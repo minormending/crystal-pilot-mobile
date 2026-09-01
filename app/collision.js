@@ -28,6 +28,13 @@ const LAND = 0x00, WATER = 0x01, WALL = 0x0f;
 const WARP_LO = 0x70, WARP_HI = 0x7f;
 const LEDGE_LO = 0xa0, LEDGE_HI = 0xbf;
 
+// Most warps fire the moment you step on them. Warp *carpets* do not: they are
+// the directional ones in CheckDirectionalWarp, and you have to press the way
+// the carpet points. Standing on one and pressing anything else simply walks
+// you off it -- which is what made the front door of the house look like a wall
+// that could be reached but never opened.
+const WARP_PUSH = { 0x70: 'DOWN', 0x76: 'LEFT', 0x78: 'UP', 0x7e: 'RIGHT' };
+
 // A ledge can be stood on; it is *leaving* it in the hop direction that jumps
 // two tiles and cannot be undone. Index is `collision & 7`, from .ledge_table
 // in engine/overworld/player_movement.asm.
@@ -137,6 +144,9 @@ export class CollisionMap {
   isWater(coll) { return this.permission(coll) === WATER; }
   static isLedge(coll) { return coll >= LEDGE_LO && coll <= LEDGE_HI; }
   static isWarp(coll) { return coll >= WARP_LO && coll <= WARP_HI; }
+
+  /** The direction a warp carpet has to be pressed, or null if it just fires. */
+  static pushFor(coll) { return WARP_PUSH[coll] || null; }
 
   /** Directions that would hop a ledge from this tile (empty if none). */
   hopDirs(tx, ty) {
