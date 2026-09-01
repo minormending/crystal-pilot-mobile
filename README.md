@@ -198,10 +198,24 @@ after dark, entry for entry.
 Grass only, deliberately. The pilot walks; it does not surf, so a route's water
 table is full of Pokémon it could pace the grass all day without meeting.
 
-**Not yet exercised end to end.** Like the grind loop, the hunt has nothing to
-run against here: a wild encounter needs a party, and reaching one means
-porting the bootstrap. The data behind it is checked against the desktop; the
-loop that uses it is not.
+Catch does the same walking and then throws balls, counting them **out of the
+bag** rather than trusting a tally — the two coming apart is the failure worth
+catching, and the desktop pilot shipped exactly that bug once, reporting two
+balls while three left the bag. It refuses up front if the party is full, since
+the sixth catch would go to the PC. The nickname prompt is answered *no*: it
+defaults to yes, and yes opens the letter grid, where anything that can only
+press A spells AAAAA.
+
+Item names come out of the ROM too, and they are not laid out like the species
+names: `PokemonNames` is a fixed-width table, `ItemNames` is packed with `@`
+between entries. Reading it at a stride drifts a character further out every
+entry — ULTRA BALL came back as `LTRA BALL`, GREAT BALL as `AT BALL`.
+
+**Not yet exercised end to end.** Like the grind loop, hunt and catch have
+nothing to run against here: a wild encounter needs a party, and reaching one
+means porting the bootstrap. Everything they read is checked against the
+desktop — species names, wild tables, item names, and the bag decode; the loops
+over that data are not.
 
 ## Controls
 

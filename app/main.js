@@ -5,7 +5,7 @@ import { GameState } from './state.js';
 import { Tasks } from './tasks.js';
 import { CollisionMap } from './collision.js';
 import { Nav } from './nav.js';
-import { RomData } from './romdata.js';
+import { RomData, normalise } from './romdata.js';
 
 const $ = (s) => document.querySelector(s);
 const PARAMS = new URLSearchParams(location.search);
@@ -20,6 +20,7 @@ const gb = new GameBoy();
 let symbols = null, state = null, tasks = null, romBytes = null;
 let collision = null, nav = null, romdata = null;
 let huntWanted = null;
+let ballId = null;
 // Frames advanced per animation frame while nobody is driving. The steps are
 // powers of two because that is how it reads: 1x, 2x, 4x... and the last one is
 // "as fast as it goes", which on a phone lands somewhere short of the label.
@@ -130,6 +131,7 @@ async function refresh() {
     ? s.party.map((m) => `${m.slot + 1}  #${m.species}  Lv${m.level}  ${m.hp}/${m.maxHp}`).join('\n')
     : '(no party)';
   await refreshSpecies(s);
+  if (romdata) refreshBag(s);
   if (s.party.length && target <= s.party[0].level) {
     target = Math.min(100, s.party[0].level + 1);
     $('#lvl').textContent = target;
@@ -262,6 +264,26 @@ addEventListener('blur', () => { gb.releaseAll(); syncHeld(); });
 // tick past dusk, and the answer is different.
 let speciesKey = '';
 
+function refreshBag(s) {
+  const carried = (s.balls || []).filter(([, q]) => q > 0);
+  // Preference order matches the desktop pilot's: the cheapest ball that will
+  // do, so a Master Ball is never spent on a Rattata by accident.
+  const best = ['poke ball', 'great ball', 'ultra ball'];
+  let pick = null;
+  for (const name of best) {
+    const hit = carried.find(([id]) => normalise(romdata.itemName(id)) === name);
+    if (hit) { pick = hit; break; }
+  }
+  if (!pick) pick = carried[0] || null;
+  ballId = pick ? pick[0] : null;
+  $('#bag').textContent = carried.length
+    ? 'bag: ' + carried.map(([id, q]) => `${romdata.itemName(id)} x${q}`).join(', ')
+    : 'bag: no Poke Balls — buy some at a Mart';
+  $('#catch').disabled = !(ballId && huntWanted);
+  $('#catch').textContent = ballId && huntWanted
+    ? `Catch with ${romdata.itemName(ballId)}` : 'Catch';
+}
+
 async function refreshSpecies(s) {
   if (!romdata) return;
   const tod = (await gb.readBytes(symbols.addr('wTimeOfDay'), 1))[0];
@@ -287,6 +309,9 @@ async function refreshSpecies(s) {
       for (const other of list.children) other.classList.toggle('on', other === b);
       $('#hunt').disabled = false;
       $('#hunt').textContent = `Look for ${name}`;
+      $('#catch').disabled = !ballId;
+      $('#catch').textContent = ballId
+        ? `Catch with ${romdata.itemName(ballId)}` : 'Catch';
     };
     list.appendChild(b);
   }
@@ -313,6 +338,25 @@ $('#hunt').onclick = async () => {
     ? 'seen: ' + [...res.seen.entries()].sort((a, b) => b[1] - a[1])
         .map(([n, c]) => `${n} x${c}`).join(', ')
     : '';
+  running = false;
+  $('#hunt').disabled = false;
+  $('#go').disabled = false;
+  refresh();
+};
+
+$('#catch').onclick = async () => {
+  if (running || !tasks || !huntWanted || !ballId) return;
+  running = true;
+  tasks.cancelled = false;
+  $('#hunt').disabled = true;
+  $('#catch').disabled = true;
+  $('#go').disabled = true;
+  gb.releaseAll();
+  syncHeld();
+  setStatus(`after ${huntWanted}`, 'busy');
+  const res = await tasks.catch_(huntWanted, ballId);
+  setStatus(res.message, res.ok ? 'ok' : 'bad');
+  progress(Object.entries(res.stats).map(([k, v]) => `${k}=${v}`).join('  '));
   running = false;
   $('#hunt').disabled = false;
   $('#go').disabled = false;

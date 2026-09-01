@@ -80,6 +80,9 @@
   .chips button.on{background:var(--accent);border-color:var(--accent);
                    font-weight:600}
   .seen{color:var(--dim);font-size:12px;margin-top:10px;line-height:1.5}
+  /* A secondary action should not be the widest thing in the card. */
+  .row.quiet{justify-content:flex-start}
+  .row.quiet button{flex:0 0 auto;padding:11px 26px}
   .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;
         padding:12px;margin-top:12px}
   .card h2{font-size:12px;margin:0 0 8px;color:var(--dim);letter-spacing:.06em;
@@ -255,16 +258,20 @@
       Keyboard: arrows, Z/X for A/B, Enter for Start, Shift for Select.</footer>
   </div>
   <div class="card hide" id="huntcard">
-    <h2>Hunt</h2>
+    <h2>Hunt &amp; catch</h2>
     <div class="chips" id="species"></div>
     <div class="row">
       <button class="primary" id="hunt" disabled>Pick one to look for</button>
+      <button id="catch" disabled>Catch</button>
+    </div>
+    <div class="row quiet">
       <button id="stopHunt">Stop</button>
     </div>
+    <div class="seen" id="bag"></div>
     <div class="seen" id="seen"></div>
-    <footer>Walks the grass and runs from everything else, then hands you the
-      battle when it finds one. Only what this route has at this hour is
-      offered.</footer>
+    <footer>Both walk the grass and run from everything else. Hunt hands you the
+      battle; catch throws balls at it and counts them out of the bag. Only what
+      this route has at this hour is offered.</footer>
   </div>
 
   <div class="card hide" id="panel">

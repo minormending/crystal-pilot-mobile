@@ -19,7 +19,10 @@
 import { NAME_MENU_FIRST_PRESET } from './state.js';
 
 const FIGHT = 1;   // wBattleMenuCursorPosition: 1 FIGHT 2 PKMN 3 PACK 4 RUN
+const PACK = 3;
 const RUN = 4;
+const BALL_POCKET = 1;   // wCurPocket: 0 ITEM, 1 BALL, 2 KEY ITEM, 3 TM/HM
+const MAX_PARTY = 6;
 
 export class Tasks {
   constructor(gb, state, onProgress = () => {}, rom = null) {
@@ -289,6 +292,200 @@ export class Tasks {
              message: this.cancelled
                ? `stopped after ${stats.encounters} encounter(s)`
                : `saw ${stats.encounters} encounters without finding ${want}` };
+  }
+
+  /**
+   * From the battle menu: PACK, the BALL pocket, the ball, USE.
+   *
+   * Pocket and item are driven by reading wCurPocket and wCurItem rather than
+   * by counting presses. The pack remembers where it was left, and the pocket
+   * switch swallows presses while it animates -- counting either of those wrong
+   * leaves the menu somewhere unexpected, and the next blind press throws a
+   * ball nobody asked for. Selecting a ball opens a USE/QUIT box, so the throw
+   * takes a second confirm.
+   */
+  async throwBall(ballId) {
+    await this.chooseAction(PACK);
+    await this.gb.run(60);
+    let s = await this.snap();
+    if ((s.curItem === 0 || s.curItem === 0xff) && s.curPocket > 3) {
+      await this.closeMenus();          // the pack never opened
+      return false;
+    }
+    for (let i = 0; i < 10 && s.curPocket !== BALL_POCKET; i++) {
+      await this.gb.press('RIGHT', 4, 8);
+      s = await this.snap();
+    }
+    if (s.curPocket !== BALL_POCKET) { await this.closeMenus(); return false; }
+    for (let i = 0; i < 12 && s.curItem !== ballId; i++) {
+      await this.gb.press('DOWN', 4, 8);
+      s = await this.snap();
+    }
+    if (s.curItem !== ballId) { await this.closeMenus(); return false; }
+    await this.gb.press('A', 6, 10);
+    await this.gb.run(40);              // USE / QUIT, cursor starts on USE
+    await this.gb.press('A', 6, 10);
+    await this.gb.run(40);
+    return true;
+  }
+
+  async closeMenus(times = 4) {
+    for (let i = 0; i < times; i++) await this.gb.press('B', 5, 10);
+  }
+
+  /**
+   * Answer a "give it a nickname?" box with NO.
+   *
+   * It defaults to YES, and saying yes opens the letter grid -- where anything
+   * that can only press A spells AAAAA. Driven against the live cursor: the box
+   * is not interactive the instant it appears, so a blind DOWN gets swallowed
+   * and the A behind it answers yes, which is the exact failure being avoided.
+   */
+  async declineNickname(tries = 14) {
+    await this.gb.run(24);
+    for (let i = 0; i < tries; i++) {
+      const s = await this.snap();
+      if (!s.windowOpen) return false;
+      const row = s.menu[1];
+      if (row === 2) { await this.gb.press('A', 6, 10); return true; }
+      if (row === 0) { await this.gb.run(6); continue; }
+      await this.gb.press('DOWN', 4, 6);
+    }
+    return false;
+  }
+
+  /**
+   * Watch a thrown ball. -> 'caught' | 'broke free' | 'gone' | 'stuck'
+   *
+   * Never taps A on spec. A stray press while the battle menu is up picks
+   * FIGHT, which leaves the pack a step out of line, and the next throw then
+   * spends a ball the count never sees -- the desktop pilot shipped exactly
+   * that bug, reporting two balls while three left the bag.
+   */
+  async watchThrow(partyBefore) {
+    for (let i = 0; i < 140; i++) {
+      const s = await this.snap();
+      if (!s.inBattle) {
+        if (s.party.length > partyBefore) {
+          await this.declineNickname();
+          await this.settleText();
+          return 'caught';
+        }
+        return 'gone';
+      }
+      // The menu coming back means it broke out and the turn is ours again.
+      if (s.menu[0] >= 1 && s.menu[0] <= 2 && s.battleCursor === 0 && i > 3) {
+        return 'broke free';
+      }
+      if (s.windowOpen && s.menu[1] >= 1 && s.party.length > partyBefore) {
+        await this.declineNickname();
+        await this.settleText();
+        return 'caught';
+      }
+      await this.gb.press('A', 4, 6);
+      await this.pump();
+    }
+    return 'stuck';
+  }
+
+  /** Tap through whatever text is left until the game stops asking. */
+  async settleText(taps = 40) {
+    for (let i = 0; i < taps; i++) {
+      const s = await this.snap();
+      if (!s.inBattle && !s.windowOpen && !s.scriptRunning) return;
+      await this.gb.press('A', 4, 8);
+      await this.pump();
+    }
+  }
+
+  /**
+   * Find a species and throw balls at it.
+   *
+   * Balls are counted out of the bag rather than trusted to a tally, because
+   * the two coming apart is the failure worth catching: a throw that goes
+   * astray still costs a ball.
+   */
+  async catch_(want, ballId, { maxEncounters = 200, maxBalls = 40 } = {}) {
+    const stats = { encounters: 0, fled: 0, thrown: 0 };
+    const started = Date.now();
+    let s = await this.snap();
+    if (s.party.length >= MAX_PARTY) {
+      return { ok: false, stats, message:
+        'the party is full — a caught Pokemon would go to the PC, ' +
+        'which this does not handle. Free a slot first.' };
+    }
+    const ballsOf = (snap) => {
+      const e = snap.balls.find(([id]) => id === ballId);
+      return e ? e[1] : 0;
+    };
+    const before = ballsOf(s);
+    if (before <= 0) {
+      return { ok: false, stats, message: 'no balls of that kind in the bag' };
+    }
+    const ballName = this.rom.itemName(ballId);
+    this.say(`after ${want} with ${ballName}s`);
+
+    while (stats.encounters < maxEncounters && !this.cancelled) {
+      s = await this.snap();
+      if (!s.inBattle) {
+        const found = await this.paceUntilBattle();
+        if (!found) {
+          return { ok: false, stats,
+                   message: 'no wild Pokemon appeared — are you standing in grass?' };
+        }
+        await this.gb.run(40);
+        s = await this.snap();
+      }
+      stats.encounters++;
+      const name = this.rom.speciesName(s.enemy.species);
+      if (name !== want) {
+        this.say(`${name} — not the one, running`);
+        if (!await this.flee()) {
+          return { ok: false, stats, message: `could not run from a ${name}` };
+        }
+        stats.fled++;
+        continue;
+      }
+
+      this.say(`found ${name} Lv${s.enemy.level} — throwing`);
+      const partyBefore = s.party.length;
+      while (stats.thrown < maxBalls && !this.cancelled) {
+        const snap = await this.snap();
+        if (ballsOf(snap) <= 0) {
+          return { ok: false, stats, message: `ran out of ${ballName}s` };
+        }
+        if (!snap.inBattle) break;
+        if (!await this.throwBall(ballId)) {
+          return { ok: false, stats, message: 'could not reach the ball in the pack' };
+        }
+        stats.thrown++;
+        const outcome = await this.watchThrow(partyBefore);
+        if (outcome === 'caught') {
+          const after = await this.snap();
+          stats.spent = before - ballsOf(after);
+          stats.seconds = ((Date.now() - started) / 1000).toFixed(1);
+          const slot = after.party.length - 1;
+          return { ok: true, stats,
+                   message: `caught ${name} Lv${after.party[slot].level} ` +
+                            `with ${stats.spent} ${ballName}` +
+                            `${stats.spent === 1 ? '' : 's'}` };
+        }
+        if (outcome === 'gone') {
+          this.say(`${name} got away`);
+          break;
+        }
+        if (outcome === 'stuck') {
+          return { ok: false, stats, message: 'lost track of the battle' };
+        }
+      }
+      if (stats.thrown >= maxBalls) {
+        return { ok: false, stats, message: `used ${stats.thrown} balls without catching it` };
+      }
+    }
+    stats.seconds = ((Date.now() - started) / 1000).toFixed(1);
+    return { ok: false, stats, message: this.cancelled
+      ? `stopped after ${stats.encounters} encounter(s)`
+      : `saw ${stats.encounters} encounters without catching ${want}` };
   }
 
   /**
