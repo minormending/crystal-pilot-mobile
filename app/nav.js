@@ -23,7 +23,7 @@
 // Reads are deliberately tiny. A step polls the coordinates every couple of
 // frames, and pulling a whole 8 KB snapshot that often would cost far more than
 // the emulation it is watching.
-import { DELTA } from './collision.js';
+import { CollisionMap, DELTA } from './collision.js';
 
 export class Nav {
   constructor(gb, symbols) {
@@ -50,6 +50,26 @@ export class Nav {
   async mapKey() {
     const m = await this.gb.readBytes(this.a.mapGroup, 2);
     return m[0] * 256 + m[1];
+  }
+
+  /**
+   * Wait out a warp, and report the map it lands on.
+   *
+   * A door, staircase, cave or warp panel fires the moment you step on it, but
+   * the transition runs for a few frames after that -- so arriving on the tile
+   * is not arriving on the new map, and reading the position straight away
+   * names a tile on the map you have just left.
+   */
+  async awaitMapChange(from, timeout = 240) {
+    for (let i = 0; i < timeout; i += 2) {
+      await this.gb.run(2);
+      const key = await this.mapKey();
+      if (key !== from && key !== 0) {
+        await this.gb.run(30);      // let the new map settle before reading
+        return key;
+      }
+    }
+    return null;
   }
 
   /** Run frames until the player stops moving, and report where they stopped. */
@@ -138,7 +158,16 @@ export class Nav {
       }
       if (wram === null) return { stopped: 'decode', pos: await this.pos() };
       const pos = collision.playerPos(wram);
-      if (pos[0] === goal[0] && pos[1] === goal[1]) return { stopped: null, pos };
+      if (pos[0] === goal[0] && pos[1] === goal[1]) {
+        // Standing on a doorway is not the same as having gone through it.
+        if (CollisionMap.isWarp(collision.collisionAt(goal[0], goal[1]))) {
+          const to = await this.awaitMapChange(startedOn);
+          if (to !== null) {
+            return { stopped: 'warped', pos: await this.pos(), map: to };
+          }
+        }
+        return { stopped: null, pos };
+      }
 
       const path = collision.pathTo(pos, goal, { avoid });
       if (!path || !path.length) return { stopped: 'unreachable', pos };

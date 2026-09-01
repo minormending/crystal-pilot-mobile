@@ -170,6 +170,12 @@ that ended somewhere plausible but wrong:
   reported success. The route is re-planned from where the player actually is,
   every step.
 
+Tapping a door, staircase or cave walks onto it and goes through: those fire the
+moment you step on them, and the transition takes a few frames longer than the
+step, so the walk waits for it and reports the map it came out on rather than
+the tile it left from. A tap is still a tile on the map in front of you — it
+will not route you through a door to somewhere on another map.
+
 It also distinguishes the ways a walk can end, because they mean different
 things: a wild battle, a tile with no route to it, a doorway that changed the
 map underneath, and *the game refusing input at all* — walk downstairs into

@@ -406,7 +406,10 @@ async function walkToTap(tx, ty) {
       setStatus(`the game would not let me move from ${where}`, 'bad');
       progress('something is happening on screen, or someone is standing there');
     } else if (res.stopped === 'warped') {
-      setStatus('that was a doorway — you are somewhere else now', 'ok');
+      const m = res.map;
+      setStatus(m === undefined
+        ? 'that was a doorway — you are somewhere else now'
+        : `through the doorway to map ${m >> 8}.${m & 0xff}`, 'ok');
       progress('');
     } else if (res.stopped === 'decode') {
       setStatus('lost track of the map mid-walk, so it stopped', 'bad');
