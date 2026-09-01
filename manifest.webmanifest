@@ -1,0 +1,11 @@
+{
+  "name": "crystal-pilot mobile",
+  "short_name": "pilot",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#16161c",
+  "theme_color": "#16161c",
+  "icons": [
+    { "src": "./icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
