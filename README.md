@@ -104,6 +104,22 @@ Both cost real time here, and both fail quietly rather than loudly:
 
 `app/gb.js` guards against both.
 
+## Starting a game is yours, not the pilot's
+
+If the ROM has no save, the app boots it, hands you the buttons, and waits. It
+does not play the intro for you.
+
+That is deliberate. An auto-pilot can only answer a prompt by pressing A, and
+the intro's NAME menu defaults to NEW NAME -- which opens the letter grid, where
+pressing A repeatedly spells `AAAAA`. Your character, your name. The pilot's
+panel stays hidden until `wMapStatus` says the world is live, and then it
+appears on its own.
+
+Automated runs have nobody to press A, so they opt in with `?autostart=1`, and
+even then they take one of the game's own names (CHRIS/MAT/ALLAN/JON, or
+KRIS/AMANDA/JUANA/JODI) rather than typing one. `NamePlayer` stores those
+directly, with no naming screen involved.
+
 ## Controls
 
 Eight on-screen buttons: the D-pad, A, B, Select and Start. **Press and hold** —
