@@ -81,6 +81,20 @@ export class GameBoy {
   }
 
   /**
+   * A few bytes at a Game Boy address, without copying a whole block.
+   *
+   * For checks that have to run after every single press, where taking a full
+   * snapshot each time would be the bottleneck -- recognising a menu that
+   * blocks on a choice, for instance, where noticing one press late is the
+   * entire failure.
+   */
+  async readBytes(addr, len) {
+    const at = this.workRam + (addr - GB_WRAM_START);
+    const section = await this.core._getWasmMemorySection(at, at + len);
+    return section.length > len ? section.subarray(at, at + len) : section;
+  }
+
+  /**
    * Read one byte at a Game Boy address.
    *
    * `wram` is a snapshot from readWram(). Callers take one snapshot per poll

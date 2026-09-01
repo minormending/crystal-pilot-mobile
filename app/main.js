@@ -5,6 +5,14 @@ import { GameState } from './state.js';
 import { Tasks } from './tasks.js';
 
 const $ = (s) => document.querySelector(s);
+const PARAMS = new URLSearchParams(location.search);
+// Dev convenience: load the ROM and .sym from ./dev/ instead of picking them.
+const DEV = PARAMS.has('dev');
+// Let the pilot play the intro itself. Off by default, dev included: a new game
+// is the player's to start, and an auto-pilot can only answer the NAME menu by
+// mashing A -- which takes NEW NAME and spells AAAAA into the letter grid.
+// Automated runs, which have nobody to press A, opt in.
+const AUTOSTART = PARAMS.has('autostart');
 const gb = new GameBoy();
 let symbols = null, state = null, tasks = null, romBytes = null;
 let running = false, target = 5;
@@ -23,20 +31,46 @@ async function maybeStart() {
   state = new GameState(symbols);
   tasks = new Tasks(gb, state, progress);
 
-  // Reach a live overworld before offering anything: party data and
-  // coordinates come back before the map does, so "there is a party" is not
-  // the same as "the world is ready".
-  setStatus('starting the game…', 'busy');
-  const ok = await tasks.continueGame();
-  if (!ok) {
-    setStatus('could not reach the overworld — is this a Crystal ROM?', 'bad');
-    return;
-  }
-  startLoop();
+  // Hand the game over immediately: buttons visible, emulator running.
   $('#loader').classList.add('hide');
-  $('#panel').classList.remove('hide');
   $('#ctrls').classList.remove('hide');
+  startLoop();
+
+  if (AUTOSTART) {
+    setStatus('starting the game…', 'busy');
+    if (!await tasks.continueGame()) {
+      setStatus('could not reach the overworld — is this a Crystal ROM?', 'bad');
+      return;
+    }
+  }
+  awaitWorld();
+}
+
+/**
+ * Wait until a game is actually underway, then offer the pilot.
+ *
+ * A new game belongs to whoever is holding the phone: their intro, their
+ * character, their name. Playing it for them means answering the NAME menu the
+ * only way an auto-pilot can -- mashing A, which takes NEW NAME and spells
+ * AAAAA into the letter grid. So this waits, and presses nothing.
+ *
+ * Waiting is also the honest signal for the pilot itself: party data and
+ * coordinates are restored before the map is, so "there is a party" is not the
+ * same as "the world is ready".
+ */
+async function awaitWorld() {
+  setStatus('press Start, and play until you are out in the world', '');
+  progress('the pilot waits here — a new game is yours to start');
+  while (true) {
+    if (!running) {
+      const s = await tasks.snap();
+      if (s.worldLoaded) break;
+    }
+    await new Promise((r) => setTimeout(r, 700));
+  }
+  $('#panel').classList.remove('hide');
   setStatus('ready', 'ok');
+  progress('');
   refresh();
   setInterval(() => { if (!running) refresh(); }, 1200);
 }
@@ -182,7 +216,7 @@ $('#stop').onclick = () => { if (tasks) tasks.cancel(); progress('stopping…');
 // of being picked by hand, so the whole flow can be exercised by a test driver.
 // That directory is gitignored -- no game files live in this repo.
 (async () => {
-  if (!new URLSearchParams(location.search).has('dev')) return;
+  if (!DEV) return;
   try {
     const [rom, sym] = await Promise.all([
       fetch('./dev/pokecrystal.gbc').then((r) => r.arrayBuffer()),

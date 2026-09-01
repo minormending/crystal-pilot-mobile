@@ -16,6 +16,8 @@
 // step toward the target. Gen 2 menus wrap, so counting presses from an assumed
 // starting position silently picks the wrong thing.
 
+import { NAME_MENU_FIRST_PRESET } from './state.js';
+
 const FIGHT = 1;   // wBattleMenuCursorPosition: 1 FIGHT 2 PKMN 3 PACK 4 RUN
 
 export class Tasks {
@@ -25,6 +27,7 @@ export class Tasks {
     this.onProgress = onProgress;
     this.cancelled = false;
     this.ticks = 0;
+    this.named = false;
   }
 
   cancel() { this.cancelled = true; }
@@ -59,14 +62,22 @@ export class Tasks {
 
   say(msg) { this.onProgress(msg); }
 
-  /** Advance to a live, controllable overworld -- title screen through to a map. */
+  /**
+   * Advance to a live, controllable overworld -- title screen through to a map.
+   *
+   * Only ever run for an automated test. A person starting a new game should
+   * see their own intro and pick their own name; see main.js.
+   */
   async continueGame(maxFrames = 20000) {
     await this.gb.run(2500);
     let spent = 2500;
-    // Checking after every press meant a memory copy per 13 frames, which
-    // saturated the main thread and made the intro crawl. The intro is long;
-    // checking every tenth press is plenty and is far cheaper.
+    // Two different checks at two different rates. "Has the world loaded?"
+    // needs a whole snapshot, which is expensive, and being a few presses late
+    // costs nothing -- so it runs every tenth press. "Is the NAME menu up?"
+    // reads a handful of bytes and must run every press: that menu blocks on a
+    // choice, and one stray A takes NEW NAME and drops us in the letter grid.
     for (let i = 0; spent < maxFrames; i++) {
+      if (await this.takeNameMenu()) continue;
       await this.gb.press('A', 5, 8);
       await this.pump();
       spent += 13;
@@ -76,6 +87,38 @@ export class Tasks {
         await this.gb.run(30);
         return true;
       }
+    }
+    return false;
+  }
+
+  /**
+   * Pick one of the game's own names if the NAME menu is up.
+   *
+   * Mashing A through this menu takes NEW NAME, and then mashing A through the
+   * letter grid that follows spells AAAAA. The presets below NEW NAME are
+   * stored directly with no naming screen at all.
+   *
+   * Once only. The menu's shape is read out of wMenuData, and nothing clears
+   * that when a menu closes -- so after the name is chosen the signature still
+   * matches, and without the latch the intro loop sits here re-picking a name
+   * that has already been picked, forever.
+   */
+  async takeNameMenu() {
+    if (this.named) return false;
+    const win = await this.gb.readBytes(
+      this.state.menuWindow.addr, this.state.menuWindow.len);
+    if (!this.state.nameMenuUp(win)) return false;
+    for (let i = 0; i < 12; i++) {
+      const now = await this.gb.readBytes(
+        this.state.menuWindow.addr, this.state.menuWindow.len);
+      const cur = this.state.menuCursorY(now);
+      if (cur === NAME_MENU_FIRST_PRESET) {
+        await this.gb.press('A', 6, 20);
+        this.named = true;
+        this.say('picked one of the game\'s own names');
+        return true;
+      }
+      await this.gb.press(cur < NAME_MENU_FIRST_PRESET ? 'DOWN' : 'UP', 4, 6);
     }
     return false;
   }

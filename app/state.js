@@ -9,6 +9,17 @@ const b = GameBoy.byteAt, w = GameBoy.wordAt;
 // as grass).
 const GRASS = new Set([0x10, 0x14, 0x18, 0x1c]);
 
+// The intro's NAME menu, from ChrisNameMenuHeader in data/player_names.asm:
+// five items (NEW NAME plus four presets) drawn in the top-left ten columns.
+// Matched on the menu's own shape rather than on the cursor, because the
+// cursor still holds whatever the gender prompt left there until this menu is
+// actually drawn.
+const NAME_MENU_ITEMS = 5;
+const NAME_MENU_RIGHT = 10;
+// Cursor 1 is NEW NAME, which opens the letter grid. 2 and below are the names
+// the game ships: CHRIS/MAT/ALLAN/JON, or KRIS/AMANDA/JUANA/JODI.
+export const NAME_MENU_FIRST_PRESET = 2;
+
 export class GameState {
   constructor(symbols) {
     this.s = symbols;
@@ -33,7 +44,31 @@ export class GameState {
       enemyMaxHp: symbols.addr('wEnemyMonMaxHP'),
       battleMonHp: symbols.addr('wBattleMonHP'),
       battleMonMaxHp: symbols.addr('wBattleMonMaxHP'),
+      menuItems: symbols.addr('wMenuDataItems'),
+      menuTop: symbols.addr('wMenuBorderTopCoord'),
+      menuRight: symbols.addr('wMenuBorderRightCoord'),
     };
+    // One small window covering every byte the name-menu check needs, so that
+    // check can run after every press without a snapshot behind it.
+    const watched = [this.a.menuItems, this.a.menuTop, this.a.menuRight,
+                     this.a.menuY];
+    this.menuWindow = {
+      addr: Math.min(...watched),
+      len: Math.max(...watched) - Math.min(...watched) + 1,
+    };
+  }
+
+  /** Is the intro's NAME menu on screen? `win` comes from menuWindow. */
+  nameMenuUp(win) {
+    const at = (addr) => win[addr - this.menuWindow.addr];
+    return at(this.a.menuItems) === NAME_MENU_ITEMS
+      && at(this.a.menuRight) === NAME_MENU_RIGHT
+      && at(this.a.menuTop) === 0;
+  }
+
+  /** The live menu cursor, read from the same small window. */
+  menuCursorY(win) {
+    return win[this.a.menuY - this.menuWindow.addr];
   }
 
   read(wram) {
