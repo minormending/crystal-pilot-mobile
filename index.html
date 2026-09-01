@@ -56,8 +56,12 @@
   <div class="card" id="loader">
     <h2>Load your own files</h2>
     <div class="row">
-      <label class="file">ROM (.gbc)<input type="file" id="romFile" accept=".gbc,.gb"></label>
-      <label class="file">Symbols (.sym)<input type="file" id="symFile" accept=".sym"></label>
+      <!-- No accept filter on purpose. Android resolves accept extensions to
+           MIME types, and .gbc/.sym have none registered, so a filter greys out
+           the very files you are trying to pick. The files are validated after
+           selection instead. -->
+      <label class="file">ROM (.gbc)<input type="file" id="romFile"></label>
+      <label class="file">Symbols (.sym)<input type="file" id="symFile"></label>
     </div>
     <footer>Nothing is uploaded — both files stay in the browser. Build them
       yourself from the pokecrystal disassembly.</footer>

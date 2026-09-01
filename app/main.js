@@ -55,11 +55,29 @@ async function refresh() {
   }
 }
 
+// Every Game Boy cartridge starts its header logo with these bytes at 0x104.
+// Checking them turns "picked the wrong file" into a sentence instead of a
+// mysterious failure to boot.
+const NINTENDO_LOGO = [0xce, 0xed, 0x66, 0x66, 0xcc, 0x0d];
+
+function looksLikeGameBoyRom(buf) {
+  if (buf.byteLength < 0x8000) return false;
+  const head = new Uint8Array(buf, 0x104, NINTENDO_LOGO.length);
+  return NINTENDO_LOGO.every((b, i) => head[i] === b);
+}
+
 $('#romFile').addEventListener('change', async (e) => {
   const f = e.target.files[0];
   if (!f) return;
-  romBytes = await f.arrayBuffer();
-  setStatus(`ROM: ${f.name} (${(romBytes.byteLength / 1048576).toFixed(1)} MB)`, 'ok');
+  const buf = await f.arrayBuffer();
+  if (!looksLikeGameBoyRom(buf)) {
+    romBytes = null;
+    setStatus(`${f.name} is not a Game Boy ROM — expected a .gbc built from ` +
+              `the disassembly`, 'bad');
+    return;
+  }
+  romBytes = buf;
+  setStatus(`ROM: ${f.name} (${(buf.byteLength / 1048576).toFixed(1)} MB)`, 'ok');
   maybeStart();
 });
 
@@ -67,7 +85,11 @@ $('#symFile').addEventListener('change', async (e) => {
   const f = e.target.files[0];
   if (!f) return;
   try {
-    symbols = new Symbols(await f.text());
+    const text = await f.text();
+    if (!/^[0-9A-Fa-f]{2,3}:[0-9A-Fa-f]{4}\s/m.test(text)) {
+      throw new Error(`${f.name} does not look like an rgblink .sym file`);
+    }
+    symbols = new Symbols(text);
     symbols.require(['wPartyCount', 'wPartyMon1', 'wBattleMode', 'wMapGroup',
                      'wMapStatus', 'wMenuCursorY', 'wPlayerTileCollision']);
     setStatus(`symbols: ${symbols.size.toLocaleString()} loaded`, 'ok');
