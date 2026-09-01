@@ -23,7 +23,11 @@
   main{padding:12px;max-width:560px;margin:0 auto}
   canvas{width:100%;aspect-ratio:160/144;background:#000;display:block;
          border:1px solid var(--line);border-radius:8px;
-         image-rendering:pixelated;cursor:crosshair}
+         image-rendering:pixelated;cursor:crosshair;
+         /* Taps go straight through as clicks: without this a phone waits to
+            see whether a second tap is coming, and treats two quick taps as a
+            zoom rather than as two destinations. */
+         touch-action:manipulation}
   /* Where you tapped, held until the walk ends. Walking takes a moment, and
      without this there is nothing to say the tap landed or where it is going.
      One overworld tile is a tenth of the screen across and a ninth down. */

@@ -273,6 +273,7 @@ async function windowOpen() {
  * finishes underneath them.
  */
 let markTimer = null;
+let walkCancelled = false;
 let markState = null;        // { goal, kx, ky } while a marker is on screen
 let markRaf = null;
 
@@ -347,6 +348,7 @@ async function trackGoal() {
 
 async function walkToTap(tx, ty) {
   running = true;
+  let arrived = false;
   // The previous walk's marker is cleared on a timer. Without cancelling it,
   // tapping again inside that window let the old timer fire mid-route and hide
   // the marker for the walk now under way.
@@ -355,6 +357,11 @@ async function walkToTap(tx, ty) {
   gb.releaseAll();
   syncHeld();
   try {
+    // Which tile a tap meant is only answerable once the world has stopped
+    // moving. Mid-step the coordinate lags the screen by up to a whole tile --
+    // measured, seven frames of every twenty-six -- so a tap taken during one
+    // walks you a tile short of where you aimed.
+    if (gb.ready) await nav.settle();
     const wram = await gb.readWram();
     const s = state.read(wram);
     if (s.inBattle) { setStatus('that is a battle, not the map', 'bad'); return; }
@@ -389,13 +396,19 @@ async function walkToTap(tx, ty) {
     }
     setStatus(`walking to (${goal[0]},${goal[1]})`, 'busy');
     markGoal(goal);
+    walkCancelled = false;
     const res = await nav.walkTo(collision, goal, {
       onStep: (n, at) => progress(`step ${n} — at (${at[0]},${at[1]})`),
+      cancelled: () => walkCancelled,
     });
     const now = res.pos;
     const where = `(${now[0]},${now[1]})`;
     if (res.stopped === null) {
+      arrived = true;
       setStatus(`walked to ${where}`, 'ok');
+      progress('');
+    } else if (res.stopped === 'cancelled') {
+      setStatus(`stopped at ${where}`, '');
       progress('');
     } else if (res.stopped === 'battle') {
       setStatus(`a wild battle interrupted the walk at ${where}`, 'bad');
@@ -417,10 +430,15 @@ async function walkToTap(tx, ty) {
       setStatus(`gave up at ${where}`, 'bad');
     }
   } finally {
-    // The marker outlives the walk by a moment: arriving is worth seeing, and
-    // clearing it the instant the last step lands makes the whole thing feel
-    // like nothing happened.
-    markTimer = setTimeout(() => markGoal(null), 1800);
+    // The marker outlives the walk by a moment, because arriving is worth
+    // seeing -- but only when we arrived. A goal is a tile on one map, so after
+    // a doorway it points at whatever happens to be there now, and after a
+    // failure it marks a place we never reached.
+    if (arrived) {
+      markTimer = setTimeout(() => markGoal(null), 1800);
+    } else {
+      markGoal(null);
+    }
     running = false;
     $('#go').disabled = false;
     refresh();
@@ -454,7 +472,13 @@ $('#go').onclick = async () => {
   refresh();
 };
 
-$('#stop').onclick = () => { if (tasks) tasks.cancel(); progress('stopping…'); };
+$('#stop').onclick = () => {
+  // Stop has to reach both kinds of work. It used to set only the task flag,
+  // which a walk never reads, so pressing it during one did nothing at all.
+  if (tasks) tasks.cancel();
+  walkCancelled = true;
+  progress('stopping…');
+};
 
 // Dev convenience: with ?dev=1 the ROM and .sym are fetched from ./dev/ instead
 // of being picked by hand, so the whole flow can be exercised by a test driver.

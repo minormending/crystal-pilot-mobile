@@ -33,6 +33,8 @@ export class Nav {
       battleMode: symbols.addr('wBattleMode'),
       mapGroup: symbols.addr('wMapGroup'),
       mapNumber: symbols.addr('wMapNumber'),
+      offX: symbols.addr('wPlayerBGMapOffsetX'),
+      offY: symbols.addr('wPlayerBGMapOffsetY'),
     };
   }
 
@@ -72,22 +74,37 @@ export class Nav {
     return null;
   }
 
-  /** Run frames until the player stops moving, and report where they stopped. */
-  async settle(stillFor = 6, timeout = 60) {
-    let last = await this.pos();
+  /**
+   * Run frames until the player really has stopped, and report where.
+   *
+   * The coordinate is not enough on its own. It changes at the *end* of a
+   * step, while the camera is still finishing its slide -- measured, settling
+   * on the coordinate alone returned with the camera six pixels short of its
+   * resting place. Anything that reads the screen at that moment, or works out
+   * which tile a tap meant, is reading a world that is still moving.
+   */
+  async settle(stillFor = 6, timeout = 90) {
+    let last = await this.restState();
     let still = 0;
     for (let i = 0; i < timeout; i += 2) {
       await this.gb.run(2);
-      const now = await this.pos();
-      if (now[0] === last[0] && now[1] === last[1]) {
+      const now = await this.restState();
+      if (now.join() === last.join()) {
         still += 2;
-        if (still >= stillFor) return now;
+        if (still >= stillFor) return [now[0], now[1]];
       } else {
         still = 0;
         last = now;
       }
     }
-    return last;
+    return [last[0], last[1]];
+  }
+
+  /** [x, y, cameraX, cameraY] -- everything that moves while a step plays out. */
+  async restState() {
+    const p = await this.gb.readBytes(this.a.y, 2);
+    const o = await this.gb.readBytes(this.a.offX, 2);
+    return [p[1], p[0], o[0], o[1]];
   }
 
   /**
