@@ -265,6 +265,8 @@ async function windowOpen() {
  * recomputed from the goal's offset from the player, every step, and it
  * finishes underneath them.
  */
+let markTimer = null;
+
 function markGoal(goal, pos) {
   const mark = $('#tapmark');
   if (!goal) { mark.classList.add('hide'); return; }
@@ -281,6 +283,10 @@ function markGoal(goal, pos) {
 
 async function walkToTap(tx, ty) {
   running = true;
+  // The previous walk's marker is cleared on a timer. Without cancelling it,
+  // tapping again inside that window let the old timer fire mid-route and hide
+  // the marker for the walk now under way.
+  clearTimeout(markTimer);
   $('#go').disabled = true;
   gb.releaseAll();
   syncHeld();
@@ -296,16 +302,20 @@ async function walkToTap(tx, ty) {
       setStatus('you are already standing there', '');
       return;
     }
-    if (goal[0] < 0 || goal[1] < 0) {
-      setStatus('that is off the edge of the map', 'bad');
-      return;
-    }
     // Checked against the game's own wPlayerTileCollision every time rather
     // than once at startup: a wrong decode does not throw, it paths through
     // walls, and the tileset changes with the map.
     if (!collision.calibrate(wram)) {
       setStatus('could not read the map — the collision decode did not check out',
                 'bad');
+      return;
+    }
+    // Bounds come from the map, not just from zero: tapping past the edge of a
+    // small indoor room is off the map, and saying "no way to reach" there
+    // blames the route for a tile that does not exist.
+    const [mw, mh] = collision.mapSize();
+    if (goal[0] < 0 || goal[1] < 0 || goal[0] >= mw || goal[1] >= mh) {
+      setStatus('that is off the edge of the map', 'bad');
       return;
     }
     if (!collision.pathTo(s.pos, goal)) {
@@ -346,7 +356,7 @@ async function walkToTap(tx, ty) {
     // The marker outlives the walk by a moment: arriving is worth seeing, and
     // clearing it the instant the last step lands makes the whole thing feel
     // like nothing happened.
-    setTimeout(() => markGoal(null), 1800);
+    markTimer = setTimeout(() => markGoal(null), 1800);
     running = false;
     $('#go').disabled = false;
     refresh();
