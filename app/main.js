@@ -255,6 +255,30 @@ async function windowOpen() {
   return (await gb.readBytes(at, 1))[0] > 0;
 }
 
+/**
+ * Mark a destination, given where the player currently is.
+ *
+ * The marker has to follow the map, not the screen. The camera keeps the
+ * player centred, so the world scrolls underneath while they walk -- a marker
+ * left at the tile that was tapped would drift off the destination and end up
+ * pointing at somewhere else entirely. Its screen position is therefore
+ * recomputed from the goal's offset from the player, every step, and it
+ * finishes underneath them.
+ */
+function markGoal(goal, pos) {
+  const mark = $('#tapmark');
+  if (!goal) { mark.classList.add('hide'); return; }
+  const tx = goal[0] - pos[0] + PLAYER_TILE_X;
+  const ty = goal[1] - pos[1] + PLAYER_TILE_Y;
+  if (tx < 0 || ty < 0 || tx >= SCREEN_TILES_X || ty >= SCREEN_TILES_Y) {
+    mark.classList.add('hide');       // walked off the edge of the view
+    return;
+  }
+  mark.style.left = (tx * 100 / SCREEN_TILES_X) + '%';
+  mark.style.top = (ty * 100 / SCREEN_TILES_Y) + '%';
+  mark.classList.remove('hide');
+}
+
 async function walkToTap(tx, ty) {
   running = true;
   $('#go').disabled = true;
@@ -290,8 +314,12 @@ async function walkToTap(tx, ty) {
       return;
     }
     setStatus(`walking to (${goal[0]},${goal[1]})`, 'busy');
+    markGoal(goal, s.pos);
     const res = await nav.walkTo(collision, goal, {
-      onStep: (n, at) => progress(`step ${n} — at (${at[0]},${at[1]})`),
+      onStep: (n, at) => {
+        progress(`step ${n} — at (${at[0]},${at[1]})`);
+        markGoal(goal, at);
+      },
     });
     const now = res.pos;
     const where = `(${now[0]},${now[1]})`;
@@ -315,6 +343,10 @@ async function walkToTap(tx, ty) {
       setStatus(`gave up at ${where}`, 'bad');
     }
   } finally {
+    // The marker outlives the walk by a moment: arriving is worth seeing, and
+    // clearing it the instant the last step lands makes the whole thing feel
+    // like nothing happened.
+    setTimeout(() => markGoal(null), 1800);
     running = false;
     $('#go').disabled = false;
     refresh();
