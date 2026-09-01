@@ -104,6 +104,33 @@ Both cost real time here, and both fail quietly rather than loudly:
 
 `app/gb.js` guards against both.
 
+## Controls
+
+Eight on-screen buttons: the D-pad, A, B, Select and Start. **Press and hold** —
+a short tap only turns the character in Gen 2, so tapping a direction will not
+walk you anywhere.
+
+There is no TAB button. On the desktop pilot, TAB opens an in-game menu because
+the only surface there is the emulator window; here the pilot's controls are the
+page itself — the Grind card, the level stepper, and Start/Stop sit above the
+buttons, so the game never has to be interrupted to reach them. The on-screen
+buttons are ignored while a task is running, so a stray thumb cannot fight the
+pilot for the joypad.
+
+A keyboard works on the same page, which is what makes it testable on a desktop:
+
+| Key | Button |
+| --- | --- |
+| Arrow keys | D-pad |
+| `Z` or `A` | A |
+| `X` or `S` | B |
+| `Enter` | Start |
+| `Shift` or `Backspace` | Select |
+
+Buttons release on `pointerup`, `pointercancel`, `pointerleave` and on window
+blur, so a direction cannot get stuck down after your thumb slides off the
+button or you switch apps mid-press.
+
 ## Running it
 
 Easiest: open **https://minormending.github.io/crystal-pilot-mobile/** and pick
