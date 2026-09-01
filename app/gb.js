@@ -123,6 +123,9 @@ export class GameBoy {
   releaseAll() { this.held.clear(); this.applyHeld(); }
 
   applyHeld() {
+    // The window can blur before a ROM has been picked, and that releases every
+    // button -- so this runs with no core behind it and must not throw.
+    if (!this.core) return;
     const state = {};
     for (const b of this.held) state[b] = true;
     this.core.setJoypadState(state);

@@ -59,7 +59,7 @@ async function maybeStart() {
  * same as "the world is ready".
  */
 async function awaitWorld() {
-  setStatus('press Start, and play until you are out in the world', '');
+  setStatus('Press Start, then play until you are out in the world', '');
   progress('the pilot waits here — a new game is yours to start');
   while (true) {
     if (!running) {
@@ -164,9 +164,35 @@ document.querySelectorAll('[data-step]').forEach((b) => {
 // --- controls -------------------------------------------------------------
 // Press and hold, not tap. The emulator advances in the run loop below, and the
 // loop pushes whatever is held each frame, so holding a direction walks.
+/**
+ * Light up whatever is currently held.
+ *
+ * Read back off the emulator's own held set rather than set by whichever
+ * handler fired, so a key pressed on a keyboard lights the same button a thumb
+ * would -- and so a button released by losing pointer capture cannot be left
+ * looking stuck down. The default tap highlight is switched off page-wide, so
+ * without this a press gives no sign at all that it landed.
+ */
+function syncHeld() {
+  for (const el of document.querySelectorAll('[data-btn]')) {
+    el.classList.toggle('held', gb.held.has(el.dataset.btn));
+  }
+}
+
+function hold(button) {
+  if (running) return;
+  gb.hold(button);
+  syncHeld();
+}
+
+function release(button) {
+  gb.release(button);
+  syncHeld();
+}
+
 function bindHold(el, button) {
-  const down = (e) => { e.preventDefault(); if (!running) gb.hold(button); };
-  const up = (e) => { e.preventDefault(); gb.release(button); };
+  const down = (e) => { e.preventDefault(); hold(button); };
+  const up = (e) => { e.preventDefault(); release(button); };
   el.addEventListener('pointerdown', down);
   el.addEventListener('pointerup', up);
   el.addEventListener('pointercancel', up);
@@ -184,16 +210,16 @@ addEventListener('keydown', (e) => {
   const b = KEYS[e.key];
   if (!b || running) return;
   e.preventDefault();
-  gb.hold(b);
+  hold(b);
 });
 addEventListener('keyup', (e) => {
   const b = KEYS[e.key];
   if (!b) return;
   e.preventDefault();
-  gb.release(b);
+  release(b);
 });
 // Releasing on blur avoids a key staying stuck down after tabbing away.
-addEventListener('blur', () => gb.releaseAll());
+addEventListener('blur', () => { gb.releaseAll(); syncHeld(); });
 
 $('#go').onclick = async () => {
   if (running || !tasks) return;
@@ -201,6 +227,7 @@ $('#go').onclick = async () => {
   tasks.cancelled = false;
   $('#go').disabled = true;
   gb.releaseAll();          // do not leave a held button pressed into the task
+  syncHeld();
   setStatus(`grinding to Lv${target}`, 'busy');
   const res = await tasks.grind(0, target);
   setStatus(res.message, res.ok ? 'ok' : 'bad');
