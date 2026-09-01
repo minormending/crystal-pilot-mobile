@@ -61,6 +61,10 @@ async function maybeStart() {
 async function awaitWorld() {
   setStatus('Press Start, then play until you are out in the world', '');
   progress('the pilot waits here — a new game is yours to start');
+  // The header tracks where you are, and it is filled in by refresh() once
+  // there is a game to describe. Until then it still read "no ROM loaded",
+  // which is untrue the moment a ROM has been picked.
+  $('#where').textContent = 'no game yet';
   while (true) {
     if (!running) {
       const s = await tasks.snap();
