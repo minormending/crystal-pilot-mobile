@@ -5,6 +5,7 @@ import { GameState } from './state.js';
 import { Tasks } from './tasks.js';
 import { CollisionMap } from './collision.js';
 import { Nav } from './nav.js';
+import { RomData } from './romdata.js';
 
 const $ = (s) => document.querySelector(s);
 const PARAMS = new URLSearchParams(location.search);
@@ -17,7 +18,13 @@ const DEV = PARAMS.has('dev');
 const AUTOSTART = PARAMS.has('autostart');
 const gb = new GameBoy();
 let symbols = null, state = null, tasks = null, romBytes = null;
-let collision = null, nav = null;
+let collision = null, nav = null, romdata = null;
+let huntWanted = null;
+// Frames advanced per animation frame while nobody is driving. The steps are
+// powers of two because that is how it reads: 1x, 2x, 4x... and the last one is
+// "as fast as it goes", which on a phone lands somewhere short of the label.
+const SPEEDS = [1, 2, 4, 8, 16];
+let speed = 1;
 let running = false, target = 5;
 
 const setStatus = (text, kind = '') => {
@@ -32,9 +39,10 @@ async function maybeStart() {
   await gb.start($('#screen'));
   await gb.loadRom(romBytes);
   state = new GameState(symbols);
-  tasks = new Tasks(gb, state, progress);
+  tasks = new Tasks(gb, state, progress, romdata);
   collision = new CollisionMap(symbols, gb);
   nav = new Nav(gb, symbols);
+  romdata = new RomData(symbols, gb);
   A_MARK = {
     x: symbols.addr('wXCoord'), y: symbols.addr('wYCoord'),
     offX: symbols.addr('wPlayerBGMapOffsetX'),
@@ -43,7 +51,12 @@ async function maybeStart() {
 
   // Hand the game over immediately: buttons visible, emulator running.
   $('#loader').classList.add('hide');
+  $('#intro').classList.add('hide');
   $('#ctrls').classList.remove('hide');
+  $('#speedcard').classList.remove('hide');
+  $('#huntcard').classList.remove('hide');
+  $('#screenwrap').classList.remove('hide');
+  $('#taphint').classList.remove('hide');
   startLoop();
 
   if (AUTOSTART) {
@@ -102,7 +115,7 @@ function startLoop() {
     requestAnimationFrame(tick);
     if (running || stepping || !gb.ready) return;
     stepping = true;
-    try { await gb.run(1); } finally { stepping = false; }
+    try { await gb.run(speed); } finally { stepping = false; }
   };
   requestAnimationFrame(tick);
 }
@@ -116,6 +129,7 @@ async function refresh() {
   $('#party').textContent = s.party.length
     ? s.party.map((m) => `${m.slot + 1}  #${m.species}  Lv${m.level}  ${m.hp}/${m.maxHp}`).join('\n')
     : '(no party)';
+  await refreshSpecies(s);
   if (s.party.length && target <= s.party[0].level) {
     target = Math.min(100, s.party[0].level + 1);
     $('#lvl').textContent = target;
@@ -163,7 +177,9 @@ $('#symFile').addEventListener('change', async (e) => {
                      'wOverworldMapBlocks', 'wMapWidth', 'wMapHeight',
                      'wTilesetCollisionBank', 'wTilesetCollisionAddress',
                      'wWindowStackSize', 'CollisionPermissionTable',
-                     'wPlayerBGMapOffsetX', 'wPlayerBGMapOffsetY']);
+                     'wPlayerBGMapOffsetX', 'wPlayerBGMapOffsetY',
+                     // hunting: names and wild tables come out of the ROM
+                     'PokemonNames', 'JohtoGrassWildMons', 'wTimeOfDay']);
     setStatus(`symbols: ${symbols.size.toLocaleString()} loaded`, 'ok');
   } catch (err) {
     symbols = null;
@@ -239,6 +255,89 @@ addEventListener('keyup', (e) => {
 });
 // Releasing on blur avoids a key staying stuck down after tabbing away.
 addEventListener('blur', () => { gb.releaseAll(); syncHeld(); });
+
+// --- hunt -------------------------------------------------------------------
+// The list is rebuilt from where you are standing and what time the game thinks
+// it is, because both change under you: walk to another route, or let the clock
+// tick past dusk, and the answer is different.
+let speciesKey = '';
+
+async function refreshSpecies(s) {
+  if (!romdata) return;
+  const tod = (await gb.readBytes(symbols.addr('wTimeOfDay'), 1))[0];
+  const key = `${s.map[0]}.${s.map[1]}:${tod}`;
+  if (key === speciesKey) return;
+  speciesKey = key;
+  const here = romdata.wildOn(s.map[0], s.map[1], tod);
+  const list = $('#species');
+  list.textContent = '';
+  if (!here.length) {
+    list.innerHTML = '<span class="seen">nothing wild appears here — ' +
+                     'stand on a route with grass</span>';
+    huntWanted = null;
+    $('#hunt').disabled = true;
+    $('#hunt').textContent = 'Nothing to hunt here';
+    return;
+  }
+  for (const name of here) {
+    const b = document.createElement('button');
+    b.textContent = name;
+    b.onclick = () => {
+      huntWanted = name;
+      for (const other of list.children) other.classList.toggle('on', other === b);
+      $('#hunt').disabled = false;
+      $('#hunt').textContent = `Look for ${name}`;
+    };
+    list.appendChild(b);
+  }
+  if (huntWanted && !here.includes(huntWanted)) {
+    huntWanted = null;
+    $('#hunt').disabled = true;
+    $('#hunt').textContent = 'Pick one to look for';
+  }
+}
+
+$('#hunt').onclick = async () => {
+  if (running || !tasks || !huntWanted) return;
+  running = true;
+  tasks.cancelled = false;
+  $('#hunt').disabled = true;
+  $('#go').disabled = true;
+  gb.releaseAll();
+  syncHeld();
+  setStatus(`looking for ${huntWanted}`, 'busy');
+  const res = await tasks.hunt(huntWanted);
+  setStatus(res.message, res.ok ? 'ok' : 'bad');
+  progress('');
+  $('#seen').textContent = res.seen && res.seen.size
+    ? 'seen: ' + [...res.seen.entries()].sort((a, b) => b[1] - a[1])
+        .map(([n, c]) => `${n} x${c}`).join(', ')
+    : '';
+  running = false;
+  $('#hunt').disabled = false;
+  $('#go').disabled = false;
+  refresh();
+};
+
+$('#stopHunt').onclick = () => {
+  if (tasks) tasks.cancel();
+  walkCancelled = true;
+  progress('stopping…');
+};
+
+// --- speed ------------------------------------------------------------------
+// Only the idle loop is affected. Tasks drive their own frames as fast as they
+// can, which is what makes a grind worth starting.
+const speedInput = $('#speed');
+if (speedInput) {
+  const showSpeed = () => {
+    speed = SPEEDS[Number(speedInput.value)];
+    $('#speedx').textContent = speed === SPEEDS[SPEEDS.length - 1]
+      ? 'max' : speed + '×';
+  };
+  speedInput.addEventListener('input', showSpeed);
+  showSpeed();
+}
 
 // --- tap the screen to walk there -------------------------------------------
 // The overworld is drawn in 16x16 tiles, so the 160x144 screen is 10x9 of them
@@ -510,5 +609,6 @@ window.PILOT = {
   get state() { return state; },
   get collision() { return collision; },
   get nav() { return nav; },
+  get romdata() { return romdata; },
   walkToTap,
 };

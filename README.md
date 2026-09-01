@@ -182,6 +182,27 @@ map underneath, and *the game refusing input at all* — walk downstairs into
 Mom's script and every direction is blocked, which is not the map's fault and
 should not be reported as one.
 
+## Hunting
+
+Pick a species and the pilot walks the grass until it turns up, running from
+everything else, then hands you the battle.
+
+The list is only what that route has **at that hour**, which needs two things
+the phone does not have a disassembly for. Both come out of the cartridge
+instead: species names from `PokemonNames`, and the encounter tables from
+`JohtoGrassWildMons`, whose layout is three blocks of seven — morning, day,
+night. Checked against the desktop pilot's reading of the same tables: Route 29
+gives HOPPIP, PIDGEY, SENTRET, RATTATA in the morning and HOOTHOOT, RATTATA
+after dark, entry for entry.
+
+Grass only, deliberately. The pilot walks; it does not surf, so a route's water
+table is full of Pokémon it could pace the grass all day without meeting.
+
+**Not yet exercised end to end.** Like the grind loop, the hunt has nothing to
+run against here: a wild encounter needs a party, and reaching one means
+porting the bootstrap. The data behind it is checked against the desktop; the
+loop that uses it is not.
+
 ## Controls
 
 Eight on-screen buttons: the D-pad, A, B, Select and Start. **Press and hold** —
