@@ -103,6 +103,40 @@
       works too: arrows, Z/X for A/B, Enter for Start, Shift for Select.</footer>
   </div>
 </main>
+<script>
+// Keep animation frames coming while the page is hidden.
+//
+// The emulator core's startup waits on an animation frame, and a hidden page
+// never gets one -- so backgrounding the tab while a ROM loads leaves it stuck
+// on "booting" for good, with no error and no way back but a reload. This has
+// to run before the core does: it captures requestAnimationFrame at module
+// scope, so replacing it afterwards would change nothing.
+//
+// A timer stands in only while nobody can see the screen. Browsers clamp
+// timers in a background tab to about one a second, which is far too slow to
+// run a game on -- but this is not running the game. gb.js steps frames
+// directly when hidden; this exists only so the core's own waits finish.
+(function () {
+  const raf = window.requestAnimationFrame.bind(window);
+  const caf = window.cancelAnimationFrame.bind(window);
+  const timers = new Map();
+  let nextId = 1 << 22;          // cannot collide with the real handles
+  window.requestAnimationFrame = function (cb) {
+    if (!document.hidden) return raf(cb);
+    const id = nextId++;
+    timers.set(id, setTimeout(function () {
+      timers.delete(id);
+      cb(performance.now());
+    }, 16));
+    return id;
+  };
+  window.cancelAnimationFrame = function (id) {
+    if (!timers.has(id)) return caf(id);
+    clearTimeout(timers.get(id));
+    timers.delete(id);
+  };
+})();
+</script>
 <script src="./vendor/wasmboy.umd.js"></script>
 <script type="module" src="./app/main.js"></script>
 </body>
