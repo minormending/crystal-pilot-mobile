@@ -65,6 +65,21 @@ export class Tasks {
     return this.state.read(await this.gb.readWram());
   }
 
+  /**
+   * Is the battle menu up and waiting for a choice?
+   *
+   * Both halves of the cursor have to be in range. Checking only the column
+   * mistakes the text after a run attempt for a fresh menu: the cursor keeps
+   * the column RUN was chosen on and the confirm slot clears itself, so it
+   * reads as (2, 3) -- a column that looks right above a row that cannot be.
+   * Fleeing gave up on that misreading and reported it could not run from a
+   * SENTRET it had in fact escaped.
+   */
+  static menuIsLive(s) {
+    const [x, y] = s.menu;
+    return x >= 1 && x <= 2 && y >= 1 && y <= 2 && s.battleCursor === 0;
+  }
+
   say(msg) { this.onProgress(msg); }
 
   /**
@@ -147,14 +162,21 @@ export class Tasks {
    * The cursor variables keep their previous value between turns, so a settle
    * comes first -- otherwise "cursor is non-zero" reads as ready while the menu
    * is still drawing, and the presses land on battle text instead.
+   *
+   * The budget is generous because the opening of a battle is long: measured
+   * from a fresh encounter, it takes 48 presses to get through the animation
+   * and "Wild SENTRET appeared!" before the menu is there to be read. The old
+   * ceiling of 40 fell just short of that, so every first turn gave up -- which
+   * is why fleeing reported it could not run from things it had never asked to
+   * run from, and a grind never got as far as choosing a move. The loop returns
+   * the moment the menu is live, so a high ceiling costs nothing.
    */
-  async awaitBattleMenu(tries = 40) {
+  async awaitBattleMenu(tries = 150) {
     await this.gb.run(40);
     for (let i = 0; i < tries; i++) {
       const s = await this.snap();
       if (!s.inBattle) return null;
-      const [x, y] = s.menu;
-      if (x >= 1 && x <= 2 && y >= 1 && y <= 2 && s.battleCursor === 0) return s;
+      if (Tasks.menuIsLive(s)) return s;
       await this.gb.press('A', 4, 6);   // push through text
     }
     return null;
@@ -212,7 +234,7 @@ export class Tasks {
       for (let i = 0; i < 120; i++) {
         const s = await this.snap();
         if (!s.inBattle) return 'won';
-        if (s.menu[0] >= 1 && s.menu[0] <= 2 && s.battleCursor === 0 && i > 3) break;
+        if (i > 3 && Tasks.menuIsLive(s)) break;
         await this.gb.press('A', 4, 6);
         await this.pump();
       }
@@ -236,7 +258,7 @@ export class Tasks {
       for (let i = 0; i < 90; i++) {
         const s = await this.snap();
         if (!s.inBattle) return true;
-        if (s.menu[0] >= 1 && s.menu[0] <= 2 && s.battleCursor === 0 && i > 3) break;
+        if (i > 3 && Tasks.menuIsLive(s)) break;   // it refused; ask again
         await this.gb.press('A', 4, 6);
         await this.pump();
       }
@@ -374,9 +396,7 @@ export class Tasks {
         return 'gone';
       }
       // The menu coming back means it broke out and the turn is ours again.
-      if (s.menu[0] >= 1 && s.menu[0] <= 2 && s.battleCursor === 0 && i > 3) {
-        return 'broke free';
-      }
+      if (i > 3 && Tasks.menuIsLive(s)) return 'broke free';
       if (s.windowOpen && s.menu[1] >= 1 && s.party.length > partyBefore) {
         await this.declineNickname();
         await this.settleText();
