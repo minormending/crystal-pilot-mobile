@@ -14,6 +14,7 @@ export class GameBoy {
     this.core = null;
     this.workRam = 0;
     this.ready = false;
+    this.held = new Set();
   }
 
   async start(canvas) {
@@ -53,7 +54,7 @@ export class GameBoy {
    * and yields plausible-looking rubbish, so the result is normalised here
    * rather than trusted.
    */
-  async readWram(bytes = 0x8000) {
+  async readWram(bytes = 0x2000) {
     const section = await this.core._getWasmMemorySection(
       this.workRam, this.workRam + bytes
     );
@@ -78,6 +79,23 @@ export class GameBoy {
   static wordAt(wram, addr) {
     const i = addr - GB_WRAM_START;
     return (wram[i] << 8) | wram[i + 1];
+  }
+
+  /**
+   * Buttons currently held down by the player.
+   *
+   * The run loop pushes this every frame, which is what makes holding a
+   * direction walk. A single short press mostly just turns the character in
+   * Gen 2, so tap-only controls cannot move you anywhere.
+   */
+  hold(button) { this.held.add(button); this.applyHeld(); }
+  release(button) { this.held.delete(button); this.applyHeld(); }
+  releaseAll() { this.held.clear(); this.applyHeld(); }
+
+  applyHeld() {
+    const state = {};
+    for (const b of this.held) state[b] = true;
+    this.core.setJoypadState(state);
   }
 
   /** Hold `buttons` for `frames`, then release. */

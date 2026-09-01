@@ -26,6 +26,8 @@
   .card h2{font-size:12px;margin:0 0 8px;color:var(--dim);letter-spacing:.06em;
            text-transform:uppercase}
   .row{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+  /* Stop a held D-pad press turning into a scroll or a text selection. */
+  [data-btn]{touch-action:none;user-select:none;-webkit-user-select:none}
   button,label.file{font:inherit;color:var(--ink);background:var(--panel);
     border:1px solid var(--line);border-radius:10px;padding:13px 14px;
     min-height:46px;flex:1 1 auto;cursor:pointer;text-align:center}
@@ -97,6 +99,8 @@
     <div class="row">
       <button data-btn="SELECT">Select</button><button data-btn="START">Start</button>
     </div>
+    <footer>Press and hold to walk — a short tap only turns you. A keyboard
+      works too: arrows, Z/X for A/B, Enter for Start, Shift for Select.</footer>
   </div>
 </main>
 <script src="./vendor/wasmboy.umd.js"></script>

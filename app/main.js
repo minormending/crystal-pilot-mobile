@@ -32,12 +32,31 @@ async function maybeStart() {
     setStatus('could not reach the overworld — is this a Crystal ROM?', 'bad');
     return;
   }
+  startLoop();
   $('#loader').classList.add('hide');
   $('#panel').classList.remove('hide');
   $('#ctrls').classList.remove('hide');
   setStatus('ready', 'ok');
   refresh();
   setInterval(() => { if (!running) refresh(); }, 1200);
+}
+
+/**
+ * Advance the emulator in real time while nobody is driving it.
+ *
+ * Without this the game only moves during a task or a button press, so it looks
+ * frozen. Tasks drive the emulator themselves, so the loop stands down while
+ * one is running to avoid two things stepping the same core.
+ */
+function startLoop() {
+  let stepping = false;
+  const tick = async () => {
+    requestAnimationFrame(tick);
+    if (running || stepping || !gb.ready) return;
+    stepping = true;
+    try { await gb.run(1); } finally { stepping = false; }
+  };
+  requestAnimationFrame(tick);
 }
 
 async function refresh() {
@@ -108,15 +127,46 @@ document.querySelectorAll('[data-step]').forEach((b) => {
   };
 });
 
-document.querySelectorAll('[data-btn]').forEach((b) => {
-  b.onclick = () => { if (!running) gb.press(b.dataset.btn, 6, 2); };
+// --- controls -------------------------------------------------------------
+// Press and hold, not tap. The emulator advances in the run loop below, and the
+// loop pushes whatever is held each frame, so holding a direction walks.
+function bindHold(el, button) {
+  const down = (e) => { e.preventDefault(); if (!running) gb.hold(button); };
+  const up = (e) => { e.preventDefault(); gb.release(button); };
+  el.addEventListener('pointerdown', down);
+  el.addEventListener('pointerup', up);
+  el.addEventListener('pointercancel', up);
+  el.addEventListener('pointerleave', up);
+}
+document.querySelectorAll('[data-btn]').forEach((b) => bindHold(b, b.dataset.btn));
+
+// Keyboard too, so the same page is usable on a desktop browser.
+const KEYS = {
+  ArrowUp: 'UP', ArrowDown: 'DOWN', ArrowLeft: 'LEFT', ArrowRight: 'RIGHT',
+  z: 'A', x: 'B', a: 'A', s: 'B', Enter: 'START', Shift: 'SELECT',
+  Backspace: 'SELECT',
+};
+addEventListener('keydown', (e) => {
+  const b = KEYS[e.key];
+  if (!b || running) return;
+  e.preventDefault();
+  gb.hold(b);
 });
+addEventListener('keyup', (e) => {
+  const b = KEYS[e.key];
+  if (!b) return;
+  e.preventDefault();
+  gb.release(b);
+});
+// Releasing on blur avoids a key staying stuck down after tabbing away.
+addEventListener('blur', () => gb.releaseAll());
 
 $('#go').onclick = async () => {
   if (running || !tasks) return;
   running = true;
   tasks.cancelled = false;
   $('#go').disabled = true;
+  gb.releaseAll();          // do not leave a held button pressed into the task
   setStatus(`grinding to Lv${target}`, 'busy');
   const res = await tasks.grind(0, target);
   setStatus(res.message, res.ok ? 'ok' : 'bad');
