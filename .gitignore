@@ -1,0 +1,10 @@
+# No game files in this repo. Bring your own ROM and .sym, built from the
+# pokecrystal disassembly.
+dev/
+*.gbc
+*.gb
+*.sav
+*.sym
+*.state
+node_modules/
+.DS_Store
