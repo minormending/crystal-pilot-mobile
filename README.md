@@ -128,6 +128,14 @@ directly, with no naming screen involved.
 
 Tap anywhere on the screen and the pilot walks there.
 
+<img src="docs/tap-to-walk.png" alt="A tap being walked to, mid-route" width="330">
+
+That is a walk in progress: the ring is the tile that was tapped, the player is
+four steps into the route, and the status says where it is going and where it
+has got to. The ring tracks the *map*, not the screen — the camera keeps the
+player centred, so a marker left where the finger landed would drift off the
+destination as the world scrolled under it.
+
 The overworld is drawn in 16×16 tiles, so the 160×144 screen is 10×9 of them and
 the player is always the one at (4, 4) — the camera keeps them centred rather
 than clamping at map edges. That makes a tap a map coordinate, and `app/collision.js`
