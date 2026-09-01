@@ -8,7 +8,10 @@
 <title>crystal-pilot mobile</title>
 <style>
   :root { --bg:#16161c; --panel:#23232c; --line:#34343f; --ink:#f2f2f5;
-          --dim:#9a9aa8; --accent:#4f7fe8; --ok:#46b06a; --bad:#d05a5a; }
+          --dim:#9a9aa8; --accent:#4f7fe8; --ok:#46b06a; --bad:#d05a5a;
+          /* Keys sit on top of a card, so they need their own step up from
+             it -- a button the same colour as its container reads as a label. */
+          --key:#343442; --key-lit:#3e3e4e; }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
   body{margin:0;background:var(--bg);color:var(--ink);
        font:15px/1.45 ui-sans-serif,-apple-system,system-ui,sans-serif;
@@ -37,17 +40,76 @@
   .mono{font-family:ui-monospace,Menlo,monospace;font-size:12px}
   .stepper{display:flex;align-items:center;gap:10px}
   .stepper .v{font-size:28px;font-weight:700;min-width:2.4em;text-align:center}
-  .pad{display:grid;grid-template-columns:repeat(3,54px);
-       grid-template-rows:repeat(3,44px);gap:6px}
-  .pad button{min-height:0;padding:0}
-  .u{grid-area:1/2}.l{grid-area:2/1}.r{grid-area:2/3}.d{grid-area:3/2}
-  .controls{display:flex;gap:14px;justify-content:space-between;align-items:center}
+
+  /* --- the gamepad -----------------------------------------------------
+     Laid out like the hardware, because that is what hands expect: cross on
+     the left, A above and right of B, and the two slim menu keys centred
+     underneath. */
+  /* Capped and centred: on a wide screen space-between alone flings the cross
+     and the face buttons to opposite edges, and a gamepad with 240px of gap
+     down the middle stops reading as one thing. */
+  .gamepad{display:flex;align-items:center;justify-content:space-between;
+           gap:10px;padding:2px 2px 0;max-width:330px;margin:0 auto}
+
+  /* A connected cross, not four loose boxes. The cells touch and only the
+     outer tips are rounded, which is what makes it read as a D-pad. */
+  .dpad{--cell:48px;display:grid;grid-template-columns:repeat(3,var(--cell));
+        grid-template-rows:repeat(3,var(--cell));flex:0 0 auto}
+  .dpad button,.dpad .hub{background:var(--key);border:0;margin:0;padding:0;
+        min-height:0;border-radius:0;color:#dcdce6;font-size:14px;line-height:1;
+        box-shadow:inset 0 1px 0 rgba(255,255,255,.05)}
+  .dpad .u{grid-area:1/2;border-radius:11px 11px 0 0}
+  .dpad .l{grid-area:2/1;border-radius:11px 0 0 11px}
+  .dpad .hub{grid-area:2/2;display:flex;align-items:center;justify-content:center}
+  .dpad .r{grid-area:2/3;border-radius:0 11px 11px 0}
+  .dpad .d{grid-area:3/2;border-radius:0 0 11px 11px}
+  /* The hub is scenery: it joins the arms, and must never eat a press meant
+     for one of them. */
+  .dpad .hub{pointer-events:none}
+  .dpad .hub::after{content:"";width:9px;height:9px;border-radius:50%;
+        background:rgba(0,0,0,.22)}
+
+  /* Round, and on the diagonal A-over-B. */
+  .face{--btn:60px;display:grid;grid-template-columns:repeat(2,var(--btn));
+        grid-template-rows:repeat(2,calc(var(--btn) * 0.78));flex:0 0 auto}
+  .face button{width:var(--btn);height:var(--btn);border-radius:50%;
+        min-height:0;padding:0;flex:0 0 auto;background:var(--key);
+        border:0;font-weight:700;font-size:18px;color:#cfcfdb;
+        box-shadow:inset 0 1px 0 rgba(255,255,255,.06)}
+  .face .a{grid-area:1/2;align-self:start}
+  .face .b{grid-area:2/1;align-self:end}
+
+  /* Slim slanted keys, the way the hardware marks Select and Start. The label
+     is un-skewed inside so only the key is angled. */
+  .menus{display:flex;gap:16px;justify-content:center;margin-top:16px}
+  .menus button{display:flex;align-items:center;justify-content:center}
+  .menus button{flex:0 0 auto;min-height:44px;padding:0 22px;border:0;
+        border-radius:7px;background:var(--key);transform:skewX(-16deg);
+        box-shadow:inset 0 1px 0 rgba(255,255,255,.05)}
+  .menus button b{display:block;transform:skewX(16deg);font-weight:600;
+        font-size:11px;letter-spacing:.11em;text-transform:uppercase;
+        color:var(--dim)}
+
+  /* Held, not just tapped. Without this a press gives no sign it landed --
+     the default tap highlight is off, and the whole point of these controls
+     is that you hold them. Driven off the emulator's own set of held buttons,
+     so a keyboard lights up the same key a thumb would. */
+  .dpad button.held,.face button.held,.menus button.held,
+  .dpad button:active,.face button:active,.menus button:active{
+        background:var(--accent);color:#fff}
+  .menus button.held b,.menus button:active b{color:#fff}
+  .face button.held,.face button:active{transform:scale(.95)}
+  .dpad button.held,.dpad button:active{box-shadow:inset 0 2px 5px rgba(0,0,0,.3)}
+  @media (prefers-reduced-motion:reduce){
+    .face button.held,.face button:active{transform:none}
+  }
   .dot{width:9px;height:9px;border-radius:50%;background:var(--dim);
        display:inline-block;margin-right:6px}
   .dot.busy{background:var(--accent)} .dot.ok{background:var(--ok)}
   .dot.bad{background:var(--bad)}
   .hide{display:none!important}
   footer{color:var(--dim);font-size:12px;padding:8px 14px 24px;text-align:center}
+  .card footer{padding:14px 0 0}
 </style>
 </head>
 <body>
@@ -73,6 +135,28 @@
     <div class="mono" id="progress" style="color:var(--dim);margin-top:6px"></div>
   </div>
 
+  <div class="card hide" id="ctrls">
+    <h2>Play</h2>
+    <div class="gamepad">
+      <div class="dpad">
+        <button class="u" data-btn="UP" aria-label="Up">▲</button>
+        <button class="l" data-btn="LEFT" aria-label="Left">◀</button>
+        <span class="hub" aria-hidden="true"></span>
+        <button class="r" data-btn="RIGHT" aria-label="Right">▶</button>
+        <button class="d" data-btn="DOWN" aria-label="Down">▼</button>
+      </div>
+      <div class="face">
+        <button class="a" data-btn="A">A</button>
+        <button class="b" data-btn="B">B</button>
+      </div>
+    </div>
+    <div class="menus">
+      <button data-btn="SELECT"><b>Select</b></button>
+      <button data-btn="START"><b>Start</b></button>
+    </div>
+    <footer>Press and hold to walk — a short tap only turns you.<br>
+      Keyboard: arrows, Z/X for A/B, Enter for Start, Shift for Select.</footer>
+  </div>
   <div class="card hide" id="panel">
     <h2>Grind</h2>
     <div class="mono" id="party" style="margin-bottom:10px"></div>
@@ -87,21 +171,6 @@
     </div>
   </div>
 
-  <div class="card hide" id="ctrls">
-    <h2>Play</h2>
-    <div class="controls">
-      <div class="pad">
-        <button class="u" data-btn="UP">▲</button><button class="l" data-btn="LEFT">◀</button>
-        <button class="r" data-btn="RIGHT">▶</button><button class="d" data-btn="DOWN">▼</button>
-      </div>
-      <div><button data-btn="B">B</button> <button data-btn="A">A</button></div>
-    </div>
-    <div class="row">
-      <button data-btn="SELECT">Select</button><button data-btn="START">Start</button>
-    </div>
-    <footer>Press and hold to walk — a short tap only turns you. A keyboard
-      works too: arrows, Z/X for A/B, Enter for Start, Shift for Select.</footer>
-  </div>
 </main>
 <script>
 // Keep animation frames coming while the page is hidden.
