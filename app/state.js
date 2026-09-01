@@ -45,6 +45,11 @@ export class GameState {
       battleMonHp: symbols.addr('wBattleMonHP'),
       battleMonMaxHp: symbols.addr('wBattleMonMaxHP'),
       menuItems: symbols.addr('wMenuDataItems'),
+      numBalls: symbols.addr('wNumBalls'),
+      balls: symbols.addr('wBalls'),
+      curPocket: symbols.addr('wCurPocket'),
+      curItem: symbols.addr('wCurItem'),
+      windowStack: symbols.addr('wWindowStackSize'),
       menuTop: symbols.addr('wMenuBorderTopCoord'),
       menuRight: symbols.addr('wMenuBorderRightCoord'),
     };
@@ -98,7 +103,28 @@ export class GameState {
         maxHp: w(wram, a.battleMonMaxHp),
       },
       party: this.party(wram),
+      balls: this.balls(wram),
+      curPocket: b(wram, a.curPocket),
+      curItem: b(wram, a.curItem),
+      windowOpen: b(wram, a.windowStack) > 0,
     };
+  }
+
+  /**
+   * The BALL pocket, as [id, quantity] pairs.
+   *
+   * wNumBalls counts the *kinds* of ball carried, not how many balls: the
+   * quantity is the second byte of each entry.
+   */
+  balls(wram) {
+    const n = Math.min(b(wram, this.a.numBalls), 20);
+    const out = [];
+    for (let i = 0; i < n; i++) {
+      const id = b(wram, this.a.balls + i * 2);
+      if (id === 0 || id === 0xff) break;
+      out.push([id, b(wram, this.a.balls + i * 2 + 1)]);
+    }
+    return out;
   }
 
   party(wram) {

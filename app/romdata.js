@@ -9,8 +9,14 @@
 // CHARMANDER, CYNDAQUIL, and Route 29's tables match data/wild/johto_grass.asm
 // entry for entry, night swap included.
 
+// Pokemon names are a fixed-width table. Item names are not -- they are packed
+// one after another, each ended by "@" -- and reading them at a fixed stride
+// drifts a character further out with every entry: ULTRA BALL came back as
+// "LTRA BALL", GREAT BALL as "AT BALL".
 const PKMN_NAME_LENGTH = 10;
-const ITEM_NAME_LENGTH = 13;
+const NAME_TERMINATOR = 0x50;
+// The charmap's one ligature that shows up in item names.
+const POKE_LIGATURE = 0x54;
 // A grass table is: map group, map number, three encounter rates, then three
 // blocks of seven (level, species) -- morning, day, night. The list ends at $FF.
 const GRASS_SLOTS_PER_TIME = 7;
@@ -22,14 +28,20 @@ const TABLE_END = 0xff;
 export function decodeText(bytes) {
   let out = '';
   for (const b of bytes) {
-    if (b === 0x50) break;                       // "@" terminates
-    if (b === 0x7f) out += ' ';
+    if (b === NAME_TERMINATOR) break;            // "@" terminates
+    if (b === POKE_LIGATURE) out += 'POKé';      // one byte, four letters
+    else if (b === 0x7f) out += ' ';
     else if (b >= 0x80 && b <= 0x99) out += String.fromCharCode(65 + b - 0x80);
     else if (b >= 0xa0 && b <= 0xb9) out += String.fromCharCode(97 + b - 0xa0);
     else if (b >= 0xf6 && b <= 0xff) out += String.fromCharCode(48 + b - 0xf6);
     else out += '?';
   }
   return out.trim();
+}
+
+/** Case and accent folded, so "POKé BALL" can be matched by typing it plainly. */
+export function normalise(name) {
+  return name.toLowerCase().replace(/é/g, 'e').replace(/\s+/g, ' ').trim();
 }
 
 export class RomData {
@@ -70,11 +82,44 @@ export class RomData {
     return this._index;
   }
 
+  /**
+   * Item name for a 1-based item id.
+   *
+   * Walks the "@" terminators rather than striding: the table is packed, so
+   * every entry after the first sits at an offset only the ones before it can
+   * tell you.
+   */
   itemName(id) {
-    if (!id) return '';
+    if (!id || id === 0xff) return '';
+    if (this._itemCache && this._itemCache.has(id)) return this._itemCache.get(id);
     const { bank, addr } = this.items;
-    return decodeText(
-      this._read(bank, addr + (id - 1) * ITEM_NAME_LENGTH, ITEM_NAME_LENGTH));
+    let at = addr;
+    for (let n = 1; n < id; n++) {
+      for (let guard = 0; guard < 24; guard++) {
+        if (this.gb.romByte(bank, at++) === NAME_TERMINATOR) break;
+      }
+    }
+    const bytes = [];
+    for (let guard = 0; guard < 24; guard++) {
+      const b = this.gb.romByte(bank, at + guard);
+      if (b === NAME_TERMINATOR) break;
+      bytes.push(b);
+    }
+    const name = decodeText(bytes);
+    if (!this._itemCache) this._itemCache = new Map();
+    this._itemCache.set(id, name);
+    return name;
+  }
+
+  /** Normalised name -> id, so a ball can be found by what it is called. */
+  itemIndex(limit = 60) {
+    if (!this._itemIndex) {
+      this._itemIndex = new Map();
+      for (let id = 1; id <= limit; id++) {
+        this._itemIndex.set(normalise(this.itemName(id)), id);
+      }
+    }
+    return this._itemIndex;
   }
 
   /**
