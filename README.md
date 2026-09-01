@@ -70,11 +70,16 @@ Proven, and visible in the screenshot:
   room — two implementations, one in Python over PyBoy and one in JS over
   WasmBoy, agreeing exactly
 
-**Not proven:** a completed grind. The task loop in `app/tasks.js` is written and
-is a direct port of logic the desktop version has tests for, but it has not been
-watched finishing a grind here, because reaching a party means porting the
-"walk to Elm's lab and take a starter" bootstrap, which this spike does not do.
-Treat the loop as untested code.
+- **a new game start to finish**: title screen, Oak's speech, a starter out of
+  Elm's lab and out to the grass on Route 29, in about a minute
+- **a grind**: Lv5 to Lv7 in five battles, seven seconds
+- **a hunt**: found a RATTATA after five encounters, running from the four it
+  did not want
+
+**Not proven:** catching. The loop is written and everything it reads is
+checked, but a fresh game carries no Poké Balls — Elm's aide hands those over
+further along the story than the bootstrap goes — so nothing has been thrown
+yet.
 
 ## The part that had to be redesigned
 
@@ -182,6 +187,17 @@ map underneath, and *the game refusing input at all* — walk downstairs into
 Mom's script and every direction is blocked, which is not the map's fault and
 should not be reported as one.
 
+## Starting from nothing
+
+There is a **Start a new game for me** button on a fresh ROM. It plays the
+intro, walks downstairs, out of the house, into Elm's lab, takes a starter, and
+carries on out to the grass on Route 29 — about a minute, and the point of it is
+that everything else needs a party to be worth running.
+
+The route is the desktop pilot's, and each leg says which map it expects to land
+on rather than assuming, because a bootstrap that drifts off course ends up
+mashing A at a wall.
+
 ## Hunting
 
 Pick a species and the pilot walks the grass until it turns up, running from
@@ -211,11 +227,10 @@ names: `PokemonNames` is a fixed-width table, `ItemNames` is packed with `@`
 between entries. Reading it at a stride drifts a character further out every
 entry — ULTRA BALL came back as `LTRA BALL`, GREAT BALL as `AT BALL`.
 
-**Not yet exercised end to end.** Like the grind loop, hunt and catch have
-nothing to run against here: a wild encounter needs a party, and reaching one
-means porting the bootstrap. Everything they read is checked against the
-desktop — species names, wild tables, item names, and the bag decode; the loops
-over that data are not.
+Hunting is now watched working: with a starter in tow on Route 29 it found a
+RATTATA after five encounters, running from two PIDGEY and two SENTRET on the
+way. Catching is not — a fresh game has no Poké Balls, and Elm's aide hands
+those over further along than the bootstrap goes.
 
 ## Controls
 

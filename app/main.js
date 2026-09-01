@@ -6,6 +6,7 @@ import { Tasks } from './tasks.js';
 import { CollisionMap } from './collision.js';
 import { Nav } from './nav.js';
 import { RomData, normalise } from './romdata.js';
+import { Bootstrap } from './bootstrap.js';
 
 const $ = (s) => document.querySelector(s);
 const PARAMS = new URLSearchParams(location.search);
@@ -18,7 +19,7 @@ const DEV = PARAMS.has('dev');
 const AUTOSTART = PARAMS.has('autostart');
 const gb = new GameBoy();
 let symbols = null, state = null, tasks = null, romBytes = null;
-let collision = null, nav = null, romdata = null;
+let collision = null, nav = null, romdata = null, boot = null;
 let huntWanted = null;
 let ballId = null;
 // Frames advanced per animation frame while nobody is driving. The steps are
@@ -40,10 +41,14 @@ async function maybeStart() {
   await gb.start($('#screen'));
   await gb.loadRom(romBytes);
   state = new GameState(symbols);
+  // romdata first: the tasks are handed it at construction, and built
+  // in the other order they were handed null -- which a hunt only finds
+  // out about when it tries to name the first Pokemon it meets.
+  romdata = new RomData(symbols, gb);
   tasks = new Tasks(gb, state, progress, romdata);
   collision = new CollisionMap(symbols, gb);
   nav = new Nav(gb, symbols);
-  romdata = new RomData(symbols, gb);
+  boot = new Bootstrap(gb, state, tasks, collision, nav, progress);
   A_MARK = {
     x: symbols.addr('wXCoord'), y: symbols.addr('wYCoord'),
     offX: symbols.addr('wPlayerBGMapOffsetX'),
@@ -85,6 +90,8 @@ async function maybeStart() {
 async function awaitWorld() {
   setStatus('Press Start, then play until you are out in the world', '');
   progress('the pilot waits here — a new game is yours to start');
+  $('#bootrow').classList.remove('hide');
+  $('#bootnote').classList.remove('hide');
   // The header tracks where you are, and it is filled in by refresh() once
   // there is a game to describe. Until then it still read "no ROM loaded",
   // which is untrue the moment a ROM has been picked.
@@ -97,6 +104,8 @@ async function awaitWorld() {
     await new Promise((r) => setTimeout(r, 700));
   }
   $('#panel').classList.remove('hide');
+  $('#bootrow').classList.add('hide');
+  $('#bootnote').classList.add('hide');
   setStatus('ready', 'ok');
   progress('');
   refresh();
@@ -257,6 +266,25 @@ addEventListener('keyup', (e) => {
 });
 // Releasing on blur avoids a key staying stuck down after tabbing away.
 addEventListener('blur', () => { gb.releaseAll(); syncHeld(); });
+
+$('#boot').onclick = async () => {
+  if (running || !boot) return;
+  running = true;
+  $('#boot').disabled = true;
+  gb.releaseAll();
+  syncHeld();
+  setStatus('starting a new game', 'busy');
+  const res = await boot.run('cyndaquil');
+  setStatus(res.message, res.ok ? 'ok' : 'bad');
+  progress('');
+  running = false;
+  $('#boot').disabled = false;
+  if (res.ok) {
+    $('#bootrow').classList.add('hide');
+    $('#bootnote').classList.add('hide');
+  }
+  refresh();
+};
 
 // --- hunt -------------------------------------------------------------------
 // The list is rebuilt from where you are standing and what time the game thinks
@@ -654,5 +682,6 @@ window.PILOT = {
   get collision() { return collision; },
   get nav() { return nav; },
   get romdata() { return romdata; },
+  get boot() { return boot; },
   walkToTap,
 };
