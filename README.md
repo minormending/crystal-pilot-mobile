@@ -126,6 +126,13 @@ Eight on-screen buttons: the D-pad, A, B, Select and Start. **Press and hold** �
 a short tap only turns the character in Gen 2, so tapping a direction will not
 walk you anywhere.
 
+<img src="docs/controls.png" alt="The on-screen controls, with LEFT held" width="330">
+
+That is the app mid-hand-off: a ROM booted, the intro left alone for the player,
+and LEFT held down — which is what the lit key means. The held state is read
+back from the emulator's own set of held buttons, so pressing `Z` on a keyboard
+lights up the same A button a thumb would.
+
 There is no TAB button. On the desktop pilot, TAB opens an in-game menu because
 the only surface there is the emulator window; here the pilot's controls are the
 page itself — the Grind card, the level stepper, and Start/Stop sit above the
