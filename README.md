@@ -76,10 +76,21 @@ Proven, and visible in the screenshot:
 - **a hunt**: found a RATTATA after five encounters, running from the four it
   did not want
 
-**Not proven:** catching. The loop is written and everything it reads is
-checked, but a fresh game carries no Poké Balls — Elm's aide hands those over
-further along the story than the bootstrap goes — so nothing has been thrown
-yet.
+- **healing**: walks into Cherrygrove's Pokémon Center, talks to the nurse and
+  comes back out with the party at full HP
+
+**Not proven:** catching, because the game will not give you a ball yet. It
+gates them deliberately — `setflag ENGINE_POKEDEX` is in Mr. Pokémon's house,
+the Cherrygrove Mart only stocks balls once you hold a Pokédex, and Elm's aide
+hands his five over only after the egg is delivered, which brings a rival battle
+with it. The earliest ball needing none of that is the one lying in the grass on
+Route 31.
+
+Getting there is half built. The pilot walks Route 29 to Cherrygrove, heals, and
+crosses north to Route 30, running from whatever jumps out on the way. Route 30
+to Route 31 is where it stops: it is fifty-four tiles top to bottom with terrain
+that a "walk to the edge and keep going" crossing cannot solve, so reaching the
+ball needs the desktop pilot's map graph ported rather than another nudge.
 
 ## The part that had to be redesigned
 

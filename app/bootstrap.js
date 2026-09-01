@@ -19,6 +19,10 @@ const PLAYERS_HOUSE_1F = key(24, 6);
 const NEW_BARK_TOWN = key(24, 4);
 const ELMS_LAB = key(24, 5);
 const ROUTE_29 = key(24, 3);
+const CHERRYGROVE_CITY = key(26, 3);
+const CHERRYGROVE_POKECENTER = key(26, 5);
+const ROUTE_30 = key(26, 1);
+const ROUTE_31 = key(26, 2);
 
 const MAP_NAMES = {
   [PLAYERS_HOUSE_2F]: 'your bedroom',
@@ -26,7 +30,20 @@ const MAP_NAMES = {
   [NEW_BARK_TOWN]: 'New Bark Town',
   [ELMS_LAB]: "Elm's lab",
   [ROUTE_29]: 'Route 29',
+  [CHERRYGROVE_CITY]: 'Cherrygrove City',
+  [CHERRYGROVE_POKECENTER]: "Cherrygrove's Pokémon Center",
+  [ROUTE_30]: 'Route 30',
+  [ROUTE_31]: 'Route 31',
 };
+
+// CherrygroveCity warp_events, and the nurse behind her counter.
+const POKECENTER_DOOR = [29, 3];
+const NURSE = [3, 1];
+// Route31 object_events: a Poké Ball lying in the grass. It is the earliest
+// ball in the game that does not need the Pokédex -- the Mart only stocks them
+// once you have one, and Elm's aide only hands them over after the errand to
+// Mr. Pokémon's, which brings a rival battle with it.
+const ROUTE_31_BALL = [19, 15];
 
 // Warp tiles, from the object_events of each map.
 const STAIRS_DOWN = [7, 0];        // PlayersHouse2F
@@ -171,8 +188,28 @@ export class Bootstrap {
 
     const from = await this.mapKey();
     for (const tile of open.slice(0, 6)) {
-      await this.nav.walkTo(this.collision, tile);
+      // Crossing a route means walking its whole width through grass, and
+      // something jumps out every few steps. A wild battle is not a navigation
+      // failure -- nothing is lost by it -- so it is run from and the walk
+      // picks up where it left off, rather than counting against the plan.
+      let arrived = false;
+      for (let attempt = 0; attempt < 30 && !arrived; attempt++) {
+        await this.escapeBattle();
+        // Routes are long -- Route 30 is fifty-four tiles top to bottom -- and
+        // the default step budget is sized for a room, so it runs out halfway
+        // up with nothing to show for it.
+        const res = await this.nav.walkTo(this.collision, tile, { maxSteps: 260 });
+        // Walking to the edge can carry us over it, and that is the errand
+        // done rather than a failure -- the walk reports it as a warp, which
+        // an earlier version treated as a reason to give up on a crossing it
+        // had just completed.
+        if (await this.mapKey() !== from) return await this.mapKey() === expect;
+        if (res.stopped === null) arrived = true;
+        else if (res.stopped !== 'battle') break;
+      }
+      if (!arrived) continue;
       for (let i = 0; i < tries; i++) {
+        await this.escapeBattle();
         const res = await this.nav.step(direction);
         if (await this.mapKey() !== from) return await this.mapKey() === expect;
         if (res.blocked) break;
@@ -202,6 +239,111 @@ export class Bootstrap {
       if (res.stopped === null) return true;
     }
     return false;
+  }
+
+  /** Find a way off this map and take it. */
+  async leaveVia(expect) {
+    const wram = await this.settled();
+    if (!wram) return false;
+    const [w, h] = this.collision.mapSize();
+    const pos = this.collision.playerPos(wram);
+    const warps = [];
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        if (CollisionMap.isWarp(this.collision.collisionAt(x, y))) warps.push([x, y]);
+      }
+    }
+    warps.sort((a, b) =>
+      Math.abs(a[0] - pos[0]) + Math.abs(a[1] - pos[1])
+      - Math.abs(b[0] - pos[0]) - Math.abs(b[1] - pos[1]));
+    for (const tile of warps.slice(0, 4)) {
+      if (await this.through(tile, expect)) return true;
+    }
+    return false;
+  }
+
+  /**
+   * Heal at Cherrygrove's Pokémon Center.
+   *
+   * The nurse stands behind a counter, so the approach is from two tiles below
+   * and then one -- the same way the desktop pilot does it, and the same way a
+   * person would. Her question defaults to yes, which is the answer we want.
+   */
+  async heal() {
+    if (await this.mapKey() !== CHERRYGROVE_CITY) return false;
+    if (!await this.through(POKECENTER_DOOR, CHERRYGROVE_POKECENTER)) return false;
+    await this.runScripts();
+    for (let attempt = 0; attempt < 3; attempt++) {
+      await this.nav.walkTo(this.collision, [NURSE[0], NURSE[1] + 2]);
+      await this.nav.walkTo(this.collision, [NURSE[0], NURSE[1] + 1]);
+      await this.nav.step('UP');
+      await this.gb.press('A', 6, 12);
+      await this.runScripts();
+      const s = await this.snap();
+      if (s.party.every((m) => m.hp === m.maxHp)) break;
+    }
+    const healed = (await this.snap()).party.every((m) => m.hp === m.maxHp);
+    await this.leaveVia(CHERRYGROVE_CITY);
+    return healed;
+  }
+
+  /**
+   * Walk from Route 29 to the Poké Ball lying on Route 31, and pick it up.
+   *
+   * Wild encounters interrupt constantly on the way, so each leg runs from
+   * whatever it meets and carries on. Healing happens in Cherrygrove because
+   * fleeing is not free -- it can fail, and a fainted party ends the trip.
+   */
+  async fetchBall() {
+    const legs = [
+      ['west to Cherrygrove', async () =>
+        await this.crossEdge('LEFT', CHERRYGROVE_CITY) ? null : 'could not leave Route 29'],
+      ['healing up', async () => { await this.heal(); return null; }],
+      ['north to Route 30', async () =>
+        await this.crossEdge('UP', ROUTE_30) ? null : 'could not reach Route 30'],
+      ['north to Route 31', async () =>
+        await this.crossEdge('UP', ROUTE_31) ? null : 'could not reach Route 31'],
+      ['picking the ball up', async () => this.pickUp(ROUTE_31_BALL)],
+    ];
+    for (const [what, leg] of legs) {
+      this.say(what);
+      await this.escapeBattle();
+      const failed = await leg();
+      if (failed) {
+        return { ok: false, message:
+          `${failed} (stopped in ${this.where(await this.mapKey())})` };
+      }
+    }
+    const s = await this.snap();
+    const balls = s.balls.reduce((n, [, q]) => n + q, 0);
+    return { ok: balls > 0, balls: s.balls,
+             message: balls > 0
+               ? `picked up ${balls} Poké Ball${balls === 1 ? '' : 's'}`
+               : 'reached the ball but the bag is still empty' };
+  }
+
+  /** Run from anything that jumped us on the way. */
+  async escapeBattle() {
+    if (!(await this.snap()).inBattle) return true;
+    return this.tasks.flee();
+  }
+
+  /** Stand next to an item ball and take it. */
+  async pickUp(tile) {
+    const below = [tile[0], tile[1] + 1];
+    for (let attempt = 0; attempt < 3; attempt++) {
+      await this.escapeBattle();
+      const res = await this.nav.walkTo(this.collision, below);
+      if (res.stopped !== null && res.stopped !== 'battle') {
+        if (res.stopped === 'battle') continue;
+      }
+      await this.nav.step('UP');
+      await this.gb.press('A', 6, 12);
+      await this.runScripts();
+      const s = await this.snap();
+      if (s.balls.length) return null;
+    }
+    return 'the ball would not go in the bag';
   }
 
   /** Take a starter out of one of the three balls in Elm's lab. */
