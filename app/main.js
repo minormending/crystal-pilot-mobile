@@ -3,6 +3,8 @@ import { GameBoy } from './gb.js';
 import { Symbols } from './symbols.js';
 import { GameState } from './state.js';
 import { Tasks } from './tasks.js';
+import { CollisionMap } from './collision.js';
+import { Nav } from './nav.js';
 
 const $ = (s) => document.querySelector(s);
 const PARAMS = new URLSearchParams(location.search);
@@ -15,6 +17,7 @@ const DEV = PARAMS.has('dev');
 const AUTOSTART = PARAMS.has('autostart');
 const gb = new GameBoy();
 let symbols = null, state = null, tasks = null, romBytes = null;
+let collision = null, nav = null;
 let running = false, target = 5;
 
 const setStatus = (text, kind = '') => {
@@ -30,6 +33,8 @@ async function maybeStart() {
   await gb.loadRom(romBytes);
   state = new GameState(symbols);
   tasks = new Tasks(gb, state, progress);
+  collision = new CollisionMap(symbols, gb);
+  nav = new Nav(gb, symbols);
 
   // Hand the game over immediately: buttons visible, emulator running.
   $('#loader').classList.add('hide');
@@ -148,7 +153,11 @@ $('#symFile').addEventListener('change', async (e) => {
     }
     symbols = new Symbols(text);
     symbols.require(['wPartyCount', 'wPartyMon1', 'wBattleMode', 'wMapGroup',
-                     'wMapStatus', 'wMenuCursorY', 'wPlayerTileCollision']);
+                     'wMapStatus', 'wMenuCursorY', 'wPlayerTileCollision',
+                     // tap-to-walk: the collision map and the window stack
+                     'wOverworldMapBlocks', 'wMapWidth', 'wMapHeight',
+                     'wTilesetCollisionBank', 'wTilesetCollisionAddress',
+                     'wWindowStackSize', 'CollisionPermissionTable']);
     setStatus(`symbols: ${symbols.size.toLocaleString()} loaded`, 'ok');
   } catch (err) {
     symbols = null;
@@ -225,6 +234,104 @@ addEventListener('keyup', (e) => {
 // Releasing on blur avoids a key staying stuck down after tabbing away.
 addEventListener('blur', () => { gb.releaseAll(); syncHeld(); });
 
+// --- tap the screen to walk there -------------------------------------------
+// The overworld is drawn in 16x16 tiles, so the 160x144 screen is 10x9 of them
+// and the player is always the one at (4, 4): the camera keeps them centred
+// rather than clamping at map edges. That makes a tap a map coordinate, which
+// the collision map can path to.
+const SCREEN_TILES_X = 10, SCREEN_TILES_Y = 9;
+const PLAYER_TILE_X = 4, PLAYER_TILE_Y = 4;
+
+/**
+ * Is a menu or textbox on screen?
+ *
+ * wWindowStackSize is pushed and popped by the game's own window code, so it
+ * cannot be left over from a menu closed minutes ago -- unlike the menu cursor,
+ * which keeps its last value out on the map. Walking while a menu is up would
+ * send the D-pad to the cursor instead of the player.
+ */
+async function windowOpen() {
+  const at = symbols.addr('wWindowStackSize');
+  return (await gb.readBytes(at, 1))[0] > 0;
+}
+
+async function walkToTap(tx, ty) {
+  running = true;
+  $('#go').disabled = true;
+  gb.releaseAll();
+  syncHeld();
+  try {
+    const wram = await gb.readWram();
+    const s = state.read(wram);
+    if (s.inBattle) { setStatus('that is a battle, not the map', 'bad'); return; }
+    if (!s.worldLoaded) { setStatus('no map on screen to walk on', 'bad'); return; }
+    if (await windowOpen()) { setStatus('close the menu first', 'bad'); return; }
+
+    const goal = [s.pos[0] + tx - PLAYER_TILE_X, s.pos[1] + ty - PLAYER_TILE_Y];
+    if (goal[0] === s.pos[0] && goal[1] === s.pos[1]) {
+      setStatus('you are already standing there', '');
+      return;
+    }
+    if (goal[0] < 0 || goal[1] < 0) {
+      setStatus('that is off the edge of the map', 'bad');
+      return;
+    }
+    // Checked against the game's own wPlayerTileCollision every time rather
+    // than once at startup: a wrong decode does not throw, it paths through
+    // walls, and the tileset changes with the map.
+    if (!collision.calibrate(wram)) {
+      setStatus('could not read the map — the collision decode did not check out',
+                'bad');
+      return;
+    }
+    if (!collision.pathTo(s.pos, goal)) {
+      setStatus(`no way to reach (${goal[0]},${goal[1]}) from here`, 'bad');
+      progress('ledges are one-way, and some tiles only open up the long way round');
+      return;
+    }
+    setStatus(`walking to (${goal[0]},${goal[1]})`, 'busy');
+    const res = await nav.walkTo(collision, goal, {
+      onStep: (n, at) => progress(`step ${n} — at (${at[0]},${at[1]})`),
+    });
+    const now = res.pos;
+    const where = `(${now[0]},${now[1]})`;
+    if (res.stopped === null) {
+      setStatus(`walked to ${where}`, 'ok');
+      progress('');
+    } else if (res.stopped === 'battle') {
+      setStatus(`a wild battle interrupted the walk at ${where}`, 'bad');
+    } else if (res.stopped === 'unreachable') {
+      setStatus(`could not get past ${where}`, 'bad');
+      progress('ledges are one-way, and some tiles only open up the long way round');
+    } else if (res.stopped === 'refused') {
+      setStatus(`the game would not let me move from ${where}`, 'bad');
+      progress('something is happening on screen, or someone is standing there');
+    } else if (res.stopped === 'warped') {
+      setStatus('that was a doorway — you are somewhere else now', 'ok');
+      progress('');
+    } else if (res.stopped === 'decode') {
+      setStatus('lost track of the map mid-walk, so it stopped', 'bad');
+    } else {
+      setStatus(`gave up at ${where}`, 'bad');
+    }
+  } finally {
+    running = false;
+    $('#go').disabled = false;
+    refresh();
+  }
+}
+
+$('#screen').addEventListener('click', (e) => {
+  if (running || !gb.ready) return;
+  const r = e.currentTarget.getBoundingClientRect();
+  if (!r.width || !r.height) return;
+  const tx = Math.min(SCREEN_TILES_X - 1,
+                      Math.floor((e.clientX - r.left) / r.width * SCREEN_TILES_X));
+  const ty = Math.min(SCREEN_TILES_Y - 1,
+                      Math.floor((e.clientY - r.top) / r.height * SCREEN_TILES_Y));
+  walkToTap(tx, ty);
+});
+
 $('#go').onclick = async () => {
   if (running || !tasks) return;
   running = true;
@@ -267,4 +374,11 @@ if ('serviceWorker' in navigator) {
 }
 
 // Exposed so the spike can be driven from a console or a test harness.
-window.PILOT = { gb, get tasks() { return tasks; }, get state() { return state; } };
+window.PILOT = {
+  gb,
+  get tasks() { return tasks; },
+  get state() { return state; },
+  get collision() { return collision; },
+  get nav() { return nav; },
+  walkToTap,
+};

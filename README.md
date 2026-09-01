@@ -65,6 +65,10 @@ Proven, and visible in the screenshot:
 - `wMapStatus == 2` distinguishes "the world is live" from "the party happens to
   be loaded", the same signal the desktop version needed
 - save states and battery saves are both available from the core
+- **the collision map decodes correctly**: the same 48 tiles of PLAYERS_HOUSE_2F
+  come out byte-for-byte identical to the desktop pilot's reading of the same
+  room — two implementations, one in Python over PyBoy and one in JS over
+  WasmBoy, agreeing exactly
 
 **Not proven:** a completed grind. The task loop in `app/tasks.js` is written and
 is a direct port of logic the desktop version has tests for, but it has not been
@@ -119,6 +123,42 @@ Automated runs have nobody to press A, so they opt in with `?autostart=1`, and
 even then they take one of the game's own names (CHRIS/MAT/ALLAN/JON, or
 KRIS/AMANDA/JUANA/JODI) rather than typing one. `NamePlayer` stores those
 directly, with no naming screen involved.
+
+## Tap to walk
+
+Tap anywhere on the screen and the pilot walks there.
+
+The overworld is drawn in 16×16 tiles, so the 160×144 screen is 10×9 of them and
+the player is always the one at (4, 4) — the camera keeps them centred rather
+than clamping at map edges. That makes a tap a map coordinate, and `app/collision.js`
+turns the map into something you can search: Gen 2 keeps the loaded blocks in
+`wOverworldMapBlocks` and the per-quadrant collision values in ROM at
+`wTilesetCollisionAddress`, which together give the collision byte for any tile.
+Ledges are one-way, so a route never plans a hop it could not walk back.
+
+The decode is checked against the game rather than trusted. `wPlayerTileCollision`
+is the collision of the tile the player is standing on, so every step compares
+the two and stops if they disagree — a wrong decode does not throw, it silently
+paths through walls. As a cross-check the same 48 tiles read here match the
+desktop pilot's reading of the same room exactly.
+
+Two things had to be learned again in the browser, because each produced a walk
+that ended somewhere plausible but wrong:
+
+- **Coordinates change when the game commits to a step, not when it finishes.**
+  Returning then reports a tile the player has not reached, and the next press
+  lands mid-stride — so every step performed the *previous* one. Steps now wait
+  for the player to come to rest.
+- **A path is a plan, and plans go stale.** Following one blindly meant a single
+  missed step put every later step in the wrong place while the walk still
+  reported success. The route is re-planned from where the player actually is,
+  every step.
+
+It also distinguishes the ways a walk can end, because they mean different
+things: a wild battle, a tile with no route to it, a doorway that changed the
+map underneath, and *the game refusing input at all* — walk downstairs into
+Mom's script and every direction is blocked, which is not the map's fault and
+should not be reported as one.
 
 ## Controls
 
@@ -196,9 +236,10 @@ In the order that would pay off:
    party there is nothing to grind, and nothing to test against.
 2. **Import a `.sav`** from the desktop pilot, which would sidestep (1) and let
    the two halves share progress.
-3. **Port the collision map and pathfinding.** They are pure arithmetic over
-   memory and carry across unchanged — which is what makes Pokémon Center
-   healing, and therefore unattended grinding, possible.
+3. ~~**Port the collision map and pathfinding.**~~ Done — see *Tap to walk*
+   below. It is what makes Pokémon Center healing, and therefore unattended
+   grinding, possible, so the remaining work there is the route between maps
+   rather than the route across one.
 4. **Then reconsider native.** If 15× real time on a phone turns out to be too
    slow in practice, a JNI core is the fix — but by then the task logic exists
    in a portable form and the rewrite is only the platform layer.
