@@ -1,0 +1,204 @@
+// Tasks, driven by polling instead of CPU hooks.
+//
+// This is the one part of the desktop pilot that could not be ported directly.
+// There, the game's own routines announced what it wanted -- a hook on
+// BattleMenu fired the moment the battle menu opened. No browser core offers
+// breakpoints, so the same questions are answered by watching memory:
+//
+//   "is the battle menu up?"   wMenuCursorX/Y become 1..2 and
+//                              wBattleMenuCursorPosition is 0 (it is only
+//                              written on confirm)
+//   "is the move menu up?"     wMenuCursorY is 1..4 while in a battle
+//   "is a script running?"     wScriptMode != 0
+//   "is the world live?"       wMapStatus == 2
+//
+// The lesson that survives from the desktop version: read the live cursor and
+// step toward the target. Gen 2 menus wrap, so counting presses from an assumed
+// starting position silently picks the wrong thing.
+
+const FIGHT = 1;   // wBattleMenuCursorPosition: 1 FIGHT 2 PKMN 3 PACK 4 RUN
+
+export class Tasks {
+  constructor(gb, state, onProgress = () => {}) {
+    this.gb = gb;
+    this.state = state;
+    this.onProgress = onProgress;
+    this.cancelled = false;
+  }
+
+  cancel() { this.cancelled = true; }
+
+  async snap() {
+    return this.state.read(await this.gb.readWram());
+  }
+
+  say(msg) { this.onProgress(msg); }
+
+  /** Advance to a live, controllable overworld -- title screen through to a map. */
+  async continueGame(maxFrames = 20000) {
+    await this.gb.run(2500);
+    let spent = 2500;
+    while (spent < maxFrames) {
+      await this.gb.press('A', 5, 8);
+      spent += 13;
+      const s = await this.snap();
+      if (s.worldLoaded) {
+        await this.gb.run(30);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /** Walk back and forth until a wild battle starts. */
+  async paceUntilBattle(maxSteps = 400) {
+    let dir = 'LEFT';
+    for (let i = 0; i < maxSteps && !this.cancelled; i++) {
+      await this.gb.press(dir, 10, 4);
+      const s = await this.snap();
+      if (s.inBattle) return s;
+      if (i % 2 === 1) dir = dir === 'LEFT' ? 'RIGHT' : 'LEFT';
+    }
+    return null;
+  }
+
+  /**
+   * Wait until the battle menu is genuinely up.
+   *
+   * The cursor variables keep their previous value between turns, so a settle
+   * comes first -- otherwise "cursor is non-zero" reads as ready while the menu
+   * is still drawing, and the presses land on battle text instead.
+   */
+  async awaitBattleMenu(tries = 40) {
+    await this.gb.run(40);
+    for (let i = 0; i < tries; i++) {
+      const s = await this.snap();
+      if (!s.inBattle) return null;
+      const [x, y] = s.menu;
+      if (x >= 1 && x <= 2 && y >= 1 && y <= 2 && s.battleCursor === 0) return s;
+      await this.gb.press('A', 4, 6);   // push through text
+    }
+    return null;
+  }
+
+  /** Drive the 2x2 battle menu to `action` by reading the live cursor. */
+  async chooseAction(action) {
+    const wantX = ((action - 1) % 2) + 1;
+    const wantY = Math.floor((action - 1) / 2) + 1;
+    for (let i = 0; i < 8; i++) {
+      const s = await this.snap();
+      const [x, y] = s.menu;
+      if (x === wantX && y === wantY) break;
+      if (x !== wantX) await this.gb.press(wantX > x ? 'RIGHT' : 'LEFT', 4, 6);
+      else if (y !== wantY) await this.gb.press(wantY > y ? 'DOWN' : 'UP', 4, 6);
+    }
+    await this.gb.press('A', 6, 10);
+  }
+
+  /** Pick a move with PP left. The move menu is a wrapping vertical list. */
+  async chooseMove(mon) {
+    const idx = mon.pp.findIndex((p, i) => mon.moves[i] && p > 0);
+    if (idx < 0) {                 // everything is out of PP: the game forces Struggle
+      await this.gb.press('A', 6, 10);
+      return -1;
+    }
+    const target = idx + 1;
+    for (let i = 0; i < 6; i++) {
+      const s = await this.snap();
+      if (s.menu[1] === target) break;
+      await this.gb.press('DOWN', 4, 6);
+    }
+    await this.gb.press('A', 6, 10);
+    return idx;
+  }
+
+  /** Play out one wild battle. -> 'won' | 'lost' | 'ended' | 'stuck' */
+  async fightBattle(maxTurns = 40) {
+    for (let turn = 0; turn < maxTurns && !this.cancelled; turn++) {
+      const menu = await this.awaitBattleMenu();
+      if (menu === null) {
+        const s = await this.snap();
+        return s.inBattle ? 'stuck' : 'won';
+      }
+      if (menu.party.length && menu.party.every((m) => m.hp === 0)) return 'lost';
+      await this.chooseAction(FIGHT);
+      await this.gb.run(30);
+      const inMoves = await this.snap();
+      if (inMoves.inBattle && inMoves.menu[1] >= 1) {
+        await this.chooseMove(inMoves.party[0] || { moves: [], pp: [] });
+      }
+      // Turn resolution is text; press through it until the battle ends or the
+      // menu comes back.
+      for (let i = 0; i < 120; i++) {
+        const s = await this.snap();
+        if (!s.inBattle) return 'won';
+        if (s.menu[0] >= 1 && s.menu[0] <= 2 && s.battleCursor === 0 && i > 3) break;
+        await this.gb.press('A', 4, 6);
+      }
+    }
+    return 'stuck';
+  }
+
+  /**
+   * Grind one party member to a level.
+   *
+   * Deliberately smaller than the desktop task: no Pokemon Center trips, no
+   * evolution or learn-move policy. It exists to show the loop runs on a phone,
+   * and it stops rather than pretending when HP runs low.
+   */
+  async grind(slot, toLevel, { maxBattles = 200, healBelow = 0.25 } = {}) {
+    const started = Date.now();
+    const stats = { battles: 0, won: 0, levels: 0 };
+    let s = await this.snap();
+    const mon0 = s.party[slot];
+    if (!mon0) return { ok: false, message: `party slot ${slot + 1} is empty`, stats };
+    const startLevel = mon0.level;
+    if (mon0.level >= toLevel) {
+      return { ok: true, message: `already Lv${mon0.level}`, stats };
+    }
+    this.say(`grinding slot ${slot + 1} from Lv${mon0.level} to Lv${toLevel}`);
+
+    while (stats.battles < maxBattles && !this.cancelled) {
+      s = await this.snap();
+      const mon = s.party[slot];
+      if (!mon) break;
+      if (mon.level >= toLevel) break;
+      if (mon.hp / Math.max(1, mon.maxHp) < healBelow) {
+        return {
+          ok: false,
+          message: `stopped at Lv${mon.level}: ${mon.hp}/${mon.maxHp} HP and ` +
+                   `this build cannot heal yet`,
+          stats: { ...stats, levels: mon.level - startLevel },
+        };
+      }
+      if (!s.inBattle) {
+        const found = await this.paceUntilBattle();
+        if (!found) {
+          return {
+            ok: false,
+            message: 'no wild Pokemon appeared — are you standing in grass?',
+            stats,
+          };
+        }
+      }
+      const outcome = await this.fightBattle();
+      stats.battles++;
+      if (outcome === 'won') stats.won++;
+      if (outcome === 'lost') break;
+      this.say(`battle ${stats.battles}: ${outcome}`);
+    }
+
+    s = await this.snap();
+    const mon = s.party[slot];
+    stats.levels = mon ? mon.level - startLevel : 0;
+    stats.seconds = ((Date.now() - started) / 1000).toFixed(1);
+    const reached = mon && mon.level >= toLevel;
+    return {
+      ok: !!reached,
+      message: reached
+        ? `reached Lv${mon.level} (from Lv${startLevel})`
+        : `stopped at Lv${mon ? mon.level : '?'} (wanted Lv${toLevel})`,
+      stats,
+    };
+  }
+}
