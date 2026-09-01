@@ -28,6 +28,11 @@ export class GameBoy {
   }
 
   async loadRom(bytes) {
+    // Kept as well as handed to the core: some of what the pilot needs to read
+    // is in the cartridge, not in RAM -- the tileset collision tables and the
+    // permission table behind them. Reading those from the file is simpler and
+    // steadier than asking the emulator to map a bank.
+    this.rom = new Uint8Array(bytes);
     await this.core.loadROM(new Uint8Array(bytes));
     // Where the emulated work RAM sits inside the core's linear memory. Asked
     // for rather than assumed, so a core update cannot silently shift it --
@@ -109,6 +114,23 @@ export class GameBoy {
   static wordAt(wram, addr) {
     const i = addr - GB_WRAM_START;
     return (wram[i] << 8) | wram[i + 1];
+  }
+
+  /** Little-endian 16-bit, the convention the game uses for pointers. */
+  static wordLeAt(wram, addr) {
+    const i = addr - GB_WRAM_START;
+    return wram[i] | (wram[i + 1] << 8);
+  }
+
+  /**
+   * One byte from the cartridge, by bank and address.
+   *
+   * Bank 0 is the first 16 KB and is always mapped low; every other bank is
+   * paged into 0x4000-0x7FFF, so the offset into the file is the bank times
+   * its size plus the position within the window.
+   */
+  romByte(bank, addr) {
+    return this.rom[bank * 0x4000 + (addr & 0x3fff)];
   }
 
   /**

@@ -26,6 +26,13 @@ export class Symbols {
     return e.addr;
   }
 
+  /** The ROM bank a symbol lives in -- needed to find it in the cartridge. */
+  bank(name) {
+    const e = this.map.get(name);
+    if (!e) throw new Error(`symbol not in this .sym file: ${name}`);
+    return e.bank;
+  }
+
   /** Fail at load time, not mid-task, if the file is from another build. */
   require(names) {
     const missing = names.filter((n) => !this.map.has(n));
