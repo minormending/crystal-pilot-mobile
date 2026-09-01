@@ -4,6 +4,10 @@ An exploration: **can the [crystal-pilot](https://github.com/minormending/crysta
 auto-pilot run on an Android phone itself**, rather than on a Mac with the phone
 as a remote?
 
+**It is live: https://minormending.github.io/crystal-pilot-mobile/** — open it
+on your phone, pick your own ROM and `.sym`, and it runs. Android will offer to
+install it to the home screen.
+
 Short answer: yes, in the browser — and this repo is a working spike that proves
 the hard part. It boots a Pokémon Crystal ROM on the device, reads the game's
 live state through the disassembly's symbol file, and drives it with synthetic
@@ -102,16 +106,26 @@ Both cost real time here, and both fail quietly rather than loudly:
 
 ## Running it
 
-It is a static site with no build step:
+Easiest: open **https://minormending.github.io/crystal-pilot-mobile/** and pick
+your ROM and `.sym`. Both files stay in the browser — nothing is uploaded, which
+is also why hosting this publicly is fine: no game data is served, only the app.
+
+It is a static site with no build step, so it runs anywhere that serves files:
 
 ```bash
 python3 -m http.server 8124
 ```
 
-Open `http://localhost:8124/`, pick your own ROM and `.sym`, and it starts. Both
-files stay in the browser — nothing is uploaded, and none of it is in this repo.
-Serve it over HTTPS on your network and Android will offer to install it to the
-home screen; the service worker caches the shell so it opens offline.
+GitHub Pages suits it particularly well. The emulator core inlines its
+WebAssembly as base64 in a single JS file, so there is no separate `.wasm` to
+serve and no MIME type to configure, and it uses no `SharedArrayBuffer`, so it
+does not need the cross-origin isolation headers Pages cannot set. Every path is
+relative, so the `/crystal-pilot-mobile/` project subpath works untouched.
+
+The HTTPS matters: service workers need a secure context, so on Pages the app
+installs to the home screen and opens offline — which it will not do over plain
+HTTP on your network. Bump `CACHE` in `sw.js` when you change the shell, or
+browsers will keep serving the old one.
 
 Build the ROM and symbol file yourself from the
 [pokecrystal](https://github.com/pret/pokecrystal) disassembly.
