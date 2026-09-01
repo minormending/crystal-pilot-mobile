@@ -131,10 +131,18 @@ Tap anywhere on the screen and the pilot walks there.
 <img src="docs/tap-to-walk.png" alt="A tap being walked to, mid-route" width="330">
 
 That is a walk in progress: the ring is the tile that was tapped, the player is
-four steps into the route, and the status says where it is going and where it
-has got to. The ring tracks the *map*, not the screen — the camera keeps the
-player centred, so a marker left where the finger landed would drift off the
-destination as the world scrolled under it.
+five steps into the route, and the status says where it is going and where it
+has got to.
+
+The ring is placed from the *camera*, not from the player's coordinate, and the
+difference is visible in that shot — it is drawn between tile boundaries because
+the screen is mid-scroll. Measured frame by frame, the camera starts sliding at
+frame 11 of a step and has moved the full 16 pixels by frame 22, but `wXCoord`
+does not change until frame 23. A marker positioned from the coordinate
+therefore holds still for almost the whole of every step while the world slides
+out from under it, which looks exactly like the destination drifting away.
+`wPlayerBGMapOffsetX/Y` is the camera itself and moves smoothly, so the marker
+stays on its tile.
 
 The overworld is drawn in 16×16 tiles, so the 160×144 screen is 10×9 of them and
 the player is always the one at (4, 4) — the camera keeps them centred rather

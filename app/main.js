@@ -35,6 +35,11 @@ async function maybeStart() {
   tasks = new Tasks(gb, state, progress);
   collision = new CollisionMap(symbols, gb);
   nav = new Nav(gb, symbols);
+  A_MARK = {
+    x: symbols.addr('wXCoord'), y: symbols.addr('wYCoord'),
+    offX: symbols.addr('wPlayerBGMapOffsetX'),
+    offY: symbols.addr('wPlayerBGMapOffsetY'),
+  };
 
   // Hand the game over immediately: buttons visible, emulator running.
   $('#loader').classList.add('hide');
@@ -157,7 +162,8 @@ $('#symFile').addEventListener('change', async (e) => {
                      // tap-to-walk: the collision map and the window stack
                      'wOverworldMapBlocks', 'wMapWidth', 'wMapHeight',
                      'wTilesetCollisionBank', 'wTilesetCollisionAddress',
-                     'wWindowStackSize', 'CollisionPermissionTable']);
+                     'wWindowStackSize', 'CollisionPermissionTable',
+                     'wPlayerBGMapOffsetX', 'wPlayerBGMapOffsetY']);
     setStatus(`symbols: ${symbols.size.toLocaleString()} loaded`, 'ok');
   } catch (err) {
     symbols = null;
@@ -241,6 +247,7 @@ addEventListener('blur', () => { gb.releaseAll(); syncHeld(); });
 // the collision map can path to.
 const SCREEN_TILES_X = 10, SCREEN_TILES_Y = 9;
 const PLAYER_TILE_X = 4, PLAYER_TILE_Y = 4;
+let A_MARK = null;          // addresses the marker tracker reads every frame
 
 /**
  * Is a menu or textbox on screen?
@@ -266,19 +273,76 @@ async function windowOpen() {
  * finishes underneath them.
  */
 let markTimer = null;
+let markState = null;        // { goal, kx, ky } while a marker is on screen
+let markRaf = null;
 
-function markGoal(goal, pos) {
+/**
+ * Mark a destination on the map, and keep it there.
+ *
+ * The hard part is that the marker has to sit on a *map* tile while the screen
+ * scrolls, and the player's coordinate is the wrong thing to derive that from.
+ * Measured frame by frame: the camera starts sliding at frame 11 of a step and
+ * has moved the full 16 pixels by frame 22, but wXCoord does not change until
+ * frame 23 -- so for almost the whole of every step the coordinate says the
+ * player has not moved while the world visibly has. A marker placed from the
+ * coordinate therefore stands still while the map slides out from under it,
+ * which is exactly what it looks like: the marked spot drifting away.
+ *
+ * wPlayerBGMapOffsetX/Y is the camera itself, and it moves smoothly. At rest it
+ * is `48 - 16 * coordinate`, so the difference between the resting value for
+ * the current coordinate and the live one is how far into the step the camera
+ * has scrolled. That difference is small and taken modulo 256, so it stays
+ * correct however far the offset has wrapped over a long walk.
+ */
+function markGoal(goal) {
   const mark = $('#tapmark');
-  if (!goal) { mark.classList.add('hide'); return; }
-  const tx = goal[0] - pos[0] + PLAYER_TILE_X;
-  const ty = goal[1] - pos[1] + PLAYER_TILE_Y;
-  if (tx < 0 || ty < 0 || tx >= SCREEN_TILES_X || ty >= SCREEN_TILES_Y) {
-    mark.classList.add('hide');       // walked off the edge of the view
+  if (!goal) {
+    markState = null;
+    if (markRaf !== null) { cancelAnimationFrame(markRaf); markRaf = null; }
+    mark.classList.add('hide');
     return;
   }
-  mark.style.left = (tx * 100 / SCREEN_TILES_X) + '%';
-  mark.style.top = (ty * 100 / SCREEN_TILES_Y) + '%';
-  mark.classList.remove('hide');
+  markState = { goal, k: null };
+  if (markRaf === null) markRaf = requestAnimationFrame(trackGoal);
+}
+
+/** Signed distance from a resting camera offset to the live one, in tiles. */
+function cameraFraction(rest, live) {
+  let d = (rest - live) & 0xff;
+  if (d > 127) d -= 256;
+  return d / 16;
+}
+
+async function trackGoal() {
+  markRaf = null;
+  if (!markState || !gb.ready) return;
+  const mark = $('#tapmark');
+  try {
+    const lo = Math.min(A_MARK.y, A_MARK.offX);
+    const hi = Math.max(A_MARK.x, A_MARK.offY);
+    const w = await gb.readBytes(lo, hi - lo + 1);
+    const at = (a) => w[a - lo];
+    const x = at(A_MARK.x), y = at(A_MARK.y);
+    const offX = at(A_MARK.offX), offY = at(A_MARK.offY);
+    // The resting offset is captured once, from a player who is standing still,
+    // rather than assuming the constant is the same on every map.
+    if (markState.k === null) {
+      markState.k = { x: (offX + 16 * x) & 0xff, y: (offY + 16 * y) & 0xff };
+    }
+    const k = markState.k;
+    const camX = x + cameraFraction((k.x - 16 * x) & 0xff, offX);
+    const camY = y + cameraFraction((k.y - 16 * y) & 0xff, offY);
+    const tx = markState.goal[0] - camX + PLAYER_TILE_X;
+    const ty = markState.goal[1] - camY + PLAYER_TILE_Y;
+    if (tx <= -1 || ty <= -1 || tx >= SCREEN_TILES_X || ty >= SCREEN_TILES_Y) {
+      mark.classList.add('hide');     // scrolled out of view
+    } else {
+      mark.style.left = (tx * 100 / SCREEN_TILES_X) + '%';
+      mark.style.top = (ty * 100 / SCREEN_TILES_Y) + '%';
+      mark.classList.remove('hide');
+    }
+  } catch (e) { /* a read can fail across a map load; try again next frame */ }
+  if (markState) markRaf = requestAnimationFrame(trackGoal);
 }
 
 async function walkToTap(tx, ty) {
@@ -324,12 +388,9 @@ async function walkToTap(tx, ty) {
       return;
     }
     setStatus(`walking to (${goal[0]},${goal[1]})`, 'busy');
-    markGoal(goal, s.pos);
+    markGoal(goal);
     const res = await nav.walkTo(collision, goal, {
-      onStep: (n, at) => {
-        progress(`step ${n} — at (${at[0]},${at[1]})`);
-        markGoal(goal, at);
-      },
+      onStep: (n, at) => progress(`step ${n} — at (${at[0]},${at[1]})`),
     });
     const now = res.pos;
     const where = `(${now[0]},${now[1]})`;
