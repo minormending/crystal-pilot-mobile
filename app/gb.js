@@ -115,8 +115,9 @@ export class GameBoy {
    * Buttons currently held down by the player.
    *
    * The run loop pushes this every frame, which is what makes holding a
-   * direction walk. A single short press mostly just turns the character in
-   * Gen 2, so tap-only controls cannot move you anywhere.
+   * direction walk. Gen 2 turns you before it walks you, so a short press in a
+   * new direction is spent on the turn -- tap-only controls move you a tile per
+   * tap at best, and nothing at all on the tap that changes direction.
    */
   hold(button) { this.held.add(button); this.applyHeld(); }
   release(button) { this.held.delete(button); this.applyHeld(); }

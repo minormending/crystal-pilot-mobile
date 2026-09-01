@@ -123,8 +123,8 @@ directly, with no naming screen involved.
 ## Controls
 
 Eight on-screen buttons: the D-pad, A, B, Select and Start. **Press and hold** —
-a short tap only turns the character in Gen 2, so tapping a direction will not
-walk you anywhere.
+Gen 2 turns you before it walks you, so a tap in a new direction only turns you,
+and each tap after that moves a single tile. Holding walks.
 
 <img src="docs/controls.png" alt="The on-screen controls, with LEFT held" width="330">
 
