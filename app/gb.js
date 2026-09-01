@@ -40,9 +40,25 @@ export class GameBoy {
     this.ready = true;
   }
 
-  /** Advance `n` frames as fast as the device manages. */
+  /**
+   * Advance `n` frames as fast as the device manages.
+   *
+   * Two paths, because the core's own _runNumberOfFrames begins by awaiting
+   * pause() -- and pause() waits for an animation frame, which a hidden page
+   * never gets. Left alone, backgrounding the tab (switching apps, screen off)
+   * hangs every call here forever: the grind stops dead while the page still
+   * claims to be running. So when the page is hidden the frames are stepped
+   * directly, which is what _runNumberOfFrames does anyway minus the drawing
+   * -- and there is nothing to draw for a screen nobody is looking at.
+   */
   async run(n = 1) {
-    await this.core._runNumberOfFrames(n);
+    if (!document.hidden) {
+      await this.core._runNumberOfFrames(n);
+      return;
+    }
+    for (let i = 0; i < n; i++) {
+      await this.core._runWasmExport('executeFrame', []);
+    }
   }
 
   /**

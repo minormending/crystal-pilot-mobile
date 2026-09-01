@@ -24,9 +24,34 @@ export class Tasks {
     this.state = state;
     this.onProgress = onProgress;
     this.cancelled = false;
+    this.ticks = 0;
   }
 
   cancel() { this.cancelled = true; }
+
+  /**
+   * Hand the browser a slot.
+   *
+   * The task loops are `await`-heavy but never actually yield to the event
+   * loop -- the emulator calls resolve immediately -- so a running task pins
+   * the main thread. The page then cannot repaint or handle a tap, which means
+   * the Stop button is unclickable and Android decides the tab has hung.
+   * Yielding periodically costs a few ms per hundred frames and buys back a
+   * responsive page.
+   *
+   * A MessageChannel rather than setTimeout(0): browsers clamp timers in a
+   * backgrounded tab to roughly one per second, which would turn a yield every
+   * sixteen presses into a grind that takes hours once you switch apps. Message
+   * events are not clamped that way.
+   */
+  async pump() {
+    if (++this.ticks % 16) return;
+    await new Promise((resolve) => {
+      const ch = new MessageChannel();
+      ch.port1.onmessage = () => { ch.port1.close(); resolve(); };
+      ch.port2.postMessage(0);
+    });
+  }
 
   async snap() {
     return this.state.read(await this.gb.readWram());
@@ -38,9 +63,14 @@ export class Tasks {
   async continueGame(maxFrames = 20000) {
     await this.gb.run(2500);
     let spent = 2500;
-    while (spent < maxFrames) {
+    // Checking after every press meant a memory copy per 13 frames, which
+    // saturated the main thread and made the intro crawl. The intro is long;
+    // checking every tenth press is plenty and is far cheaper.
+    for (let i = 0; spent < maxFrames; i++) {
       await this.gb.press('A', 5, 8);
+      await this.pump();
       spent += 13;
+      if (i % 10 !== 0) continue;
       const s = await this.snap();
       if (s.worldLoaded) {
         await this.gb.run(30);
@@ -55,6 +85,7 @@ export class Tasks {
     let dir = 'LEFT';
     for (let i = 0; i < maxSteps && !this.cancelled; i++) {
       await this.gb.press(dir, 10, 4);
+      await this.pump();
       const s = await this.snap();
       if (s.inBattle) return s;
       if (i % 2 === 1) dir = dir === 'LEFT' ? 'RIGHT' : 'LEFT';
@@ -115,6 +146,7 @@ export class Tasks {
   /** Play out one wild battle. -> 'won' | 'lost' | 'ended' | 'stuck' */
   async fightBattle(maxTurns = 40) {
     for (let turn = 0; turn < maxTurns && !this.cancelled; turn++) {
+      await this.pump();
       const menu = await this.awaitBattleMenu();
       if (menu === null) {
         const s = await this.snap();
@@ -134,6 +166,7 @@ export class Tasks {
         if (!s.inBattle) return 'won';
         if (s.menu[0] >= 1 && s.menu[0] <= 2 && s.battleCursor === 0 && i > 3) break;
         await this.gb.press('A', 4, 6);
+        await this.pump();
       }
     }
     return 'stuck';
