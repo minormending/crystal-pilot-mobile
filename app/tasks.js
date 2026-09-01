@@ -19,11 +19,13 @@
 import { NAME_MENU_FIRST_PRESET } from './state.js';
 
 const FIGHT = 1;   // wBattleMenuCursorPosition: 1 FIGHT 2 PKMN 3 PACK 4 RUN
+const RUN = 4;
 
 export class Tasks {
-  constructor(gb, state, onProgress = () => {}) {
+  constructor(gb, state, onProgress = () => {}, rom = null) {
     this.gb = gb;
     this.state = state;
+    this.rom = rom;
     this.onProgress = onProgress;
     this.cancelled = false;
     this.ticks = 0;
@@ -213,6 +215,80 @@ export class Tasks {
       }
     }
     return 'stuck';
+  }
+
+  /**
+   * Leave a wild battle.
+   *
+   * Running can fail -- the game says so and the turn passes -- so this asks
+   * again rather than assuming one attempt worked. It never fights: a hunt that
+   * knocked out everything it met would spend the party's HP on Pokemon it did
+   * not want.
+   */
+  async flee(maxTurns = 8) {
+    for (let turn = 0; turn < maxTurns && !this.cancelled; turn++) {
+      const menu = await this.awaitBattleMenu();
+      if (menu === null) return !(await this.snap()).inBattle;
+      await this.chooseAction(RUN);
+      for (let i = 0; i < 90; i++) {
+        const s = await this.snap();
+        if (!s.inBattle) return true;
+        if (s.menu[0] >= 1 && s.menu[0] <= 2 && s.battleCursor === 0 && i > 3) break;
+        await this.gb.press('A', 4, 6);
+        await this.pump();
+      }
+    }
+    return !(await this.snap()).inBattle;
+  }
+
+  /**
+   * Walk the grass until a species turns up, fleeing everything else.
+   *
+   * The battle is left running when it finds one, so the choice of what to do
+   * with it is yours -- which is the whole point of hunting rather than
+   * catching.
+   */
+  async hunt(want, { maxEncounters = 200 } = {}) {
+    const started = Date.now();
+    const stats = { encounters: 0, fled: 0 };
+    const seen = new Map();
+    this.say(`looking for ${want}`);
+
+    while (stats.encounters < maxEncounters && !this.cancelled) {
+      let s = await this.snap();
+      if (!s.inBattle) {
+        const found = await this.paceUntilBattle();
+        if (!found) {
+          return { ok: false, seen, stats,
+                   message: 'no wild Pokemon appeared — are you standing in grass?' };
+        }
+        // The species is not readable the instant the battle flag flips; give
+        // the encounter a moment to load before believing what it says.
+        await this.gb.run(40);
+        s = await this.snap();
+      }
+      stats.encounters++;
+      const name = this.rom.speciesName(s.enemy.species);
+      seen.set(name, (seen.get(name) || 0) + 1);
+      if (name === want) {
+        stats.found = name;
+        stats.level = s.enemy.level;
+        stats.seconds = ((Date.now() - started) / 1000).toFixed(1);
+        return { ok: true, seen, stats,
+                 message: `found ${name} Lv${s.enemy.level} after ` +
+                          `${stats.encounters} encounter(s)` };
+      }
+      this.say(`${name} — not the one, running`);
+      if (!await this.flee()) {
+        return { ok: false, seen, stats, message: `could not run from a ${name}` };
+      }
+      stats.fled++;
+    }
+    stats.seconds = ((Date.now() - started) / 1000).toFixed(1);
+    return { ok: false, seen, stats,
+             message: this.cancelled
+               ? `stopped after ${stats.encounters} encounter(s)`
+               : `saw ${stats.encounters} encounters without finding ${want}` };
   }
 
   /**
