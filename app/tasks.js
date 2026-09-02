@@ -40,8 +40,12 @@ const SAVE_PROMPT_FRAMES = 40;
 const SAVE_CONFIRM_TRIES = 60;
 // Polls waiting for the START menu's cursor to appear.
 const MENU_OPEN_TRIES = 25;
-// Polls waiting for the overworld to settle after a battle or a script.
-const QUIET_TRIES = 60;
+// Polls waiting for the overworld to settle after a battle or a script. Sixty
+// was not enough: starting a job straight after another one found a script
+// still running and gave up, and the job then ran with no undo point. The wait
+// is cheap -- it ends the moment the game is quiet -- so the budget is set by
+// the worst case worth surviving rather than the common one.
+const QUIET_TRIES = 250;
 // The party screen ignores the short presses the battle menu takes.
 const PARTY_HOLD = 12, PARTY_GAP = 24, PARTY_SETTLE = 40;
 // What the drawn battle menu measures, telling it from the pack over the top of

@@ -536,7 +536,7 @@ refusal is not an answer.
 
 ## 6. Battles
 
-<!-- covers: app/tasks.js app/state.js @ b0edcb28f66a -->
+<!-- covers: app/tasks.js app/state.js @ f9685e2bb6f5 -->
 
 ### Is it our turn?
 
@@ -660,7 +660,7 @@ fainted.
 
 ## 7. Catching something
 
-<!-- covers: app/tasks.js app/romdata.js @ 076c8af20195 -->
+<!-- covers: app/tasks.js app/romdata.js @ 83e7966c3a13 -->
 
 Catching is the most involved loop, because a Poké Ball's odds turn on how much
 HP is left. Throwing at a full-health target is mostly throwing balls away.
@@ -746,7 +746,7 @@ precedes it defaults to yes, which is what we want; the nickname box does not.
 
 ## 7a. Three that act on where you already are
 
-<!-- covers: app/tasks.js app/bootstrap.js @ a4f80f1f92f6 -->
+<!-- covers: app/tasks.js app/bootstrap.js @ 6f9bdf310b2a -->
 
 Grind, hunt and catch all go *looking* for something. These three do the obvious
 thing with the situation you are already in, and take no parameters:
@@ -989,7 +989,7 @@ the bag" rather than "did we gain any".
 
 ## 9. The interface
 
-<!-- covers: app/main.js index.html @ bb27662706e4 -->
+<!-- covers: app/main.js index.html @ 660779f366b6 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.

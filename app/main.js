@@ -49,6 +49,9 @@ let saves = null;
 // Whether the undo slot holds a point from the job just run, and what it
 // was, so the row can say what undoing would take you back to.
 let undoPoint = null;
+// Why the last job had no undo point, so the row can say so instead of
+// looking like no job has run.
+let undoRefused = null;
 
 // --- colour theme -----------------------------------------------------------
 // Three states, not two: "auto" follows the phone, and the other two override
@@ -1016,14 +1019,22 @@ async function describeGame() {
  */
 async function snapshotForUndo(label) {
   undoPoint = null;
+  undoRefused = null;
   const can = await tasks.canSave();
   if (!can.ok) {
+    // Kept, not just logged. The run log holds three lines and a job writes
+    // more than that, so the reason scrolled away and the row went on saying
+    // "nothing to undo yet" -- which reads as "no job has run" rather than
+    // "this job is not undoable". Losing an undo point quietly is the whole
+    // problem: you find out when you try to use it.
+    undoRefused = can.why;
     progress(`no undo point: ${can.why}`);
     paintUndo();
     return;
   }
   const res = await tasks.saveGame();
   if (!res.ok) {
+    undoRefused = res.message;
     progress(`no undo point: ${res.message}`);
     paintUndo();
     return;
@@ -1035,6 +1046,7 @@ async function snapshotForUndo(label) {
     undoPoint = { ...where, job: label, when: kept.when };
     progress(`undo point kept before ${label}`);
   } else {
+    undoRefused = kept.message;
     progress(`no undo point: ${kept.message}`);
   }
   paintUndo();
@@ -1056,7 +1068,9 @@ function paintUndo() {
   const row = $('#undostate'), btn = $('#undo');
   if (!row || !btn) return;
   if (!undoPoint) {
-    row.textContent = 'nothing to undo yet';
+    row.textContent = undoRefused
+      ? `the last job could not be undone \u2014 ${undoRefused}`
+      : 'nothing to undo yet';
     btn.disabled = true;
     $('#job-undo').classList.add('blocked');
     return;
