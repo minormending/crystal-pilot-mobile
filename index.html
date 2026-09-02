@@ -94,6 +94,21 @@
      overflowed 375px, wrapping the title and truncating the location.
      It says which of the three states is in force rather than showing a
      symbol to be guessed at. */
+  .slots{display:block}
+  .slotrows{display:flex;flex-direction:column;gap:6px;margin-top:8px}
+  .slotrow{display:flex;align-items:center;gap:8px;background:var(--raise);
+           border:1px solid var(--line);border-radius:10px;padding:8px 10px}
+  .slotrow .sname{flex:0 0 auto;font-weight:700;font-size:12px;
+                  color:var(--ink);min-width:3.4em}
+  .slotrow .sstate{flex:1 1 auto;font-size:12px;color:var(--raise-ink);
+                   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .slotrow button{flex:0 0 auto;min-height:34px;padding:0 12px;font-size:12px;
+                  border:1px solid var(--line);border-radius:8px;
+                  background:var(--panel);color:var(--ink);font-weight:700}
+  .slotrow button:disabled{opacity:.45}
+  label.file.jgo{display:inline-flex;align-items:center;justify-content:center;
+                 position:relative;overflow:hidden;cursor:pointer}
+  label.file.jgo input{position:absolute;inset:0;opacity:0;cursor:pointer}
   .themerow{display:flex;align-items:center;gap:10px}
   button.themebtn{flex:0 0 auto;min-height:0;padding:6px 12px;font-size:12px;
                   letter-spacing:.06em;text-transform:uppercase;font-weight:600;
@@ -546,9 +561,33 @@
       <button class="jgo" id="exportsav">Get</button>
     </div>
 
-    <footer>Nothing here persists on its own. Saving writes the game's own
-      battery, which lives in this tab &mdash; downloading is how it leaves the
-      phone.</footer>
+    <div class="job" id="job-import">
+      <div class="what">
+        <span class="jname">Load a .sav</span>
+        <span class="jstate" id="importstate">bring a game in from the desktop
+          pilot</span>
+      </div>
+      <label class="jgo file" id="importlabel">Choose<input type="file"
+        id="importsav" accept=".sav"></label>
+    </div>
+
+    <div class="job" id="job-undo">
+      <div class="what">
+        <span class="jname">Undo the last job</span>
+        <span class="jstate" id="undostate">nothing to undo yet</span>
+      </div>
+      <button class="jgo" id="undo" disabled>Undo</button>
+    </div>
+
+    <div class="param slots">
+      <span class="lvlabel">Slots</span>
+      <div class="slotrows" id="slotrows"></div>
+    </div>
+
+    <footer>A slot holds the game&rsquo;s own battery save, so keeping one
+      saves the game first &mdash; and loading one puts you back at that save
+      point rather than at an exact moment. Nothing here leaves this tab until
+      you download it.</footer>
   </div>
 
   <div class="card hide" id="panel">

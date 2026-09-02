@@ -1,6 +1,7 @@
 // Wiring: file pickers, the render loop, and dispatching a task.
 import { GameBoy } from './gb.js';
 import { Symbols } from './symbols.js';
+import { Saves, SLOT_IDS, UNDO_SLOT } from './saves.js';
 import { GameState, TRAINER_BATTLE, MAX_PARTY } from './state.js';
 import { Tasks } from './tasks.js';
 import { CollisionMap } from './collision.js';
@@ -44,6 +45,10 @@ let lastLead = null;   // the lead's level, for the relative grind presets
 // Whether this tab has committed a save. Only used for wording -- the
 // download checks the battery itself rather than trusting this.
 let savedThisSession = false;
+let saves = null;
+// Whether the undo slot holds a point from the job just run, and what it
+// was, so the row can say what undoing would take you back to.
+let undoPoint = null;
 
 // --- colour theme -----------------------------------------------------------
 // Three states, not two: "auto" follows the phone, and the other two override
@@ -129,6 +134,7 @@ async function maybeStart() {
   // out about when it tries to name the first Pokemon it meets.
   romdata = new RomData(symbols, gb);
   tasks = new Tasks(gb, state, progress, romdata);
+  saves = new Saves(gb, state, romdata, progress);
   collision = new CollisionMap(symbols, gb);
   nav = new Nav(gb, symbols);
   world = new World(symbols, gb);
@@ -147,6 +153,8 @@ async function maybeStart() {
   $('#speedbox').classList.remove('hide');
   $('#huntcard').classList.remove('hide');
   $('#savecard').classList.remove('hide');
+  paintSlots();
+  paintUndo();
   $('#screenwrap').classList.remove('hide');
   $('#taphint').classList.remove('hide');
   startLoop();
@@ -285,7 +293,8 @@ function setMode(piloting) {
   $('#stopRun').classList.toggle('hide', !piloting);
 }
 
-async function runTask(id, busy, work, { needsWorld = true } = {}) {
+async function runTask(id, busy, work,
+                       { needsWorld = true, takeUndoPoint = true } = {}) {
   if (running) return null;
   // Every one of these needs a game already running -- the buttons are on
   // screen before that is true, and pressing one first got "no way from map
@@ -307,6 +316,10 @@ async function runTask(id, busy, work, { needsWorld = true } = {}) {
   $(id).disabled = true;
   gb.releaseAll();
   syncHeld();
+  // An undo point, before anything moves. Only possible where the game can
+  // save at all, which rules out the two commands that run inside a battle --
+  // so this reports what it did rather than pretending every job is undoable.
+  if (takeUndoPoint) await snapshotForUndo(busy);
   setStatus(busy, 'busy');
   try {
     const res = await work();
@@ -971,6 +984,182 @@ $('#stopRun').onclick = () => {
   if (tasks) tasks.cancel();
   walkCancelled = true;
   progress('stopping…');
+};
+
+// --- slots, undo, and importing a save ---------------------------------------
+
+/**
+ * Describe the game as it stands, for a slot row to show.
+ *
+ * Read at capture time rather than stored as a screenshot: a slot is worth
+ * nothing if you cannot tell which one it is.
+ */
+async function describeGame() {
+  const s = await tasks.snap();
+  const lead = s.party[0];
+  return {
+    // The same namer the header uses, so a slot says "Route 29" rather than
+    // the map numbers it is stored as.
+    where: boot ? boot.where(s.map[0] * 256 + s.map[1]) : `map ${s.map.join('.')}`,
+    lead: lead && romdata
+      ? `${romdata.speciesName(lead.species)} Lv${lead.level}` : null,
+    party: s.party.length,
+  };
+}
+
+/**
+ * Save the game and keep the result in the undo slot.
+ *
+ * Called before a pilot job. A slot is a save point, so taking one means
+ * actually saving -- there is no cheaper snapshot available here, and the
+ * honest consequence is that jobs which run inside a battle cannot have one.
+ */
+async function snapshotForUndo(label) {
+  undoPoint = null;
+  const can = await tasks.canSave();
+  if (!can.ok) {
+    progress(`no undo point: ${can.why}`);
+    paintUndo();
+    return;
+  }
+  const res = await tasks.saveGame();
+  if (!res.ok) {
+    progress(`no undo point: ${res.message}`);
+    paintUndo();
+    return;
+  }
+  savedThisSession = true;
+  const where = await describeGame();
+  const kept = await saves.capture(UNDO_SLOT, { ...where, job: label });
+  if (kept.ok) {
+    undoPoint = { ...where, job: label, when: kept.when };
+    progress(`undo point kept before ${label}`);
+  } else {
+    progress(`no undo point: ${kept.message}`);
+  }
+  paintUndo();
+}
+
+function describeSlot(meta) {
+  if (!meta) return 'empty';
+  const bits = [];
+  if (meta.where) bits.push(meta.where);
+  if (meta.lead) bits.push(meta.lead);
+  if (meta.when) {
+    const d = new Date(meta.when);
+    bits.push(`${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`);
+  }
+  return bits.join(' \u00b7 ') || 'kept';
+}
+
+function paintUndo() {
+  const row = $('#undostate'), btn = $('#undo');
+  if (!row || !btn) return;
+  if (!undoPoint) {
+    row.textContent = 'nothing to undo yet';
+    btn.disabled = true;
+    $('#job-undo').classList.add('blocked');
+    return;
+  }
+  row.textContent = `back to before ${undoPoint.job} \u00b7 ${describeSlot(undoPoint)}`;
+  btn.disabled = false;
+  $('#job-undo').classList.remove('blocked');
+}
+
+/** Put the game back to a slot, and pick the save up at the title screen. */
+async function loadSlot(slot, what) {
+  return runTask('#undo', `loading ${what}`, async () => {
+    const rec = await saves.read(slot);
+    if (!rec || !rec.bytes) return { ok: false, message: `${what} is empty` };
+    await saves.install(rec.bytes);
+    if (!await tasks.continueFromTitle()) {
+      return { ok: false, message: 'loaded the save but could not reach the world' };
+    }
+    const now = await describeGame();
+    return { ok: true, message: `back at ${now.where}`
+      + (now.lead ? ` with ${now.lead}` : '') };
+  }, { needsWorld: false, takeUndoPoint: false });
+}
+
+async function paintSlots() {
+  const host = $('#slotrows');
+  if (!host || !saves) return;
+  const all = await saves.list();
+  host.textContent = '';
+  for (const id of SLOT_IDS) {
+    const meta = all[id];
+    const row = document.createElement('div');
+    row.className = 'slotrow';
+    const name = document.createElement('span');
+    name.className = 'sname';
+    name.textContent = `Slot ${id}`;
+    const stateEl = document.createElement('span');
+    stateEl.className = 'sstate';
+    stateEl.textContent = describeSlot(meta);
+    const keep = document.createElement('button');
+    keep.textContent = meta ? 'Replace' : 'Keep';
+    keep.onclick = () => runTask('#savegame', `keeping slot ${id}`, async () => {
+      const can = await tasks.canSave();
+      if (!can.ok) return { ok: false, message: `cannot save: ${can.why}` };
+      const saved = await tasks.saveGame();
+      if (!saved.ok) return saved;
+      savedThisSession = true;
+      const where = await describeGame();
+      const kept = await saves.capture(id, where);
+      await paintSlots();
+      return kept.ok
+        ? { ok: true, message: `slot ${id}: ${describeSlot({ ...where, when: kept.when })}` }
+        : kept;
+    }, { takeUndoPoint: false });
+    const load = document.createElement('button');
+    load.textContent = 'Load';
+    load.disabled = !meta;
+    load.onclick = () => loadSlot(id, `slot ${id}`);
+    row.append(name, stateEl, keep, load);
+    host.append(row);
+  }
+}
+
+$('#undo').onclick = async () => {
+  if (!undoPoint) return;
+  const res = await loadSlot(UNDO_SLOT, 'the undo point');
+  if (res && res.ok) {
+    undoPoint = null;
+    paintUndo();
+  }
+};
+
+/**
+ * Bring a .sav in from somewhere else.
+ *
+ * Checked before it is installed, and checked for the right two things: the
+ * length, and the cartridge's own save marker. A file that is neither is
+ * refused with a reason -- installing it would re-load the ROM and leave the
+ * player at a title screen with no save behind it, having lost what they had.
+ */
+$('#importsav').onchange = async (ev) => {
+  const file = ev.target.files && ev.target.files[0];
+  ev.target.value = '';
+  if (!file || running) return;
+  await runTask('#importlabel', `loading ${file.name}`, async () => {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    if (bytes.length !== 32768) {
+      return { ok: false, message:
+        `${file.name} is ${bytes.length} bytes; a battery save is 32768` };
+    }
+    if (!state.saveIsPresent(bytes)) {
+      return { ok: false, message: `${file.name} holds no save the game would load` };
+    }
+    await saves.install(bytes);
+    if (!await tasks.continueFromTitle()) {
+      return { ok: false, message: 'loaded the file but could not reach the world' };
+    }
+    savedThisSession = true;
+    const now = await describeGame();
+    await paintSlots();
+    return { ok: true, message: `loaded ${file.name} \u2014 ${now.where}`
+      + (now.lead ? ` with ${now.lead}` : '') };
+  }, { needsWorld: false, takeUndoPoint: false });
 };
 
 // --- saving, and getting the save off the phone ------------------------------

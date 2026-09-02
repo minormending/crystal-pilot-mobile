@@ -434,8 +434,32 @@ played a new game to Route 29 with a Lv5 Cyndaquil, saved, and the resulting
 Route 29, `CYNDAQUIL Lv5 20/20`, Tackle and Leer. Two emulators, two
 implementations, one save file.
 
-**Still missing: import.** You can get a save out and not put one in, so the
-desktop and the phone do not yet share a game in both directions.
+`Load a .sav` brings one back the other way, so the desktop and the phone share
+a game in both directions.
+
+## Slots, and undoing a job
+
+Three slots, plus one the pilot writes for itself before every job it runs.
+
+**A slot holds a battery save, not a machine state, and that decides what it
+can do.** Keeping one saves the game first; loading one puts you back at that
+save point. So a slot is a place, not a moment — and a job that runs *inside* a
+battle cannot have an undo point at all, because the game cannot be saved
+there. The interface says so rather than offering an undo that quietly does
+something else.
+
+That limit is the emulator's, not a preference. WasmBoy will *capture* a machine
+state — `saveState()` returns all four memory regions populated, and persists
+them — but it will not put one back: `loadState()` rejects with `undefined`,
+measured on states the library created itself, fetched from its own IndexedDB,
+handed to its own API, with every buffer the right length. A snapshot you can
+never return to is no use as a slot, so slots are batteries instead.
+
+Writing a battery is the one piece of cleverness here. The library keeps a
+per-cartridge record in IndexedDB and reads `cartridgeRam` out of it when a ROM
+loads, so putting a save in means writing that record and re-loading the ROM —
+which is why loading a slot leaves you at the title screen's CONTINUE, driven
+for you.
 
 ## Starting a game is yours, not the pilot's
 

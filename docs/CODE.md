@@ -90,7 +90,7 @@ of the subtleties in sections 6 and 7.
 
 ## 2. The shape of it
 
-<!-- covers-api: app/main.js app/bootstrap.js app/tasks.js app/nav.js app/world.js app/collision.js app/state.js app/romdata.js app/symbols.js app/gb.js @ 3969889a4e0f -->
+<!-- covers-api: app/main.js app/bootstrap.js app/tasks.js app/nav.js app/world.js app/collision.js app/state.js app/romdata.js app/symbols.js app/gb.js @ 998b179d5b51 -->
 
 Ten modules. Arrows point from a module to the ones it imports.
 
@@ -536,7 +536,7 @@ refusal is not an answer.
 
 ## 6. Battles
 
-<!-- covers: app/tasks.js app/state.js @ 6419f7d865d4 -->
+<!-- covers: app/tasks.js app/state.js @ b0edcb28f66a -->
 
 ### Is it our turn?
 
@@ -660,7 +660,7 @@ fainted.
 
 ## 7. Catching something
 
-<!-- covers: app/tasks.js app/romdata.js @ aafde8d6aa4e -->
+<!-- covers: app/tasks.js app/romdata.js @ 076c8af20195 -->
 
 Catching is the most involved loop, because a Poké Ball's odds turn on how much
 HP is left. Throwing at a full-health target is mostly throwing balls away.
@@ -746,7 +746,7 @@ precedes it defaults to yes, which is what we want; the nickname box does not.
 
 ## 7a. Three that act on where you already are
 
-<!-- covers: app/tasks.js app/bootstrap.js @ 05b830edd0f9 -->
+<!-- covers: app/tasks.js app/bootstrap.js @ a4f80f1f92f6 -->
 
 Grind, hunt and catch all go *looking* for something. These three do the obvious
 thing with the situation you are already in, and take no parameters:
@@ -989,7 +989,7 @@ the bag" rather than "did we gain any".
 
 ## 9. The interface
 
-<!-- covers: app/main.js index.html @ 67db51f1000e -->
+<!-- covers: app/main.js index.html @ bb27662706e4 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.

@@ -40,6 +40,8 @@ const SAVE_PROMPT_FRAMES = 40;
 const SAVE_CONFIRM_TRIES = 60;
 // Polls waiting for the START menu's cursor to appear.
 const MENU_OPEN_TRIES = 25;
+// Polls waiting for the overworld to settle after a battle or a script.
+const QUIET_TRIES = 60;
 // The party screen ignores the short presses the battle menu takes.
 const PARTY_HOLD = 12, PARTY_GAP = 24, PARTY_SETTLE = 40;
 // What the drawn battle menu measures, telling it from the pack over the top of
@@ -900,7 +902,10 @@ export class Tasks {
     const wasBlank = !this.state.saveIsPresent(before);
     const hashBefore = digest(before);
 
-    let s = await this.snap();
+    // Settled first, not read raw: straight after a battle the overworld
+    // reports itself absent for a moment, and refusing then means a save right
+    // after a job never works.
+    let s = await this.awaitQuiet();
     if (s.inBattle) return { ok: false, message: 'finish the battle first' };
     if (!s.worldLoaded) return { ok: false, message: 'start a game first' };
     if (s.scriptRunning) {
@@ -1036,6 +1041,64 @@ export class Tasks {
     const win = await this.gb.readBytes(this.state.menuWindow.addr,
                                         this.state.menuWindow.len);
     return this.state.menuCursorY(win) === target;
+  }
+
+  /**
+   * From the title screen to the world, by way of CONTINUE.
+   *
+   * Used after a slot is installed: loading a battery re-loads the ROM, so the
+   * game restarts and the save has to be picked up the way a person picks it
+   * up. START opens the title menu, A takes CONTINUE (which is the top entry
+   * whenever save data exists), and the alternation covers both the press that
+   * opens the menu and the ones that answer the "saved on" panel behind it.
+   */
+  async continueFromTitle(rounds = 24) {
+    for (let i = 0; i < rounds && !this.cancelled; i++) {
+      const s = await this.snap();
+      if (s.worldLoaded) return true;
+      await this.gb.press(i % 2 === 0 ? 'START' : 'A', 6, 12);
+      await this.gb.run(90);
+    }
+    return (await this.snap()).worldLoaded;
+  }
+
+  /**
+   * Can the game be saved right now?
+   *
+   * Saving drives the START menu, which does not open in a battle or while a
+   * script is running. Exposed because the pilot's undo point is a save, so
+   * whether one can be taken has to be answerable *before* a task starts --
+   * and for the two commands that run inside a battle the answer is no.
+   */
+  async canSave() {
+    const s = await this.awaitQuiet();
+    if (s.inBattle) return { ok: false, why: 'a battle is in progress' };
+    if (!s.worldLoaded) return { ok: false, why: 'no game is running' };
+    if (s.scriptRunning) return { ok: false, why: 'the screen is busy' };
+    return { ok: true };
+  }
+
+  /**
+   * Wait for the overworld to be standing still, and report where it got to.
+   *
+   * Needed because "is there a game running?" is briefly false at moments when
+   * there obviously is one. A battle does not hand control straight back: for a
+   * short while afterwards wMapStatus reads 1 rather than 2 and a script is
+   * still running, while the map and the party read correctly the whole time.
+   *
+   * Measured, and it cost a working feature to find: an undo point taken right
+   * after a grind refused itself with "no game is running", because the check
+   * ran during that transient and took the answer at face value. Anything that
+   * asks whether the game can be saved has to let it settle first.
+   */
+  async awaitQuiet(tries = QUIET_TRIES) {
+    let s = await this.snap();
+    for (let i = 0; i < tries; i++) {
+      if (s.worldLoaded && !s.scriptRunning && !s.inBattle) return s;
+      await this.gb.run(SETTLE_FRAMES);
+      s = await this.snap();
+    }
+    return s;
   }
 
   /**
