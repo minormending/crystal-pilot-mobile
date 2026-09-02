@@ -1,6 +1,6 @@
 # crystal-pilot mobile
 
-[![static-checks](https://github.com/minormending/crystal-pilot-mobile/actions/workflows/checks.yml/badge.svg)](https://github.com/minormending/crystal-pilot-mobile/actions/workflows/checks.yml)
+[![checks](https://github.com/minormending/crystal-pilot-mobile/actions/workflows/checks.yml/badge.svg)](https://github.com/minormending/crystal-pilot-mobile/actions/workflows/checks.yml)
 [![license: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue.svg)](LICENSE)
 [![live: github pages](https://img.shields.io/badge/live-github%20pages-2ea44f.svg)](https://minormending.github.io/crystal-pilot-mobile/)
 
@@ -867,6 +867,38 @@ A keyboard works on the same page, which is what makes it testable on a desktop:
 Buttons release on `pointerup`, `pointercancel`, `pointerleave` and on window
 blur, so a direction cannot get stuck down after your thumb slides off the
 button or you switch apps mid-press.
+
+## Tests
+
+```bash
+./run-tests            # everything
+./run-tests -k catch   # only names that match
+./run-tests -v         # notes and stack lines
+```
+
+No ROM, no browser, no emulator — which is the point rather than a compromise.
+The ROM is not in this repository and never will be, so a test that needs one
+cannot run on a clean checkout or in CI, and a test that cannot run there does
+not get run.
+
+What that leaves is most of what has actually gone wrong. Every bug this app has
+shipped was a decision made about a game state: picking a move whose power byte
+lies, reporting a knockout as a getaway, giving up on a save while the game was
+still settling, calling a blank cartridge saved. None of those needs a
+cartridge. They need a plausible work-RAM snapshot and a way to watch what the
+code does with it, which is what `tests/harness.mjs` provides — a fake Game Boy
+with scripted responses, and a synthetic symbol table so nothing is pinned to
+one build's addresses.
+
+Every test here was checked by putting its bug back and confirming it fails.
+Two did not, the first time: one never reached the branch it claimed to test,
+and one asserted against a stub of the logic instead of the logic. Both are
+rewritten. A test that has not been watched failing is a test you do not know
+you have.
+
+What the tests do **not** cover is anything that needs the emulator running —
+walking, the intro, the collision decode against a real map, and loading a save
+back into the cartridge. Those are still verified by hand against a local build.
 
 ## Running it
 

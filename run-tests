@@ -1,0 +1,7 @@
+#!/bin/sh
+# Behaviour tests. No ROM and no browser: see tests/harness.mjs for why.
+#   ./run-tests            run everything
+#   ./run-tests -k catch   only tests whose name matches
+#   ./run-tests -v         show notes and stack lines
+here=$(cd "$(dirname "$0")" && pwd)
+exec node "$here/tests/index.mjs" "$@"

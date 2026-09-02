@@ -2,14 +2,13 @@
 #
 # There is deliberately no emulator here. Driving the game needs a ROM built
 # from the pokecrystal disassembly, and no ROM, save or symbol file is
-# distributed -- so the tasks are verified by hand against a local build, and
-# what CI covers is everything else: that the modules parse, that the offline
-# shell matches what is on disk, that the markup closes, that the palette still
-# meets contrast in both themes, that no game file has been committed, and that
-# the documentation has been looked at since the code changed.
+# distributed. What runs instead is two things: static checks over the
+# repository, and behaviour tests against a fake Game Boy -- a work-RAM
+# snapshot and scripted button responses, which is enough to test the decisions
+# the pilot makes without a cartridge to make them against.
 #
 # Naming the job for what it actually covers keeps the badge honest.
-name: static-checks
+name: checks
 
 on:
   push:
@@ -21,7 +20,7 @@ permissions:
   contents: read
 
 jobs:
-  static-checks:
+  checks:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -39,6 +38,9 @@ jobs:
 
       - name: App checks
         run: tools/check-app
+
+      - name: Behaviour tests
+        run: ./run-tests
 
       - name: Documentation is current
         run: tools/docs-check

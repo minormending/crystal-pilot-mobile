@@ -9,6 +9,15 @@
 staged=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(js|html)$')
 [ -z "$staged" ] && exit 0
 
+# The tests are seconds, so there is no reason to find out later.
+if ! ./run-tests >/dev/null 2>&1; then
+  echo
+  echo "  ---"
+  echo "  The behaviour tests fail. Run ./run-tests to see which."
+  echo "  To commit anyway:  git commit --no-verify"
+  exit 1
+fi
+
 # Check the staged content, not the working tree: those can differ, and the
 # commit is what will be recorded.
 tmp=$(mktemp -d) || exit 0

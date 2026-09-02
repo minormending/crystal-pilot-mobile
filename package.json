@@ -1,0 +1,6 @@
+{
+  "name": "crystal-pilot-mobile",
+  "private": true,
+  "type": "module",
+  "description": "Static app; this file exists so Node treats app/*.js as ES modules for the tests."
+}
