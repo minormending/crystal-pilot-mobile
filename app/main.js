@@ -41,6 +41,9 @@ let bootStage = 'start';
 // Where healing would go from here, worked out once per refresh.
 let healPlace = null;
 let lastLead = null;   // the lead's level, for the relative grind presets
+// Whether this tab has committed a save. Only used for wording -- the
+// download checks the battery itself rather than trusting this.
+let savedThisSession = false;
 
 // --- colour theme -----------------------------------------------------------
 // Three states, not two: "auto" follows the phone, and the other two override
@@ -143,6 +146,7 @@ async function maybeStart() {
   $('#speedcard').classList.remove('hide');
   $('#speedbox').classList.remove('hide');
   $('#huntcard').classList.remove('hide');
+  $('#savecard').classList.remove('hide');
   $('#screenwrap').classList.remove('hide');
   $('#taphint').classList.remove('hide');
   startLoop();
@@ -361,6 +365,24 @@ function paintJobs(s) {
       : 'pick something below';
   $('#catch').disabled = !(ballId && huntWanted);
   $('#job-catch').classList.toggle('blocked', needsBalls || !huntWanted);
+
+  // Saving needs the world and a quiet screen; it drives the START menu, and
+  // that menu does not open in a battle or mid-script.
+  const canSave = s.worldLoaded && !s.inBattle && !s.scriptRunning;
+  $('#savestate').textContent = !s.worldLoaded
+    ? 'start a game first'
+    : s.inBattle
+      ? 'finish the battle first'
+      : s.scriptRunning
+        ? 'wait for the screen to settle'
+        : savedThisSession
+          ? 'saved this session'
+          : 'not saved yet';
+  $('#savegame').disabled = !canSave;
+  $('#job-save').classList.toggle('blocked', !canSave);
+  $('#exportstate').textContent = savedThisSession
+    ? 'ready — the battery has this session in it'
+    : 'the battery save, for another emulator';
 
   // The three below act on the situation you are already in, so what they can
   // do is decided by the game rather than by anything picked on this page.
@@ -949,6 +971,53 @@ $('#stopRun').onclick = () => {
   if (tasks) tasks.cancel();
   walkCancelled = true;
   progress('stopping…');
+};
+
+// --- saving, and getting the save off the phone ------------------------------
+$('#savegame').onclick = () => runTask('#savegame', 'saving', async () => {
+  const r = await tasks.saveGame();
+  if (r.ok) savedThisSession = true;
+  return r;
+});
+
+/**
+ * Hand the battery save over as a file.
+ *
+ * Read on the click rather than polled: it is 32KB, and the only moment its
+ * contents matter is now. A battery with no save in it is refused -- such a
+ * file loads as "no save file" in every emulator, so handing one over would
+ * look like the download worked and the game had nothing in it, which is a
+ * worse answer than saying the game has not been saved.
+ *
+ * The test is the cartridge's own two check bytes, not whether any byte is
+ * non-zero: a never-saved battery has five non-zero bytes in it, so the
+ * obvious test passes on a blank cartridge. Measured, having written the
+ * obvious one first.
+ */
+$('#exportsav').onclick = async () => {
+  if (running) return;
+  try {
+    const bytes = await gb.batterySave();
+    if (!state.saveIsPresent(bytes)) {
+      setStatus('no save data yet — save the game first', 'bad');
+      return;
+    }
+    const stamp = new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '');
+    const url = URL.createObjectURL(new Blob([bytes],
+      { type: 'application/octet-stream' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `pokecrystal-${stamp}.sav`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    // Revoked on a timer rather than immediately: Safari cancels an in-flight
+    // download if the URL goes away while it is still reading it.
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
+    setStatus(`downloaded ${a.download} (${bytes.length} bytes)`, 'ok');
+  } catch (e) {
+    setStatus(`could not read the save: ${e && e.message ? e.message : e}`, 'bad');
+  }
 };
 
 // Dev convenience: with ?dev=1 the ROM and .sym are fetched from ./dev/ instead

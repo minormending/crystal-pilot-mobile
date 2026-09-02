@@ -30,6 +30,23 @@ export const TRAINER_BATTLE = 2;
 // rather than sending it to a box this does not handle.
 export const MAX_PARTY = 6;
 
+// Where the cartridge's save data lives, and how the game knows it is real.
+//
+// Crystal validates a save by two magic bytes: SAVE_CHECK_VALUE_1 (99) at
+// sCheckValue1 and SAVE_CHECK_VALUE_2 (127) at sCheckValue2. If either is
+// wrong the game reports no save file, which makes them exactly the right test
+// -- it is the game's own, from engine/menus/save.asm, rather than a guess
+// about how much of the battery looks used.
+//
+// Counting non-zero bytes does NOT work, which is worth stating because it is
+// the obvious thing to reach for and it is wrong: a battery that has never
+// been saved to still reads five non-zero bytes here, so "any non-zero byte
+// means there is a save" calls a blank cartridge saved.
+const SRAM_START = 0xa000;
+const SRAM_BANK_BYTES = 0x2000;
+const SAVE_CHECK_VALUE_1 = 99;
+const SAVE_CHECK_VALUE_2 = 127;
+
 export class GameState {
   constructor(symbols) {
     this.s = symbols;
@@ -84,6 +101,27 @@ export class GameState {
   /** The live menu cursor, read from the same small window. */
   menuCursorY(win) {
     return win[this.a.menuY - this.menuWindow.addr];
+  }
+
+  /**
+   * Does this battery save hold a game the cartridge would load?
+   *
+   * `sram` is the 32KB from GameBoy.batterySave(). Offsets come out of the
+   * symbol file rather than being written down here, the same as every other
+   * address in this app -- an SRAM symbol carries a bank, so the offset into
+   * the flat block is bank * 0x2000 + (addr - 0xA000).
+   */
+  saveIsPresent(sram) {
+    if (!sram || sram.length < SRAM_BANK_BYTES) return false;
+    const at = (name) => {
+      if (!this.s.has(name)) return -1;
+      return this.s.bank(name) * SRAM_BANK_BYTES + (this.s.addr(name) - SRAM_START);
+    };
+    const one = at('sCheckValue1'), two = at('sCheckValue2');
+    if (one < 0 || two < 0 || one >= sram.length || two >= sram.length) {
+      return false;
+    }
+    return sram[one] === SAVE_CHECK_VALUE_1 && sram[two] === SAVE_CHECK_VALUE_2;
   }
 
   read(wram) {

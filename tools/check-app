@@ -278,12 +278,47 @@ def check_moves():
                 f"{len(GENTLE_ENOUGH)} kept")
 
 
+# The only names the core's setJoypadState understands. A name it does not know
+# is not an error: the key is set on an object the core ignores, so the press
+# runs, takes its frames, and does nothing at all.
+BUTTONS = {"UP", "DOWN", "LEFT", "RIGHT", "A", "B", "START", "SELECT"}
+PRESS_CALL = re.compile(r"\.(?:press|hold|release)\(\s*'([A-Za-z]+)'")
+
+
+def check_buttons():
+    """Every button name handed to press/hold/release is one the core knows.
+
+    Worth a check of its own because getting it wrong is silent. `press('Start')`
+    parses, runs, waits its frames and has no effect -- the core is handed
+    {Start: true}, sees no key it recognises, and leaves the joypad alone. The
+    save driver was written with 'Start' and 'Down' and failed with "could not
+    get the game to save", which points at the menu rather than at the presses.
+    """
+    problems = []
+    for path in APP + [INDEX]:
+        for n, line in enumerate(path.read_text().splitlines(), 1):
+            for name in PRESS_CALL.findall(line):
+                if name not in BUTTONS:
+                    problems.append(f"{path.name}:{n}  {name!r} is not a button")
+    # The on-screen pad is where the canonical spelling comes from, so make
+    # sure that agrees too rather than trusting the set above.
+    markup = set(re.findall(r'data-btn="([A-Za-z]+)"', INDEX.read_text()))
+    unknown = markup - BUTTONS
+    for u in sorted(unknown):
+        problems.append(f"index.html  data-btn={u!r} is not a button")
+    for p in problems:
+        print(f"        {p}")
+    return fail(f"{len(problems)} bad button name(s)") if problems \
+        else ok(f"all button names are among {len(BUTTONS)} the core knows")
+
+
 CHECKS = {
     "syntax": check_syntax,
     "shell": check_shell,
     "markup": check_markup,
     "contrast": check_contrast,
     "gamefiles": check_no_game_files,
+    "buttons": check_buttons,
     "moves": check_moves,
 }
 

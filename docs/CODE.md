@@ -35,6 +35,7 @@ and the code disagree, the code is right and the section is a bug — see
 6. [Battles](#6-battles)
 7. [Catching something](#7-catching-something)
    · [Three that act on where you are](#7a-three-that-act-on-where-you-already-are)
+   · [Saving, and getting the save out](#7b-saving-and-getting-the-save-out)
 8. [The errands](#8-the-errands)
 9. [The interface](#9-the-interface)
 10. [Keeping this honest](#10-keeping-this-honest)
@@ -232,7 +233,7 @@ later duplicates are aliases and locals.
 
 ### `state.js` — what the game is doing right now
 
-<!-- covers: app/state.js @ 4b8815618cf2 -->
+<!-- covers: app/state.js @ 07c21b8020de -->
 
 One snapshot, many answers: `inBattle`, `party`, `pos`, `onGrass`,
 `worldLoaded`, `menu`, `balls`, and the enemy's HP.
@@ -535,7 +536,7 @@ refusal is not an answer.
 
 ## 6. Battles
 
-<!-- covers: app/tasks.js app/state.js @ cb9912e7f82d -->
+<!-- covers: app/tasks.js app/state.js @ 6419f7d865d4 -->
 
 ### Is it our turn?
 
@@ -659,7 +660,7 @@ fainted.
 
 ## 7. Catching something
 
-<!-- covers: app/tasks.js app/romdata.js @ 272447fc543b -->
+<!-- covers: app/tasks.js app/romdata.js @ aafde8d6aa4e -->
 
 Catching is the most involved loop, because a Poké Ball's odds turn on how much
 HP is left. Throwing at a full-health target is mostly throwing balls away.
@@ -745,7 +746,7 @@ precedes it defaults to yes, which is what we want; the nickname box does not.
 
 ## 7a. Three that act on where you already are
 
-<!-- covers: app/tasks.js app/bootstrap.js @ 52816c78e11e -->
+<!-- covers: app/tasks.js app/bootstrap.js @ 05b830edd0f9 -->
 
 Grind, hunt and catch all go *looking* for something. These three do the obvious
 thing with the situation you are already in, and take no parameters:
@@ -802,6 +803,83 @@ This surfaced as a plain `ReferenceError` the first time `captureHere` ran,
 which is worth knowing: the syntax check in `tools/check-app` parses every
 module but cannot see an undefined reference. That class of bug only shows up by
 running the thing.
+
+</details>
+
+## 7b. Saving, and getting the save out
+
+<!-- covers: app/tasks.js app/state.js -->
+
+```mermaid
+flowchart TD
+    A["Save the game"] --> G{"in a battle,<br/>or mid-script?"}
+    G -- yes --> R["refuse, and say which"]
+    G -- no --> C["close menus, press START"]
+    C --> O{"cursor appeared?"}
+    O -- no --> RT["retry, up to 3 times"]
+    O -- yes --> N["count rows by stepping DOWN<br/>until the cursor wraps"]
+    N -- "the player moved" --> W["the menu never opened — stop"]
+    N --> S["drive the cursor to row count&minus;2"]
+    S --> A2["press A, then wait for the<br/>confirm box's own cursor"]
+    A2 --> Y["press A for YES, advance the text"]
+    Y --> V{"battery bytes moved, AND<br/>now hold a loadable save?"}
+    V -- yes --> OK["saved"]
+    V -- no --> RT2["wrong row — try the others"]
+```
+
+Saving is driven through the real menu rather than by writing SRAM. It could not
+be done any other way here — this core is readable but not writable — and it
+should not be anyway: Crystal validates a save with two check bytes and a
+checksum it computes as it writes, so a save the game did not make itself is a
+save the game does not trust.
+
+`Download .sav` then hands the battery over as a file, which is how a phone
+session leaves the tab.
+
+<details>
+<summary><b>Advanced detail:</b> why the evidence is the bytes</summary>
+
+**The row is counted, not remembered.** The START menu grows as the game goes on
+— no POKéDEX or POKéGEAR at the start — so a fixed row number lands on OPTION
+once they appear. Rows are counted by stepping DOWN until the cursor repeats,
+and SAVE is `count - 2`, because the last three are always SAVE, OPTION, EXIT.
+If the first guess opens the pack instead, the others are tried.
+
+**Counting rows is also how it notices the menu never opened.** If those DOWN
+presses are reaching the world rather than a menu, the player walks — which in
+grass starts a wild battle and makes saving impossible. So the position is
+checked after each press, and a move means stop.
+
+**Success is the battery changing, not the presses landing.** The desktop pilot
+watches its `SaveGameData` hook fire; there are no hooks in a browser. So this
+reads 32KB of cartridge RAM before and after and requires two things: that the
+bytes moved, and that what they now hold is a save the cartridge would load.
+Either test alone is too weak — the first accepts a half-written battery, the
+second accepts a save that was already there while this attempt did nothing.
+
+**"Is there a save?" is Crystal's own test**, from `engine/menus/save.asm`:
+`sCheckValue1 == 99 && sCheckValue2 == 127`. `GameState.saveIsPresent` resolves
+both out of the symbol file — an SRAM symbol carries a bank, so the offset into
+the flat 32KB is `bank * 0x2000 + (addr - 0xA000)`.
+
+Counting non-zero bytes does **not** work, and it was the first thing written: a
+battery never saved to still reads five non-zero bytes, so "any non-zero byte
+means there is a save" calls a blank cartridge saved. It made a genuine first
+save report itself as a repeat, and it would have let `Download .sav` hand over
+a file every emulator opens as "no save file".
+
+**The button names are checked statically now.** The first version of this
+driver used `press('Start')` and `press('Down')`. Every other call site in the
+app is uppercase, and the core ignores a key it does not recognise — so the
+press ran, took its frames and did nothing, and the failure surfaced as "could
+not get the game to save", which points at the menu rather than at the presses.
+`tools/check-app buttons` now rejects any name outside the eight the core knows,
+checked against the on-screen pad's own `data-btn` values.
+
+**Verified across both halves of the project.** The app played a new game to
+Route 29 with a Lv5 Cyndaquil, saved, and those 32768 bytes were loaded in the
+desktop pilot under PyBoy — which read back Route 29, `CYNDAQUIL Lv5 20/20`,
+Tackle and Leer. Two emulators, two implementations, one save file.
 
 </details>
 
@@ -911,7 +989,7 @@ the bag" rather than "did we gain any".
 
 ## 9. The interface
 
-<!-- covers: app/main.js index.html @ 70e54d83f74a -->
+<!-- covers: app/main.js index.html @ 67db51f1000e -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.

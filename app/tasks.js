@@ -32,6 +32,14 @@ const MAX_STUCK_BATTLES = 5;
 const MAX_CHIPS = 8;
 // Party slots to try when sending out a replacement.
 const MAX_SEND_TRIES = 6;
+// Times to try the whole START -> SAVE -> YES flow before giving up.
+const SAVE_ATTEMPTS = 3;
+// Frames for the save prompt to appear after SAVE is chosen.
+const SAVE_PROMPT_FRAMES = 40;
+// Polls waiting for the confirm box to become interactive.
+const SAVE_CONFIRM_TRIES = 60;
+// Polls waiting for the START menu's cursor to appear.
+const MENU_OPEN_TRIES = 25;
 // The party screen ignores the short presses the battle menu takes.
 const PARTY_HOLD = 12, PARTY_GAP = 24, PARTY_SETTLE = 40;
 // What the drawn battle menu measures, telling it from the pack over the top of
@@ -863,6 +871,171 @@ export class Tasks {
         return { ok: false, stats,
                  message: `used ${balls(r.thrown)} without catching it` };
     }
+  }
+
+  /**
+   * Save the game, the way a person does: START -> SAVE -> YES.
+   *
+   * Driven through the real menu rather than by writing SRAM, because writing
+   * is not possible here -- the core hands back copies -- and because a save
+   * the game did not make itself would be a save the game does not trust.
+   *
+   * Success is taken from the battery changing, not from the presses landing.
+   * The desktop pilot can watch its SaveGameData hook fire; there are no hooks
+   * in a browser, so the evidence here is the bytes: 32KB of cartridge RAM
+   * before and after, and a save that commits always moves them, if only the
+   * play-time counter and the checksums. That is a stronger claim than the hook
+   * anyway -- it is the thing we actually want to be true.
+   */
+  async saveGame() {
+    const started = Date.now();
+    const before = await this.gb.batterySave();
+    const digest = (bytes) => {
+      let h = 0;
+      for (let i = 0; i < bytes.length; i++) h = (Math.imul(h, 31) + bytes[i]) >>> 0;
+      return h;
+    };
+    // The game's own validity test, not a count of non-zero bytes -- a battery
+    // that has never been saved to still reads five of those.
+    const wasBlank = !this.state.saveIsPresent(before);
+    const hashBefore = digest(before);
+
+    let s = await this.snap();
+    if (s.inBattle) return { ok: false, message: 'finish the battle first' };
+    if (!s.worldLoaded) return { ok: false, message: 'start a game first' };
+    if (s.scriptRunning) {
+      // Mid-cutscene the START menu will not open, and the presses would
+      // answer whatever is on screen instead.
+      await this.settleText();
+      s = await this.snap();
+      if (s.scriptRunning) {
+        return { ok: false, message: 'something is happening on screen — wait' };
+      }
+    }
+
+    for (let attempt = 0; attempt < SAVE_ATTEMPTS && !this.cancelled; attempt++) {
+      if (await this._saveOnce()) {
+        const after = await this.gb.batterySave();
+        // Two things have to be true: the bytes moved, and what they now hold
+        // is a save the cartridge would load. The first alone would accept a
+        // half-written battery; the second alone would accept a save that was
+        // already there before this attempt did nothing.
+        if (digest(after) !== hashBefore && this.state.saveIsPresent(after)) {
+          const secs = ((Date.now() - started) / 1000).toFixed(1);
+          return { ok: true, seconds: secs, firstSave: wasBlank,
+                   message: wasBlank ? 'saved — the game now has save data'
+                                     : 'saved' };
+        }
+        // The menu flow completed and the battery did not move. Reported
+        // rather than smoothed over: a save that did not commit is exactly
+        // the thing worth knowing about.
+        this.say('the menu went through but the battery did not change');
+      }
+      await this.closeMenus(6);
+      await this.gb.run(SETTLE_FRAMES);
+    }
+    if (this.cancelled) return { ok: false, message: 'stopped' };
+    return { ok: false, message: 'could not get the game to save' };
+  }
+
+  /** One attempt at the menu flow. True if it believes it saved. */
+  async _saveOnce() {
+    await this.closeMenus(3);
+    if (!await this._openStartMenu()) return false;
+
+    const count = await this._menuRowCount();
+    if (count < 3) return false;
+    // The last three rows are always SAVE, OPTION, EXIT, so SAVE is count-2
+    // whether or not the POKeDEX row exists yet. Tried first, then the others:
+    // a wrong guess opens the pack or the party, which is recoverable, and
+    // guessing again beats giving up.
+    const order = [count - 2];
+    for (let r = 1; r <= count; r++) if (r !== count - 2) order.push(r);
+
+    for (const row of order) {
+      if (this.cancelled) return false;
+      if (await this._trySaveRow(row, count)) return true;
+    }
+    return false;
+  }
+
+  async _trySaveRow(row, count) {
+    if (!await this._openStartMenu()) return false;
+    if (!await this._driveMenuCursor(row, count)) return false;
+
+    await this.gb.press('A', 5, 10);
+    await this.gb.run(SAVE_PROMPT_FRAMES);
+
+    // "Would you like to save the game?" -- YES is preselected, and the box is
+    // not interactive the moment it appears. Waiting for its cursor is the
+    // same lesson the nickname box taught: an A pressed too early is swallowed
+    // and the next one answers something else.
+    for (let i = 0; i < SAVE_CONFIRM_TRIES; i++) {
+      const win = await this.gb.readBytes(this.state.menuWindow.addr,
+                                          this.state.menuWindow.len);
+      if (this.state.menuCursorY(win) === 1) break;
+      await this.gb.run(6);
+    }
+    await this.gb.press('A', 5, 10);
+    await this.settleText();
+
+    // Back in the world with no window open is what a finished save looks like.
+    const s = await this.snap();
+    return s.worldLoaded && !s.windowOpen && !s.inBattle;
+  }
+
+  /** Open the START menu and confirm it really opened. */
+  async _openStartMenu(tries = 3) {
+    for (let attempt = 0; attempt < tries; attempt++) {
+      await this.gb.press('START', 5, 10);
+      for (let i = 0; i < MENU_OPEN_TRIES; i++) {
+        await this.gb.run(6);
+        const win = await this.gb.readBytes(this.state.menuWindow.addr,
+                                            this.state.menuWindow.len);
+        if (this.state.menuCursorY(win) !== 0) return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * How many rows the START menu has, by stepping until the cursor repeats.
+   *
+   * Counted rather than assumed because the menu grows: no POKeDEX or POKeGEAR
+   * early on, and a fixed row number would land on OPTION once they appear.
+   * Bails out if the player turns out to be walking -- that means the menu was
+   * never open and these presses are moving us through the grass, which starts
+   * a battle and makes saving impossible.
+   */
+  async _menuRowCount(limit = 12) {
+    const start = (await this.snap()).pos;
+    const seen = [];
+    for (let i = 0; i < limit; i++) {
+      const win = await this.gb.readBytes(this.state.menuWindow.addr,
+                                          this.state.menuWindow.len);
+      const cur = this.state.menuCursorY(win);
+      if (seen.includes(cur)) break;
+      seen.push(cur);
+      await this.gb.press('DOWN', 5, 8);
+      const now = (await this.snap()).pos;
+      if (now[0] !== start[0] || now[1] !== start[1]) {
+        this.say('the START menu was not open — the player moved');
+        return 0;
+      }
+    }
+    return seen.length ? Math.max(...seen) : 0;
+  }
+
+  async _driveMenuCursor(target, count) {
+    for (let i = 0; i < count + 2; i++) {
+      const win = await this.gb.readBytes(this.state.menuWindow.addr,
+                                          this.state.menuWindow.len);
+      if (this.state.menuCursorY(win) === target) return true;
+      await this.gb.press('DOWN', 5, 8);
+    }
+    const win = await this.gb.readBytes(this.state.menuWindow.addr,
+                                        this.state.menuWindow.len);
+    return this.state.menuCursorY(win) === target;
   }
 
   /**

@@ -118,7 +118,8 @@
      the way anyone opening this expects. Header, screen, hint and the whole
      pad measure 596px against an 812px viewport, so it fits with room over. */
   #screenwrap{order:1} #taphint{order:2} #ctrls{order:3}
-  #statuscard{order:4} #huntcard{order:5} #panel{order:6} #speedcard{order:7}
+  #statuscard{order:4} #huntcard{order:5} #savecard{order:6}
+  #panel{order:7} #speedcard{order:8}
   #intro{order:0} #loader{order:0}
 
   /* Piloting: a task is running. The run state takes the band under the
@@ -127,9 +128,10 @@
   body.piloting #statuscard{order:3}
   body.piloting #ctrls{order:6}
   body.piloting #ctrls{opacity:.4;pointer-events:none;filter:saturate(.4)}
-  body.piloting #huntcard,body.piloting #panel{opacity:.5;pointer-events:none}
+  body.piloting #huntcard,body.piloting #panel,
+  body.piloting #savecard{opacity:.5;pointer-events:none}
   @media (prefers-reduced-motion:no-preference){
-    #ctrls,#huntcard,#panel{transition:opacity .18s ease}
+    #ctrls,#huntcard,#panel,#savecard{transition:opacity .18s ease}
   }
   canvas{width:100%;aspect-ratio:160/144;background:#000;display:block;
          border:1px solid var(--line);border-radius:8px;
@@ -522,6 +524,31 @@
       <span class="v" id="lvl" hidden>5</span>
     </div>
     <div class="seen" id="seen"></div>
+  </div>
+
+  <div class="card hide" id="savecard">
+    <h2>Your save</h2>
+
+    <div class="job" id="job-save">
+      <div class="what">
+        <span class="jname">Save the game</span>
+        <span class="jstate" id="savestate">&mdash;</span>
+      </div>
+      <button class="jgo" id="savegame">Save</button>
+    </div>
+
+    <div class="job" id="job-export">
+      <div class="what">
+        <span class="jname">Download .sav</span>
+        <span class="jstate" id="exportstate">the battery save, for another
+          emulator</span>
+      </div>
+      <button class="jgo" id="exportsav">Get</button>
+    </div>
+
+    <footer>Nothing here persists on its own. Saving writes the game's own
+      battery, which lives in this tab &mdash; downloading is how it leaves the
+      phone.</footer>
   </div>
 
   <div class="card hide" id="panel">
