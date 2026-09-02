@@ -207,6 +207,27 @@
   @media (prefers-reduced-motion:reduce){
     .face button.held,.face button:active{transform:none}
   }
+  /* One Stop, in the band under the screen, and only while something runs.
+     There used to be two -- one per card -- at 1181px and 1463px down the
+     page, so during a ninety-second grind neither was on screen, and having
+     two identical buttons in different cards asked a question the user should
+     never have to hold: which one stops which thing. */
+  .statusline{display:flex;align-items:center;gap:2px}
+  .statusline #status{flex:1 1 auto;min-width:0}
+  button.stopnow{flex:0 0 auto;min-height:38px;padding:8px 18px;
+                 background:transparent;border-color:var(--bad);color:var(--bad);
+                 font-weight:600}
+
+  /* What the pilot is doing, rather than one label overwriting itself. The
+     errand walks four maps, heals twice and fights a rival; it used to report
+     through a single string, with a second line left over from whatever ran
+     before. The events already existed and were being thrown away. */
+  .runlog{list-style:none;margin:8px 0 0;padding:0;
+          font-family:ui-monospace,Menlo,monospace;font-size:12px;
+          color:var(--dim);display:flex;flex-direction:column;gap:2px}
+  .runlog li{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .runlog li:last-child{color:var(--ink)}
+
   .dot{width:9px;height:9px;border-radius:50%;background:var(--dim);
        display:inline-block;margin-right:6px}
   .dot.busy{background:var(--accent)} .dot.ok{background:var(--ok)}
@@ -276,8 +297,13 @@
     <footer>Pick the ROM first; the symbol file can follow.</footer>
   </div>
 
-  <div class="card" id="statuscard"><span class="dot" id="dot"></span><span id="status">waiting for a ROM and a .sym</span>
-    <div class="mono" id="progress" style="color:var(--dim);margin-top:6px"></div>
+  <div class="card" id="statuscard">
+    <div class="statusline">
+      <span class="dot" id="dot"></span>
+      <span id="status">waiting for a ROM and a .sym</span>
+      <button id="stopRun" class="stopnow hide">Stop</button>
+    </div>
+    <ol class="runlog hide" id="runlog"></ol>
     <div class="row hide" id="bootrow">
       <button class="primary" id="boot">Start a new game for me</button>
     </div>
@@ -317,7 +343,6 @@
     </div>
     <div class="row quiet">
       <button id="errand">Fetch Poké Balls</button>
-      <button id="stopHunt">Stop</button>
     </div>
     <div class="seen" id="bag"></div>
     <div class="seen" id="seen"></div>
@@ -336,7 +361,6 @@
     </div>
     <div class="row">
       <button class="primary" id="go">Start grinding</button>
-      <button id="stop">Stop</button>
     </div>
   </div>
 

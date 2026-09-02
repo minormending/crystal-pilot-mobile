@@ -37,7 +37,29 @@ const setStatus = (text, kind = '') => {
   $('#dot').className = 'dot ' + kind;
   $('#status').textContent = text;
 };
-const progress = (m) => { $('#progress').textContent = m; };
+// The pilot's own account of what it is doing, kept rather than overwritten.
+// It emits exactly the right events already -- "heading left", "healing up",
+// "slot 1 is down - sending out slot 2" -- and a single label threw all but
+// the last one away. Three lines is enough to see progress without the card
+// growing under your thumb mid-run.
+const RUN_LOG_LINES = 3;
+let runLines = [];
+
+const progress = (m) => {
+  const log = $('#runlog');
+  if (!m) { runLines = []; log.textContent = ''; log.classList.add('hide'); return; }
+  // Repeats are common -- several legs say "heading left" -- and stacking
+  // identical lines reads as being stuck rather than as making progress.
+  if (runLines[runLines.length - 1] !== m) runLines.push(m);
+  runLines = runLines.slice(-RUN_LOG_LINES);
+  log.textContent = '';
+  for (const line of runLines) {
+    const li = document.createElement('li');
+    li.textContent = line;
+    log.appendChild(li);
+  }
+  log.classList.remove('hide');
+};
 
 async function maybeStart() {
   if (!romBytes || !symbols) return;
@@ -195,6 +217,7 @@ function startLoop() {
  */
 function setMode(piloting) {
   document.body.classList.toggle('piloting', piloting);
+  $('#stopRun').classList.toggle('hide', !piloting);
 }
 
 async function runTask(id, busy, work, { lock = [], needsWorld = true } = {}) {
@@ -208,6 +231,9 @@ async function runTask(id, busy, work, { lock = [], needsWorld = true } = {}) {
   }
   running = true;
   setMode(true);
+  // Cleared here rather than when a run finishes: the last thing the pilot
+  // said is the most useful thing on screen once it stops.
+  progress('');
   if (tasks) tasks.cancelled = false;   // clear a Stop left over from last time
   const buttons = [id, ...lock];
   for (const b of buttons) $(b).disabled = true;
@@ -393,7 +419,6 @@ $('#boot').onclick = async () => {
   if (!boot) return;
   const res = await runTask('#boot', 'starting a new game',
                             () => boot.run('cyndaquil'), { needsWorld: false });
-  progress('');
   if (res && res.ok) {
     $('#bootrow').classList.add('hide');
     $('#bootnote').classList.add('hide');
@@ -406,7 +431,6 @@ $('#boot').onclick = async () => {
 $('#errand').onclick = async () => {
   if (!boot) return;
   await runTask('#errand', 'off to Mr. Pokémon\u2019s', () => boot.eggErrand());
-  progress('');
 };
 
 // --- hunt -------------------------------------------------------------------
@@ -483,7 +507,6 @@ $('#hunt').onclick = async () => {
   const res = await runTask('#hunt', `looking for ${huntWanted}`,
     () => tasks.hunt(huntWanted, { regrass: () => boot.backToGrass() }),
     { lock: ['#go'] });
-  progress('');
   $('#seen').textContent = res && res.seen && res.seen.size
     ? 'seen: ' + [...res.seen.entries()].sort((a, b) => b[1] - a[1])
         .map(([n, c]) => `${n} x${c}`).join(', ')
@@ -499,11 +522,6 @@ $('#catch').onclick = async () => {
     ? Object.entries(res.stats).map(([k, v]) => `${k}=${v}`).join('  ') : '');
 };
 
-$('#stopHunt').onclick = () => {
-  if (tasks) tasks.cancel();
-  walkCancelled = true;
-  progress('stopping…');
-};
 
 // --- speed ------------------------------------------------------------------
 // Only the idle loop is affected. Tasks drive their own frames as fast as they
@@ -705,7 +723,7 @@ async function walkToTap(tx, ty) {
       const m = res.map;
       setStatus(m === undefined
         ? 'that was a doorway — you are somewhere else now'
-        : `through the doorway to map ${m >> 8}.${m & 0xff}`, 'ok');
+        : `through the doorway to ${boot ? boot.where(m) : 'somewhere else'}`, 'ok');
       progress('');
     } else if (res.stopped === 'decode') {
       setStatus('lost track of the map mid-walk, so it stopped', 'bad');
@@ -753,9 +771,9 @@ $('#go').onclick = async () => {
     ? Object.entries(res.stats).map(([k, v]) => `${k}=${v}`).join('  ') : '');
 };
 
-$('#stop').onclick = () => {
-  // Stop has to reach both kinds of work. It used to set only the task flag,
-  // which a walk never reads, so pressing it during one did nothing at all.
+$('#stopRun').onclick = () => {
+  // Reaches both kinds of work: the task flag, which a walk never reads, and
+  // the walk flag, which a task never reads.
   if (tasks) tasks.cancel();
   walkCancelled = true;
   progress('stopping…');
