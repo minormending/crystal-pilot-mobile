@@ -8,6 +8,7 @@ clean checkout, which is exactly what CI has.
     tools/check-app            run everything
     tools/check-app syntax     just one group
 """
+import os
 import pathlib
 import re
 import shutil
@@ -194,12 +195,96 @@ def check_no_game_files():
         else ok("no ROM, save or symbol file is tracked")
 
 
+# The eleven moves whose power byte says 0 or 1 while the move takes half the
+# bar, your level in HP, or all of it. Ranking by power to find something gentle
+# puts every one of them ahead of TACKLE, so weakening would open with
+# GUILLOTINE. Effect ids read out of the ROM's own move table, not counted from
+# the disassembly's const_def order.
+UNGENTLE = {
+    "GUILLOTINE": 38, "HORN_DRILL": 38, "FISSURE": 38, "SUPER_FANG": 40,
+    "SEISMIC_TOSS": 87, "NIGHT_SHADE": 87, "PSYWAVE": 88, "COUNTER": 89,
+    "MIRROR_COAT": 144,
+}
+# Real fixed damage, which does encode itself as power and so ranks correctly.
+GENTLE_ENOUGH = {"TACKLE", "SCRATCH", "EMBER", "DRAGON_RAGE", "SONICBOOM"}
+MOVE_BYTES = 7
+
+
+def check_moves():
+    """Drive the app's own isChipMove against a real cartridge, if one is here.
+
+    Skipped without a ROM, which is the case on CI and on a clean checkout --
+    the point of the skip is that this check can exist at all without anything
+    game-derived entering the repo. It matters because the alternative is
+    trusting a hand-written table of effect ids, and getting one wrong picks a
+    one-hit KO as the gentlest move available.
+    """
+    rom_path = ROOT / "dev" / "pokecrystal.gbc"
+    sym_path = ROOT / "dev" / "pokecrystal.sym"
+    src = pathlib.Path(
+        os.environ.get("POKECRYSTAL_SOURCE", pathlib.Path.home()
+                       / "projects" / "pokecrystal"))
+    moves_asm = src / "data" / "moves" / "moves.asm"
+    if not (rom_path.exists() and sym_path.exists() and moves_asm.exists()):
+        print("  skip  move ranking (no dev/pokecrystal.gbc + .sym + source)")
+        return 0
+
+    rom = rom_path.read_bytes()
+    sym = {}
+    for line in sym_path.read_text().splitlines():
+        m = re.match(r"^([0-9a-fA-F]{2}):([0-9a-fA-F]{4})\s+(\S+)", line)
+        if m:
+            sym[m.group(3)] = (int(m.group(1), 16), int(m.group(2), 16))
+    if "Moves" not in sym:
+        return fail("the .sym has no Moves symbol")
+    bank, addr = sym["Moves"]
+    base = addr if bank == 0 else bank * 0x4000 + (addr - 0x4000)
+
+    order = [ln.split()[1].rstrip(",") for ln in moves_asm.read_text().splitlines()
+             if ln.strip().startswith("move ")]
+
+    # Whatever the app decided, read from the app rather than restated here.
+    text = (ROOT / "app" / "romdata.js").read_text()
+    m = re.search(r"UNGENTLE_EFFECTS = new Set\(\[([0-9,\s]*)\]\)", text)
+    if not m:
+        return fail("could not find UNGENTLE_EFFECTS in app/romdata.js")
+    declared = {int(x) for x in m.group(1).replace(" ", "").split(",") if x}
+
+    problems = []
+    for name, want_effect in UNGENTLE.items():
+        if name not in order:
+            problems.append(f"{name} is not in moves.asm")
+            continue
+        off = base + order.index(name) * MOVE_BYTES
+        effect, power = rom[off + 1], rom[off + 2]
+        if effect != want_effect:
+            problems.append(f"{name}: ROM says effect {effect}, "
+                            f"this check expected {want_effect}")
+        if effect not in declared:
+            problems.append(f"{name} (effect {effect}, power {power}) would be "
+                            f"picked as a gentle move")
+    for name in GENTLE_ENOUGH:
+        if name not in order:
+            continue
+        off = base + order.index(name) * MOVE_BYTES
+        effect, power = rom[off + 1], rom[off + 2]
+        if power <= 0 or effect in declared:
+            problems.append(f"{name} (effect {effect}, power {power}) is "
+                            f"excluded, leaving nothing to weaken with")
+    for p in problems:
+        print(f"        {p}")
+    return fail(f"{len(problems)} move-ranking problem(s)") if problems \
+        else ok(f"{len(UNGENTLE)} lethal moves excluded from weakening, "
+                f"{len(GENTLE_ENOUGH)} kept")
+
+
 CHECKS = {
     "syntax": check_syntax,
     "shell": check_shell,
     "markup": check_markup,
     "contrast": check_contrast,
     "gamefiles": check_no_game_files,
+    "moves": check_moves,
 }
 
 

@@ -235,7 +235,7 @@ One snapshot, many answers: `inBattle`, `party`, `pos`, `onGrass`,
 
 ### `romdata.js` — what the cartridge knows
 
-<!-- covers: app/romdata.js @ d176b81abe14 -->
+<!-- covers: app/romdata.js @ f218aefa92d9 -->
 
 Species names, item names, wild-encounter tables, move power. All read out of
 the ROM, not shipped as a copy, so they cannot drift from the build being driven.
@@ -253,10 +253,17 @@ the ROM, not shipped as a copy, so they cannot drift from the build being driven
   Time-of-day matters: Route 29 trades Pidgey and Sentret for Hoothoot after
   dark, and offering a species that cannot appear sends a hunt after something
   that was never there.
-- `Moves` — 7 bytes each, power at offset 2. Status moves have power 0, which is
-  the whole distinction `isChipMove()` needs. Gen 2 stores fixed-damage moves'
-  damage *as* their power, so Dragon Rage reads 40 and takes 40 — no special
-  case needed.
+- `Moves` — 7 bytes each, **effect at offset 1, power at offset 2**.
+  `isChipMove()` needs both. Status moves have power 0, which rules them out.
+  But eleven moves lie about their power: Gen 2 computes their damage rather
+  than scaling it, so it stores them at 0 or 1 — which puts Guillotine, Horn
+  Drill and Fissure *ahead* of Tackle when ranking ascending. Asked for the
+  weakest damaging move, the first version returned a one-hit KO. They are
+  excluded by effect id (`38, 40, 87, 88, 89, 144`), read out of the cartridge's
+  own move table rather than counted from the disassembly's `const_def` order.
+  This is **not** the same as "fixed damage": `EFFECT_STATIC_DAMAGE` really does
+  store its damage as its power, so Dragon Rage reads 40, takes 40, and ranks
+  correctly.
 - `0x54` is a one-byte ligature for `POKé`.
 
 </details>
@@ -508,7 +515,7 @@ refusal is not an answer.
 
 ## 6. Battles
 
-<!-- covers: app/tasks.js app/state.js @ 1094b76b6062 -->
+<!-- covers: app/tasks.js app/state.js @ cb9912e7f82d -->
 
 ### Is it our turn?
 
@@ -632,7 +639,7 @@ fainted.
 
 ## 7. Catching something
 
-<!-- covers: app/tasks.js app/romdata.js @ 056641f09d63 -->
+<!-- covers: app/tasks.js app/romdata.js @ 272447fc543b -->
 
 Catching is the most involved loop, because a Poké Ball's odds turn on how much
 HP is left. Throwing at a full-health target is mostly throwing balls away.
@@ -664,7 +671,12 @@ flowchart TD
 
 **The gentlest attack, not the first one.** That is why `romdata` reads the move
 table at all — leading with whatever is in slot one knocks out the thing being
-caught, and a fainted Pokémon cannot be caught by anything.
+caught, and a fainted Pokémon cannot be caught by anything. "Gentlest" cannot be
+read off the power byte alone, though: see [the move table](#romdatajs--what-the-cartridge-knows) for
+the eleven moves that store 0 or 1 while taking half the bar, your level in HP,
+or all of it. The memory below cannot cover for that one — it learns from the
+swing it just took, so opening with Guillotine teaches it the maximum and costs
+the target to do it.
 
 **The threshold alone is not a safe stopping point.** Against a Lv2 Rattata one
 swing carries it from above the line to zero. So the pilot remembers the biggest
@@ -680,6 +692,18 @@ the following run caught four out of four with no knockouts.
 
 Weakening spends no ball, so it is bounded at eight swings, or a move that kept
 missing would loop for good with the ball budget never moving.
+
+**A knockout usually arrives as `ended`, not as `fainted`.** `chip()` checks
+whether it is still in a battle before it reads the enemy's HP, because it has
+to — the enemy struct reads zero once the battle is over, so trusting that zero
+would call every finished battle a knockout. The consequence is that a knockout
+which beats the poll comes back as `ended`, and treating that as "work out what
+happened later" reports it as a spent ball budget: the wrong reason, and the
+guard learns nothing from the one measurement worth having. What tells the two
+apart is our *own* party, which still answers after the battle ends — lead still
+standing means the target went down, lead at zero means we did. The desktop
+pilot had the same bug and reported seven kills as "got away" before a live hunt
+caught it.
 
 **Throws are counted as throws, not as bag deltas.** `wBalls` only settles when
 the battle ends, so an interim attempt to detect throws that never happened by
@@ -701,7 +725,7 @@ precedes it defaults to yes, which is what we want; the nickname box does not.
 
 ## 7a. Three that act on where you already are
 
-<!-- covers: app/tasks.js app/bootstrap.js @ 134669862f10 -->
+<!-- covers: app/tasks.js app/bootstrap.js @ 52816c78e11e -->
 
 Grind, hunt and catch all go *looking* for something. These three do the obvious
 thing with the situation you are already in, and take no parameters:

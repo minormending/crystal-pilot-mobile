@@ -751,7 +751,25 @@ export class Tasks {
             mem.biggestHit = Math.max(mem.biggestHit, hpBefore);
             return { outcome: 'knockedOut', name, thrown, chips };
           }
-          if (how === 'ended') break;
+          if (how === 'ended') {
+            // Our own swing ended the battle. chip() checks inBattle before it
+            // checks the enemy's HP -- it has to, because the enemy struct
+            // reads zero once the battle is over -- so a knockout that beats
+            // the poll arrives here rather than as 'fainted', and reporting it
+            // as a spent ball budget would be doubly wrong: the wrong reason,
+            // and the guard learns nothing from the one measurement worth
+            // having. Our own party still answers after the battle ends.
+            const after = await this.snap();
+            const lead = after.party[0];
+            if (lead && lead.hp > 0) {
+              mem.biggestHit = Math.max(mem.biggestHit, hpBefore);
+              return { outcome: 'knockedOut', name, thrown, chips };
+            }
+            // It was our lead that went down. Say so: falling through to the
+            // budget report would tell you the balls ran out, which is both
+            // untrue and the wrong thing to go and fix.
+            return { outcome: 'lost', name, thrown, chips };
+          }
           if (how === 'ok') {
             const now = await this.snap();
             mem.biggestHit = Math.max(mem.biggestHit, hpBefore - now.enemy.hp);
@@ -834,6 +852,9 @@ export class Tasks {
         return { ok: false, stats, message: `knocked the ${r.name} out` };
       case 'gone':
         return { ok: false, stats, message: `the ${r.name} got away` };
+      case 'lost':
+        return { ok: false, stats,
+                 message: `your lead fainted before the ${r.name} could be caught` };
       case 'stuck':
         return { ok: false, stats, message: 'lost track of the battle' };
       case 'cancelled':
@@ -965,6 +986,13 @@ export class Tasks {
       }
       if (r.outcome === 'stuck') {
         return { ok: false, stats, message: 'lost track of the battle' };
+      }
+      if (r.outcome === 'lost') {
+        // Stop. Unlike a grind this has no heal hook, so carrying on would
+        // walk into the next encounter with a fainted lead and spend the rest
+        // of the budget answering party screens.
+        return { ok: false, stats,
+                 message: 'your lead fainted while weakening — heal and retry' };
       }
       if (stats.thrown >= maxBalls) {
         return { ok: false, stats,

@@ -25,6 +25,17 @@ const GRASS_ENTRY_BYTES = 5 + GRASS_SLOTS_PER_TIME * GRASS_BLOCKS * 2;
 const TABLE_END = 0xff;
 // data/moves/moves.asm: animation, effect, power, type, accuracy, pp, chance.
 const MOVE_BYTES = 7;
+// Move effects whose damage has nothing to do with the power byte, so ranking
+// by power to find something gentle picks exactly the moves that end a battle.
+// Values read out of the ROM's move table (see docs/CODE.md):
+//   38 OHKO         GUILLOTINE, HORN DRILL, FISSURE -- the whole bar
+//   40 SUPER_FANG   half of current HP, whatever that is
+//   87 LEVEL_DAMAGE SEISMIC TOSS, NIGHT SHADE -- your level, in HP
+//   88 PSYWAVE      up to 1.5x your level, unpredictably
+//   89 COUNTER      twice what you just took
+//  144 MIRROR_COAT  the same, for special moves
+const UNGENTLE_EFFECTS = new Set([38, 40, 87, 88, 89, 144]);
+
 const MOVE_EFFECT = 1, MOVE_POWER = 2, MOVE_TYPE = 3, MOVE_PP = 5;
 const MOVE_COUNT = 251;
 
@@ -142,17 +153,27 @@ export class RomData {
   }
 
   /**
-   * Does this move take HP off at all?
+   * Can this move take HP off without deciding the battle by itself?
    *
-   * Status moves carry a power of zero, which is the whole distinction: LEER
-   * and SMOKESCREEN would otherwise rank as the gentlest attacks available and
-   * weaken nothing, forever. The fixed-damage moves need no special case here,
-   * because Gen 2 stores their damage *as* their power -- DRAGON_RAGE reads 40
-   * and takes 40 -- so ranking by power sorts them about right anyway.
+   * Two exclusions, for opposite reasons.
+   *
+   * Status moves carry a power of zero. LEER and SMOKESCREEN would otherwise
+   * rank as the gentlest attacks available and weaken nothing, forever.
+   *
+   * And eleven moves lie about their power. Gen 2 computes their damage rather
+   * than scaling it, so it stores them at power 0 or 1 -- which puts every one
+   * of them *ahead* of TACKLE when ranking ascending. Ask for the weakest
+   * damaging move and you get GUILLOTINE. Checked against the ROM's own move
+   * table, not just the disassembly's names.
+   *
+   * Note this is not the same as "fixed damage": EFFECT_STATIC_DAMAGE really
+   * does store its damage as its power -- DRAGON_RAGE reads 40 and takes 40 --
+   * so it ranks correctly and stays in.
    */
   isChipMove(id) {
     const m = this.move(id);
-    return !!m && m.power > 0;
+    if (!m || m.power <= 0) return false;
+    return !UNGENTLE_EFFECTS.has(m.effect);
   }
 
   /** Normalised name -> id, so a ball can be found by what it is called. */

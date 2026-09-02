@@ -230,12 +230,19 @@ everything untouched. Three attempts, five balls, nothing caught. So it weakens
 things now, which is the game's own tactic:
 
 * `romdata` reads the **Moves** table out of the cartridge -- seven bytes an
-  entry, power at offset two -- because the point is to pick the *gentlest*
-  attack, and without the power there is no way to tell which that is. Leading
-  with whatever is in slot one knocks out the thing being caught.
-* Status moves are excluded by having no power at all, which is the whole
+  entry, effect at offset one and power at offset two -- because the point is to
+  pick the *gentlest* attack. Leading with whatever is in slot one knocks out
+  the thing being caught.
+* Status moves are excluded by having no power at all, which is one half of the
   distinction: LEER would otherwise rank as the gentlest attack available and
   weaken nothing, forever.
+* **Eleven moves lie about their power**, which is the other half. Gen 2
+  computes their damage rather than scaling it, so it stores them at 0 or 1 --
+  putting GUILLOTINE, HORN DRILL and FISSURE *ahead* of TACKLE when ranking
+  ascending. Ask for the weakest damaging move and you get a one-hit KO. They
+  are excluded by effect id, read out of the cartridge's own move table. This is
+  not the same as "fixed damage": DRAGON RAGE really does store 40 and take 40,
+  so it ranks correctly and stays in.
 * **The pilot learns how hard it hits, and remembers it for the rest of the
   hunt.** A threshold on its own is not a safe place to stop -- against a Lv2
   RATTATA one swing carries it from above the line to zero, and a fainted
