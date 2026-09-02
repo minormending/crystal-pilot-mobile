@@ -218,15 +218,32 @@ async function runTask(id, busy, work, { lock = [], needsWorld = true } = {}) {
   }
 }
 
+/** One party member: who it is, and how close it is to fainting. */
+function monRow(m) {
+  const frac = m.maxHp ? m.hp / m.maxHp : 0;
+  const name = romdata ? romdata.speciesName(m.species) : `#${m.species}`;
+  const cls = m.hp === 0 ? 'out' : frac < 0.34 ? 'low' : '';
+  const right = m.hp === 0
+    ? '<span class="fnt">FNT</span>'
+    : `<span class="hpnum">${m.hp}/${m.maxHp}</span>`;
+  return `<div class="mon"><span class="who">${name}` +
+         `<span>Lv${m.level}</span></span>${right}` +
+         `<span class="hp ${cls}"><i style="width:${Math.round(frac * 100)}%"></i></span></div>`;
+}
+
 async function refresh() {
   if (!state) return;
   const s = await tasks.snap();
+  // Named, not numbered. Both of these had a friendly form available in this
+  // same scope and neither was called, so the interface showed a species id and
+  // a map number to the one audience that cannot read either.
+  const place = boot ? boot.where(s.map[0] * 256 + s.map[1]) : '—';
   $('#where').textContent = s.inBattle
-    ? `battle · Lv${s.enemy.level}`
-    : `map ${s.map[0]}.${s.map[1]}${s.onGrass ? ' · grass' : ''}`;
-  $('#party').textContent = s.party.length
-    ? s.party.map((m) => `${m.slot + 1}  #${m.species}  Lv${m.level}  ${m.hp}/${m.maxHp}`).join('\n')
-    : '(no party)';
+    ? `battle · ${romdata ? romdata.speciesName(s.enemy.species) : 'wild'} Lv${s.enemy.level}`
+    : `${place}${s.onGrass ? ' · grass' : ''}`;
+  $('#party').innerHTML = s.party.length
+    ? s.party.map(monRow).join('')
+    : '<span class="seen">no party yet</span>';
   await refreshSpecies(s);
   if (romdata) refreshBag(s);
   // Derived rather than left to whoever last touched it. runTask re-enables the
