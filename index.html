@@ -20,7 +20,32 @@
          border-bottom:1px solid var(--line)}
   header h1{font-size:15px;margin:0}
   header .where{margin-left:auto;color:var(--dim);font-size:13px}
-  main{padding:12px;max-width:560px;margin:0 auto}
+  /* A column flex, so the order of the cards is a decision rather than
+     whatever the source happens to say. The app does two different jobs --
+     you play it by hand, or you send the pilot off to work for ninety
+     seconds -- and they want different things in the band directly under the
+     screen. `display:block` meant source order was the only order, so the
+     controls you needed were always the ones scrolled away. */
+  main{padding:12px;max-width:560px;margin:0 auto;
+       display:flex;flex-direction:column}
+
+  /* Playing: the screen sits on its controls, the way the hardware does and
+     the way anyone opening this expects. Header, screen, hint and the whole
+     pad measure 596px against an 812px viewport, so it fits with room over. */
+  #screenwrap{order:1} #taphint{order:2} #ctrls{order:3}
+  #statuscard{order:4} #huntcard{order:5} #panel{order:6} #speedcard{order:7}
+  #intro{order:0} #loader{order:0}
+
+  /* Piloting: a task is running. The run state takes the band under the
+     screen, and the pad drops below it and dims -- pressing it fights the
+     pilot for the same emulator, so it should not look available. */
+  body.piloting #statuscard{order:3}
+  body.piloting #ctrls{order:6}
+  body.piloting #ctrls{opacity:.4;pointer-events:none;filter:saturate(.4)}
+  body.piloting #huntcard,body.piloting #panel{opacity:.5;pointer-events:none}
+  @media (prefers-reduced-motion:no-preference){
+    #ctrls,#huntcard,#panel{transition:opacity .18s ease}
+  }
   canvas{width:100%;aspect-ratio:160/144;background:#000;display:block;
          border:1px solid var(--line);border-radius:8px;
          image-rendering:pixelated;cursor:crosshair;
@@ -251,7 +276,7 @@
     <footer>Pick the ROM first; the symbol file can follow.</footer>
   </div>
 
-  <div class="card"><span class="dot" id="dot"></span><span id="status">waiting for a ROM and a .sym</span>
+  <div class="card" id="statuscard"><span class="dot" id="dot"></span><span id="status">waiting for a ROM and a .sym</span>
     <div class="mono" id="progress" style="color:var(--dim);margin-top:6px"></div>
     <div class="row hide" id="bootrow">
       <button class="primary" id="boot">Start a new game for me</button>

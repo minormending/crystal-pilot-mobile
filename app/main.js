@@ -186,6 +186,17 @@ function startLoop() {
  * `busy` is what to say while it runs; `lock` are buttons to grey out alongside
  * the one pressed. Returns the job's result, or null if it never got to run.
  */
+/**
+ * Declare which of the two modes the interface is in.
+ *
+ * The `running` flag has always existed and gated every handler; nothing in
+ * the layout used it, so a task running looked exactly like a task not
+ * running. This is the whole switch -- the ordering and dimming live in CSS.
+ */
+function setMode(piloting) {
+  document.body.classList.toggle('piloting', piloting);
+}
+
 async function runTask(id, busy, work, { lock = [], needsWorld = true } = {}) {
   if (running) return null;
   // Every one of these needs a game already running -- the buttons are on
@@ -196,6 +207,7 @@ async function runTask(id, busy, work, { lock = [], needsWorld = true } = {}) {
     return null;
   }
   running = true;
+  setMode(true);
   if (tasks) tasks.cancelled = false;   // clear a Stop left over from last time
   const buttons = [id, ...lock];
   for (const b of buttons) $(b).disabled = true;
@@ -213,6 +225,7 @@ async function runTask(id, busy, work, { lock = [], needsWorld = true } = {}) {
     return null;
   } finally {
     running = false;
+    setMode(false);
     for (const b of buttons) $(b).disabled = false;
     refresh();
   }
@@ -613,6 +626,10 @@ async function trackGoal() {
 }
 
 async function walkToTap(tx, ty) {
+  // Deliberately stays in playing mode. This sets `running` -- the idle loop
+  // must stand down and no task may start on top of it -- but it does not call
+  // setMode: a walk lasts a couple of seconds, and reordering the page under a
+  // thumb that just tapped it would be worse than the dimming is worth.
   running = true;
   let arrived = false;
   // The previous walk's marker is cleared on a timer. Without cancelling it,
