@@ -721,17 +721,35 @@ export class Bootstrap {
   }
 
   /** Take a starter out of one of the three balls in Elm's lab. */
+  /**
+   * Hear Elm out, so the three balls become active.
+   *
+   * Split from picking one because choosing a starter is not the pilot's
+   * business. It is the one decision in the opening that is actually a
+   * decision, and a tool that plays the intro for you should hand it back
+   * rather than answer it on your behalf.
+   */
+  async askElm() {
+    await this.runScripts();                      // Elm greets you on the way in
+    await this.nav.walkTo(this.collision, ELM_TALK_FROM, this.walkOpts);
+    await this.nav.step('UP');
+    await this.gb.press('A', 6, 12);
+    await this.runScripts();
+  }
+
+  /** Stand in front of the balls, so the choice is one step away. */
+  async waitAtTheTable() {
+    await this.nav.walkTo(this.collision, [STARTER_BALL_X.totodile, 4],
+                          this.walkOpts);
+    await this.nav.step('UP');
+  }
+
   async takeStarter(which) {
     const ballX = STARTER_BALL_X[which];
     if (ballX === undefined) {
       return `unknown starter ${which}`;
     }
-    await this.runScripts();                      // Elm greets you on the way in
-    // Talk to Elm first, the way the story expects, so the balls become active.
-    await this.nav.walkTo(this.collision, ELM_TALK_FROM, this.walkOpts);
-    await this.nav.step('UP');
-    await this.gb.press('A', 6, 12);
-    await this.runScripts();
+    await this.askElm();
 
     for (let attempt = 0; attempt < 3; attempt++) {
       await this.nav.walkTo(this.collision, [ballX, 4], this.walkOpts);
@@ -754,7 +772,63 @@ export class Bootstrap {
    *
    * Returns { ok, message, party }.
    */
-  async run(starter = 'cyndaquil') {
+  /**
+   * The legs from Elm's lab out to the grass.
+   *
+   * Separate because the pilot stops in between: with no starter named it hands
+   * over at the table, and this is what finishes the job afterwards.
+   */
+  async toGrass() {
+    const s = await this.snap();
+    if (!s.party.length) {
+      return { ok: false, party: [], message: 'pick a starter first' };
+    }
+    const legs = [
+      ['back outside', async () =>
+        await this.through(LAB_EXIT, NEW_BARK_TOWN)
+          ? null : 'could not get out of the lab'],
+      ['out to Route 29', async () =>
+        await this.crossEdge('LEFT', ROUTE_29) ? null : 'could not reach Route 29'],
+      ['finding grass', async () =>
+        await this.findGrass() ? null : 'could not find a patch of grass'],
+    ];
+    return this.walkLegs(legs, async () => {
+      const now = await this.snap();
+      const lead = now.party[0];
+      return { ok: true, party: now.party,
+               message: lead
+                 ? `ready on Route 29 with a Lv${lead.level} ${this.nameOf(lead)}`
+                 : 'reached the grass, but with no Pokémon' };
+    });
+  }
+
+  /** Run a list of named legs, stopping at the first one that fails. */
+  async walkLegs(legs, done) {
+    for (const [what, leg] of legs) {
+      this.say(what);
+      const failed = await leg();
+      if (failed) {
+        const s = await this.snap();
+        return { ok: false, party: s.party,
+                 message: `${failed} (stopped in ${this.where(await this.mapKey())})` };
+      }
+    }
+    return done();
+  }
+
+  nameOf(mon) {
+    return this.tasks.rom ? this.tasks.rom.speciesName(mon.species) : 'starter';
+  }
+
+  /**
+   * Title screen to a starter in your hands.
+   *
+   * With no starter named it stops at the table and hands over: which of the
+   * three you want is the one real decision in the opening, and answering it
+   * for you is not the pilot's job. Name one and it plays straight through,
+   * which is what the tests do.
+   */
+  async run(starter = null) {
     const legs = [
       ['starting a new game', async () => {
         if (await this.tasks.continueGame()) return null;
@@ -768,6 +842,21 @@ export class Bootstrap {
           ? null : 'could not get out of the house'],
       ["into Elm's lab", async () =>
         await this.through(LAB_DOOR, ELMS_LAB) ? null : 'could not get into the lab'],
+    ];
+
+    if (!starter) {
+      legs.push(['hearing Elm out', async () => {
+        await this.askElm();
+        await this.waitAtTheTable();
+        return null;
+      }]);
+      return this.walkLegs(legs, async () => ({
+        ok: true, handover: true, party: [],
+        message: 'your turn — pick a starter',
+      }));
+    }
+
+    legs.push(
       [`taking ${starter}`, async () => this.takeStarter(starter)],
       ['back outside', async () =>
         await this.through(LAB_EXIT, NEW_BARK_TOWN)
@@ -776,7 +865,7 @@ export class Bootstrap {
         await this.crossEdge('LEFT', ROUTE_29) ? null : 'could not reach Route 29'],
       ['finding grass', async () =>
         await this.findGrass() ? null : 'could not find a patch of grass'],
-    ];
+    );
 
     for (const [what, leg] of legs) {
       this.say(what);
@@ -793,8 +882,8 @@ export class Bootstrap {
       ok: true,
       party: s.party,
       message: lead
-        ? `ready on Route 29 with a Lv${lead.level} starter`
-        : 'reached the grass, but with no Pokemon',
+        ? `ready on Route 29 with a Lv${lead.level} ${this.nameOf(lead)}`
+        : 'reached the grass, but with no Pokémon',
     };
   }
 }

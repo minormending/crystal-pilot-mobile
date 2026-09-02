@@ -70,8 +70,8 @@ Proven, and visible in the screenshot:
   room — two implementations, one in Python over PyBoy and one in JS over
   WasmBoy, agreeing exactly
 
-- **a new game start to finish**: title screen, Oak's speech, a starter out of
-  Elm's lab and out to the grass on Route 29, in about a minute
+- **a new game start to finish**: title screen, Oak's speech, your own choice of
+  starter out of Elm's lab, and out to the grass on Route 29 in about a minute
 - **a grind**: Lv5 to Lv7 in five battles, seven seconds
 - **a hunt**: found a RATTATA after five encounters, running from the four it
   did not want
@@ -374,6 +374,24 @@ even then they take one of the game's own names (CHRIS/MAT/ALLAN/JON, or
 KRIS/AMANDA/JUANA/JODI) rather than typing one. `NamePlayer` stores those
 directly, with no naming screen involved.
 
+The same reasoning applies one step further in, which is why **Start a new game
+for me** is two presses rather than one. The first plays the intro, walks
+downstairs, out of the house and into Elm's lab, hears Elm out so the three
+balls go live, and stops with you standing in front of the middle one. Which
+starter you want is the one real decision in the opening; a tool that plays the
+boring parts should hand that back rather than answer it. The second press walks
+out to the grass once you have chosen, and refuses with *pick a starter first*
+if you have not.
+
+It also tells you which ball is which, because the game does not: they are three
+identical sprites, and the name only appears once you are already talking to
+one. Left to right on the table is Cyndaquil, Totodile, Chikorita — read off
+`ElmsLab.asm`, where they sit at x = 6, 7 and 8, and confirmed by picking each
+one.
+
+`boot.run(name)` still plays straight through when a starter is named, which is
+what the automated runs use; `boot.run()` with nothing named is the hand-over.
+
 ## Tap to walk
 
 Tap anywhere on the screen and the pilot walks there.
@@ -435,9 +453,11 @@ should not be reported as one.
 ## Starting from nothing
 
 There is a **Start a new game for me** button on a fresh ROM. It plays the
-intro, walks downstairs, out of the house, into Elm's lab, takes a starter, and
-carries on out to the grass on Route 29 — about a minute, and the point of it is
-that everything else needs a party to be worth running.
+intro, walks downstairs, out of the house and into Elm's lab, and stops at the
+table so you can choose your own starter; a second press carries on out to the
+grass on Route 29. About a minute in total, and the point of it is that
+everything else needs a party to be worth running. Why it stops there rather
+than picking for you is under *Starting a game is yours, not the pilot's*.
 
 The route is the desktop pilot's, and each leg says which map it expects to land
 on rather than assuming, because a bootstrap that drifts off course ends up

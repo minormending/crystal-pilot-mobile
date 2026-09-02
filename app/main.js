@@ -32,6 +32,12 @@ const SPEEDS = [1, 2, 4, 8, 16];
 const LOST_STEP_MS = 1000;
 let speed = 1;
 let running = false, target = 5;
+// Which half of the bootstrap the button is offering. Two presses, because the
+// middle of it is not the pilot's decision: the first plays the intro and stops
+// at the table in Elm's lab, the second walks out to the grass once you have
+// chosen. Which of the three you want is the one real choice in the opening,
+// and answering it for you would be taking the interesting part.
+let bootStage = 'start';
 let lastLead = null;   // the lead's level, for the relative grind presets
 
 // --- colour theme -----------------------------------------------------------
@@ -178,10 +184,16 @@ async function awaitWorld() {
     await new Promise((r) => setTimeout(r, 700));
   }
   $('#panel').classList.remove('hide');
-  $('#bootrow').classList.add('hide');
-  $('#bootnote').classList.add('hide');
-  setStatus('ready', 'ok');
-  progress('');
+  // Not while the pilot is mid-hand-off. This loop's job is to notice that a
+  // world exists, and one does the moment the bootstrap reaches Elm's lab --
+  // so without this it tidied away the very button offering to finish the
+  // trip, and overwrote "your turn - pick a starter" with "ready".
+  if (bootStage !== 'grass') {
+    $('#bootrow').classList.add('hide');
+    $('#bootnote').classList.add('hide');
+    setStatus('ready', 'ok');
+    progress('');
+  }
   refresh();
   setInterval(() => { if (!running) refresh(); }, 1200);
 }
@@ -517,8 +529,22 @@ addEventListener('blur', () => { gb.releaseAll(); syncHeld(); });
 
 $('#boot').onclick = async () => {
   if (!boot) return;
-  const res = await runTask('#boot', 'starting a new game',
-                            () => boot.run('cyndaquil'), { needsWorld: false });
+  if (bootStage === 'start') {
+    const res = await runTask('#boot', 'starting a new game',
+                              () => boot.run(), { needsWorld: false });
+    if (res && res.handover) {
+      bootStage = 'grass';
+      $('#boot').textContent = 'Now take me out to the grass';
+      // The three balls are identical on screen, and the game does not say
+      // which is which until you are already talking to one.
+      $('#bootnote').textContent = 'Left to right on the table: Cyndaquil, '
+        + 'Totodile, Chikorita. Walk up to one and press A — you are standing '
+        + 'in front of the middle ball.';
+      $('#bootnote').classList.remove('hide');
+    }
+    return;
+  }
+  const res = await runTask('#boot', 'out to the grass', () => boot.toGrass());
   if (res && res.ok) {
     $('#bootrow').classList.add('hide');
     $('#bootnote').classList.add('hide');
