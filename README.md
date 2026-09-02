@@ -74,7 +74,10 @@ but the pilot is still doing hours of work while you wait for a coffee.
 Proven, and visible in the screenshot:
 
 - a 2 MB Crystal ROM boots in the browser
-- the symbol file parses to the same 58,456 symbols the Python version reads,
+- the symbol file parses to exactly the same symbols the Python version reads —
+  58,456 of them from the build this was measured against, and the count is a
+  property of that build rather than of either implementation: run both parsers
+  over a newer `.sym` and they still agree with each other, at a different total
   with `wPartyMon2 - wPartyMon1 == 0x30` as expected
 - **game state reads correctly**: `wMapGroup`/`wMapNumber` at `0xDCB5` return
   `24, 7` after the intro, matching the desktop pilot exactly

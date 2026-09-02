@@ -63,7 +63,7 @@
      the affordance. And --mark stays exactly as it is in both: it sits on the
      game's own picture, not on any surface of ours, so it is not the theme's
      business. */
-  :root[data-theme="light"], :root.light-theme {
+  :root[data-theme="light"] {
     --bg:#eef0f4; --panel:#ffffff; --raise:#f1f4f9; --line:#c2c9d5;
     --ink:#171a1f; --dim:#5c6470; --raise-ink:#4e5663;
     --action:#3358cc; --accent:#3a61d6;
@@ -195,7 +195,6 @@
                  color:#fff;font-weight:600}
   button[disabled]{opacity:.45}
   input[type=file]{display:none}
-  .mono{font-family:ui-monospace,Menlo,monospace;font-size:12px}
 
   /* The party, as a glance rather than a list. HP is the number that decides
      whether a grind is about to go wrong, so it gets a bar: reading it as

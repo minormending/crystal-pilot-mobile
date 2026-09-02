@@ -54,7 +54,7 @@ direct questions instead of guessing from pixels.
 ```mermaid
 flowchart LR
     ROM["ROM<br/>the game"] --> CORE["WasmBoy<br/>emulator core"]
-    SYM[".sym<br/>58,456 names"] --> READ["state.js<br/>romdata.js"]
+    SYM[".sym<br/>every address, named"] --> READ["state.js<br/>romdata.js"]
     CORE --> READ
     READ --> THINK["collision · nav · world<br/>tasks · bootstrap"]
     THINK --> PRESS["synthetic button presses"]
@@ -804,7 +804,7 @@ the bag" rather than "did we gain any".
 
 ## 9. The interface
 
-<!-- covers: app/main.js index.html @ 52ff1fe9a0df -->
+<!-- covers: app/main.js index.html @ e73ff2cfa2d4 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
