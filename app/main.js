@@ -1,7 +1,7 @@
 // Wiring: file pickers, the render loop, and dispatching a task.
 import { GameBoy } from './gb.js';
 import { Symbols } from './symbols.js';
-import { GameState } from './state.js';
+import { GameState, TRAINER_BATTLE, MAX_PARTY } from './state.js';
 import { Tasks } from './tasks.js';
 import { CollisionMap } from './collision.js';
 import { Nav } from './nav.js';
@@ -38,6 +38,8 @@ let running = false, target = 5;
 // chosen. Which of the three you want is the one real choice in the opening,
 // and answering it for you would be taking the interesting part.
 let bootStage = 'start';
+// Where healing would go from here, worked out once per refresh.
+let healPlace = null;
 let lastLead = null;   // the lead's level, for the relative grind presets
 
 // --- colour theme -----------------------------------------------------------
@@ -348,7 +350,7 @@ function paintJobs(s) {
   // is a one-time thing anyway: run it twice and it returns "already carrying
   // 5 ball(s)" without moving. So it is Catch's empty state instead.
   const balls = (s.balls || []).filter(([, q]) => q > 0);
-  const ballName = balls.length && romdata ? romdata.itemName(balls[0][0]) : null;
+  const ballName = ballId && romdata ? romdata.itemName(ballId) : null;
   const needsBalls = !ballId;
   $('#errand').classList.toggle('hide', !needsBalls);
   $('#catch').classList.toggle('hide', needsBalls);
@@ -359,6 +361,41 @@ function paintJobs(s) {
       : 'pick something below';
   $('#catch').disabled = !(ballId && huntWanted);
   $('#job-catch').classList.toggle('blocked', needsBalls || !huntWanted);
+
+  // The three below act on the situation you are already in, so what they can
+  // do is decided by the game rather than by anything picked on this page.
+  const foe = s.inBattle && romdata ? romdata.speciesName(s.enemy.species) : null;
+  const trainer = s.battleMode === TRAINER_BATTLE;
+
+  $('#battlestate').textContent = !s.inBattle
+    ? 'not in a battle'
+    : `${trainer ? 'trainer' : 'wild'} ${foe} Lv${s.enemy.level}`;
+  $('#battle').disabled = !s.inBattle;
+  $('#job-battle').classList.toggle('blocked', !s.inBattle);
+
+  $('#herestate').textContent = !s.inBattle
+    ? 'not in a battle'
+    : trainer
+      ? 'a trainer\u2019s Pokémon cannot be caught'
+      : s.party.length >= MAX_PARTY
+        ? 'the party is full'
+        : needsBalls
+          ? 'no Poké Balls yet'
+          : `${foe} Lv${s.enemy.level} · ${ballName || 'a ball'}`;
+  $('#catchhere').disabled = !(s.inBattle && !trainer && ballId
+                               && s.party.length < MAX_PARTY);
+  $('#job-here').classList.toggle('blocked', $('#catchhere').disabled);
+
+  const hurt = s.party.filter((m) => m.hp < m.maxHp);
+  $('#healstate').textContent = s.inBattle
+    ? 'finish the battle first'
+    : !s.party.length
+      ? 'no party yet'
+      : hurt.length
+        ? `${hurt.length} hurt · nearest is ${healPlace || 'a Center'}`
+        : 'everyone is at full health';
+  $('#heal').disabled = s.inBattle || !hurt.length;
+  $('#job-heal').classList.toggle('blocked', $('#heal').disabled);
 }
 
 /** One party member: who it is, and how close it is to fainting. */
@@ -391,6 +428,14 @@ async function refresh() {
   if (romdata) refreshBag(s);
   // Remembered so the relative presets have something to be relative to.
   lastLead = s.party.length ? s.party[0].level : null;
+  // Named in the Heal row, so the choice the pilot would make is visible
+  // before it is asked to make it.
+  if (boot && !s.inBattle && s.worldLoaded) {
+    try {
+      const pick = await boot.nearestHeal(s.map[0] * 256 + s.map[1]);
+      healPlace = pick ? boot.where(pick.map) : null;
+    } catch (e) { healPlace = null; }
+  }
   if (s.party.length && target <= s.party[0].level) {
     target = Math.min(100, s.party[0].level + 1);
   }
@@ -873,6 +918,29 @@ $('#go').onclick = async () => {
     }));
   progress(res
     ? Object.entries(res.stats).map(([k, v]) => `${k}=${v}`).join('  ') : '');
+};
+
+// --- the three that act on where you already are ----------------------------
+// No parameters and no picking: each one reads the situation and either does
+// the obvious thing or says why it cannot.
+$('#battle').onclick = async () => {
+  if (!tasks) return;
+  const res = await runTask('#battle', 'fighting', () => tasks.battleHere());
+  progress(res ? Object.entries(res.stats)
+    .map(([k, v]) => `${k}=${v}`).join('  ') : '');
+};
+
+$('#catchhere').onclick = async () => {
+  if (!tasks || !ballId) return;
+  const res = await runTask('#catchhere', 'throwing',
+                            () => tasks.catchHere(ballId));
+  progress(res ? Object.entries(res.stats)
+    .map(([k, v]) => `${k}=${v}`).join('  ') : '');
+};
+
+$('#heal').onclick = async () => {
+  if (!boot) return;
+  await runTask('#heal', 'off to heal', () => boot.healNow());
 };
 
 $('#stopRun').onclick = () => {

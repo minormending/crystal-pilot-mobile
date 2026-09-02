@@ -34,6 +34,7 @@ and the code disagree, the code is right and the section is a bug — see
 5. [Crossing to the next map](#5-crossing-to-the-next-map)
 6. [Battles](#6-battles)
 7. [Catching something](#7-catching-something)
+   · [Three that act on where you are](#7a-three-that-act-on-where-you-already-are)
 8. [The errands](#8-the-errands)
 9. [The interface](#9-the-interface)
 10. [Keeping this honest](#10-keeping-this-honest)
@@ -88,7 +89,7 @@ of the subtleties in sections 6 and 7.
 
 ## 2. The shape of it
 
-<!-- covers-api: app/main.js app/bootstrap.js app/tasks.js app/nav.js app/world.js app/collision.js app/state.js app/romdata.js app/symbols.js app/gb.js @ 5a263f7921a2 -->
+<!-- covers-api: app/main.js app/bootstrap.js app/tasks.js app/nav.js app/world.js app/collision.js app/state.js app/romdata.js app/symbols.js app/gb.js @ 852e80466f42 -->
 
 Ten modules. Arrows point from a module to the ones it imports.
 
@@ -211,7 +212,7 @@ later duplicates are aliases and locals.
 
 ### `state.js` — what the game is doing right now
 
-<!-- covers: app/state.js @ c57eca2d8c48 -->
+<!-- covers: app/state.js @ 4b8815618cf2 -->
 
 One snapshot, many answers: `inBattle`, `party`, `pos`, `onGrass`,
 `worldLoaded`, `menu`, `balls`, and the enemy's HP.
@@ -441,7 +442,7 @@ point those coordinates mean somewhere else entirely.
 
 ## 5. Crossing to the next map
 
-<!-- covers: app/bootstrap.js app/world.js @ 980aa1707036 -->
+<!-- covers: app/bootstrap.js app/world.js @ 2ecf6f282297 -->
 
 A connection spans only part of a shared edge, so "walk west until something
 happens" does not work. `crossEdge()` closes the distance in stages, then tries
@@ -507,7 +508,7 @@ refusal is not an answer.
 
 ## 6. Battles
 
-<!-- covers: app/tasks.js app/state.js @ 0dad8f8f6593 -->
+<!-- covers: app/tasks.js app/state.js @ 1094b76b6062 -->
 
 ### Is it our turn?
 
@@ -631,7 +632,7 @@ fainted.
 
 ## 7. Catching something
 
-<!-- covers: app/tasks.js app/romdata.js @ 602a7a1790e8 -->
+<!-- covers: app/tasks.js app/romdata.js @ 056641f09d63 -->
 
 Catching is the most involved loop, because a Poké Ball's odds turn on how much
 HP is left. Throwing at a full-health target is mostly throwing balls away.
@@ -698,9 +699,71 @@ precedes it defaults to yes, which is what we want; the nickname box does not.
 
 ---
 
+## 7a. Three that act on where you already are
+
+<!-- covers: app/tasks.js app/bootstrap.js @ 134669862f10 -->
+
+Grind, hunt and catch all go *looking* for something. These three do the obvious
+thing with the situation you are already in, and take no parameters:
+
+| Command | Does | Refuses when |
+| --- | --- | --- |
+| **Battle** | plays out the battle you are in, wild or trainer | you are not in one |
+| **Catch this one** | weakens and throws at the wild Pokémon in front of you | not in a battle · it is a trainer's · party full · no balls |
+| **Heal** | goes to the nearer heal place and comes back | you are in a battle · nothing is hurt |
+
+```mermaid
+flowchart TD
+    A["what is happening?"] --> B{"in a battle?"}
+    B -- no --> H{"anyone hurt?"}
+    H -- yes --> HEAL["Heal is the only one offered"]
+    H -- no --> NONE["all three stand down"]
+    B -- yes --> T{"a trainer?"}
+    T -- yes --> ONLYB["Battle only — a trainer's<br/>Pokémon cannot be caught"]
+    T -- no --> BOTH["Battle, or Catch this one"]
+```
+
+Each row in the interface says which of those it is, so the reason a thing is
+unavailable is on screen rather than discovered by pressing it.
+
+<details>
+<summary><b>Advanced detail:</b> what was extracted, and what was not</summary>
+
+**`captureHere` is the battle-facing half of `catch_`**, split out because it is
+now also a command. `catch_` finds the species and delegates per encounter; the
+standalone version skips the finding.
+
+The split matters for one thing in particular: `catch_` passes a shared
+`memory` object holding the biggest hit landed so far, because when hunting, the
+one swing that cannot be guarded is the *first* one — a knockout is itself a
+measurement that every later target benefits from. Called on its own there is no
+earlier encounter to learn from, so it starts cold. That is correct rather than
+a limitation, but it does mean a single `Catch this one` on a very low-level
+target can still knock it out where a hunt would not.
+
+**`battleHere` is a guard and a report around `fightBattle`**, not new battle
+logic. Everything in [section 6](#6-battles) applies — the fainted-lead prompt,
+trainers being unfleeable, PP exhaustion — because it is the same engine.
+
+**`healNow` likewise wraps `healUp`**, which already chooses between Elm's
+computer and the Pokémon Center by distance. It refuses in a battle rather than
+pressing buttons hopefully, and reports "already at full health" as a success
+rather than an error, because nothing needed doing.
+
+**Two constants moved to `state.js` while doing this.** `TRAINER_BATTLE` and
+`MAX_PARTY` were each defined in more than one module — a magic `2` and a magic
+`6` stated in three places between them. `state.js` is the module whose job is
+interpreting memory values, so they live there now and the others import them.
+This surfaced as a plain `ReferenceError` the first time `captureHere` ran,
+which is worth knowing: the syntax check in `tools/check-app` parses every
+module but cannot see an undefined reference. That class of bug only shows up by
+running the thing.
+
+</details>
+
 ## 8. The errands
 
-<!-- covers: app/bootstrap.js @ ba0c7a109c38 -->
+<!-- covers: app/bootstrap.js @ 7ea837455a0e -->
 
 ### Starting a new game
 
@@ -804,7 +867,7 @@ the bag" rather than "did we gain any".
 
 ## 9. The interface
 
-<!-- covers: app/main.js index.html @ e73ff2cfa2d4 -->
+<!-- covers: app/main.js index.html @ 70e54d83f74a -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.

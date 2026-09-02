@@ -10,6 +10,7 @@
 // lands somewhere else, because a bootstrap that quietly drifts off course ends
 // up mashing A at a wall.
 import { CollisionMap } from './collision.js';
+import { TRAINER_BATTLE } from './state.js';
 
 const key = (group, number) => group * 256 + number;
 
@@ -75,8 +76,7 @@ const ELM_HEAL_FROM = [2, 2];      // stand here, face up, and the machine is ab
 // Encounter tiles, the same values CheckGrassCollision uses.
 const GRASS = new Set([0x10, 0x14, 0x18, 0x1c]);
 
-// wBattleMode: 1 is a wild Pokemon, 2 is a trainer.
-const TRAINER_BATTLE = 2;
+
 // What a leg beyond the first is worth in tiles, when weighing up two routes.
 // A door is cheap and a route crossing is not, and only the leg we are standing
 // on can actually be measured.
@@ -560,6 +560,50 @@ export class Bootstrap {
       await this.travelTo(from);
     }
     return healed;
+  }
+
+  /**
+   * Go to the nearest place that will heal, then come back — as a task.
+   *
+   * healUp already does the work, including choosing between Elm's computer and
+   * the Pokemon Center by distance rather than by leg count. This is the guard
+   * and the reporting around it, so it reports like every other task.
+   *
+   * Refuses in a battle, because walking is not an option there and the honest
+   * answer is to say so rather than to press buttons hopefully.
+   */
+  async healNow() {
+    const started = Date.now();
+    const before = await this.snap();
+    if (before.inBattle) {
+      return { ok: false, stats: {}, message: 'finish the battle first' };
+    }
+    if (!before.party.length) {
+      return { ok: false, stats: {}, message: 'no party to heal' };
+    }
+    const hurt = before.party.filter((m) => m.hp < m.maxHp);
+    if (!hurt.length) {
+      return { ok: true, stats: { already: true },
+               message: 'the party is already at full health' };
+    }
+
+    const from = await this.mapKey();
+    const where = await this.nearestHeal(from);
+    this.say(`healing at ${this.where(where.map)}`);
+    const healed = await this.healUp();
+    const after = await this.snap();
+    const stats = {
+      at: this.where(where.map),
+      seconds: ((Date.now() - started) / 1000).toFixed(1),
+      party: after.party.map((m) => `${m.hp}/${m.maxHp}`).join(' '),
+    };
+    if (!healed) {
+      return { ok: false, stats,
+               message: `could not heal (stopped in ${this.where(await this.mapKey())})` };
+    }
+    return { ok: true, stats,
+             message: `healed ${hurt.length === 1 ? 'one Pokémon' : `${hurt.length} Pokémon`}`
+                      + ` at ${stats.at}` };
   }
 
   /**

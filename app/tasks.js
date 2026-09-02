@@ -17,7 +17,8 @@
 // step toward the target. Gen 2 menus wrap, so counting presses from an assumed
 // starting position silently picks the wrong thing.
 
-import { NAME_MENU_FIRST_PRESET } from './state.js';
+import { NAME_MENU_FIRST_PRESET, TRAINER_BATTLE, MAX_PARTY }
+  from './state.js';
 
 const FIGHT = 1;   // wBattleMenuCursorPosition: 1 FIGHT 2 PKMN 3 PACK 4 RUN
 const PACK = 3;
@@ -38,7 +39,6 @@ const PARTY_HOLD = 12, PARTY_GAP = 24, PARTY_SETTLE = 40;
 const BATTLE_MENU_ITEMS = 34, BATTLE_MENU_TOP = 12;
 // Long enough for the pack to write wCurItem for the pocket now showing.
 const SETTLE_FRAMES = 20;
-const MAX_PARTY = 6;
 
 export class Tasks {
   constructor(gb, state, onProgress = () => {}, rom = null) {
@@ -686,6 +686,199 @@ export class Tasks {
    * the two coming apart is the failure worth catching: a throw that goes
    * astray still costs a ball.
    */
+  /**
+   * Catch the wild Pokemon already in front of you.
+   *
+   * The battle-facing half of `catch_`, split out because it is also a command
+   * on its own: you walked into an encounter yourself and want this one caught,
+   * rather than asking the pilot to go and find a species.
+   *
+   * `memory` carries the biggest hit landed so far. Kept outside this call on
+   * purpose when hunting -- the one swing that cannot be guarded is the first
+   * one, so a knockout is itself a measurement that every later target
+   * benefits from.
+   */
+  async captureHere(ballId, { maxBalls = 40, weakenTo = 0.34,
+                              memory = null } = {}) {
+    const mem = memory || { biggestHit: 0 };
+    const ballsOf = (snap) => {
+      const e = snap.balls.find(([id]) => id === ballId);
+      return e ? e[1] : 0;
+    };
+    const ballName = this.rom.itemName(ballId);
+
+    let s = await this.snap();
+    if (!s.inBattle) return { outcome: 'nobattle' };
+    if (s.battleMode === TRAINER_BATTLE) return { outcome: 'trainer' };
+    if (s.party.length >= MAX_PARTY) return { outcome: 'full' };
+    if (ballsOf(s) <= 0) return { outcome: 'noballs', ballName };
+
+    const name = this.rom.speciesName(s.enemy.species);
+    const partyBefore = s.party.length;
+    let weakening = weakenTo > 0;
+    let thrown = 0, chips = 0;
+
+    while (thrown < maxBalls && !this.cancelled) {
+      const snap = await this.snap();
+      if (!snap.inBattle) break;
+
+      // Soften it up first. A ball's odds turn on how much HP is left, so
+      // throwing at something untouched is mostly throwing balls away.
+      const enemyMax = Math.max(1, snap.enemy.maxHp);
+      if (weakening && snap.enemy.hp / enemyMax > weakenTo) {
+        // Never swing when the biggest hit seen so far could finish it. The
+        // threshold alone is not a safe stopping point -- against a low-level
+        // wild Pokemon one hit can carry it from above the line to zero, and a
+        // fainted Pokemon cannot be caught by anything.
+        if (snap.enemy.hp <= mem.biggestHit) {
+          weakening = false;
+          this.say('any more would knock it out — throwing now');
+        } else {
+          // Bounded, because weakening does not spend a ball: without this a
+          // move that keeps missing would loop here for good, the ball budget
+          // never moving because no ball was ever thrown.
+          if (chips >= MAX_CHIPS) {
+            weakening = false;
+            this.say('weakening is getting nowhere — throwing');
+            continue;
+          }
+          chips++;
+          const hpBefore = snap.enemy.hp;
+          const how = await this.chip();
+          if (how === 'fainted') {
+            // It had hpBefore left and we took all of it, so that is the floor
+            // on what one swing does.
+            mem.biggestHit = Math.max(mem.biggestHit, hpBefore);
+            return { outcome: 'knockedOut', name, thrown, chips };
+          }
+          if (how === 'ended') break;
+          if (how === 'ok') {
+            const now = await this.snap();
+            mem.biggestHit = Math.max(mem.biggestHit, hpBefore - now.enemy.hp);
+            continue;
+          }
+          // No usable attack, or the fight got away from us: stop trying to
+          // weaken and take the odds as they are rather than stalling.
+          //
+          // Backing out first matters. A chip that ended badly can leave the
+          // move menu open, and menuIsLive cannot tell that from the battle
+          // menu -- they share the same box -- so the pack was opened from
+          // inside the move list and the throw could not find a ball.
+          weakening = false;
+          await this.closeMenus(2);
+          await this.gb.run(SETTLE_FRAMES);
+          this.say(how === 'nomove'
+            ? 'nothing gentle enough to weaken it with' : 'throwing as it is');
+        }
+      }
+
+      if (!await this.throwBall(ballId)) {
+        // The bag is not readable mid-battle -- wBalls only settles once the
+        // battle ends -- so "no ball in the pocket" is how running out shows up
+        // here, rather than the count above catching it.
+        return { outcome: thrown ? 'ranout' : 'nopack', name, thrown, chips,
+                 ballName };
+      }
+      const how = await this.watchThrow(partyBefore);
+      thrown++;
+      if (how === 'caught') {
+        const after = await this.snap();
+        const slot = after.party.length - 1;
+        return { outcome: 'caught', name, thrown, chips, ballName,
+                 level: after.party[slot] ? after.party[slot].level : null };
+      }
+      if (how === 'gone') return { outcome: 'gone', name, thrown, chips };
+      if (how === 'stuck') return { outcome: 'stuck', name, thrown, chips };
+    }
+    if (this.cancelled) return { outcome: 'cancelled', name, thrown, chips };
+    return { outcome: 'budget', name, thrown, chips, ballName };
+  }
+
+  /**
+   * Catch the wild Pokemon in front of you, as a task in its own right.
+   *
+   * Reports in the same shape as every other task, and refuses politely rather
+   * than flailing: a trainer's Pokemon cannot be caught, a full party would
+   * send the catch to a box this does not handle, and with no balls there is
+   * nothing to throw.
+   */
+  async catchHere(ballId, { maxBalls = 40, weakenTo = 0.34 } = {}) {
+    const started = Date.now();
+    const r = await this.captureHere(ballId, { maxBalls, weakenTo });
+    const stats = { thrown: r.thrown || 0, chips: r.chips || 0,
+                    seconds: ((Date.now() - started) / 1000).toFixed(1) };
+    const balls = (n) => `${n} ${r.ballName}${n === 1 ? '' : 's'}`;
+    switch (r.outcome) {
+      case 'caught':
+        return { ok: true, stats,
+                 message: `caught ${r.name}${r.level ? ` Lv${r.level}` : ''} `
+                          + `with ${balls(r.thrown)}` };
+      case 'nobattle':
+        return { ok: false, stats, message: 'not in a battle' };
+      case 'trainer':
+        return { ok: false, stats,
+                 message: "that is a trainer's Pokémon — it cannot be caught" };
+      case 'full':
+        return { ok: false, stats, message:
+          'the party is full — a caught Pokémon would go to the PC, '
+          + 'which this does not handle. Free a slot first.' };
+      case 'noballs':
+        return { ok: false, stats, message: 'no balls of that kind in the bag' };
+      case 'nopack':
+        return { ok: false, stats,
+                 message: 'could not reach the ball in the pack' };
+      case 'ranout':
+        return { ok: false, stats,
+                 message: `used ${balls(r.thrown)} and then had none left` };
+      case 'knockedOut':
+        return { ok: false, stats, message: `knocked the ${r.name} out` };
+      case 'gone':
+        return { ok: false, stats, message: `the ${r.name} got away` };
+      case 'stuck':
+        return { ok: false, stats, message: 'lost track of the battle' };
+      case 'cancelled':
+        return { ok: false, stats, message: 'stopped' };
+      default:
+        return { ok: false, stats,
+                 message: `used ${balls(r.thrown)} without catching it` };
+    }
+  }
+
+  /**
+   * Play out the battle you are already in, wild or trainer.
+   *
+   * fightBattle does the work; this is the guard and the reporting around it.
+   * Distinct from a grind, which goes looking for battles -- here you walked
+   * into one yourself.
+   */
+  async battleHere({ maxTurns = 40 } = {}) {
+    const started = Date.now();
+    const before = await this.snap();
+    if (!before.inBattle) {
+      return { ok: false, stats: {}, message: 'not in a battle' };
+    }
+    const kind = before.battleMode === TRAINER_BATTLE ? 'trainer' : 'wild';
+    const foe = this.rom ? this.rom.speciesName(before.enemy.species) : 'it';
+    this.say(`fighting the ${kind} ${foe}`);
+
+    const how = await this.fightBattle(maxTurns);
+    const after = await this.snap();
+    const stats = {
+      kind,
+      outcome: how,
+      seconds: ((Date.now() - started) / 1000).toFixed(1),
+    };
+    const lead = after.party[0];
+    if (lead) stats.lead = `${lead.hp}/${lead.maxHp}`;
+    if (how === 'won') {
+      return { ok: true, stats, message: `won the ${kind} battle` };
+    }
+    if (how === 'lost') {
+      return { ok: false, stats, message: 'the whole party fainted' };
+    }
+    return { ok: false, stats, message: `the ${kind} battle went nowhere` };
+  }
+
   async catch_(want, ballId, { maxEncounters = 200, maxBalls = 40,
                               regrass = null, weakenTo = 0.34 } = {}) {
     const stats = { encounters: 0, fled: 0, thrown: 0 };
@@ -693,15 +886,14 @@ export class Tasks {
     let s = await this.snap();
     if (s.party.length >= MAX_PARTY) {
       return { ok: false, stats, message:
-        'the party is full — a caught Pokemon would go to the PC, ' +
-        'which this does not handle. Free a slot first.' };
+        'the party is full — a caught Pokemon would go to the PC, '
+        + 'which this does not handle. Free a slot first.' };
     }
     const ballsOf = (snap) => {
       const e = snap.balls.find(([id]) => id === ballId);
       return e ? e[1] : 0;
     };
-    const before = ballsOf(s);
-    if (before <= 0) {
+    if (ballsOf(s) <= 0) {
       return { ok: false, stats, message: 'no balls of that kind in the bag' };
     }
     const ballName = this.rom.itemName(ballId);
@@ -714,7 +906,7 @@ export class Tasks {
     // happened -- so the knockout teaches the pilot its own damage, and every
     // target after it whose HP is already inside that range gets thrown at
     // rather than hit.
-    let biggestHit = 0;
+    const memory = { biggestHit: 0 };
 
     while (stats.encounters < maxEncounters && !this.cancelled) {
       s = await this.snap();
@@ -738,109 +930,45 @@ export class Tasks {
       }
 
       this.say(`found ${name} Lv${s.enemy.level} — weakening it`);
-      const partyBefore = s.party.length;
-      let weakening = weakenTo > 0;
-      let knockedOut = false;
-      let chips = 0;
-      while (stats.thrown < maxBalls && !this.cancelled) {
-        const snap = await this.snap();
-        if (ballsOf(snap) <= 0) {
-          return { ok: false, stats, message: `ran out of ${ballName}s` };
-        }
-        if (!snap.inBattle) break;
+      const r = await this.captureHere(ballId, {
+        maxBalls: maxBalls - stats.thrown, weakenTo, memory });
+      stats.thrown += r.thrown || 0;
+      if (r.chips) stats.chips = (stats.chips || 0) + r.chips;
 
-        // Soften it up first. A ball's odds turn on how much HP is left, so
-        // throwing at something untouched is mostly throwing balls away.
-        const enemyMax = Math.max(1, snap.enemy.maxHp);
-        if (weakening && snap.enemy.hp / enemyMax > weakenTo) {
-          // Never swing when the biggest hit seen so far could finish it. The
-          // threshold alone is not a safe stopping point -- against a low-level
-          // wild Pokemon one hit can carry it from above the line to zero, and
-          // a fainted Pokemon cannot be caught by anything.
-          if (snap.enemy.hp <= biggestHit) {
-            weakening = false;
-            this.say('any more would knock it out — throwing now');
-          } else {
-            // Bounded, because weakening does not spend a ball: without this a
-            // move that keeps missing would loop here for good, the ball budget
-            // never moving because no ball was ever thrown.
-            if (chips >= MAX_CHIPS) {
-              weakening = false;
-              this.say('weakening is getting nowhere — throwing');
-              continue;
-            }
-            chips++;
-            const hpBefore = snap.enemy.hp;
-            const how = await this.chip();
-            if (how === 'fainted') {
-              // It had hpBefore left and we took all of it, so that is the
-              // floor on what one swing does.
-              biggestHit = Math.max(biggestHit, hpBefore);
-              knockedOut = true;
-              break;
-            }
-            if (how === 'ended') break;
-            if (how === 'ok') {
-              const now = await this.snap();
-              biggestHit = Math.max(biggestHit, hpBefore - now.enemy.hp);
-              stats.chips = (stats.chips || 0) + 1;
-              continue;
-            }
-            // No usable attack, or the fight got away from us: stop trying to
-            // weaken and take the odds as they are rather than stalling.
-            //
-            // Backing out first matters. A chip that ended badly can leave the
-            // move menu open, and menuIsLive cannot tell that from the battle
-            // menu -- they share the same box -- so the pack was opened from
-            // inside the move list and the throw could not find a ball.
-            weakening = false;
-            await this.closeMenus(2);
-            await this.gb.run(SETTLE_FRAMES);
-            this.say(how === 'nomove'
-              ? 'nothing gentle enough to weaken it with' : 'throwing as it is');
-          }
-        }
-
-        if (!await this.throwBall(ballId)) {
-          // The bag is not readable mid-battle -- wBalls only settles once the
-          // battle ends -- so "no ball in the pocket" is how running out shows
-          // up here, rather than the count above catching it.
-          return { ok: false, stats, message: stats.thrown
-            ? `used ${stats.thrown} ${ballName}${stats.thrown === 1 ? '' : 's'} ` +
-              'and then had none left'
-            : 'could not reach the ball in the pack' };
-        }
-        const outcome = await this.watchThrow(partyBefore);
-        stats.thrown++;
-        if (outcome === 'caught') {
-          // Counted from the throws, not the bag: the deduction lands when the
-          // battle ends, so subtracting mid-battle reported nonsense.
-          const after = await this.snap();
-          stats.spent = stats.thrown;
-          stats.seconds = ((Date.now() - started) / 1000).toFixed(1);
-          const slot = after.party.length - 1;
-          return { ok: true, stats,
-                   message: `caught ${name} Lv${after.party[slot].level} ` +
-                            `with ${stats.spent} ${ballName}` +
-                            `${stats.spent === 1 ? '' : 's'}` };
-        }
-        if (outcome === 'gone') {
-          this.say(`${name} got away`);
-          break;
-        }
-        if (outcome === 'stuck') {
-          return { ok: false, stats, message: 'lost track of the battle' };
-        }
+      if (r.outcome === 'caught') {
+        stats.spent = stats.thrown;
+        stats.seconds = ((Date.now() - started) / 1000).toFixed(1);
+        return { ok: true, stats,
+                 message: `caught ${name}${r.level ? ` Lv${r.level}` : ''} `
+                          + `with ${stats.spent} ${ballName}`
+                          + `${stats.spent === 1 ? '' : 's'}` };
       }
-      if (knockedOut) {
+      if (r.outcome === 'knockedOut') {
         // Not a failure worth stopping for: there is another one in the grass.
         stats.knockedOut = (stats.knockedOut || 0) + 1;
         this.say(`knocked the ${name} out — looking for another`);
         await this.settleText();
         continue;
       }
+      if (r.outcome === 'gone') {
+        this.say(`${name} got away`);
+        continue;
+      }
+      if (r.outcome === 'nopack') {
+        return { ok: false, stats,
+                 message: 'could not reach the ball in the pack' };
+      }
+      if (r.outcome === 'ranout') {
+        return { ok: false, stats, message:
+          `used ${stats.thrown} ${ballName}${stats.thrown === 1 ? '' : 's'} `
+          + 'and then had none left' };
+      }
+      if (r.outcome === 'stuck') {
+        return { ok: false, stats, message: 'lost track of the battle' };
+      }
       if (stats.thrown >= maxBalls) {
-        return { ok: false, stats, message: `used ${stats.thrown} balls without catching it` };
+        return { ok: false, stats,
+                 message: `used ${stats.thrown} balls without catching it` };
       }
     }
     stats.seconds = ((Date.now() - started) / 1000).toFixed(1);

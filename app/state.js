@@ -20,6 +20,16 @@ const NAME_MENU_RIGHT = 10;
 // the game ships: CHRIS/MAT/ALLAN/JON, or KRIS/AMANDA/JUANA/JODI.
 export const NAME_MENU_FIRST_PRESET = 2;
 
+// wBattleMode: 0 none, 1 a wild Pokemon, 2 a trainer. Exported because both
+// tasks.js and bootstrap.js need it -- you cannot run from a trainer, and a
+// trainer's Pokemon cannot be caught -- and a magic 2 stated in two places is
+// exactly the kind of thing that drifts.
+export const TRAINER_BATTLE = 2;
+
+// Six. The cap the game enforces, and the reason a catch refuses a full party
+// rather than sending it to a box this does not handle.
+export const MAX_PARTY = 6;
+
 export class GameState {
   constructor(symbols) {
     this.s = symbols;
