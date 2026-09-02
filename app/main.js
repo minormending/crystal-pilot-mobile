@@ -88,6 +88,7 @@ async function maybeStart() {
   $('#intro').classList.add('hide');
   $('#ctrls').classList.remove('hide');
   $('#speedcard').classList.remove('hide');
+  $('#speedbox').classList.remove('hide');
   $('#huntcard').classList.remove('hide');
   $('#screenwrap').classList.remove('hide');
   $('#taphint').classList.remove('hide');

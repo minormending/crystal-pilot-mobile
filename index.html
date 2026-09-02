@@ -19,7 +19,16 @@
   header{display:flex;gap:8px;align-items:baseline;padding:10px 14px;
          border-bottom:1px solid var(--line)}
   header h1{font-size:15px;margin:0}
-  header .where{margin-left:auto;color:var(--dim);font-size:13px}
+  header .where{margin-left:auto;color:var(--dim);font-size:13px;
+                white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  /* Speed is status, not a task: it belongs beside where you are, not wedged
+     between the screen and the buttons you press. */
+  header .speed{display:flex;align-items:center;gap:7px;flex:0 0 auto}
+  header .speed input[type=range]{width:74px;accent-color:var(--accent);
+                                  background:transparent;margin:0}
+  header .speed .x{font-variant-numeric:tabular-nums;font-weight:700;
+                   font-size:12px;color:var(--dim);min-width:2.2em;
+                   text-align:right}
   /* A column flex, so the order of the cards is a decision rather than
      whatever the source happens to say. The app does two different jobs --
      you play it by hand, or you send the pilot off to work for ninety
@@ -271,7 +280,15 @@
 </style>
 </head>
 <body>
-<header><h1>crystal-pilot</h1><span class="where" id="where">no ROM loaded</span></header>
+<header>
+  <h1>crystal-pilot</h1>
+  <span class="where" id="where">no ROM loaded</span>
+  <span class="speed hide" id="speedbox">
+    <input type="range" id="speed" min="0" max="4" step="1" value="0"
+           aria-label="Emulator speed">
+    <span class="x" id="speedx">1×</span>
+  </span>
+</header>
 <main>
   <div class="screenwrap hide" id="screenwrap">
     <canvas id="screen" width="160" height="144"></canvas>
@@ -280,19 +297,23 @@
   <p class="tiphint hide" id="taphint">Tap the screen to walk there.</p>
 
   <div class="card hide" id="speedcard">
-    <div class="speed">
-      <label for="speed">Speed</label>
-      <input type="range" id="speed" min="0" max="4" step="1" value="0">
-      <span class="x" id="speedx">1×</span>
-    </div>
     <details class="how">
       <summary>How this works</summary>
       <p>The pilot reads the game's own memory through the symbol file — your
         party, the map you are on, and the collision data behind it — so it can
         plan a route and pick a move rather than guess from the picture.</p>
-      <p>Speed only changes how fast the game runs while <em>you</em> are
-        watching it. A pilot task always runs as fast as the phone manages,
-        which is the whole point of it.</p>
+      <p>The speed slider in the header only changes how fast the game runs
+        while <em>you</em> are watching it. A pilot task always runs as fast as
+        the phone manages, which is the whole point of it.</p>
+      <p><b>Playing.</b> Press and hold the pad to walk — a tap in a new
+        direction only turns you. Tap the screen and the pilot walks you there.
+        On a keyboard: arrows, Z and X for A and B, Enter for Start, Shift for
+        Select.</p>
+      <p><b>Sending the pilot.</b> Hunt and catch both walk the grass and run
+        from everything else; hunt hands you the battle, catch weakens it and
+        throws. Only what this route has at this hour is offered. While a job
+        runs the pad dims — it would be fighting the pilot for the same
+        emulator — and one Stop sits under the screen.</p>
     </details>
   </div>
 
@@ -364,8 +385,6 @@
       <button data-btn="SELECT"><b>Select</b></button>
       <button data-btn="START"><b>Start</b></button>
     </div>
-    <footer>Press and hold to walk — a tap in a new direction only turns you.<br>
-      Keyboard: arrows, Z/X for A/B, Enter for Start, Shift for Select.</footer>
   </div>
   <div class="card hide" id="huntcard">
     <h2>Send the pilot</h2>
