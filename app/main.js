@@ -319,12 +319,18 @@ async function runTask(id, busy, work,
   $(id).disabled = true;
   gb.releaseAll();
   syncHeld();
-  // An undo point, before anything moves. Only possible where the game can
-  // save at all, which rules out the two commands that run inside a battle --
-  // so this reports what it did rather than pretending every job is undoable.
-  if (takeUndoPoint) await snapshotForUndo(busy);
   setStatus(busy, 'busy');
   try {
+    // An undo point, before anything moves. Only possible where the game can
+    // save at all, which rules out the two commands that run inside a battle --
+    // so this reports what it did rather than pretending every job is undoable.
+    //
+    // Inside the try, and this matters more than it looks. It was outside, and
+    // anything it threw -- an IndexedDB error, a bad read -- escaped past the
+    // finally: `running` stayed true, the pad stayed dimmed and every button
+    // stayed disabled, with no way back but a reload. That is the exact failure
+    // runTask exists to prevent, reintroduced by adding a step above it.
+    if (takeUndoPoint) await snapshotForUndo(busy);
     const res = await work();
     setStatus(res.message, res.ok ? 'ok' : 'bad');
     return res;
@@ -1018,6 +1024,18 @@ async function describeGame() {
  * honest consequence is that jobs which run inside a battle cannot have one.
  */
 async function snapshotForUndo(label) {
+  try {
+    await keepUndoPoint(label);
+  } catch (e) {
+    // Belt and braces with the try in runTask: bookkeeping must never be the
+    // reason the job you asked for does not happen.
+    undoRefused = e && e.message ? e.message : String(e);
+    progress(`no undo point: ${undoRefused}`);
+    paintUndo();
+  }
+}
+
+async function keepUndoPoint(label) {
   undoPoint = null;
   undoRefused = null;
   const can = await tasks.canSave();
@@ -1155,7 +1173,7 @@ $('#importsav').onchange = async (ev) => {
   const file = ev.target.files && ev.target.files[0];
   ev.target.value = '';
   if (!file || running) return;
-  await runTask('#importlabel', `loading ${file.name}`, async () => {
+  await runTask('#importsav', `loading ${file.name}`, async () => {
     const bytes = new Uint8Array(await file.arrayBuffer());
     if (bytes.length !== 32768) {
       return { ok: false, message:

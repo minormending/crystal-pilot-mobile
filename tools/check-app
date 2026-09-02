@@ -312,6 +312,56 @@ def check_buttons():
         else ok(f"all button names are among {len(BUTTONS)} the core knows")
 
 
+SELECTOR = re.compile(r"\$\('#([\w-]+)'\)")
+IMPORT_NAMED = re.compile(r"import\s*\{([^}]*)\}\s*from\s*'\./([\w.]+)'")
+EXPORT_DECL = re.compile(r"^export\s+(?:async\s+)?(?:class|function|const|let)\s+([A-Za-z_$][\w$]*)", re.M)
+EXPORT_LIST = re.compile(r"^export\s*\{([^}]*)\}", re.M)
+
+
+def check_wiring():
+    """Every $('#id') exists in the markup, and every import is really exported.
+
+    Both are the same kind of mistake: a name that parses fine and is wrong at
+    run time. `node --check` cannot see either, and neither can a reading of one
+    file -- they only show up when the app runs, which for a phone app means
+    when someone presses the button. A constant that lived in two modules once
+    reached a user as a plain ReferenceError the first time a catch ran.
+    """
+    ids = set(re.findall(r'id="([\w-]+)"', INDEX.read_text()))
+    problems = []
+    for path in APP:
+        text = path.read_text()
+        for n, line in enumerate(text.splitlines(), 1):
+            for sel in SELECTOR.findall(line):
+                if sel not in ids:
+                    problems.append(f"{path.name}:{n}  $('#{sel}') is not in index.html")
+
+    exports = {}
+    for path in APP:
+        text = path.read_text()
+        names = set(EXPORT_DECL.findall(text))
+        for block in EXPORT_LIST.findall(text):
+            for part in block.split(","):
+                name = part.strip().split(" as ")[-1].strip()
+                if name:
+                    names.add(name)
+        exports[path.name] = names
+    for path in APP:
+        for block, src in IMPORT_NAMED.findall(path.read_text()):
+            for part in block.split(","):
+                want = part.strip().split(" as ")[0].strip()
+                if not want:
+                    continue
+                if src not in exports:
+                    problems.append(f"{path.name}  imports from {src}, which is not a module here")
+                elif want not in exports[src]:
+                    problems.append(f"{path.name}  imports {want!r} from {src}, which does not export it")
+    for p in problems:
+        print(f"        {p}")
+    return fail(f"{len(problems)} wiring problem(s)") if problems \
+        else ok(f"{len(ids)} markup ids and every import resolve")
+
+
 CHECKS = {
     "syntax": check_syntax,
     "shell": check_shell,
@@ -319,6 +369,7 @@ CHECKS = {
     "contrast": check_contrast,
     "gamefiles": check_no_game_files,
     "buttons": check_buttons,
+    "wiring": check_wiring,
     "moves": check_moves,
 }
 

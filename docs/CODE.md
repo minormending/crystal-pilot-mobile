@@ -36,6 +36,7 @@ and the code disagree, the code is right and the section is a bug — see
 7. [Catching something](#7-catching-something)
    · [Three that act on where you are](#7a-three-that-act-on-where-you-already-are)
    · [Saving, and getting the save out](#7b-saving-and-getting-the-save-out)
+   · [Slots, undo, and bringing a save in](#7c-slots-undo-and-bringing-a-save-in)
 8. [The errands](#8-the-errands)
 9. [The interface](#9-the-interface)
 10. [Keeping this honest](#10-keeping-this-honest)
@@ -92,7 +93,7 @@ of the subtleties in sections 6 and 7.
 
 <!-- covers-api: app/main.js app/bootstrap.js app/tasks.js app/nav.js app/world.js app/collision.js app/state.js app/romdata.js app/symbols.js app/gb.js @ 998b179d5b51 -->
 
-Ten modules. Arrows point from a module to the ones it imports.
+Eleven modules. Arrows point from a module to the ones it imports.
 
 ```mermaid
 flowchart TD
@@ -105,6 +106,7 @@ flowchart TD
     state["state.js<br/>live game state"]
     rom["romdata.js<br/>cartridge tables"]
     sym["symbols.js<br/>the .sym file"]
+    saves["saves.js<br/>slots and .sav files"]
     gb["gb.js<br/>emulator wrapper"]
 
     main --> boot
@@ -116,6 +118,9 @@ flowchart TD
     main --> rom
     main --> sym
     main --> gb
+    main --> saves
+    saves --> gb
+    saves --> state
     boot --> coll
     tasks --> state
     nav --> coll
@@ -135,6 +140,7 @@ flowchart TD
 | `world.js` | "which map is west of here?" |
 | `tasks.js` | "grind to level 12", "catch a Sentret" |
 | `bootstrap.js` | "start a new game", "fetch Poké Balls" |
+| `saves.js` | "keep this in slot 2", "put that .sav into the cartridge" |
 | `main.js` | everything the person holding the phone touches |
 
 The dependency direction is the design: **nothing below `tasks.js` knows what a
@@ -188,14 +194,27 @@ in section 8. Measured rather than assumed: two calls for the same range return
 different objects with different buffers, the core exposes no writer at all, and
 writing through the copy resolves without error and changes nothing.
 
-**So save states are impossible here, and the two methods offering them were
-removed.** A snapshot you can never put back is not a save state. Worth stating
-plainly because the code claimed otherwise for a long time: `saveState()`
-resolved, handing back `{wasmboyMemory, date, isAuto}` with all four of
-`wasmboyMemory`'s fields `undefined` — the right shape holding nothing — and
-`loadState()` threw `Cannot read properties of undefined (reading 'buffer')` on
-it. Neither was called from anywhere, which is the only reason it went unnoticed;
-the README had listed both as available since the feasibility notes.
+**Save states can be taken here and cannot be put back, so the two methods
+offering them were removed.** The precise reason took two tries to get right,
+and the first answer was wrong in a way worth recording.
+
+What the code shipped with looked broken outright: `saveState()` resolved with
+`{wasmboyMemory, date, isAuto}` whose four memory fields were all `undefined` —
+the right shape holding nothing — and `loadState()` threw on it. Neither was
+called from anywhere, which is the only reason it went unnoticed.
+
+The `undefined` fields were not the real story. They come from the library's
+memory module, which this app never initialises because it steps frames itself
+and never calls `play()`. Call `play()` once and `saveState()` returns
+everything populated — cartridge RAM 32768, Game Boy memory 65536, internal
+state 1024, palette 128 — and persists it, so `getSaveStates()` lists them back.
+
+`loadState()` is the half that genuinely does not work. It rejects with
+`undefined` on states the library created itself, fetched from its own
+IndexedDB, handed to its own API with every buffer the right length. That is
+what makes a state useless here, not the copy semantics above: a snapshot you
+can never return to is not a save state. Slots hold battery saves instead — see
+[section 7c](#7c-slots-undo-and-bringing-a-save-in).
 
 **The battery save is the one that *can* work**, because it only needs reading.
 `batterySave()` used to return `this.core.getSavedMemory()`, which is
@@ -203,8 +222,11 @@ the README had listed both as available since the feasibility notes.
 not writable to a file. It now locates `CARTRIDGE_RAM_LOCATION` the same way
 `start()` locates work RAM and returns 32768 bytes, which is Crystal's battery
 and the same size as the desktop's `.sav`. It reads all zeroes until the game
-commits an in-game save, and nothing here drives the SAVE menu yet — so the read
-is verified for type, size and region, and not against real save data.
+commits an in-game save; `saveGame` in [section 7b](#7b-saving-and-getting-the-save-out)
+is what makes it hold one. Verified against real save data rather than only for
+size: a battery this read produced was written to a file, opened in the desktop
+pilot under PyBoy, and read back the same game — Route 29, `CYNDAQUIL Lv5
+20/20` — and then imported back into this app, which loaded it.
 
 **Frames must be stepped differently when the page is hidden.** `_runNumberOfFrames`
 awaits `pause()`, which needs an animation frame, and a hidden page does not get
@@ -883,6 +905,83 @@ Tackle and Leer. Two emulators, two implementations, one save file.
 
 </details>
 
+## 7c. Slots, undo, and bringing a save in
+
+<!-- covers: app/saves.js -->
+
+Three slots a person picks, plus one the pilot writes before every job. A slot
+holds a **battery save** — the 32KB the cartridge writes — and not a machine
+state, and everything odd about how slots behave follows from that.
+
+```mermaid
+flowchart TD
+    K["Keep slot 2"] --> Q{"can the game save?<br/>not in a battle, screen quiet"}
+    Q -- no --> R["refuse, and say which"]
+    Q -- yes --> SV["save the game for real"]
+    SV --> C["copy the 32KB into slot 2<br/>with map, lead and time"]
+
+    L["Load slot 2"] --> W["write cartridgeRam into the<br/>library's IndexedDB record"]
+    W --> RL["re-load the ROM"]
+    RL --> CT["drive START, A to CONTINUE"]
+    CT --> D["back in the world at that save point"]
+```
+
+**Why not machine states.** WasmBoy will capture one — after a `play()` its
+`saveState()` returns all four memory regions populated, and it even persists
+them — but it will not put one back. `loadState()` rejects with `undefined`,
+measured on states the library created itself, fetched from its own IndexedDB
+and handed to its own API with every buffer the right length. A snapshot you
+can never return to is no use as a slot. The desktop pilot has real states,
+which is why *its* slots can be taken mid-battle and these cannot.
+
+**What that costs, plainly:** keeping a slot saves your game, loading one puts
+you at that save point rather than an exact moment, and a job that runs *inside*
+a battle — Battle, Catch this one — cannot have an undo point at all. The rows
+say so instead of offering an undo that would do something else.
+
+<details>
+<summary><b>Advanced detail:</b> writing a battery, and the traps around it</summary>
+
+**Writing the battery is the one piece of cleverness.** The core is readable and
+not writable, so the bytes cannot simply be poked in. The library keeps a
+per-cartridge record in IndexedDB and calls `loadCartridgeRam` when a ROM loads,
+which pushes that record's `cartridgeRam` into the core. So installing a save
+means writing that record and re-loading the ROM — which is also why loading a
+slot leaves you at the title screen, and why `continueFromTitle` drives CONTINUE
+for you.
+
+**The record is addressed by the key the library already used**, and only
+derived from `_getCartridgeInfo().header` when there is none. Both work; they
+are not equally well evidenced. Writing under an existing key is the path that
+was watched loading a real save back into a real game; the derivation is
+reasoning about how the library builds its key. The proven one is primary and
+the other covers first visits.
+
+**That record belongs to the library, so it is opened with no version and no
+upgrade callback.** Naming a version means a `VersionError` the day the library
+bumps its own, and an upgrade callback would have us inventing its schema —
+creating a database it then finds already there and wrong. Our own database is
+the only one we version.
+
+**`install` refuses on a hidden page.** Re-loading the ROM goes through the
+library's `pause()`, which awaits an animation frame, and a hidden page is given
+none — so the call never returns. `run()` already branches on this for frame
+stepping and there is no equivalent escape here, so it refuses with a reason
+rather than hanging. A person pressing Load is looking at the page; the check
+only bites a backgrounded tab.
+
+**A refused undo does not spend the undo point.** Whatever the reason — hidden
+page, empty slot — the point stays where it was, so the next attempt still has
+somewhere to go back to.
+
+**Losing an undo point is reported, not just logged.** `canSave` settling too
+early once let a job run with nothing to go back to, and the reason scrolled out
+of the three-line run log while the row still read "nothing to undo yet" — which
+is what it says when no job has run at all. The row now distinguishes the two,
+because that failure is only otherwise discovered by reaching for the undo.
+
+</details>
+
 ## 8. The errands
 
 <!-- covers: app/bootstrap.js @ 7ea837455a0e -->
@@ -989,7 +1088,7 @@ the bag" rather than "did we gain any".
 
 ## 9. The interface
 
-<!-- covers: app/main.js index.html @ 660779f366b6 -->
+<!-- covers: app/main.js index.html @ ae260376e49b -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -1038,6 +1137,18 @@ Afterwards: page 1424px, pad card 341px → 257px, and the screen, pad, status a
 run log all above the fold. It got *shorter* while gaining a run log and three
 job state lines, because the duplicate Stop, two prose footers and the stepper
 all went.
+
+Since then the save card has been added and the page is **2065px** — the card is
+608px of it, which is what three slot rows, save, download, import and undo cost.
+The number that mattered has not moved: measured with a game running, the screen
+sits at 55px, the pad ends at 665px, status at 678px and the run log ends at
+720px, so all four are still above an 812px fold and the card lives below them.
+That was the point of the ordering rather than the total height — a page you
+scroll to read is fine, a page you must scroll to *stop the pilot* is not.
+
+(These were measured in a 437px-wide pane rather than at 375px, so treat them as
+the current shape rather than a like-for-like comparison with the numbers above.
+The fold claim holds either way: the deepest of the four is 720px.)
 
 **`runTask` owns the whole lifecycle in a `finally`.** Before that, each handler
 set `running`, disabled its button and cleared both at the end — which only

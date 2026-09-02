@@ -200,11 +200,17 @@ export class Saves {
     // anything, which is every first visit.
     const existing = await this._existingKey();
     const key = existing || await this._cartridgeKey();
-    const wdb = await open(WASMBOY_DB, DB_VERSION, (db) => {
-      if (!db.objectStoreNames.contains(WASMBOY_STORE)) {
-        db.createObjectStore(WASMBOY_STORE);
-      }
-    });
+    // Opened with no version and no upgrade, unlike our own database. This one
+    // belongs to the library: naming a version means a VersionError the day it
+    // bumps its own, and an upgrade callback would have us inventing its schema
+    // -- creating a database the library then finds already there and wrong.
+    // If the store is not there yet the honest answer is that there is nothing
+    // to write into, not that we should build it.
+    const wdb = await open(WASMBOY_DB);
+    if (!wdb.objectStoreNames.contains(WASMBOY_STORE)) {
+      throw new Error('the emulator has not stored anything for this cartridge '
+        + 'yet — load the ROM first');
+    }
     const rec = await tx(wdb, WASMBOY_STORE, 'readonly', (os) => wrap(os.get(key)));
     const next = Object.assign({}, rec || {}, { cartridgeRam: Uint8Array.from(bytes) });
     await tx(wdb, WASMBOY_STORE, 'readwrite', (os) => os.put(next, key));

@@ -97,9 +97,14 @@ Proven, and visible in the screenshot:
   be loaded", the same signal the desktop version needed
 - ~~save states and battery saves are both available from the core~~ — **half
   of this was wrong, and nothing had ever called it to find out.** The battery
-  save is readable, out of cartridge RAM, and is now what `Download .sav`
-  hands over. Save states are not possible at all: the core can be read but not
-  written. See *Saving, and getting the save off the phone*
+  save is readable, out of cartridge RAM, and is what `Download .sav` hands
+  over. Save states can be *taken* — the library populates one once it has been
+  started — but not put back: its `loadState` rejects even on its own saved
+  states, so a state here is a snapshot you can never return to. That is why
+  slots hold battery saves. See *Slots, and undoing a job*
+- **a save this app wrote loads elsewhere**: saved in game, downloaded, opened in
+  the desktop pilot under PyBoy, which read back the same Route 29 and
+  `CYNDAQUIL Lv5 20/20` — then imported back in here, which loaded it
 - **the collision map decodes correctly**: the same 48 tiles of PLAYERS_HOUSE_2F
   come out byte-for-byte identical to the desktop pilot's reading of the same
   room — two implementations, one in Python over PyBoy and one in JS over
@@ -904,12 +909,12 @@ In the order that would pay off:
 1. ~~**Port the bootstrap** so the loop can be exercised end to end.~~ Done, and
    then some: `run` reaches the grass with a starter, and `eggErrand` goes on to
    the Poké Balls, which is what made catching testable at all.
-2. **Import a `.sav`** from the desktop pilot, so the two halves share progress
-   rather than each playing the opening again. Half done: saving and export
-   work, and a mobile save loads in the desktop pilot. Import is the missing
-   direction, and it is the harder one — the core takes a save when the ROM is
-   loaded, so it means re-loading the cartridge rather than writing SRAM, which
-   cannot be done at all here.
+2. ~~**Import a `.sav`** from the desktop pilot, so the two halves share progress
+   rather than each playing the opening again.~~ Done, in both directions. The
+   guess about how was right: SRAM cannot be written, so bringing a save in
+   means writing the library's per-cartridge IndexedDB record and re-loading the
+   cartridge — which is also how loading a slot works, and why both leave you at
+   the title screen's CONTINUE.
 3. ~~**Port the collision map and pathfinding.**~~ ~~It is what makes Pokémon
    Center healing, and therefore unattended grinding, possible.~~ ~~The
    remaining work there is the route between maps rather than the route across
