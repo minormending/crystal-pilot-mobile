@@ -491,6 +491,48 @@ Two bugs surfaced while measuring that, both from walking into people:
   matches the disassembly's `object_event` lists on Route 29 and Route 30, in
   order.
 
+## Colour
+
+One palette, no switcher, named by the job each colour does.
+
+There is no palette switcher on purpose, and the reasons are worth writing down
+because the idea is appealing until you check it. For the *screen*, it is not
+available and would not help: this ROM's header reads `0xc0`, Game Boy Color
+only, so Crystal supplies its own colours and uses them to tell things apart —
+a DMG green wash would destroy information, and the core exposes no palette API
+to do it with anyway. For the *interface*, a switcher multiplies a palette
+rather than resolving one, and this palette had four measurable failures to
+resolve first. A second theme would have doubled the work of fixing them.
+
+What was actually wrong:
+
+* **Ordinary buttons were filled with `--panel`** — the exact colour of the card
+  holding them, 1.00:1 — and leaned on a 1.27:1 border to be visible at all.
+  The comment in that stylesheet already said *"a button the same colour as its
+  container reads as a label"*, and applied it only to the D-pad keys. `--raise`
+  is that lesson applied to everything pressable.
+* **White on the accent was 3.80:1**, so the label on every Start button in the
+  app failed. `--action` at `#4269c9` passes at 5.13:1 and still steps clear of
+  a card at 3.04:1. Darker blues pass more easily and go muddy.
+* **Stop read at 3.93:1** — the one control you want in a hurry.
+* **Select and Start read at 4.41:1**: `--dim` is legible on the page and on a
+  card, but not on a raised key, which is where those two live. They have their
+  own ink now.
+
+And one thing that was not a contrast problem at all: **`--accent` meant six
+unrelated things** — the primary action, a selected species, a selected level, a
+held key, where you tapped, and something running. When everything important is
+the same blue, blue has stopped signalling anything. Filled controls that carry
+a label are `--action`; `--accent` is now only used where there is no text on it
+(the running dot, the slider, links); and where you tapped is `--mark`, a warm
+amber, deliberately not a control colour — as the accent blue it read as one
+more button sitting on the map.
+
+Every pair is checked: no text combination under 4.5:1, no meaningful edge under
+3:1. Removing the old under-the-screen `.speed` block also fixed a cascade
+collision it was causing — it still set `margin-top:10px`, which the header rule
+did not override, so the header's speed control carried a stray margin.
+
 ## Controls
 
 Eight on-screen buttons: the D-pad, A, B, Select and Start. **Press and hold** —
