@@ -107,6 +107,13 @@ export class GameState {
       curPocket: b(wram, a.curPocket),
       curItem: b(wram, a.curItem),
       windowOpen: b(wram, a.windowStack) > 0,
+      // Which menu is drawn, not just where its cursor is. The battle menu and
+      // the pack both park the cursor at (1, 1), so the cursor alone cannot
+      // tell them apart -- and mistaking one for the other is what made a
+      // thrown ball look like a Pokemon breaking free. Measured: the battle
+      // menu is 34 items with its box at row 12, the pack is 5 at row 1.
+      menuItems: b(wram, a.menuItems),
+      menuTop: b(wram, a.menuTop),
     };
   }
 

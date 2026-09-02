@@ -7,6 +7,7 @@ import { CollisionMap } from './collision.js';
 import { Nav } from './nav.js';
 import { RomData, normalise } from './romdata.js';
 import { Bootstrap } from './bootstrap.js';
+import { World } from './world.js';
 
 const $ = (s) => document.querySelector(s);
 const PARAMS = new URLSearchParams(location.search);
@@ -20,12 +21,15 @@ const AUTOSTART = PARAMS.has('autostart');
 const gb = new GameBoy();
 let symbols = null, state = null, tasks = null, romBytes = null;
 let collision = null, nav = null, romdata = null, boot = null;
+let world;
 let huntWanted = null;
 let ballId = null;
 // Frames advanced per animation frame while nobody is driving. The steps are
 // powers of two because that is how it reads: 1x, 2x, 4x... and the last one is
 // "as fast as it goes", which on a phone lands somewhere short of the label.
 const SPEEDS = [1, 2, 4, 8, 16];
+// How long an idle-loop step may be outstanding before it is treated as lost.
+const LOST_STEP_MS = 1000;
 let speed = 1;
 let running = false, target = 5;
 
@@ -48,7 +52,8 @@ async function maybeStart() {
   tasks = new Tasks(gb, state, progress, romdata);
   collision = new CollisionMap(symbols, gb);
   nav = new Nav(gb, symbols);
-  boot = new Bootstrap(gb, state, tasks, collision, nav, progress);
+  world = new World(symbols, gb);
+  boot = new Bootstrap(gb, state, tasks, collision, nav, progress, world);
   A_MARK = {
     x: symbols.addr('wXCoord'), y: symbols.addr('wYCoord'),
     offX: symbols.addr('wPlayerBGMapOffsetX'),
@@ -120,14 +125,97 @@ async function awaitWorld() {
  * one is running to avoid two things stepping the same core.
  */
 function startLoop() {
-  let stepping = false;
-  const tick = async () => {
-    requestAnimationFrame(tick);
-    if (running || stepping || !gb.ready) return;
+  let stepping = false, since = 0, stepId = 0, generation = 0;
+  const tick = async (mine) => {
+    // A newer chain has taken over; this one is a leftover and stops here.
+    if (mine !== generation) return;
+    requestAnimationFrame(() => tick(mine));
+    if (running || !gb.ready) return;
+    // A step that never comes back would hold this flag for good, and the loop
+    // is then dead for the rest of the session. Belt and braces next to the
+    // re-arming below -- that fixes the chain the loop actually lost, this
+    // covers a step going missing on its own, which the visibility handler
+    // could not help with.
+    //
+    // A step is a handful of frames, so one still outstanding after a second is
+    // not slow, it is lost. The id makes sure a stale step finishing later
+    // cannot clear the flag belonging to the step that replaced it.
+    if (stepping) {
+      if (performance.now() - since < LOST_STEP_MS) return;
+      stepping = false;
+    }
     stepping = true;
-    try { await gb.run(speed); } finally { stepping = false; }
+    since = performance.now();
+    const step = ++stepId;
+    try { await gb.run(speed); } finally { if (stepId === step) stepping = false; }
   };
-  requestAnimationFrame(tick);
+
+  /**
+   * Start a fresh chain, retiring whatever was running.
+   *
+   * The loop used to re-arm itself only from inside its own callback, which
+   * meant it could not survive being backgrounded: an animation frame already
+   * pending when the page is hidden never arrives, so the chain was simply
+   * lost. The loop died on the first background and the game stayed frozen
+   * ever after -- including back in the foreground, where the only way out was
+   * a reload. Measured: zero animation frames scheduled in three seconds by a
+   * page whose loop was supposedly running.
+   *
+   * Re-arming on every visibility change fixes that, and the generation makes
+   * sure the transitions cannot leave two chains stepping the same core.
+   */
+  const restart = () => {
+    generation++;
+    const mine = generation;
+    requestAnimationFrame(() => tick(mine));
+  };
+  restart();
+  document.addEventListener('visibilitychange', restart);
+}
+
+/**
+ * Run one long job with the UI left in a sane state whichever way it ends.
+ *
+ * Each handler used to set `running`, disable its buttons, and clear both at the
+ * end -- which only happened if nothing threw. One exception and the button
+ * stayed disabled for good, the status sat frozen on "grinding to Lv13" with no
+ * error anywhere, and `running` stuck true so nothing else would start either.
+ * The app was finished until a reload. Measured: throwing from a task left
+ * #go disabled and the status mid-sentence.
+ *
+ * `busy` is what to say while it runs; `lock` are buttons to grey out alongside
+ * the one pressed. Returns the job's result, or null if it never got to run.
+ */
+async function runTask(id, busy, work, { lock = [], needsWorld = true } = {}) {
+  if (running) return null;
+  // Every one of these needs a game already running -- the buttons are on
+  // screen before that is true, and pressing one first got "no way from map
+  // 0.0 to Route 30", which is honest but not much help.
+  if (needsWorld && tasks && !(await tasks.snap()).worldLoaded) {
+    setStatus('start a game first', 'bad');
+    return null;
+  }
+  running = true;
+  if (tasks) tasks.cancelled = false;   // clear a Stop left over from last time
+  const buttons = [id, ...lock];
+  for (const b of buttons) $(b).disabled = true;
+  gb.releaseAll();
+  syncHeld();
+  setStatus(busy, 'busy');
+  try {
+    const res = await work();
+    setStatus(res.message, res.ok ? 'ok' : 'bad');
+    return res;
+  } catch (e) {
+    // Surfaced rather than swallowed: a task that dies silently looks
+    // indistinguishable from one still working.
+    setStatus(`${busy}: ${e && e.message ? e.message : e}`, 'bad');
+    return null;
+  } finally {
+    running = false;
+    for (const b of buttons) $(b).disabled = false;
+    refresh();
+  }
 }
 
 async function refresh() {
@@ -141,6 +229,10 @@ async function refresh() {
     : '(no party)';
   await refreshSpecies(s);
   if (romdata) refreshBag(s);
+  // Derived rather than left to whoever last touched it. runTask re-enables the
+  // buttons it greyed out, which would otherwise light this one up after a
+  // grind with no species chosen -- a button that looks ready and does nothing.
+  if (!huntWanted) $('#hunt').disabled = true;
   if (s.party.length && target <= s.party[0].level) {
     target = Math.min(100, s.party[0].level + 1);
     $('#lvl').textContent = target;
@@ -268,22 +360,23 @@ addEventListener('keyup', (e) => {
 addEventListener('blur', () => { gb.releaseAll(); syncHeld(); });
 
 $('#boot').onclick = async () => {
-  if (running || !boot) return;
-  running = true;
-  $('#boot').disabled = true;
-  gb.releaseAll();
-  syncHeld();
-  setStatus('starting a new game', 'busy');
-  const res = await boot.run('cyndaquil');
-  setStatus(res.message, res.ok ? 'ok' : 'bad');
+  if (!boot) return;
+  const res = await runTask('#boot', 'starting a new game',
+                            () => boot.run('cyndaquil'), { needsWorld: false });
   progress('');
-  running = false;
-  $('#boot').disabled = false;
-  if (res.ok) {
+  if (res && res.ok) {
     $('#bootrow').classList.add('hide');
     $('#bootnote').classList.add('hide');
   }
-  refresh();
+};
+
+// --- the errand that pays for the balls --------------------------------------
+// Nothing to catch with until this has been round: the Mart wants a Pokédex and
+// the free ball on Route 31 is behind a roadblock that only the egg lifts.
+$('#errand').onclick = async () => {
+  if (!boot) return;
+  await runTask('#errand', 'off to Mr. Pokémon\u2019s', () => boot.eggErrand());
+  progress('');
 };
 
 // --- hunt -------------------------------------------------------------------
@@ -343,52 +436,37 @@ async function refreshSpecies(s) {
     };
     list.appendChild(b);
   }
-  if (huntWanted && !here.includes(huntWanted)) {
-    huntWanted = null;
-    $('#hunt').disabled = true;
-    $('#hunt').textContent = 'Pick one to look for';
-  }
+  // Whatever was being hunted may not live here.
+  if (huntWanted && !here.includes(huntWanted)) huntWanted = null;
+  // Derived from what is chosen, rather than set only on the one transition that
+  // used to be handled. Going indoors clears the choice and leaves the label
+  // saying "Nothing to hunt here"; coming back out to a route re-drew the
+  // species but never took that back, so the button sat there disabled and
+  // contradicting the four names listed directly above it.
+  $('#hunt').disabled = !huntWanted;
+  $('#hunt').textContent = huntWanted
+    ? `Look for ${huntWanted}` : 'Pick one to look for';
 }
 
 $('#hunt').onclick = async () => {
-  if (running || !tasks || !huntWanted) return;
-  running = true;
-  tasks.cancelled = false;
-  $('#hunt').disabled = true;
-  $('#go').disabled = true;
-  gb.releaseAll();
-  syncHeld();
-  setStatus(`looking for ${huntWanted}`, 'busy');
-  const res = await tasks.hunt(huntWanted);
-  setStatus(res.message, res.ok ? 'ok' : 'bad');
+  if (!tasks || !huntWanted) return;
+  const res = await runTask('#hunt', `looking for ${huntWanted}`,
+    () => tasks.hunt(huntWanted, { regrass: () => boot.backToGrass() }),
+    { lock: ['#go'] });
   progress('');
-  $('#seen').textContent = res.seen && res.seen.size
+  $('#seen').textContent = res && res.seen && res.seen.size
     ? 'seen: ' + [...res.seen.entries()].sort((a, b) => b[1] - a[1])
         .map(([n, c]) => `${n} x${c}`).join(', ')
     : '';
-  running = false;
-  $('#hunt').disabled = false;
-  $('#go').disabled = false;
-  refresh();
 };
 
 $('#catch').onclick = async () => {
-  if (running || !tasks || !huntWanted || !ballId) return;
-  running = true;
-  tasks.cancelled = false;
-  $('#hunt').disabled = true;
-  $('#catch').disabled = true;
-  $('#go').disabled = true;
-  gb.releaseAll();
-  syncHeld();
-  setStatus(`after ${huntWanted}`, 'busy');
-  const res = await tasks.catch_(huntWanted, ballId);
-  setStatus(res.message, res.ok ? 'ok' : 'bad');
-  progress(Object.entries(res.stats).map(([k, v]) => `${k}=${v}`).join('  '));
-  running = false;
-  $('#hunt').disabled = false;
-  $('#go').disabled = false;
-  refresh();
+  if (!tasks || !huntWanted || !ballId) return;
+  const res = await runTask('#catch', `after ${huntWanted}`,
+    () => tasks.catch_(huntWanted, ballId, { regrass: () => boot.backToGrass() }),
+    { lock: ['#hunt', '#go'] });
+  progress(res
+    ? Object.entries(res.stats).map(([k, v]) => `${k}=${v}`).join('  ') : '');
 };
 
 $('#stopHunt').onclick = () => {
@@ -628,19 +706,17 @@ $('#screen').addEventListener('click', (e) => {
 });
 
 $('#go').onclick = async () => {
-  if (running || !tasks) return;
-  running = true;
-  tasks.cancelled = false;
-  $('#go').disabled = true;
-  gb.releaseAll();          // do not leave a held button pressed into the task
-  syncHeld();
-  setStatus(`grinding to Lv${target}`, 'busy');
-  const res = await tasks.grind(0, target);
-  setStatus(res.message, res.ok ? 'ok' : 'bad');
-  progress(Object.entries(res.stats).map(([k, v]) => `${k}=${v}`).join('  '));
-  running = false;
-  $('#go').disabled = false;
-  refresh();
+  if (!tasks) return;
+  // Handed a way to heal and a way back to grass, or it trains the party to
+  // death, or paces off the grass and starves. Where a Pokémon Center is, and
+  // where grass is, is map knowledge tasks.js deliberately does not carry.
+  const res = await runTask('#go', `grinding to Lv${target}`,
+    () => tasks.grind(0, target, {
+      heal: () => boot.healUp(),
+      regrass: () => boot.backToGrass(),
+    }), { lock: ['#hunt'] });
+  progress(res
+    ? Object.entries(res.stats).map(([k, v]) => `${k}=${v}`).join('  ') : '');
 };
 
 $('#stop').onclick = () => {
@@ -680,6 +756,7 @@ window.PILOT = {
   get tasks() { return tasks; },
   get state() { return state; },
   get collision() { return collision; },
+  get world() { return world; },
   get nav() { return nav; },
   get romdata() { return romdata; },
   get boot() { return boot; },

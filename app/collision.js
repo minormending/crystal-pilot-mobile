@@ -51,6 +51,11 @@ export const DELTA = {
 
 // The offsets the desktop version tries when the derived one does not
 // reproduce the game's own answer. (4, 4) is the one the map layout implies.
+// wMapObjects: sixteen 16-byte entries, coordinates offset by four.
+const MAP_OBJECT_COUNT = 16, MAP_OBJECT_BYTES = 0x10;
+const MAP_OBJECT_SPRITE = 1, MAP_OBJECT_Y = 2, MAP_OBJECT_X = 3;
+const MAP_OBJECT_ORIGIN = 4;
+
 const CANDIDATE_OFFSETS = [[4, 4], [0, 0], [4, 0], [0, 4], [2, 2], [6, 6], [5, 5], [3, 3]];
 
 export class CollisionMap {
@@ -65,6 +70,7 @@ export class CollisionMap {
       playerTile: symbols.addr('wPlayerTileCollision'),
       x: symbols.addr('wXCoord'),
       y: symbols.addr('wYCoord'),
+      objects: symbols.has('wMapObjects') ? symbols.addr('wMapObjects') : null,
     };
     this.permTable = symbols.addr('CollisionPermissionTable');
     this.permBank = symbols.bank('CollisionPermissionTable');
@@ -106,6 +112,32 @@ export class CollisionMap {
   permission(coll) {
     return this.gb.romByte(this.permBank,
                            (this.permTable + (coll & 0xff)) & 0xffff) & 0x0f;
+  }
+
+  /**
+   * Tiles that people and props are standing on.
+   *
+   * The collision map is terrain only, so an NPC reads as open floor and the
+   * planner walks into them. That is not a theoretical problem: Route 30 opens
+   * with Youngster Joey and two Rattata sprites filling the one-tile corridor
+   * north, and every plan routed straight through them.
+   *
+   * The list is what the map placed, not what is on screen -- an object whose
+   * event flag has hidden it is still an entry -- so these are treated as tiles
+   * to prefer avoiding rather than walls, and the caller drops them if that is
+   * the only way through. Index 0 is the player and is skipped. Coordinates are
+   * stored four higher than the map's own, which is checked against the player.
+   */
+  occupied(wram = this.wram) {
+    const taken = new Set();
+    if (this.a.objects === null) return taken;
+    for (let i = 1; i < MAP_OBJECT_COUNT; i++) {
+      const at = this.a.objects + i * MAP_OBJECT_BYTES;
+      if (!b(wram, at + MAP_OBJECT_SPRITE)) continue;
+      taken.add((b(wram, at + MAP_OBJECT_X) - MAP_OBJECT_ORIGIN) + ',' +
+                (b(wram, at + MAP_OBJECT_Y) - MAP_OBJECT_ORIGIN));
+    }
+    return taken;
   }
 
   // --- calibration -----------------------------------------------------------
@@ -170,6 +202,44 @@ export class CollisionMap {
     if (CollisionMap.isLedge(coll) && !allowLedge) return false;
     if (CollisionMap.isWarp(coll) && !allowWarp) return false;
     return true;
+  }
+
+  /**
+   * The reachable tile that lies furthest in a direction.
+   *
+   * Walking straight at the edge of a route does not work: Route 30 is
+   * fifty-four tiles top to bottom, winding, and fenced with ledges, so the
+   * opening at the far end is not reachable in one plan from the near end. But
+   * *something* further along always is, so the crossing advances to the best
+   * tile it can actually reach and asks again from there.
+   */
+  furthestToward(start, direction, { maxNodes = 20000 } = {}) {
+    const better = {
+      UP: (a, b) => a[1] < b[1], DOWN: (a, b) => a[1] > b[1],
+      LEFT: (a, b) => a[0] < b[0], RIGHT: (a, b) => a[0] > b[0],
+    }[direction];
+    if (!better) return null;
+
+    const key = (p) => p[0] + ',' + p[1];
+    const seen = new Set([key(start)]);
+    const queue = [start];
+    let head = 0, nodes = 0, best = start;
+    while (head < queue.length && nodes < maxNodes) {
+      const pos = queue[head++];
+      nodes++;
+      if (better(pos, best)) best = pos;
+      const hops = this.hopDirs(pos[0], pos[1]);
+      for (const d of DIRS) {
+        if (hops.includes(d)) continue;
+        const next = [pos[0] + DELTA[d][0], pos[1] + DELTA[d][1]];
+        const k = key(next);
+        if (seen.has(k)) continue;
+        if (!this.walkable(next[0], next[1])) continue;
+        seen.add(k);
+        queue.push(next);
+      }
+    }
+    return best;
   }
 
   // --- pathfinding -----------------------------------------------------------

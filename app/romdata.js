@@ -23,6 +23,10 @@ const GRASS_SLOTS_PER_TIME = 7;
 const GRASS_BLOCKS = 3;
 const GRASS_ENTRY_BYTES = 5 + GRASS_SLOTS_PER_TIME * GRASS_BLOCKS * 2;
 const TABLE_END = 0xff;
+// data/moves/moves.asm: animation, effect, power, type, accuracy, pp, chance.
+const MOVE_BYTES = 7;
+const MOVE_EFFECT = 1, MOVE_POWER = 2, MOVE_TYPE = 3, MOVE_PP = 5;
+const MOVE_COUNT = 251;
 
 /** The game's own character encoding, as far as names use it. */
 export function decodeText(bytes) {
@@ -54,6 +58,8 @@ export class RomData {
       .filter((n) => symbols.has(n))
       .map((n) => this.at(n));
     this._species = new Map();
+    this._moves = new Map();
+    this.moves = symbols.has('Moves') ? this.at('Moves') : null;
   }
 
   _read(bank, addr, length) {
@@ -109,6 +115,44 @@ export class RomData {
     if (!this._itemCache) this._itemCache = new Map();
     this._itemCache.set(id, name);
     return name;
+  }
+
+  /**
+   * A move's numbers, straight out of the cartridge.
+   *
+   * Needed to weaken something before throwing a ball at it: the point is to
+   * pick the *weakest* attack available, and without the power there is no way
+   * to tell which that is -- so the pilot hit as hard as it could and kept
+   * knocking out the Pokemon it was trying to catch.
+   */
+  move(id) {
+    if (!id || !this.moves || id > MOVE_COUNT) return null;
+    if (this._moves.has(id)) return this._moves.get(id);
+    const { bank, addr } = this.moves;
+    const at = addr + (id - 1) * MOVE_BYTES;
+    const info = {
+      id,
+      effect: this.gb.romByte(bank, at + MOVE_EFFECT),
+      power: this.gb.romByte(bank, at + MOVE_POWER),
+      type: this.gb.romByte(bank, at + MOVE_TYPE),
+      pp: this.gb.romByte(bank, at + MOVE_PP),
+    };
+    this._moves.set(id, info);
+    return info;
+  }
+
+  /**
+   * Does this move take HP off at all?
+   *
+   * Status moves carry a power of zero, which is the whole distinction: LEER
+   * and SMOKESCREEN would otherwise rank as the gentlest attacks available and
+   * weaken nothing, forever. The fixed-damage moves need no special case here,
+   * because Gen 2 stores their damage *as* their power -- DRAGON_RAGE reads 40
+   * and takes 40 -- so ranking by power sorts them about right anyway.
+   */
+  isChipMove(id) {
+    const m = this.move(id);
+    return !!m && m.power > 0;
   }
 
   /** Normalised name -> id, so a ball can be found by what it is called. */

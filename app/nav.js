@@ -25,6 +25,14 @@
 // the emulation it is watching.
 import { CollisionMap, DELTA } from './collision.js';
 
+/** The two sets as one, without disturbing either. */
+function union(a, b) {
+  if (!b || !b.size) return a;
+  const out = new Set(a);
+  for (const k of b) out.add(k);
+  return out;
+}
+
 export class Nav {
   constructor(gb, symbols) {
     this.gb = gb;
@@ -186,7 +194,27 @@ export class Nav {
         return { stopped: null, pos };
       }
 
-      const path = collision.pathTo(pos, goal, { avoid });
+      // Three tries, each giving up one assumption, because being too careful
+      // and being too trusting fail in opposite directions.
+      //
+      // First: route around both the tiles that have already refused a step and
+      // the tiles the map says someone is standing on. That is the plan you
+      // want when there is room to go around.
+      //
+      // Then drop the object list, which is what the map *placed* rather than
+      // what is really there -- an object hidden by its event flag still has an
+      // entry, and treating those as walls seals corridors that are open.
+      //
+      // Last, drop the refusals too. A single refused step used to be enough to
+      // end a walk: the tile went into `avoid` for good, and where the only way
+      // through is one tile wide -- Route 30's corridor north, say -- banning it
+      // made the goal unreachable, so the walk gave up before the three-refusal
+      // counter could ever notice it was the same obstacle twice. Whoever
+      // refused may also simply have been walking past.
+      const occupied = collision.occupied(wram);
+      const path = collision.pathTo(pos, goal, { avoid: union(avoid, occupied) })
+        || collision.pathTo(pos, goal, { avoid })
+        || (avoid.size ? collision.pathTo(pos, goal) : null);
       if (!path || !path.length) return { stopped: 'unreachable', pos };
 
       const res = await this.step(path[0]);
