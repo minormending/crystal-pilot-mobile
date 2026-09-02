@@ -437,6 +437,26 @@ implementations, one save file.
 `Load a .sav` brings one back the other way, so the desktop and the phone share
 a game in both directions.
 
+## A note on updates
+
+The app is a PWA with a service worker, and it fetches **network first, falling
+back to the cache**. That is the opposite of the usual offline-first advice, on
+purpose.
+
+Cache-first looked like it worked and was wrong. A returning visitor got the
+*previous* deploy's shell: the new worker installs and claims the page, but the
+load already in flight had been answered from the old cache, so the app was
+permanently one reload behind. Found on the deployed app, which served an
+`index.html` from before the save card existed while serving the new `sw.js`
+that listed it — so the save card simply was not there.
+
+The staleness was the visible half. The dangerous half was mixing: the match
+was not scoped to the current cache, and a module added in a new version is not
+in the old cache at all, so it gets fetched fresh. Old HTML against new
+JavaScript is a combination nobody has tested.
+
+It still works with no network — that is what the fallback is for.
+
 ## Slots, and undoing a job
 
 Three slots, plus one the pilot writes for itself before every job it runs.
