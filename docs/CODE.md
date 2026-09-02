@@ -12,7 +12,7 @@ Wherever there is more to the story — a measurement, a trap, an address, a
 reason the obvious approach does not work — it is folded away like this:
 
 <details>
-<summary><b>Senior detail:</b> what goes in these</summary>
+<summary><b>Advanced detail:</b> what goes in these</summary>
 
 The expansions hold the things that cost time to find out: exact memory
 addresses, the failure that motivated a design, numbers measured off the running
@@ -65,7 +65,7 @@ That loop is the whole program. Everything else is detail about how each box
 answers its question.
 
 <details>
-<summary><b>Senior detail:</b> why this and not screen-scraping</summary>
+<summary><b>Advanced detail:</b> why this and not screen-scraping</summary>
 
 Reading pixels would mean OCR on a 160×144 screen, and it could not answer the
 questions that actually matter — *what species is this*, *what is behind that
@@ -139,7 +139,7 @@ The dependency direction is the design: **nothing below `tasks.js` knows what a
 task is, and nothing below `bootstrap.js` knows the name of a single map.**
 
 <details>
-<summary><b>Senior detail:</b> the one boundary worth defending</summary>
+<summary><b>Advanced detail:</b> the one boundary worth defending</summary>
 
 `tasks.js` deliberately does **not** know where a Pokémon Center is, where grass
 is, or how to get anywhere. That knowledge lives in `bootstrap.js`, which owns
@@ -177,7 +177,7 @@ The important part of its interface is that **buttons are held, not tapped**:
 a short press in a new direction only turns you on the spot.
 
 <details>
-<summary><b>Senior detail:</b> two things about this core</summary>
+<summary><b>Advanced detail:</b> two things about this core</summary>
 
 **`_getWasmMemorySection` returns a copy, not a live view.** You cannot write to
 it and have the game notice. That is why nothing here injects items or party
@@ -217,7 +217,7 @@ One snapshot, many answers: `inBattle`, `party`, `pos`, `onGrass`,
 `worldLoaded`, `menu`, `balls`, and the enemy's HP.
 
 <details>
-<summary><b>Senior detail:</b> the signals that are not what they look like</summary>
+<summary><b>Advanced detail:</b> the signals that are not what they look like</summary>
 
 - **`worldLoaded` is `wMapStatus == 2`, not "is there a party".** The CONTINUE
   screen restores party and coordinates *before* the map exists, so waiting on
@@ -240,7 +240,7 @@ Species names, item names, wild-encounter tables, move power. All read out of
 the ROM, not shipped as a copy, so they cannot drift from the build being driven.
 
 <details>
-<summary><b>Senior detail:</b> table layouts, and the one that bites</summary>
+<summary><b>Advanced detail:</b> table layouts, and the one that bites</summary>
 
 - `PokemonNames` — fixed width 10, terminated by `$50`.
 - `ItemNames` — **variable length**, packed, each ended by `@`. Reading at a
@@ -269,7 +269,7 @@ pathfinding over the result. This is what turns walking from trial and error
 into a plan.
 
 <details>
-<summary><b>Senior detail:</b> the decode, and why one check is not enough</summary>
+<summary><b>Advanced detail:</b> the decode, and why one check is not enough</summary>
 
 `wOverworldMapBlocks` holds the loaded map's blocks; each tileset's per-quadrant
 collision values sit in ROM at `wTilesetCollisionAddress`. Indexing comes from
@@ -318,7 +318,7 @@ The map graph, read out of the cartridge: edge connections *and* warps, so it ca
 route out of a building rather than only across a route.
 
 <details>
-<summary><b>Senior detail:</b> lazily, because there is no map count in the ROM</summary>
+<summary><b>Advanced detail:</b> lazily, because there is no map count in the ROM</summary>
 
 Each map header points at a map-attributes block whose tail is a bitmask of
 connected sides plus one 12-byte struct per connection naming the map beyond it.
@@ -369,7 +369,7 @@ flowchart TD
 the collision map cannot see — an NPC — is standing in the way.
 
 <details>
-<summary><b>Senior detail:</b> why "settle" needs two things, not one</summary>
+<summary><b>Advanced detail:</b> why "settle" needs two things, not one</summary>
 
 The coordinates change when the game **commits** to a step, not when it
 finishes. Returning at that moment reports a tile the player has not reached,
@@ -413,7 +413,7 @@ Being too careful and being too trusting fail in opposite directions, so it
 tries both in order.
 
 <details>
-<summary><b>Senior detail:</b> the bug that produced the third tier</summary>
+<summary><b>Advanced detail:</b> the bug that produced the third tier</summary>
 
 Originally a tile that refused a step went into `avoid` **for good**. On Route
 30 the only corridor north is one tile wide, so banning it made the goal
@@ -465,7 +465,7 @@ flowchart TD
 Three things in that diagram were each a separate bug.
 
 <details>
-<summary><b>Senior detail:</b> all three, in the order they were found</summary>
+<summary><b>Advanced detail:</b> all three, in the order they were found</summary>
 
 **1. Openings are found centre-out, and filtered before sorting.** Sorting the
 whole edge and taking the nearest few tried eight walls in a row: New Bark's west
@@ -525,7 +525,7 @@ flowchart TD
 ```
 
 <details>
-<summary><b>Senior detail:</b> the two wrong versions, and what each cost</summary>
+<summary><b>Advanced detail:</b> the two wrong versions, and what each cost</summary>
 
 **Version one required `wBattleMenuCursorPosition == 0`.** That register holds
 the action *last chosen*, not whether the menu is waiting: it is 0 until the
@@ -580,7 +580,7 @@ flowchart TD
 ```
 
 <details>
-<summary><b>Senior detail:</b> four traps in that one flow</summary>
+<summary><b>Advanced detail:</b> four traps in that one flow</summary>
 
 **"Not in battle any more" is not "won".** Whiting out ends the battle too, and
 reading that as a win let a grind report five straight victories with the party
@@ -659,7 +659,7 @@ flowchart TD
 ```
 
 <details>
-<summary><b>Senior detail:</b> the learning, and why it is not per-encounter</summary>
+<summary><b>Advanced detail:</b> the learning, and why it is not per-encounter</summary>
 
 **The gentlest attack, not the first one.** That is why `romdata` reads the move
 table at all — leading with whatever is in slot one knocks out the thing being
@@ -738,7 +738,7 @@ flowchart TD
 ```
 
 <details>
-<summary><b>Senior detail:</b> why leg-counting gets this wrong</summary>
+<summary><b>Advanced detail:</b> why leg-counting gets this wrong</summary>
 
 Elm has a healing machine in his lab and it works from the moment you take a
 starter — `bg_event 2, 1` in `ElmsLab.asm`, gated on
@@ -780,7 +780,7 @@ flowchart TD
 ```
 
 <details>
-<summary><b>Senior detail:</b> the roadblock, and why Route 31 is the long way</summary>
+<summary><b>Advanced detail:</b> the roadblock, and why Route 31 is the long way</summary>
 
 Route 30's one-tile corridor north is filled by Youngster Joey at `(5,26)` with
 two Rattata sprites at `(5,24)` and `(5,25)`, all three conditional on
@@ -837,7 +837,7 @@ The pilot's jobs are a **list, not a toolbar**, because `runTask` opens with
 mutually exclusive choice.
 
 <details>
-<summary><b>Senior detail:</b> the measurements, and one lifecycle rule</summary>
+<summary><b>Advanced detail:</b> the measurements, and one lifecycle rule</summary>
 
 Measured on 375 × 812 with a game running, the page was **1537px** — 1.89
 screens — with the emulator at the top and everything that starts or stops the
@@ -882,7 +882,7 @@ you tapped, `--raise` for anything pressable. Dark is the base; light is a real
 second palette, not an inversion. The control is three-state: auto, light, dark.
 
 <details>
-<summary><b>Senior detail:</b> what the role split fixed</summary>
+<summary><b>Advanced detail:</b> what the role split fixed</summary>
 
 `--accent` used to mean six unrelated things: the primary action, a selected
 species, a selected level, a held key, where you tapped, and something running.
@@ -955,7 +955,7 @@ git config core.hooksPath .githooks
 ```
 
 <details>
-<summary><b>Senior detail:</b> what this can and cannot tell you</summary>
+<summary><b>Advanced detail:</b> what this can and cannot tell you</summary>
 
 It checks that the prose was *looked at* since the code changed. It cannot check
 that the prose is correct — nothing can, short of a human reading both.

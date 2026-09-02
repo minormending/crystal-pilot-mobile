@@ -29,7 +29,7 @@ the interface's two modes fit together.
 
 It is written for someone who has not seen the codebase before, with the harder
 material — addresses, measurements, and the failures that motivated a design —
-folded into collapsible *Senior detail* sections so the main thread stays
+folded into collapsible *Advanced detail* sections so the main thread stays
 readable.
 
 Sections that describe code carry a hash of the files they cover, so
