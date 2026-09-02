@@ -20,6 +20,23 @@ ROM and played through the intro on its own. The header reads `map 24.7` —
 `PLAYERS_HOUSE_2F`, the bedroom — which is exactly where the desktop pilot's
 bootstrap lands. Same address, same value, different emulator.
 
+## The code
+
+**[docs/CODE.md](docs/CODE.md)** explains the code and the reasoning inside it,
+with mermaid diagrams for the decision trees — how a step is taken, how a walk
+is planned, how a map crossing works, how a battle and a catch play out, and how
+the interface's two modes fit together.
+
+It is written for someone who has not seen the codebase before, with the harder
+material — addresses, measurements, and the failures that motivated a design —
+folded into collapsible *Senior detail* sections so the main thread stays
+readable.
+
+Sections that describe code carry a hash of the files they cover, so
+`tools/docs-check` can name the ones that need re-reading after a change. A
+pre-commit hook runs it; enable it once per clone with
+`git config core.hooksPath .githooks`.
+
 ## How the options actually compared
 
 Measured rather than guessed, on an M-series Mac:
