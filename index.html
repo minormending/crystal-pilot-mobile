@@ -142,8 +142,41 @@
   .mon .hp::after{content:"";position:absolute;top:0;bottom:0;left:25%;
                   width:1px;background:rgba(0,0,0,.45)}
   .mon .fnt{color:var(--bad);font-weight:700;font-size:11px;letter-spacing:.08em}
-  .stepper{display:flex;align-items:center;gap:10px}
-  .stepper .v{font-size:28px;font-weight:700;min-width:2.4em;text-align:center}
+  /* The pilot's jobs, as a list rather than a toolbar.
+     runTask opens with `if (running) return null`, so only one job can ever be
+     underway: these are not independent buttons, they are one mutually
+     exclusive choice, and a row of buttons is the wrong shape for that. The old
+     arrangement kept the fiction by hand -- each handler carried a list of the
+     others to grey out, and the lists disagreed -- and content-sized flex rows
+     gave the four actions four different widths (207, 110, 167, 86) inside a
+     351px card, which made Catch the smallest target on screen.
+     Rows with state, not a stack of filled buttons: a name, what it will
+     actually do, and one small affordance. Only the ready job takes the
+     accent, because a list where everything shouts is worse than the grid. */
+  .job{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;
+       padding:11px 0;border-top:1px solid var(--line)}
+  .job:first-of-type{border-top:0;padding-top:2px}
+  .job .what{min-width:0}
+  .job .jname{display:block;font-size:15px;font-weight:600}
+  .job .jstate{display:block;font-family:ui-monospace,Menlo,monospace;
+               font-size:11.5px;color:var(--dim);margin-top:2px;
+               white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  button.jgo{flex:0 0 auto;min-height:42px;padding:10px 20px;font-size:13px}
+  .job.blocked .jname{color:var(--dim)}
+
+  /* Both jobs above share this one choice, so it is labelled like a parameter
+     rather than left to sit under Catch looking like part of it. */
+  .param{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:14px}
+  .param .chips{flex:1 1 auto}
+
+  /* Level target: the numbers people actually pick, relative to the party,
+     instead of four buttons and up to four taps to say "Lv10". */
+  .levels{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:12px}
+  .levels .lvlabel{color:var(--dim);font-size:12px;letter-spacing:.06em;
+                   text-transform:uppercase;font-weight:600;flex:0 0 auto}
+  .levels button{flex:0 1 auto;min-height:40px;padding:9px 14px;font-size:14px}
+  .levels button.on{background:var(--accent);border-color:var(--accent);
+                    font-weight:600}
 
   /* --- the gamepad -----------------------------------------------------
      Laid out like the hardware, because that is what hands expect: cross on
@@ -335,33 +368,51 @@
       Keyboard: arrows, Z/X for A/B, Enter for Start, Shift for Select.</footer>
   </div>
   <div class="card hide" id="huntcard">
-    <h2>Hunt &amp; catch</h2>
-    <div class="chips" id="species"></div>
-    <div class="row">
-      <button class="primary" id="hunt" disabled>Pick one to look for</button>
-      <button id="catch" disabled>Catch</button>
+    <h2>Send the pilot</h2>
+
+    <div class="job" id="job-grind">
+      <div class="what">
+        <span class="jname">Grind</span>
+        <span class="jstate" id="grindstate">—</span>
+      </div>
+      <button class="jgo primary" id="go">Start</button>
     </div>
-    <div class="row quiet">
-      <button id="errand">Fetch Poké Balls</button>
+
+    <div class="job" id="job-hunt">
+      <div class="what">
+        <span class="jname">Hunt</span>
+        <span class="jstate" id="huntstate">pick something below</span>
+      </div>
+      <button class="jgo" id="hunt" disabled>Start</button>
     </div>
-    <div class="seen" id="bag"></div>
+
+    <div class="job" id="job-catch">
+      <div class="what">
+        <span class="jname">Catch</span>
+        <span class="jstate" id="catchstate">pick something below</span>
+      </div>
+      <button class="jgo" id="catch" disabled>Start</button>
+      <button class="jgo hide" id="errand">Get</button>
+    </div>
+
+    <div class="param">
+      <span class="lvlabel">Look for</span>
+      <div class="chips" id="species"></div>
+    </div>
+    <div class="levels" id="levels" hidden>
+      <span class="lvlabel">Grind to</span>
+      <button data-target="+2">+2</button>
+      <button data-target="+5">+5</button>
+      <button data-target="10">Lv10</button>
+      <button data-target="20">Lv20</button>
+      <span class="v" id="lvl" hidden>5</span>
+    </div>
     <div class="seen" id="seen"></div>
-    <footer>Both walk the grass and run from everything else. Hunt hands you the
-      battle; catch throws balls at it and counts them out of the bag. Only what
-      this route has at this hour is offered.</footer>
   </div>
 
   <div class="card hide" id="panel">
-    <h2>Grind</h2>
-    <div class="mono" id="party" style="margin-bottom:10px"></div>
-    <div class="stepper">
-      <button data-step="-5">−5</button><button data-step="-1">−</button>
-      <span class="v" id="lvl">5</span>
-      <button data-step="1">+</button><button data-step="5">+5</button>
-    </div>
-    <div class="row">
-      <button class="primary" id="go">Start grinding</button>
-    </div>
+    <h2>Party</h2>
+    <div id="party"></div>
   </div>
 
 </main>

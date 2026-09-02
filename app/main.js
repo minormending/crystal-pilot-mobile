@@ -32,6 +32,7 @@ const SPEEDS = [1, 2, 4, 8, 16];
 const LOST_STEP_MS = 1000;
 let speed = 1;
 let running = false, target = 5;
+let lastLead = null;   // the lead's level, for the relative grind presets
 
 const setStatus = (text, kind = '') => {
   $('#dot').className = 'dot ' + kind;
@@ -220,7 +221,7 @@ function setMode(piloting) {
   $('#stopRun').classList.toggle('hide', !piloting);
 }
 
-async function runTask(id, busy, work, { lock = [], needsWorld = true } = {}) {
+async function runTask(id, busy, work, { needsWorld = true } = {}) {
   if (running) return null;
   // Every one of these needs a game already running -- the buttons are on
   // screen before that is true, and pressing one first got "no way from map
@@ -235,8 +236,11 @@ async function runTask(id, busy, work, { lock = [], needsWorld = true } = {}) {
   // said is the most useful thing on screen once it stops.
   progress('');
   if (tasks) tasks.cancelled = false;   // clear a Stop left over from last time
-  const buttons = [id, ...lock];
-  for (const b of buttons) $(b).disabled = true;
+  // No list of other buttons to grey out. Only one job can be underway, and
+  // piloting mode makes the rest inert -- which is what the hand-maintained
+  // lock lists were imitating, inconsistently: grinding locked Hunt but not
+  // Catch or the errand; catching locked Hunt and grinding but not the errand.
+  $(id).disabled = true;
   gb.releaseAll();
   syncHeld();
   setStatus(busy, 'busy');
@@ -252,9 +256,51 @@ async function runTask(id, busy, work, { lock = [], needsWorld = true } = {}) {
   } finally {
     running = false;
     setMode(false);
-    for (const b of buttons) $(b).disabled = false;
+    $(id).disabled = false;
     refresh();
   }
+}
+
+/**
+ * Say what each job would do if you started it now.
+ *
+ * The state line is the point of the row. A disabled primary button reading
+ * "Pick one to look for" was an instruction wearing a button's clothes, and it
+ * sat below the chips that were the actual control.
+ */
+function paintJobs(s) {
+  const lead = s.party[0];
+  const leadName = lead && romdata ? romdata.speciesName(lead.species) : null;
+
+  $('#grindstate').textContent = lead
+    ? `${leadName} \u2192 Lv${target}`
+    : 'no party yet';
+  $('#go').disabled = !lead;
+  $('#job-grind').classList.toggle('blocked', !lead);
+  $('#levels').hidden = !lead;
+
+  $('#huntstate').textContent = huntWanted
+    ? `${huntWanted} \u00b7 here now`
+    : 'pick something below';
+  $('#hunt').disabled = !huntWanted;
+  $('#job-hunt').classList.toggle('blocked', !huntWanted);
+
+  // Catch owns its own prerequisite. The errand used to be a peer button in
+  // this card, below Catch, next to bag advice that contradicted it -- and it
+  // is a one-time thing anyway: run it twice and it returns "already carrying
+  // 5 ball(s)" without moving. So it is Catch's empty state instead.
+  const balls = (s.balls || []).filter(([, q]) => q > 0);
+  const ballName = balls.length && romdata ? romdata.itemName(balls[0][0]) : null;
+  const needsBalls = !ballId;
+  $('#errand').classList.toggle('hide', !needsBalls);
+  $('#catch').classList.toggle('hide', needsBalls);
+  $('#catchstate').textContent = needsBalls
+    ? 'no Poké Balls yet — fetch them first'
+    : huntWanted
+      ? `${huntWanted} \u00b7 ${ballName}`
+      : 'pick something below';
+  $('#catch').disabled = !(ballId && huntWanted);
+  $('#job-catch').classList.toggle('blocked', needsBalls || !huntWanted);
 }
 
 /** One party member: who it is, and how close it is to fainting. */
@@ -285,14 +331,12 @@ async function refresh() {
     : '<span class="seen">no party yet</span>';
   await refreshSpecies(s);
   if (romdata) refreshBag(s);
-  // Derived rather than left to whoever last touched it. runTask re-enables the
-  // buttons it greyed out, which would otherwise light this one up after a
-  // grind with no species chosen -- a button that looks ready and does nothing.
-  if (!huntWanted) $('#hunt').disabled = true;
+  // Remembered so the relative presets have something to be relative to.
+  lastLead = s.party.length ? s.party[0].level : null;
   if (s.party.length && target <= s.party[0].level) {
     target = Math.min(100, s.party[0].level + 1);
-    $('#lvl').textContent = target;
   }
+  paintJobs(s);
 }
 
 // Every Game Boy cartridge starts its header logo with these bytes at 0x104.
@@ -348,10 +392,20 @@ $('#symFile').addEventListener('change', async (e) => {
   maybeStart();
 });
 
-document.querySelectorAll('[data-step]').forEach((b) => {
+// The targets people actually pick, two of them relative to the party, rather
+// than four buttons and up to four taps to say "Lv10".
+document.querySelectorAll('[data-target]').forEach((b) => {
   b.onclick = () => {
-    target = Math.max(2, Math.min(100, target + Number(b.dataset.step)));
-    $('#lvl').textContent = target;
+    const spec = b.dataset.target;
+    const lead = lastLead || 5;
+    target = spec.startsWith('+')
+      ? Math.min(100, lead + Number(spec.slice(1)))
+      : Number(spec);
+    target = Math.max(2, Math.min(100, target));
+    for (const other of $('#levels').querySelectorAll('button')) {
+      other.classList.toggle('on', other === b);
+    }
+    refresh();
   };
 });
 
@@ -451,12 +505,6 @@ function refreshBag(s) {
   }
   if (!pick) pick = carried[0] || null;
   ballId = pick ? pick[0] : null;
-  $('#bag').textContent = carried.length
-    ? 'bag: ' + carried.map(([id, q]) => `${romdata.itemName(id)} x${q}`).join(', ')
-    : 'bag: no Poke Balls — buy some at a Mart';
-  $('#catch').disabled = !(ballId && huntWanted);
-  $('#catch').textContent = ballId && huntWanted
-    ? `Catch with ${romdata.itemName(ballId)}` : 'Catch';
 }
 
 async function refreshSpecies(s) {
@@ -472,8 +520,6 @@ async function refreshSpecies(s) {
     list.innerHTML = '<span class="seen">nothing wild appears here — ' +
                      'stand on a route with grass</span>';
     huntWanted = null;
-    $('#hunt').disabled = true;
-    $('#hunt').textContent = 'Nothing to hunt here';
     return;
   }
   for (const name of here) {
@@ -482,31 +528,18 @@ async function refreshSpecies(s) {
     b.onclick = () => {
       huntWanted = name;
       for (const other of list.children) other.classList.toggle('on', other === b);
-      $('#hunt').disabled = false;
-      $('#hunt').textContent = `Look for ${name}`;
-      $('#catch').disabled = !ballId;
-      $('#catch').textContent = ballId
-        ? `Catch with ${romdata.itemName(ballId)}` : 'Catch';
+      refresh();
     };
     list.appendChild(b);
   }
   // Whatever was being hunted may not live here.
   if (huntWanted && !here.includes(huntWanted)) huntWanted = null;
-  // Derived from what is chosen, rather than set only on the one transition that
-  // used to be handled. Going indoors clears the choice and leaves the label
-  // saying "Nothing to hunt here"; coming back out to a route re-drew the
-  // species but never took that back, so the button sat there disabled and
-  // contradicting the four names listed directly above it.
-  $('#hunt').disabled = !huntWanted;
-  $('#hunt').textContent = huntWanted
-    ? `Look for ${huntWanted}` : 'Pick one to look for';
 }
 
 $('#hunt').onclick = async () => {
   if (!tasks || !huntWanted) return;
   const res = await runTask('#hunt', `looking for ${huntWanted}`,
-    () => tasks.hunt(huntWanted, { regrass: () => boot.backToGrass() }),
-    { lock: ['#go'] });
+    () => tasks.hunt(huntWanted, { regrass: () => boot.backToGrass() }));
   $('#seen').textContent = res && res.seen && res.seen.size
     ? 'seen: ' + [...res.seen.entries()].sort((a, b) => b[1] - a[1])
         .map(([n, c]) => `${n} x${c}`).join(', ')
@@ -516,8 +549,7 @@ $('#hunt').onclick = async () => {
 $('#catch').onclick = async () => {
   if (!tasks || !huntWanted || !ballId) return;
   const res = await runTask('#catch', `after ${huntWanted}`,
-    () => tasks.catch_(huntWanted, ballId, { regrass: () => boot.backToGrass() }),
-    { lock: ['#hunt', '#go'] });
+    () => tasks.catch_(huntWanted, ballId, { regrass: () => boot.backToGrass() }));
   progress(res
     ? Object.entries(res.stats).map(([k, v]) => `${k}=${v}`).join('  ') : '');
 };
@@ -766,7 +798,7 @@ $('#go').onclick = async () => {
     () => tasks.grind(0, target, {
       heal: () => boot.healUp(),
       regrass: () => boot.backToGrass(),
-    }), { lock: ['#hunt'] });
+    }));
   progress(res
     ? Object.entries(res.stats).map(([k, v]) => `${k}=${v}`).join('  ') : '');
 };
