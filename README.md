@@ -76,8 +76,9 @@ Proven, and visible in the screenshot:
 - **a hunt**: found a RATTATA after five encounters, running from the four it
   did not want
 
-- **healing**: walks into Cherrygrove's Pokémon Center, talks to the nurse and
-  comes back out with the party at full HP
+- **healing**: two places, and it works out which is nearer — Elm's computer in
+  his lab, or the nurse in Cherrygrove's Pokémon Center — then comes back to
+  where it was working with the party at full HP
 
 **Catching is now proven too**, from a fresh ROM with nothing carried in:
 starter, grind to Lv8 healing itself at Cherrygrove when it ran low, the egg
@@ -600,6 +601,31 @@ run log now all sit above the fold — where before the fold landed inside the p
 and both Stops were some 500px below it. It got shorter while gaining a run log
 and three job state lines, because the duplicate Stop, two prose footers and the
 stepper all went.
+
+## Two places to heal
+
+Elm has a healing machine in his lab, and it works from the moment you take a
+starter — `bg_event 2, 1` in `ElmsLab.asm`, gated on
+`EVENT_GOT_A_POKEMON_FROM_ELM`, a yes/no and then `special HealParty`. No
+Pokédex, no Pokémon Center, no fee. It is easy to miss, and the pilot used to
+walk to Cherrygrove for everything.
+
+Which of the two is nearer is not a fixed answer. Elm's lab is in New Bark, the
+Center is in Cherrygrove, and Route 29 runs between them — so it flips depending
+on which end of that route you are standing on, which happens to be the route
+the pilot spends nearly all of its time on.
+
+Counting legs of the world graph gets this wrong, and wrong in the common case.
+By legs the Center is one hop from Route 29 and the lab is two, so the Center
+wins everywhere. But a hop west means walking the whole sixty-tile width of the
+route through grass, while the lab — from the eastern end, where the bootstrap
+leaves you — is six tiles and a door. So the cost is the tiles to the edge the
+route would actually leave by, plus a flat charge for each further leg.
+Measured standing at x=53 of 60 on Route 29, that picks the lab at a cost of 31
+against the Center's 53, and healing a fainted party took 1.8 seconds.
+
+Below about x=25 the answer swings back to Cherrygrove, which is the point of
+computing it rather than picking a favourite.
 
 ## Colour
 

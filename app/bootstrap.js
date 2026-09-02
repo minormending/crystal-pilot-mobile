@@ -67,12 +67,20 @@ const LAB_EXIT = [4, 11];          // ElmsLab, back out to the town
 // ElmsLab object_events: the three balls sit in a row at y=4.
 const STARTER_BALL_X = { cyndaquil: 6, totodile: 7, chikorita: 8 };
 const ELM_TALK_FROM = [5, 3];      // stand here, face up, and Elm is above
+// ElmsLab bg_events: the healing machine at (2, 1), read by facing it. It is
+// gated only on EVENT_GOT_A_POKEMON_FROM_ELM, so it works from the moment you
+// take a starter -- no Pokedex, and no walking to a Pokemon Center.
+const ELM_HEAL_FROM = [2, 2];      // stand here, face up, and the machine is above
 
 // Encounter tiles, the same values CheckGrassCollision uses.
 const GRASS = new Set([0x10, 0x14, 0x18, 0x1c]);
 
 // wBattleMode: 1 is a wild Pokemon, 2 is a trainer.
 const TRAINER_BATTLE = 2;
+// What a leg beyond the first is worth in tiles, when weighing up two routes.
+// A door is cheap and a route crossing is not, and only the leg we are standing
+// on can actually be measured.
+const LEG_COST = 25;
 
 export class Bootstrap {
   constructor(gb, state, tasks, collision, nav, say = () => {}, world = null) {
@@ -464,18 +472,91 @@ export class Bootstrap {
    * somebody who knows where a Pokemon Center *is*, which is map knowledge
    * tasks.js deliberately does not carry.
    */
+  /**
+   * Heal at the computer in Elm's lab.
+   *
+   * Available from the moment you have a starter, which is the whole point:
+   * the Pokemon Center in Cherrygrove is a town away, and for anything
+   * happening on Route 29 or in New Bark this is next door. `HealParty` behind
+   * a yes/no, the same as the nurse, so the presses are the same shape.
+   */
+  async healAtElm() {
+    if (await this.mapKey() !== ELMS_LAB) {
+      if (!await this.through(LAB_DOOR, ELMS_LAB)) return false;
+    }
+    await this.runScripts();
+    for (let attempt = 0; attempt < 3; attempt++) {
+      await this.nav.walkTo(this.collision, ELM_HEAL_FROM, this.walkOpts);
+      await this.nav.step('UP');
+      await this.gb.press('A', 6, 12);
+      await this.runScripts();          // "shall I heal them?" defaults to yes
+      const s = await this.snap();
+      if (s.party.length && s.party.every((m) => m.hp === m.maxHp)) break;
+    }
+    const s = await this.snap();
+    const healed = s.party.length > 0 && s.party.every((m) => m.hp === m.maxHp);
+    if (healed) this.say("healed at Elm's computer");
+    await this.through(LAB_EXIT, NEW_BARK_TOWN);
+    return healed;
+  }
+
+  /**
+   * The nearer of the two places that will heal.
+   *
+   * Elm's lab is in New Bark, the Pokemon Center is in Cherrygrove, and Route
+   * 29 runs between them -- so the answer flips depending on which end of that
+   * route you are standing on, which is exactly the route the pilot spends its
+   * time on.
+   *
+   * Counting legs alone gets this wrong, and wrong in the common case. By legs
+   * the Center is one hop from Route 29 and the lab is two, so the Center wins
+   * everywhere -- but a "hop" west means walking the whole sixty-tile width of
+   * the route through grass, while the lab, from the eastern end where the
+   * bootstrap leaves you, is six tiles and a door. So the cost is the tiles to
+   * the edge we would actually leave by, plus a flat charge per further leg.
+   */
+  async nearestHeal(from) {
+    const options = [
+      { map: ELMS_LAB, heal: () => this.healAtElm() },
+      { map: CHERRYGROVE_CITY, heal: () => this.heal() },
+    ];
+    const fallback = options[1];
+    if (!this.world) return fallback;
+
+    const wram = await this.settled();
+    let best = null;
+    for (const option of options) {
+      if (from === option.map) return { ...option, cost: 0 };
+      const route = this.world.route(from, option.map);
+      if (route === null) continue;
+      let cost = (route.length - 1) * LEG_COST;
+      // How far to the edge this route leaves by. Only the first leg is
+      // measurable from here -- the rest are charged flat.
+      const first = route[0];
+      if (wram && first && first.kind === 'edge') {
+        const [w, h] = this.collision.mapSize();
+        const at = this.collision.playerPos(wram);
+        cost += { LEFT: at[0], RIGHT: w - 1 - at[0],
+                  UP: at[1], DOWN: h - 1 - at[1] }[first.dir] ?? LEG_COST;
+      }
+      if (!best || cost < best.cost) best = { ...option, cost };
+    }
+    return best || fallback;
+  }
+
   async healUp() {
     const from = await this.mapKey();
-    if (from !== CHERRYGROVE_CITY) {
-      const there = await this.travelTo(CHERRYGROVE_CITY);
+    const where = await this.nearestHeal(from);
+    if (from !== where.map) {
+      const there = await this.travelTo(where.map);
       if (!there.ok) return false;
     }
-    const healed = await this.heal();
+    const healed = await where.heal();
     // And come back. Healing used to end standing in Cherrygrove, which has no
     // grass in it, so a grind that healed itself resumed in a town and stopped
     // on the next breath saying it could not find any wild Pokemon -- with a
     // full-health party, one map away from the route it had been working.
-    if (healed && from !== CHERRYGROVE_CITY && await this.mapKey() !== from) {
+    if (healed && await this.mapKey() !== from) {
       await this.travelTo(from);
     }
     return healed;
