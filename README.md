@@ -493,16 +493,21 @@ Two bugs surfaced while measuring that, both from walking into people:
 
 ## Colour
 
-One palette, no switcher, named by the job each colour does.
+Two palettes, named by the job each colour does. Dark is the base, because that
+is what this app is: a Game Boy screen looked at in the evening. Light is for
+the people whose phone is set that way.
 
-There is no palette switcher on purpose, and the reasons are worth writing down
-because the idea is appealing until you check it. For the *screen*, it is not
-available and would not help: this ROM's header reads `0xc0`, Game Boy Color
-only, so Crystal supplies its own colours and uses them to tell things apart —
-a DMG green wash would destroy information, and the core exposes no palette API
-to do it with anyway. For the *interface*, a switcher multiplies a palette
-rather than resolving one, and this palette had four measurable failures to
-resolve first. A second theme would have doubled the work of fixing them.
+There is no palette switcher for the *screen*, and that is deliberate: this
+ROM's header reads `0xc0`, Game Boy Color only, so Crystal supplies its own
+colours and uses them to tell things apart. A DMG green wash would destroy
+information, and the core exposes no palette API to do it with anyway.
+
+The interface theme is a different question, and the order mattered. A second
+theme multiplies a palette rather than resolving one, and this palette had four
+measurable failures in it — so those were fixed first, on one palette, and the
+light set was derived afterwards from the roles rather than from the old
+values. Doing it the other way round would have doubled the work and shipped
+both halves broken.
 
 What was actually wrong:
 
@@ -528,10 +533,30 @@ a label are `--action`; `--accent` is now only used where there is no text on it
 amber, deliberately not a control colour — as the accent blue it read as one
 more button sitting on the map.
 
-Every pair is checked: no text combination under 4.5:1, no meaningful edge under
-3:1. Removing the old under-the-screen `.speed` block also fixed a cascade
-collision it was causing — it still set `margin-top:10px`, which the header rule
-did not override, so the header's speed control carried a stray margin.
+Every pair is checked in both themes: no text combination under 4.5:1, no
+meaningful edge under 3:1. Removing the old under-the-screen `.speed` block also
+fixed a cascade collision it was causing — it still set `margin-top:10px`, which
+the header rule did not override, so the header's speed control carried a stray
+margin.
+
+Three things about light are not simply the dark values flipped:
+
+* **A pressable cannot be lighter than a white card.** On dark, `--raise` steps
+  up and carries the affordance on its own. On light it steps *down* and the
+  border does more of the work.
+* **The gamepad needs a bigger step than the buttons do**, because it is drawn
+  as one connected cross with no borders at all — the fill is the only thing
+  separating it from the card. `--key` stopped being an alias of `--raise` for
+  that reason. The first attempt gave each cell its own outline instead, which
+  worked and was wrong: it turned the cross back into the four loose boxes the
+  original CSS says it is not.
+* **`--mark` is identical in both.** Where you tapped sits on the game's own
+  picture, not on any surface of ours, so it is not the theme's business.
+
+The control is three-state — auto, light, dark — and lives in the card with
+*How this works* rather than the header. The header is for where you are and
+how fast the game is running; a theme is neither, and it is set once. Putting it
+there also overflowed 375px, wrapping the title and truncating the location.
 
 ## Controls
 

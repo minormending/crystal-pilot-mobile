@@ -34,6 +34,51 @@ let speed = 1;
 let running = false, target = 5;
 let lastLead = null;   // the lead's level, for the relative grind presets
 
+// --- colour theme -----------------------------------------------------------
+// Three states, not two: "auto" follows the phone, and the other two override
+// it. Dark is what the app is -- a Game Boy screen looked at in the evening --
+// so it is the base palette, and light is a real second one rather than an
+// inversion. A phone set to light still gets light by default; this exists so
+// that following the phone is not the same as being stuck with it.
+const THEMES = ['auto', 'light', 'dark'];
+const THEME_KEY = 'crystal-pilot-theme';
+let themeChoice = 'auto';
+
+function readTheme() {
+  // Private windows and cleared site data both throw rather than return null.
+  try {
+    const saved = localStorage.getItem(THEME_KEY);
+    if (THEMES.includes(saved)) return saved;
+  } catch (e) { /* no storage: auto is a fine answer */ }
+  return 'auto';
+}
+
+function applyTheme(choice) {
+  themeChoice = choice;
+  const root = document.documentElement;
+  if (choice === 'auto') root.removeAttribute('data-theme');
+  else root.setAttribute('data-theme', choice);
+  const btn = $('#theme');
+  if (btn) btn.textContent = choice;
+  // The address bar has its own copy of the ground colour, and the media-query
+  // pair in the head cannot know about an override.
+  const meta = $('#themecolor');
+  if (meta) {
+    const dark = choice === 'dark' || (choice === 'auto'
+      && matchMedia('(prefers-color-scheme: dark)').matches);
+    meta.setAttribute('content', dark ? '#16161c' : '#eef0f4');
+  }
+  try { localStorage.setItem(THEME_KEY, choice); } catch (e) { /* fine */ }
+}
+
+applyTheme(readTheme());
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+  if (themeChoice === 'auto') applyTheme('auto');   // refresh the address bar
+});
+$('#theme').onclick = () => {
+  applyTheme(THEMES[(THEMES.indexOf(themeChoice) + 1) % THEMES.length]);
+};
+
 const setStatus = (text, kind = '') => {
   $('#dot').className = 'dot ' + kind;
   $('#status').textContent = text;
