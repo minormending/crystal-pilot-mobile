@@ -296,10 +296,11 @@ never been tested at all. The two worst things found all session were here:
 * A step that never returns can no longer wedge the loop on its own either.
 
 Verified working while looking, and worth saying so because each was a candidate:
-the level stepper clamps to 2–100; keyboard input reaches the emulator including
-two keys at once; the species list tracks the map and the in-game clock; and a
-bag holding Ultra, Great and Poké Balls picks the Poké Ball — the cheapest that
-will do, so a better ball is not spent on a Rattata by accident.
+the level stepper clamped to 2–100 (the stepper has since been replaced by
+presets, for reasons in *Layout*); keyboard input reaches the emulator
+including two keys at once; the species list tracks the map and the in-game
+clock; and a bag holding Ultra, Great and Poké Balls picks the Poké Ball — the
+cheapest that will do, so a better ball is not spent on a Rattata by accident.
 
 Two things went the other way and are worth recording as *not* bugs, because
 both looked like one: the Catch button re-enables itself through `refreshBag`,
@@ -491,6 +492,95 @@ Two bugs surfaced while measuring that, both from walking into people:
   matches the disassembly's `object_event` lists on Route 29 and Route 30, in
   order.
 
+## Layout
+
+The app does two jobs and used to look identical doing both: you play it by
+hand, or you send the pilot off to work for ninety seconds. Measured on a
+375 × 812 viewport with a game running, the page was 1537px — 1.89 screens —
+with the emulator at the top and everything that starts or stops the pilot at
+the bottom. There was no scroll position from which you could watch the game and
+reach the thing that stops it.
+
+`main` was `display:block`, so source order was the only order. It is a column
+flex now and the order is a decision:
+
+| | directly under the screen | then |
+| --- | --- | --- |
+| **Playing** | the pad | status, the jobs, the party |
+| **Piloting** | the run state and Stop | the jobs, then the pad, dimmed |
+
+Playing puts the pad against the screen. Piloting gives that band to the run
+state instead and drops the pad below the fold, dimmed — pressing it would be
+fighting the pilot for the same emulator, so it should not look available. The
+switch is one class on `<body>`, set where `running` was already set: that flag
+had always existed and gated every handler, and nothing in the layout used it.
+
+Tap-to-walk deliberately does not switch modes. It sets `running`, because the
+idle loop must stand down and no job may start on top of it, but a walk lasts a
+couple of seconds and reordering the page under a thumb that just tapped it
+would cost more than the dimming is worth.
+
+### The pilot's jobs are a list, not a toolbar
+
+`runTask` opens with `if (running) return null`, so only one job can ever be
+underway. These were never four independent buttons — they are one mutually
+exclusive choice, and a row of buttons is the wrong shape for that. The old
+arrangement kept the fiction by hand, and the lists disagreed: grinding locked
+Hunt but not Catch or the errand; catching locked Hunt and grinding but not the
+errand. That bookkeeping is gone.
+
+It measured badly too. Content-sized flex rows gave the four actions four
+different widths — 207, 110, 167 and 86 — inside a 351px card, which made
+Catch, the most consequential thing in it, the smallest target on screen.
+
+Three rows now, each a name, what it would actually do, and one small
+affordance. Only the ready job takes the accent, because a list where everything
+shouts is worse than the grid it replaced:
+
+```
+Grind   CYNDAQUIL → Lv10          Start
+Hunt    HOPPIP · here now         Start
+Catch   no Poké Balls yet         Get
+```
+
+Catch owns its prerequisite. The errand used to be a peer button *below* Catch,
+beside bag advice that contradicted it — and it is a one-time thing anyway: run
+it twice and it returns *already carrying 5 ball(s)* without moving. It is
+Catch's empty state instead, so the row that says you need balls is the row that
+fetches them.
+
+Two other things went with it. *Pick one to look for* was a filled accent
+primary button that was disabled and did nothing, sitting below the chips that
+were the real control — the chips are the control, and the rows report readiness.
+And the level stepper, four buttons and up to four taps to say Lv10, became the
+targets people pick, two of them relative to the party's own level.
+
+### What the pilot is doing
+
+There were two Stop buttons, one per card, at 1181px and 1463px down the page —
+so during a ninety-second grind neither was on screen, and two identical buttons
+in different cards asked a question nobody should have to hold: *which one stops
+which thing.* There is one, under the screen, only while something runs.
+
+The pilot's account of itself was a single label that overwrote itself, with a
+second line left over from whatever ran before — "ready" sitting above a stale
+"finding grass". The errand walks four maps, heals twice and fights a rival, and
+all of it arrived as one string. It already emitted the right events and they
+were being thrown away.
+
+Three lines now, newest last, cleared when a run *starts* rather than when it
+finishes: the last thing the pilot said is the most useful thing on screen once
+it has stopped. Consecutive repeats collapse, because several legs say "heading
+left" and a stack of identical lines reads as being stuck rather than as making
+progress.
+
+Net effect, measured the same way: the page went from 1537px to 1424px and the
+pad card from 341px to 257px, and the screen, the pad, the status line and the
+run log now all sit above the fold — where before the fold landed inside the pad
+and both Stops were some 500px below it. It got shorter while gaining a run log
+and three job state lines, because the duplicate Stop, two prose footers and the
+stepper all went.
+
 ## Colour
 
 Two palettes, named by the job each colour does. Dark is the base, because that
@@ -567,16 +657,29 @@ and each tap after that moves a single tile. Holding walks.
 <img src="docs/controls.png" alt="The on-screen controls, with LEFT held" width="330">
 
 That is the app mid-hand-off: a ROM booted, the intro left alone for the player,
-and LEFT held down — which is what the lit key means. The held state is read
+and LEFT held down — which is what the lit key means.
+
+**These three screenshots predate the layout and colour work below**, so they
+show the older arrangement: the pad beneath a speed slider rather than beneath
+the screen, four action buttons where there is now a list of jobs, and the old
+palette. The controls themselves are unchanged. They want retaking on a real
+device, which is also the only place the emulator picture can be captured — a
+backgrounded tab does not paint the canvas, so a screenshot taken from a test
+harness has a black rectangle where the game should be. The held state is read
 back from the emulator's own set of held buttons, so pressing `Z` on a keyboard
 lights up the same A button a thumb would.
 
+The pad sits directly under the screen, which is what the hardware does and
+what anyone opening this expects. Header, screen, hint and the whole pad measure
+596px against an 812px viewport, so both halves of the console fit above the
+fold with room over.
+
 There is no TAB button. On the desktop pilot, TAB opens an in-game menu because
 the only surface there is the emulator window; here the pilot's controls are the
-page itself — the Grind card, the level stepper, and Start/Stop sit above the
-buttons, so the game never has to be interrupted to reach them. The on-screen
-buttons are ignored while a task is running, so a stray thumb cannot fight the
-pilot for the joypad.
+page itself, in a list below the pad, so the game never has to be interrupted to
+reach them. While a job is running the pad dims and stops taking input — it
+would be fighting the pilot for the same joypad — and one Stop appears under the
+screen for as long as there is something to stop. See *Layout* above.
 
 A keyboard works on the same page, which is what makes it testable on a desktop:
 
