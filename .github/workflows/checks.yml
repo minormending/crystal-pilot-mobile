@@ -1,0 +1,44 @@
+# Runs the checks that need nothing but the repository.
+#
+# There is deliberately no emulator here. Driving the game needs a ROM built
+# from the pokecrystal disassembly, and no ROM, save or symbol file is
+# distributed -- so the tasks are verified by hand against a local build, and
+# what CI covers is everything else: that the modules parse, that the offline
+# shell matches what is on disk, that the markup closes, that the palette still
+# meets contrast in both themes, that no game file has been committed, and that
+# the documentation has been looked at since the code changed.
+#
+# Naming the job for what it actually covers keeps the badge honest.
+name: static-checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  static-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # node for the syntax pass, python for everything else. Both are already
+      # on the runner; pinning them keeps a runner image change from being
+      # indistinguishable from a real failure.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: App checks
+        run: tools/check-app
+
+      - name: Documentation is current
+        run: tools/docs-check

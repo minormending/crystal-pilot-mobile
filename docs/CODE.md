@@ -954,6 +954,51 @@ clone:
 git config core.hooksPath .githooks
 ```
 
+### The other checks
+
+`tools/check-app` runs everything that can be verified without a ROM:
+
+```bash
+tools/check-app              # all of it
+tools/check-app contrast     # or one group
+```
+
+| Group | Checks |
+| --- | --- |
+| `syntax` | every module parses |
+| `shell` | the service worker's cached list matches what is on disk, both ways |
+| `markup` | `index.html` tags and CSS braces balance |
+| `contrast` | the palette still meets contrast, in both themes |
+| `gamefiles` | no ROM, save or symbol file has been committed |
+
+CI (`.github/workflows/checks.yml`) runs `check-app` and `docs-check` on every
+push. There is deliberately no emulator in CI: driving the game needs a ROM
+built from the disassembly, and none is distributed, so the tasks are verified
+by hand against a local build. The job is named `static-checks` for that reason.
+
+<details>
+<summary><b>Advanced detail:</b> two of those groups exist because of a real slip</summary>
+
+**`shell` checks both directions.** A file listed in the service worker but
+absent on disk makes the install reject, which takes the whole offline story
+with it. A module present but *unlisted* is quietly served from the network and
+breaks offline use with no error at all — which is how `app/world.js` was
+nearly shipped when it was added.
+
+**`contrast` encodes pairs that were measured once by hand.** Four of them were
+failing before the palette was reworked — white on the accent was 3.80:1, so the
+label on every Start button in the app failed. Without those thresholds written
+down, the next palette edit quietly undoes that work.
+
+**`syntax` copies each module to `.mjs` before checking it, and that is not
+fussiness.** Measured on node v24: `node --check` on a **`.js`** file containing
+a syntax error exits **0** — it does not report the error at all, presumably
+because module detection makes the parse ambiguous. The same content as `.mjs`
+exits 1. Checking the `.js` files directly would have been a green light that
+meant nothing.
+
+</details>
+
 <details>
 <summary><b>Advanced detail:</b> what this can and cannot tell you</summary>
 

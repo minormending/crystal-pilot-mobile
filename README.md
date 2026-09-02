@@ -37,6 +37,13 @@ Sections that describe code carry a hash of the files they cover, so
 pre-commit hook runs it; enable it once per clone with
 `git config core.hooksPath .githooks`.
 
+`tools/check-app` runs the rest of what can be checked without a ROM: that every
+module parses, that the offline shell matches what is on disk, that the markup
+closes, that the palette still meets contrast in both themes, and that no game
+file has been committed. CI runs both on every push — and nothing more, because
+driving the game needs a ROM built from the disassembly and none is
+distributed.
+
 ## How the options actually compared
 
 Measured rather than guessed, on an M-series Mac:

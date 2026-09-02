@@ -1,0 +1,221 @@
+#!/usr/bin/env python3
+"""Static checks for the app, all runnable without a ROM.
+
+Nothing here drives the emulator: that needs a ROM built from the pokecrystal
+disassembly, which is not distributed. These are the checks that can run on a
+clean checkout, which is exactly what CI has.
+
+    tools/check-app            run everything
+    tools/check-app syntax     just one group
+"""
+import pathlib
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+APP = sorted((ROOT / "app").glob("*.js"))
+INDEX = ROOT / "index.html"
+SW = ROOT / "sw.js"
+
+GAME_FILES = re.compile(r"\.(gbc|gb|sav|sym|state|bk2)$", re.I)
+
+
+def fail(msg):
+    print(f"  FAIL  {msg}")
+    return 1
+
+
+def ok(msg):
+    print(f"  ok    {msg}")
+    return 0
+
+
+def check_syntax():
+    """Parse every module.
+
+    Copied to .mjs first, and that is not fussiness. Measured on node v24:
+    `node --check` on a *.js* file containing a syntax error exits 0 -- it does
+    not report the error at all, presumably because module detection makes the
+    parse ambiguous. The same content as .mjs exits 1. Checking the .js files
+    directly would be a green light that means nothing.
+    """
+    if not shutil.which("node"):
+        return fail("node not found, cannot check syntax")
+    bad = []
+    with tempfile.TemporaryDirectory() as tmp:
+        for src in APP + [SW]:
+            dst = pathlib.Path(tmp) / (src.stem + ".mjs")
+            dst.write_text(src.read_text())
+            r = subprocess.run(["node", "--check", str(dst)],
+                               capture_output=True, text=True)
+            if r.returncode != 0:
+                # The useful line, not the last one -- node ends its output with
+                # its own version banner, so [-1] reports "Node.js v24.8.0" as
+                # though that were the syntax error.
+                lines = [l.strip() for l in r.stderr.splitlines() if l.strip()]
+                why = next((l for l in lines if "Error" in l), None) \
+                    or (lines[0] if lines else "parse failed")
+                bad.append(f"{src.relative_to(ROOT)}: {why}")
+    for b in bad:
+        print(f"        {b}")
+    return fail(f"{len(bad)} module(s) do not parse") if bad \
+        else ok(f"{len(APP) + 1} modules parse")
+
+
+def check_shell():
+    """The service worker's cached shell must match what is on disk.
+
+    Both directions. A file listed but absent makes the install reject, which
+    takes the whole offline story with it; a module present but unlisted is
+    served from the network and silently breaks offline use -- which is how
+    app/world.js was nearly shipped when it was added.
+    """
+    text = SW.read_text()
+    m = re.search(r"const SHELL = \[(.*?)\];", text, re.S)
+    if not m:
+        return fail("could not find SHELL in sw.js")
+    listed = set(re.findall(r"'\./([^']*)'", m.group(1)))
+    problems = []
+    for rel in sorted(listed):
+        if rel and not (ROOT / rel).exists():
+            problems.append(f"listed in SHELL but missing on disk: {rel}")
+    for src in APP:
+        rel = f"app/{src.name}"
+        if rel not in listed:
+            problems.append(f"on disk but not in SHELL: {rel}")
+    for p in problems:
+        print(f"        {p}")
+    return fail(f"{len(problems)} shell mismatch(es)") if problems \
+        else ok(f"service worker shell lists all {len(listed)} files, and all exist")
+
+
+def check_markup():
+    s = INDEX.read_text()
+    void = {"br", "img", "link", "meta", "input", "hr", "source", "area",
+            "base", "col", "embed", "param", "track", "wbr"}
+    opened = re.findall(r"<([a-zA-Z][a-zA-Z0-9]*)[^>]*?(?<!/)>", s)
+    closed = re.findall(r"</([a-zA-Z][a-zA-Z0-9]*)\s*>", s)
+    counts = {}
+    for t in opened:
+        if t.lower() not in void:
+            counts[t.lower()] = counts.get(t.lower(), 0) + 1
+    for t in closed:
+        counts[t.lower()] = counts.get(t.lower(), 0) - 1
+    bad = {k: v for k, v in counts.items() if v}
+    if bad:
+        return fail(f"unbalanced tags in index.html: {bad}")
+    css = s.split("<style>")[1].split("</style>")[0]
+    if css.count("{") != css.count("}"):
+        return fail(f"unbalanced CSS braces: {css.count('{')} open, "
+                    f"{css.count('}')} close")
+    return ok("index.html tags and CSS braces balance")
+
+
+# --- contrast ---------------------------------------------------------------
+# Encoded rather than re-measured by hand. Every one of these was checked once
+# against the running app; without them written down, the next palette edit
+# quietly undoes the work. The thresholds are WCAG: 4.5 for text, 3.0 for a
+# boundary that carries meaning on its own, and a small ratio for a surface
+# step that only has to be perceptible.
+PAIRS = [
+    ("ink on the page",        "ink",   "bg",     4.5),
+    ("ink on a card",          "ink",   "panel",  4.5),
+    ("ink on a raised button", "ink",   "raise",  4.5),
+    ("dim text on a card",     "dim",   "panel",  4.5),
+    ("dim text on the page",   "dim",   "bg",     4.5),
+    ("key ink on a key",       "raise-ink", "raise", 4.5),
+    ("Stop label on a card",   "bad",   "panel",  4.5),
+    ("link on a card",         "accent", "panel", 4.5),
+    ("running dot on a card",  "accent", "panel", 3.0),
+    ("filled control vs card", "action", "panel", 3.0),
+]
+WHITE_ON = [("white label on a filled control", "action", 4.5)]
+
+
+def _lum(hex_):
+    h = hex_.lstrip("#")
+    if len(h) == 3:
+        h = "".join(c * 2 for c in h)
+    r, g, b = (int(h[i:i + 2], 16) / 255 for i in (0, 2, 4))
+
+    def f(c):
+        return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+    return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b)
+
+
+def _ratio(a, b):
+    la, lb = _lum(a), _lum(b)
+    hi, lo = max(la, lb), min(la, lb)
+    return (hi + 0.05) / (lo + 0.05)
+
+
+def _tokens(block):
+    return dict(re.findall(r"--([\w-]+)\s*:\s*(#[0-9a-fA-F]{3,6})", block))
+
+
+def check_contrast():
+    s = INDEX.read_text()
+    css = s.split("<style>")[1].split("</style>")[0]
+    dark = _tokens(css.split(":root {")[1].split("}")[0])
+    light_block = css.split('[data-theme="light"]')[1].split("}")[0]
+    light = dict(dark)
+    light.update(_tokens(light_block))
+
+    problems = []
+    for label, themes in (("dark", dark), ("light", light)):
+        for name, fg, bg, need in PAIRS:
+            if fg not in themes or bg not in themes:
+                problems.append(f"{label}: no token for {fg} or {bg} ({name})")
+                continue
+            r = _ratio(themes[fg], themes[bg])
+            if r < need:
+                problems.append(f"{label}: {name} is {r:.2f}:1, needs {need}")
+        for name, fg, need in WHITE_ON:
+            r = _ratio("#ffffff", themes[fg])
+            if r < need:
+                problems.append(f"{label}: {name} is {r:.2f}:1, needs {need}")
+    for p in problems:
+        print(f"        {p}")
+    n = (len(PAIRS) + len(WHITE_ON)) * 2
+    return fail(f"{len(problems)} contrast failure(s)") if problems \
+        else ok(f"{n} colour pairs meet contrast, both themes")
+
+
+def check_no_game_files():
+    r = subprocess.run(["git", "ls-files"], cwd=ROOT,
+                       capture_output=True, text=True)
+    bad = [f for f in r.stdout.split() if GAME_FILES.search(f)]
+    for b in bad:
+        print(f"        {b}")
+    return fail(f"{len(bad)} game-derived file(s) are tracked") if bad \
+        else ok("no ROM, save or symbol file is tracked")
+
+
+CHECKS = {
+    "syntax": check_syntax,
+    "shell": check_shell,
+    "markup": check_markup,
+    "contrast": check_contrast,
+    "gamefiles": check_no_game_files,
+}
+
+
+def main(argv):
+    wanted = [a for a in argv if not a.startswith("-")] or list(CHECKS)
+    unknown = [w for w in wanted if w not in CHECKS]
+    if unknown:
+        print(f"unknown check(s): {', '.join(unknown)}")
+        print(f"available: {', '.join(CHECKS)}")
+        return 2
+    print("check-app:")
+    bad = sum(CHECKS[w]() for w in wanted)
+    print(f"\n{'FAILED' if bad else 'all good'} — "
+          f"{len(wanted) - bad}/{len(wanted)} check groups passed")
+    return 1 if bad else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
