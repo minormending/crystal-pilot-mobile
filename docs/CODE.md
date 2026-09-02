@@ -32,6 +32,7 @@ and the code disagree, the code is right and the section is a bug — see
 3. [The layers, bottom up](#3-the-layers-bottom-up)
 4. [Taking one step, and planning a walk](#4-taking-one-step-and-planning-a-walk)
 5. [Crossing to the next map](#5-crossing-to-the-next-map)
+   · [How the tasks are arranged](#5a-how-the-tasks-are-arranged)
 6. [Battles](#6-battles)
 7. [Catching something](#7-catching-something)
    · [Three that act on where you are](#7a-three-that-act-on-where-you-already-are)
@@ -91,15 +92,19 @@ of the subtleties in sections 6 and 7.
 
 ## 2. The shape of it
 
-<!-- covers-api: app/main.js app/bootstrap.js app/tasks.js app/nav.js app/world.js app/collision.js app/state.js app/romdata.js app/symbols.js app/gb.js @ 998b179d5b51 -->
+<!-- covers-api: app/main.js app/bootstrap.js app/tasks.js app/nav.js app/world.js app/collision.js app/state.js app/romdata.js app/symbols.js app/gb.js @ 954789513785 -->
 
-Eleven modules. Arrows point from a module to the ones it imports.
+Fifteen modules. Arrows point from a module to the ones it imports.
 
 ```mermaid
 flowchart TD
     main["main.js<br/>the page and its controls"]
     boot["bootstrap.js<br/>plays the story"]
-    tasks["tasks.js<br/>grind · hunt · catch"]
+    tasks["tasks.js<br/>composes the four below"]
+    jobs["jobs.js<br/>grind · hunt · catch"]
+    btl["battle.js<br/>one turn"]
+    menus["menus.js<br/>the game's own menus"]
+    tbase["taskbase.js<br/>machine and snapshot"]
     nav["nav.js<br/>walking"]
     world["world.js<br/>map graph"]
     coll["collision.js<br/>what is walkable"]
@@ -122,7 +127,13 @@ flowchart TD
     saves --> gb
     saves --> state
     boot --> coll
-    tasks --> state
+    tasks --> jobs
+    tasks --> btl
+    tasks --> menus
+    jobs --> tbase
+    btl --> tbase
+    menus --> tbase
+    tbase --> state
     nav --> coll
     coll --> gb
     state --> gb
@@ -138,7 +149,11 @@ flowchart TD
 | `collision.js` | "can I stand there, and how do I get there?" |
 | `nav.js` | "walk to this tile" |
 | `world.js` | "which map is west of here?" |
-| `tasks.js` | "grind to level 12", "catch a Sentret" |
+| `tasks.js` | composes the four below into one `Tasks` |
+| `taskbase.js` | "give me a snapshot", "settle down", "where is the cursor?" |
+| `menus.js` | "open START and save", "answer the intro" |
+| `battle.js` | "choose a move", "throw a ball", "what happened?" |
+| `jobs.js` | "grind to level 12", "catch a Sentret" |
 | `bootstrap.js` | "start a new game", "fetch Poké Balls" |
 | `saves.js` | "keep this in slot 2", "put that .sav into the cartridge" |
 | `main.js` | everything the person holding the phone touches |
@@ -556,9 +571,58 @@ refusal is not an answer.
 
 ---
 
+## 5a. How the tasks are arranged
+
+`tasks.js` used to be one class: 1335 lines, thirty-seven methods, five
+unrelated jobs. It is now four files and a line of composition.
+
+```mermaid
+flowchart LR
+    tbase["taskbase.js<br/>the machine"] --> menus["menus.js<br/>the game's menus"]
+    menus --> btl["battle.js<br/>one turn"]
+    btl --> jobs["jobs.js<br/>what you asked for"]
+    jobs --> T["class Tasks"]
+```
+
+Split by what a method is *about*, not by size. `taskbase.js` talks to the
+emulator — the snapshot, the settle, the cursor read. `menus.js` drives menus
+the game already had: the intro, START, saving. `battle.js` is one turn:
+choosing an action, a move, a ball, and reading what happened. `jobs.js` is the
+handful of things a person actually asks for, and is the only file the interface
+calls into.
+
+<details>
+<summary><b>Advanced detail:</b> why mixins, and what the split had to preserve</summary>
+
+**They are mixins rather than collaborators** — `withJobs(withBattle(withMenus(
+TaskBase)))` — because `this` has to keep meaning the same object. Every method
+here reaches for `this.gb`, `this.snap()`, `this.say()`; splitting into objects
+that hold each other would have meant several hundred lines of delegation whose
+only purpose is to look like a refactor. The prototype chain reads
+`Tasks → WithJobs → WithBattle → WithMenus → TaskBase`, and each class is named
+so a stack trace says which one a frame came from.
+
+**Nothing was retyped.** The methods were moved by extracting their exact line
+ranges, comments included, so the diff is a move rather than a rewrite. The
+public surface was then compared before and after: nothing lost, two helpers
+gained.
+
+**The safety net came first.** This split landed the commit after the tests did,
+and that order was the point — nineteen tests and eight static checks make a
+mechanical move of 1300 lines something you can verify rather than hope about.
+The service worker's shell check caught the four new files immediately, which is
+exactly the kind of thing a move like this forgets.
+
+**`menuCursor()` is the one behaviour change.** The two-line incantation for
+reading the menu window appeared five times in the save-driving code; it is one
+method on the base now. That is a read of a handful of bytes rather than the
+eight kilobytes a full snapshot copies, which is worth keeping distinct.
+
+</details>
+
 ## 6. Battles
 
-<!-- covers: app/tasks.js app/state.js @ f9685e2bb6f5 -->
+<!-- covers: app/tasks.js app/taskbase.js app/battle.js app/jobs.js app/state.js @ fd2f46f04543 -->
 
 ### Is it our turn?
 
@@ -682,7 +746,7 @@ fainted.
 
 ## 7. Catching something
 
-<!-- covers: app/tasks.js app/romdata.js @ 83e7966c3a13 -->
+<!-- covers: app/tasks.js app/jobs.js app/battle.js app/romdata.js @ bafe7e2dbfa5 -->
 
 Catching is the most involved loop, because a Poké Ball's odds turn on how much
 HP is left. Throwing at a full-health target is mostly throwing balls away.
@@ -768,7 +832,7 @@ precedes it defaults to yes, which is what we want; the nickname box does not.
 
 ## 7a. Three that act on where you already are
 
-<!-- covers: app/tasks.js app/bootstrap.js @ 6f9bdf310b2a -->
+<!-- covers: app/tasks.js app/jobs.js app/menus.js app/bootstrap.js @ e2be60bdcafa -->
 
 Grind, hunt and catch all go *looking* for something. These three do the obvious
 thing with the situation you are already in, and take no parameters:
@@ -830,7 +894,7 @@ running the thing.
 
 ## 7b. Saving, and getting the save out
 
-<!-- covers: app/tasks.js app/state.js -->
+<!-- covers: app/tasks.js app/taskbase.js app/battle.js app/jobs.js app/state.js -->
 
 ```mermaid
 flowchart TD
