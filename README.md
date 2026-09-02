@@ -1,5 +1,9 @@
 # crystal-pilot mobile
 
+[![static-checks](https://github.com/minormending/crystal-pilot-mobile/actions/workflows/checks.yml/badge.svg)](https://github.com/minormending/crystal-pilot-mobile/actions/workflows/checks.yml)
+[![license: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue.svg)](LICENSE)
+[![live: github pages](https://img.shields.io/badge/live-github%20pages-2ea44f.svg)](https://minormending.github.io/crystal-pilot-mobile/)
+
 An exploration: **can the [crystal-pilot](https://github.com/minormending/crystal-pilot)
 auto-pilot run on an Android phone itself**, rather than on a Mac with the phone
 as a remote?
