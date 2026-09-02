@@ -1,11 +1,20 @@
 // The emulator, wrapped so the rest of the app never touches WasmBoy directly.
 //
+// One property of this core shapes everything below: it can be read but not
+// written. _getWasmMemorySection hands back a *copy* -- a different object with
+// a different buffer on every call -- and there is no writer on the core at
+// all. Writing through the copy succeeds silently and changes nothing, which is
+// the most expensive kind of nothing. So the pilot plays the game by pressing
+// buttons rather than by setting memory, and save states are not possible here:
+// you could snapshot the machine and never put it back. Measured, not assumed.
+//
 // The desktop pilot drives PyBoy and hangs its whole design on CPU hooks: the
 // game's own routines announce when they want input. No browser Game Boy core
 // exposes breakpoints, so everything here is built on the one thing they all
 // do offer -- reading the emulated address space -- and the state variables the
 // hooks used to stand in for.
 
+const SRAM_BYTES = 32768;
 const GB_WRAM_START = 0xc000;   // where work RAM begins in the Game Boy's map
 const GB_W = 160, GB_H = 144;
 
@@ -164,11 +173,28 @@ export class GameBoy {
     if (gap) await this.run(gap);
   }
 
-  async saveState() { return this.core.saveState(); }
-  async loadState(s) { return this.core.loadState(s); }
-
-  /** Battery save (the .sav other emulators and hardware read). */
-  async batterySave() { return this.core.getSavedMemory(); }
+  /**
+   * The battery save: the .sav other emulators and hardware read.
+   *
+   * Read straight out of cartridge RAM, the same way work RAM is located, and
+   * not via the core's getSavedMemory() -- that returns the shape WasmBoy
+   * persists to IndexedDB, `[{saveStates}]`, which is not save data and cannot
+   * be written to a file.
+   *
+   * All zeroes means the game has never committed an in-game save, not that the
+   * read failed. Crystal writes SRAM only when you choose SAVE, so a cartridge
+   * that has been played but never saved has a blank battery -- and nothing
+   * here drives the SAVE menu yet, so that is currently always the case.
+   */
+  async batterySave() {
+    const at = await this.core._getWasmConstant('CARTRIDGE_RAM_LOCATION');
+    if (typeof at !== 'number') {
+      throw new Error('could not locate cartridge RAM in the emulator core');
+    }
+    const section = await this.core._getWasmMemorySection(at, at + SRAM_BYTES);
+    return section.length > SRAM_BYTES
+      ? section.subarray(at, at + SRAM_BYTES) : section;
+  }
 }
 
-export { GB_WRAM_START, GB_W, GB_H };
+export { GB_WRAM_START, GB_W, GB_H, SRAM_BYTES };

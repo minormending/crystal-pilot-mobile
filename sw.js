@@ -1,7 +1,7 @@
 // Cache the shell so the app opens with no network once installed. The ROM and
 // .sym are never cached: they are yours, they stay in the page, and they are
 // re-picked each session.
-const CACHE = 'crystal-pilot-v58';
+const CACHE = 'crystal-pilot-v59';
 const SHELL = [
   './', './index.html', './manifest.webmanifest', './icon.svg',
   './vendor/wasmboy.umd.js',

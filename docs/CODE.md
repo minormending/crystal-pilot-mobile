@@ -89,7 +89,7 @@ of the subtleties in sections 6 and 7.
 
 ## 2. The shape of it
 
-<!-- covers-api: app/main.js app/bootstrap.js app/tasks.js app/nav.js app/world.js app/collision.js app/state.js app/romdata.js app/symbols.js app/gb.js @ 852e80466f42 -->
+<!-- covers-api: app/main.js app/bootstrap.js app/tasks.js app/nav.js app/world.js app/collision.js app/state.js app/romdata.js app/symbols.js app/gb.js @ 3969889a4e0f -->
 
 Ten modules. Arrows point from a module to the ones it imports.
 
@@ -169,7 +169,7 @@ was cheaper than moving the boundary.
 
 ### `gb.js` — the emulator
 
-<!-- covers: app/gb.js @ 4a88081144e6 -->
+<!-- covers: app/gb.js @ 16d3c58c2cb3 -->
 
 Wraps WasmBoy. Runs frames, reads work RAM, holds and releases buttons.
 
@@ -178,12 +178,32 @@ The important part of its interface is that **buttons are held, not tapped**:
 a short press in a new direction only turns you on the spot.
 
 <details>
-<summary><b>Advanced detail:</b> two things about this core</summary>
+<summary><b>Advanced detail:</b> what this core will and will not do</summary>
 
 **`_getWasmMemorySection` returns a copy, not a live view.** You cannot write to
 it and have the game notice. That is why nothing here injects items or party
 members — everything is earned by pressing buttons, including the five Poké Balls
-in section 8.
+in section 8. Measured rather than assumed: two calls for the same range return
+different objects with different buffers, the core exposes no writer at all, and
+writing through the copy resolves without error and changes nothing.
+
+**So save states are impossible here, and the two methods offering them were
+removed.** A snapshot you can never put back is not a save state. Worth stating
+plainly because the code claimed otherwise for a long time: `saveState()`
+resolved, handing back `{wasmboyMemory, date, isAuto}` with all four of
+`wasmboyMemory`'s fields `undefined` — the right shape holding nothing — and
+`loadState()` threw `Cannot read properties of undefined (reading 'buffer')` on
+it. Neither was called from anywhere, which is the only reason it went unnoticed;
+the README had listed both as available since the feasibility notes.
+
+**The battery save is the one that *can* work**, because it only needs reading.
+`batterySave()` used to return `this.core.getSavedMemory()`, which is
+`[{saveStates}]` — the record WasmBoy persists to IndexedDB, not save data, and
+not writable to a file. It now locates `CARTRIDGE_RAM_LOCATION` the same way
+`start()` locates work RAM and returns 32768 bytes, which is Crystal's battery
+and the same size as the desktop's `.sav`. It reads all zeroes until the game
+commits an in-game save, and nothing here drives the SAVE menu yet — so the read
+is verified for type, size and region, and not against real save data.
 
 **Frames must be stepped differently when the page is hidden.** `_runNumberOfFrames`
 awaits `pause()`, which needs an animation frame, and a hidden page does not get

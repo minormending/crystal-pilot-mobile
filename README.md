@@ -95,7 +95,10 @@ Proven, and visible in the screenshot:
 - synthetic input works — the intro was played through by the app, not by hand
 - `wMapStatus == 2` distinguishes "the world is live" from "the party happens to
   be loaded", the same signal the desktop version needed
-- save states and battery saves are both available from the core
+- ~~save states and battery saves are both available from the core~~ — **half
+  of this was wrong, and nothing had ever called it to find out.** The battery
+  save is readable, out of cartridge RAM. Save states are not possible at all:
+  the core can be read but not written. See *Nothing persists yet*
 - **the collision map decodes correctly**: the same 48 tiles of PLAYERS_HOUSE_2F
   come out byte-for-byte identical to the desktop pilot's reading of the same
   room — two implementations, one in Python over PyBoy and one in JS over
@@ -396,6 +399,35 @@ Both cost real time here, and both fail quietly rather than loudly:
    loaded. Fetch it during `config()` and every later read is silently empty.
 
 `app/gb.js` guards against both.
+
+## Nothing persists yet
+
+**A reload loses the run.** There is no save, no export and no import. If the
+pilot grinds for an hour on your phone and the tab is refreshed, that hour is
+gone. It is the largest gap in the app, and worth knowing before a long run.
+
+What was there before was worse than nothing, because it looked like a way out:
+
+| | Was | Now |
+| --- | --- | --- |
+| `saveState()` | resolved, returning four `undefined` memory fields | removed |
+| `loadState()` | threw `Cannot read properties of undefined` | removed |
+| `batterySave()` | `[{saveStates}]` — WasmBoy's IndexedDB record shape | 32768 real bytes out of cartridge RAM |
+
+None of the three was called by anything, which is why none of it had ever been
+found. All three were measured against a live game before being changed.
+
+**Save states cannot be made to work here.** `_getWasmMemorySection` returns a
+*copy* — a different object with a different buffer on every call — and the core
+exposes no writer at all. Writing through the copy succeeds silently and changes
+nothing. You could snapshot the machine and never put it back, which is why the
+desktop pilot keeps machine-state backups and this one cannot.
+
+`batterySave()` now returns the real thing, and reads all zeroes until the game
+commits an in-game save. Nothing here drives the SAVE menu yet, so that is
+currently always — the read is verified for size, type and region, not yet
+against real save data. Two pieces are needed before progress can leave the
+phone: a driver for `START → SAVE → YES`, and somewhere to put the bytes.
 
 ## Starting a game is yours, not the pilot's
 
