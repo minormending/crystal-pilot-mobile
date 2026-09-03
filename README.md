@@ -856,6 +856,39 @@ The control is three-state — auto, light, dark — and lives in the card with
 how fast the game is running; a theme is neither, and it is set once. Putting it
 there also overflowed 375px, wrapping the title and truncating the location.
 
+## What the page remembers
+
+Three choices survive a reload, in one localStorage key: the **speed step**,
+which **grind preset** was tapped, and **what was being hunted**. The colour
+theme has its own, older key. That is the whole list — everything else is
+either derived, or too big for localStorage, or nobody's choice to begin with.
+
+The ball is a good example of the third: nobody picks it. `refreshBag` derives
+it from what is in the bag, cheapest ball that will do, so a Master Ball is
+never spent on a Rattata. Remembering a derived value only gives it a way to go
+stale.
+
+Two rules make the rest of it dull, which is the goal:
+
+**What comes back is a suggestion, not a fact.** It was written by an older
+build, on a phone whose owner may have edited it by hand, so it is checked
+against what this build can actually use — and dropped rather than salvaged. A
+remembered speed of `9` must not become `SPEEDS[9]`: that is `undefined`, and
+the idle loop would then step the emulator `undefined` frames. A grind preset
+the buttons no longer offer has no nearest neighbour either; `+5` and `Lv20`
+are different intentions, not different amounts of one.
+
+**What is stored is the choice, never what it worked out to.** `+2` means two
+above the lead, so storing the `Lv12` it came to today would come back tomorrow
+meaning something nobody chose. The hunted species is restored only where it
+can actually be found, at this hour, and only when nothing is selected — so it
+restores a choice and never overrides one.
+
+Storage throws rather than returning null in a private window or after cleared
+site data, so every access goes through one accessor that answers "nothing
+remembered". Nine tests cover the deciding; the storage call itself is three
+lines and a `try`.
+
 ## Controls
 
 Eight on-screen buttons: the D-pad, A, B, Select and Start. **Press and hold** —

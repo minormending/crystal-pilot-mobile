@@ -3,6 +3,7 @@ import { GameBoy } from './gb.js';
 import { Symbols } from './symbols.js';
 import { describeRows, describeSlot, describeUndo } from './rows.js';
 import { VERSION } from './version.js';
+import { readOpts, writeOpts } from './remember.js';
 import { Cancelled } from './taskbase.js';
 import { Saves, SLOT_IDS, UNDO_SLOT } from './saves.js';
 import { GameState, TRAINER_BATTLE, MAX_PARTY } from './state.js';
@@ -32,6 +33,18 @@ let ballId = null;
 // powers of two because that is how it reads: 1x, 2x, 4x... and the last one is
 // "as fast as it goes", which on a phone lands somewhere short of the label.
 const SPEEDS = [1, 2, 4, 8, 16];
+// The presets are read off the markup rather than listed again here, so there
+// is one place they are written down and a remembered `+5` cannot outlive the
+// button that offered it.
+const GRIND_SPECS = [...document.querySelectorAll('[data-target]')]
+  .map((b) => b.dataset.target);
+// Last session's choices, checked against this build before anything uses
+// them. Read once: a second read mid-session would fight the person.
+const REMEMBERED = readOpts({ speeds: SPEEDS.length, grinds: GRIND_SPECS });
+// Whether the remembered grind preset has been applied. It cannot be applied
+// at load: `+2` means two above the lead, and there is no party until a game
+// is running.
+let grindRestored = false;
 // How long an idle-loop step may be outstanding before it is treated as lost.
 const LOST_STEP_MS = 1000;
 let speed = 1;
@@ -430,6 +443,13 @@ async function refresh() {
   if (romdata) refreshBag(s);
   // Remembered so the relative presets have something to be relative to.
   lastLead = s.party.length ? s.party[0].level : null;
+  // Last session's preset, applied the moment it means something and then
+  // never again -- re-applying on every refresh would drag the target back
+  // every time the person chose differently.
+  if (!grindRestored && REMEMBERED.grind && s.party.length) {
+    grindRestored = true;
+    pickTarget(REMEMBERED.grind, false);
+  }
   // Named in the Heal row, so the choice the pilot would make is visible
   // before it is asked to make it.
   if (boot && !s.inBattle && s.worldLoaded) {
@@ -499,17 +519,30 @@ $('#symFile').addEventListener('change', async (e) => {
 
 // The targets people actually pick, two of them relative to the party, rather
 // than four buttons and up to four taps to say "Lv10".
+//
+/**
+ * Aim a grind at what a preset means right now.
+ *
+ * The spec is what is remembered, never the level it works out to. `+2` means
+ * two above the lead, and the lead next session will not be the lead this one
+ * ended with -- so storing the 12 it resolved to today would come back
+ * tomorrow meaning something the person never chose.
+ */
+function pickTarget(spec, remember = true) {
+  const lead = lastLead || 5;
+  target = spec.startsWith('+')
+    ? Math.min(100, lead + Number(spec.slice(1)))
+    : Number(spec);
+  target = Math.max(2, Math.min(100, target));
+  for (const other of $('#levels').querySelectorAll('button')) {
+    other.classList.toggle('on', other.dataset.target === spec);
+  }
+  if (remember) writeOpts({ grind: spec });
+}
+
 document.querySelectorAll('[data-target]').forEach((b) => {
   b.onclick = () => {
-    const spec = b.dataset.target;
-    const lead = lastLead || 5;
-    target = spec.startsWith('+')
-      ? Math.min(100, lead + Number(spec.slice(1)))
-      : Number(spec);
-    target = Math.max(2, Math.min(100, target));
-    for (const other of $('#levels').querySelectorAll('button')) {
-      other.classList.toggle('on', other === b);
-    }
+    pickTarget(b.dataset.target);
     refresh();
   };
 });
@@ -646,13 +679,29 @@ async function refreshSpecies(s) {
     b.textContent = name;
     b.onclick = () => {
       huntWanted = name;
-      for (const other of list.children) other.classList.toggle('on', other === b);
+      writeOpts({ hunt: name });
+      markSpecies(list);
       refresh();
     };
     list.appendChild(b);
   }
   // Whatever was being hunted may not live here.
   if (huntWanted && !here.includes(huntWanted)) huntWanted = null;
+  // Last session's quarry, but only where it can actually be found and only
+  // when nothing is chosen -- so this restores a choice and never overrides
+  // one. The list is rebuilt whenever the map or the hour changes, which is
+  // exactly when "is it here?" has a new answer.
+  if (!huntWanted && REMEMBERED.hunt && here.includes(REMEMBERED.hunt)) {
+    huntWanted = REMEMBERED.hunt;
+  }
+  markSpecies(list);
+}
+
+/** One source for which button is lit: whatever `huntWanted` says. */
+function markSpecies(list) {
+  for (const b of list.children) {
+    b.classList.toggle('on', b.textContent === huntWanted);
+  }
 }
 
 $('#hunt').onclick = async () => {
@@ -684,7 +733,13 @@ if (speedInput) {
     $('#speedx').textContent = speed === SPEEDS[SPEEDS.length - 1]
       ? 'max' : speed + '×';
   };
+  if (REMEMBERED.speed !== null) speedInput.value = String(REMEMBERED.speed);
   speedInput.addEventListener('input', showSpeed);
+  // Written on `change` rather than `input`: dragging the slider fires input
+  // for every step it passes through, and there is no reason to write four
+  // records on the way to the fifth.
+  speedInput.addEventListener('change',
+    () => writeOpts({ speed: Number(speedInput.value) }));
   showSpeed();
 }
 

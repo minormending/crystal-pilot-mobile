@@ -92,9 +92,9 @@ of the subtleties in sections 6 and 7.
 
 ## 2. The shape of it
 
-<!-- covers-api: app/main.js app/bootstrap.js app/tasks.js app/nav.js app/world.js app/collision.js app/state.js app/romdata.js app/symbols.js app/gb.js @ f455d9f8c1c4 -->
+<!-- covers-api: app/main.js app/bootstrap.js app/tasks.js app/nav.js app/world.js app/collision.js app/state.js app/romdata.js app/symbols.js app/gb.js @ b3b05d02ad2d -->
 
-Seventeen modules. Arrows point from a module to the ones it imports.
+Eighteen modules. Arrows point from a module to the ones it imports.
 
 ```mermaid
 flowchart TD
@@ -107,6 +107,7 @@ flowchart TD
     tbase["taskbase.js<br/>machine and snapshot"]
     rows["rows.js<br/>what each row says"]
     ver["version.js<br/>which build this is"]
+    rem["remember.js<br/>what survives a reload"]
     nav["nav.js<br/>walking"]
     world["world.js<br/>map graph"]
     coll["collision.js<br/>what is walkable"]
@@ -120,6 +121,7 @@ flowchart TD
     main --> tasks
     main --> rows
     main --> ver
+    main --> rem
     main --> nav
     main --> world
     main --> coll
@@ -162,6 +164,7 @@ flowchart TD
 | `saves.js` | "keep this in slot 2", "put that .sav into the cartridge" |
 | `rows.js` | "why is that button greyed out?" |
 | `version.js` | "which build am I running?" |
+| `remember.js` | "what did they choose last time?" |
 | `main.js` | everything the person holding the phone touches |
 
 The dependency direction is the design: **nothing below `tasks.js` knows what a
@@ -1188,7 +1191,7 @@ the bag" rather than "did we gain any".
 
 ## 9. The interface
 
-<!-- covers: app/main.js index.html @ 8db45049aef3 -->
+<!-- covers: app/main.js index.html @ 491d03b565ca -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -1337,6 +1340,45 @@ the card. And `--mark` is identical in both, because where you tapped sits on th
 game's own picture, not on a surface of ours.
 
 </details>
+
+### What it remembers
+
+<!-- covers: app/remember.js @ 138c74bad538 -->
+
+The app forgets everything on a reload, and a reload is not rare: the Update
+button causes one deliberately, and a phone discards a background tab whenever
+it likes. Three choices survive it, in one JSON object under one localStorage
+key — the speed step, which grind preset was tapped, and what was being hunted.
+
+Two rules do all the work, and both come from the same place: what comes back
+is a *suggestion*, written by an older build of this app on a phone whose owner
+may have edited it by hand.
+
+**It is checked against what this build can use, and dropped rather than
+salvaged.** A remembered speed of 9 must not become `SPEEDS[9]`, which is
+`undefined` — and the idle loop then steps the emulator `undefined` frames. A
+grind preset the markup no longer offers has no nearest neighbour either: `+5`
+and `Lv20` are different intentions, not different amounts of one. The valid
+range comes from the markup and the `SPEEDS` table rather than being written
+down twice, so a preset cannot outlive the button that offered it.
+
+**What is stored is the choice, never what the choice worked out to.** `+2`
+means two above the lead, so storing the `Lv12` it resolved to today would come
+back tomorrow meaning something nobody chose. `pickTarget` resolves a spec, and
+a tap and a restore both go through it.
+
+The hunted species is restored only when it appears where you are standing at
+this hour, and only when nothing is selected — so it restores a choice and
+never overrides one. `refreshSpecies` already had the first half of that rule,
+because a species you walked away from was being offered when it could not
+appear.
+
+Storage throws rather than returning null — private windows, cleared site data
+— and in Node there is no `localStorage` binding at all, so reading it is a
+`ReferenceError` and not something a `try` around the *value* would catch. One
+accessor answers "nothing remembered" for all of it. The colour theme keeps its
+own older key: moving it would cost a migration for people who have already
+chosen and buy nothing.
 
 ---
 
