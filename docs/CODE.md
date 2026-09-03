@@ -658,7 +658,7 @@ eight kilobytes a full snapshot copies, which is worth keeping distinct.
 
 ## 6. Battles
 
-<!-- covers: app/tasks.js app/taskbase.js app/battle.js app/jobs.js app/state.js @ 1fa777531a3e -->
+<!-- covers: app/tasks.js app/taskbase.js app/battle.js app/jobs.js app/state.js @ 62990af890a8 -->
 
 ### Is it our turn?
 
@@ -782,7 +782,7 @@ fainted.
 
 ## 7. Catching something
 
-<!-- covers: app/tasks.js app/jobs.js app/battle.js app/romdata.js @ 3599defc56a7 -->
+<!-- covers: app/tasks.js app/jobs.js app/battle.js app/romdata.js @ 02003213a83a -->
 
 Catching is the most involved loop, because a Poké Ball's odds turn on how much
 HP is left. Throwing at a full-health target is mostly throwing balls away.
@@ -930,7 +930,7 @@ running the thing.
 
 ## 7b. Saving, and getting the save out
 
-<!-- covers: app/tasks.js app/taskbase.js app/battle.js app/jobs.js app/state.js @ 1fa777531a3e -->
+<!-- covers: app/tasks.js app/taskbase.js app/battle.js app/jobs.js app/state.js @ 62990af890a8 -->
 
 ```mermaid
 flowchart TD

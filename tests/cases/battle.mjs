@@ -100,3 +100,51 @@ test('canSave refuses in a battle, and says which reason', async (t) => {
   t.false(can.ok, 'cannot save mid-battle');
   t.contains(can.why, 'battle', 'and says so');
 });
+
+test('awaitBattleMenu waits for the menu and hands back the snapshot', async (t) => {
+  // The regression this guards shipped. Six call sites in battle.js said
+  // `Tasks.menuIsLive(...)`, and after the class was split into mixins that
+  // name lives in tasks.js and is not in scope there -- so every one was a
+  // ReferenceError the moment it ran, and grinding broke in the deployed app.
+  //
+  // The existing tests called the static directly, which works, and never
+  // called anything that calls it. So this drives a caller.
+  const sym = symbols();
+  const state = new GameState(sym);
+  let polls = 0;
+  const inBattleNoMenu = worldRam(sym, {
+    battleMode: 1, party: [{ hp: 20, maxHp: 20 }],
+    enemy: { species: 16, level: 3, hp: 15, maxHp: 15 },
+    active: { hp: 20, maxHp: 20 }, menuItems: 34, menuTop: 12, menu: [0, 0],
+  });
+  // The menu appears after a few polls, as it does in a real battle. Driven
+  // from onPress rather than onRun: awaitBattleMenu taps A between polls to
+  // push through text, so onRun alone fires once and never again.
+  const draw = (_x, self) => {
+    if (++polls > 3) {
+      self.wram[sym.addr('wMenuCursorX') - 0xc000] = 1;
+      self.wram[sym.addr('wMenuCursorY') - 0xc000] = 1;
+    }
+  };
+  const gb = new FakeGameBoy({ wram: inBattleNoMenu, onRun: draw, onPress: draw });
+  const tasks = new Tasks(gb, state, () => {}, fakeRom());
+
+  const menu = await tasks.awaitBattleMenu(40);
+  t.true(menu !== null, 'it found the menu rather than throwing');
+  t.true(menu.inBattle, 'and hands back a snapshot of the battle');
+  t.eq(menu.menu, [1, 1], 'with the cursor where the menu put it');
+});
+
+test('awaitBattleMenu gives up rather than throwing when no menu appears', async (t) => {
+  const sym = symbols();
+  const state = new GameState(sym);
+  const gb = new FakeGameBoy({
+    wram: worldRam(sym, {
+      battleMode: 1, party: [{ hp: 20, maxHp: 20 }],
+      enemy: { hp: 15, maxHp: 15 }, active: { hp: 20, maxHp: 20 },
+      menuItems: 34, menuTop: 12, menu: [0, 0],
+    }),
+  });
+  const tasks = new Tasks(gb, state, () => {}, fakeRom());
+  t.eq(await tasks.awaitBattleMenu(8), null, 'it returns null, not an exception');
+});

@@ -436,6 +436,120 @@ def check_docs_shape():
         else ok(f"all {len(modules)} modules are drawn, counted and tabled")
 
 
+# Names the platform provides, so a reference to one is not a mistake.
+BROWSER_GLOBALS = {
+    "Object", "Array", "String", "Number", "Boolean", "Math", "JSON", "Date",
+    "Promise", "Error", "TypeError", "RangeError", "Set", "Map", "WeakMap",
+    "Symbol", "Proxy", "Reflect", "RegExp", "Function", "BigInt",
+    "Uint8Array", "Uint16Array", "Int8Array", "Uint8ClampedArray",
+    "Uint32Array", "Int32Array", "Float32Array", "Float64Array",
+    "ArrayBuffer", "DataView", "TextEncoder", "TextDecoder",
+    "URL", "URLSearchParams", "Blob", "File", "FileReader", "FormData",
+    "Headers", "Request", "Response", "AbortController",
+    "MessageChannel", "MessagePort", "Worker", "BroadcastChannel",
+    "MutationObserver", "IntersectionObserver", "ResizeObserver",
+    "Image", "ImageData", "Audio", "AudioContext", "OffscreenCanvas",
+    "CustomEvent", "Event", "EventTarget", "DOMParser", "Node", "Element",
+    "HTMLElement", "DocumentFragment", "IDBKeyRange", "Intl", "WebAssembly",
+    "Notification", "Storage", "CSS", "Option",
+}
+def _code_only(text: str) -> str:
+    """The source with comments and string contents blanked out.
+
+    Needed because the first version of check_names read prose as code: "Mr.
+    Pokemon", "Pokemon Center" and a sentence ending "...Chikorita." all look
+    exactly like a capitalised name followed by a dot. Eleven false positives
+    and no real ones, which is the fastest way to make a check ignored.
+
+    Line structure is preserved so the numbers it reports still point at the
+    right line.
+    """
+    out = []
+    i, n = 0, len(text)
+    while i < n:
+        two = text[i:i + 2]
+        if two == "/*":                      # block comment
+            end = text.find("*/", i + 2)
+            end = n if end < 0 else end + 2
+            out.append("".join(c if c == "\n" else " " for c in text[i:end]))
+            i = end
+        elif two == "//":                    # line comment
+            end = text.find("\n", i)
+            end = n if end < 0 else end
+            out.append(" " * (end - i))
+            i = end
+        elif text[i] in "'\"`":             # string or template literal
+            quote = text[i]
+            j = i + 1
+            while j < n and text[j] != quote:
+                if text[j] == "\\":
+                    j += 1
+                j += 1
+            j = min(j + 1, n)
+            out.append("".join(c if c == "\n" else " " for c in text[i:j]))
+            i = j
+        else:
+            out.append(text[i])
+            i += 1
+    return "".join(out)
+
+
+CAPITALISED_USE = re.compile(r"\b([A-Z][A-Za-z0-9_]*)\s*(?:\.|\()")
+
+
+def check_names():
+    """Every capitalised name a module uses is one it can actually see.
+
+    This is the class of bug nothing else here can catch. `node --check` parses
+    a file without resolving a single name, and the wiring check only confirms
+    that what *is* imported exists -- neither notices a name that was never
+    imported at all. It is a ReferenceError the moment that line runs, and only
+    that line.
+
+    It has now happened twice. A constant defined in two modules reached a user
+    as a bare ReferenceError the first time a catch ran. And splitting tasks.js
+    into mixins left six `Tasks.menuIsLive(...)` calls in battle.js, where the
+    name `Tasks` no longer exists -- which shipped, and broke grinding in the
+    deployed app, while every check here passed and thirty-seven tests stayed
+    green because they exercised the static directly rather than its callers.
+
+    What it covers is `Name.something` and `Name(...)` for a capitalised name.
+    It does not cover bare identifiers, which would need real scope analysis --
+    parameters, destructuring, loop variables. A narrower rule that is always
+    right is worth more than a broad one that cries wolf: a first attempt at
+    also checking ALL_CAPS constants produced twelve findings, every one of them
+    an object key or a property name.
+    """
+    problems = []
+    for path in APP:
+        text = path.read_text()
+        declared = set(BROWSER_GLOBALS)
+        # Imported names.
+        for block in re.findall(r"import\s*\{([^}]*)\}\s*from", text):
+            for part in block.split(","):
+                name = part.strip().split(" as ")[-1].strip()
+                if name:
+                    declared.add(name)
+        for name in re.findall(r"import\s+(\w+)\s+from", text):
+            declared.add(name)
+        # Declared here: classes, functions, consts, and mixin parameters.
+        declared |= set(re.findall(r"\b(?:class|function)\s+([A-Z]\w*)", text))
+        declared |= set(re.findall(r"\b(?:const|let|var)\s+([A-Z]\w*)", text))
+        declared |= set(re.findall(r"function\s+with\w+\((\w+)\)", text))
+        declared |= set(re.findall(r"\bclass\s+(\w+)\s+extends", text))
+
+        for n, line in enumerate(_code_only(text).splitlines(), 1):
+            for name in CAPITALISED_USE.findall(line):
+                if name in declared or name.isupper():
+                    continue
+                problems.append(f"{path.name}:{n}  {name} is used but never "
+                                f"imported or declared here")
+    for p in problems:
+        print(f"        {p}")
+    return fail(f"{len(problems)} unbound name(s)") if problems \
+        else ok(f"every capitalised name in {len(APP)} modules resolves")
+
+
 CHECKS = {
     "syntax": check_syntax,
     "shell": check_shell,
@@ -446,6 +560,7 @@ CHECKS = {
     "wiring": check_wiring,
     "version": check_version,
     "docshape": check_docs_shape,
+    "names": check_names,
     "moves": check_moves,
 }
 

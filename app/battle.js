@@ -17,45 +17,32 @@ const PARTY_HOLD = 12, PARTY_GAP = 24, PARTY_SETTLE = 40;
 // it: wMenuDataItems and wMenuBorderTopCoord.
 const BATTLE_MENU_ITEMS = 34, BATTLE_MENU_TOP = 12;
 
+/**
+ * Is the battle menu up and waiting for a choice?
+ *
+ * A module function, not only a static. Six call sites in this file used to say
+ * `menuIsLive(...)`, and after the class was split into mixins the name
+ * `Tasks` lives in tasks.js and is not in scope here -- so every one of them
+ * was a ReferenceError the moment it ran. It reached the deployed app and broke
+ * grinding, because nothing that could see it was looking: `node --check` cannot
+ * spot an unbound name, and the tests exercised the static directly rather than
+ * any of its callers.
+ */
+export function menuIsLive(s) {
+  const [x, y] = s.menu;
+  if (s.menuItems !== BATTLE_MENU_ITEMS || s.menuTop !== BATTLE_MENU_TOP) {
+    return false;
+  }
+  return x >= 1 && x <= 2 && y >= 1 && y <= 2;
+}
+
+
 export function withBattle(Base) {
   // Named, so a stack trace says which of these a frame came from.
   return class WithBattle extends Base {
-  /**
-   * Is the battle menu up and waiting for a choice?
-   *
-   * Both halves of the cursor have to be in range. Checking only the column
-   * mistakes the text after a run attempt for a fresh menu: the cursor keeps
-   * the column RUN was chosen on and the confirm slot clears itself, so it
-   * reads as (2, 3) -- a column that looks right above a row that cannot be.
-   * Fleeing gave up on that misreading and reported it could not run from a
-   * SENTRET it had in fact escaped.
-   *
-   * What must *not* be in here is wBattleMenuCursorPosition. It holds the action
-   * last chosen, not whether the menu is waiting: it is 0 until the first choice
-   * of a battle and keeps that choice afterwards. Requiring it to be 0 therefore
-   * matched only the opening turn and was false for every turn after -- so
-   * awaitBattleMenu spent 150 presses and returned null, flee could not tell a
-   * refusal from an escape, and watchThrow could not see a Pokemon break free.
-   * Measured at a menu that was plainly live and taking input, it read 3.
-   *
-   * That is also why a throw could burn five balls and catch nothing: the break
-   * free went unnoticed, the presses meant to clear text re-opened the pack, and
-   * the last one left the pilot sitting in an empty ball pocket on CANCEL.
-   *
-   * The cursor is not enough on its own either, because the pack parks it at
-   * (1, 1) too -- so a ball in mid-air read as a fresh menu, and the throw was
-   * abandoned before the game had finished saying "used the POKé BALL". Which
-   * menu is actually drawn settles it: measured, the battle menu is 34 items
-   * with its box at row 12, while the pack is 5 items at row 1 and the pack
-   * mid-throw is 2 at row 0. The move menu shares the battle menu's box, and
-   * that is fine -- both mean the game is waiting on us.
-   */
+  /** Kept as a static so external callers and tests can reach it. */
   static menuIsLive(s) {
-    const [x, y] = s.menu;
-    if (s.menuItems !== BATTLE_MENU_ITEMS || s.menuTop !== BATTLE_MENU_TOP) {
-      return false;
-    }
-    return x >= 1 && x <= 2 && y >= 1 && y <= 2;
+    return menuIsLive(s);
   }
 
   /** Walk back and forth until a wild battle starts. */
@@ -91,7 +78,7 @@ export function withBattle(Base) {
     for (let i = 0; i < tries; i++) {
       const s = await this.snap();
       if (!s.inBattle) return null;
-      if (Tasks.menuIsLive(s)) return s;
+      if (menuIsLive(s)) return s;
       await this.push('A', 4, 6);   // push through text
     }
     return null;
@@ -214,7 +201,7 @@ export function withBattle(Base) {
         const now = await this.snap();
         if (!now.inBattle) return 'ended';
         if (now.active.maxHp > 0 && now.active.hp > 0) return 'ok';
-        if (i > 2 && Tasks.menuIsLive(now)) return 'ok';
+        if (i > 2 && menuIsLive(now)) return 'ok';
         await this.push('A', 4, 6);
         await this.pump();
       }
@@ -270,7 +257,7 @@ export function withBattle(Base) {
       for (let i = 0; i < 120; i++) {
         const s = await this.snap();
         if (!s.inBattle) return this._outcome();
-        if (i > 3 && Tasks.menuIsLive(s)) break;
+        if (i > 3 && menuIsLive(s)) break;
         await this.push('A', 4, 6);
         await this.pump();
       }
@@ -349,7 +336,7 @@ export function withBattle(Base) {
       const now = await this.snap();
       if (!now.inBattle) return 'ended';
       if (now.enemy.hp === 0) return 'fainted';
-      if (i > 3 && Tasks.menuIsLive(now)) return 'ok';
+      if (i > 3 && menuIsLive(now)) return 'ok';
       await this.push('A', 4, 6);
       await this.pump();
     }
@@ -372,7 +359,7 @@ export function withBattle(Base) {
       for (let i = 0; i < 90; i++) {
         const s = await this.snap();
         if (!s.inBattle) return true;
-        if (i > 3 && Tasks.menuIsLive(s)) break;   // it refused; ask again
+        if (i > 3 && menuIsLive(s)) break;   // it refused; ask again
         await this.push('A', 4, 6);
         await this.pump();
       }
@@ -459,7 +446,7 @@ export function withBattle(Base) {
         return 'gone';
       }
       // The menu coming back means it broke out and the turn is ours again.
-      if (i > 3 && Tasks.menuIsLive(s)) return 'broke free';
+      if (i > 3 && menuIsLive(s)) return 'broke free';
       if (s.windowOpen && s.menu[1] >= 1 && s.party.length > partyBefore) {
         await this.declineNickname();
         await this.settleText();
