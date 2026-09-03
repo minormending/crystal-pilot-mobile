@@ -504,12 +504,21 @@
     <p>Both come out of a
       <a href="https://github.com/pret/pokecrystal">pokecrystal</a> build: run
       <code>make</code> and you get the pair.</p>
-    <div class="note">Neither file leaves your phone. They are read in the page
-      and never uploaded, which is also why this can be hosted publicly — no
-      game data is served, only the app. Both are kept in this browser's own
-      storage so a reload does not send you looking for them again, with your
-      last save beside them; <em>Forget</em> in the settings card throws all
-      three away.</div>
+    <!-- One child, not three. This is a flex row -- the bar down the left is
+         its ::before -- so a <br> at this level makes the text either side of
+         it a separate flex item, and two of those read as newspaper columns.
+         Caught by looking at the page rather than by any check here. -->
+    <div class="note"><div>Neither file is ever uploaded. They are read in the
+      page and kept in this browser's own storage, so a reload does not send you
+      looking for them again — <em>Forget</em>, in the settings card, throws
+      them and your save away. This is also why the app can be hosted publicly:
+      no game data is served, only the app.
+      <br><br>
+      One exception, and only if you turn it on: <em>Share</em> puts your save —
+      and the 45 addresses the pilot reads — into a room, so your other device
+      can pick the game up. The ROM never goes, the room is reachable by anyone
+      holding its code, and until you press Share nothing leaves at
+      all.</div></div>
   </div>
 
   <div class="card" id="loader">

@@ -40,6 +40,13 @@ and the code disagree, the code is right and the section is a bug — see
    · [Slots, undo, and bringing a save in](#7c-slots-undo-and-bringing-a-save-in)
 8. [The errands](#8-the-errands)
 9. [The interface](#9-the-interface)
+   · [Colour](#colour) · [What it remembers](#what-it-remembers)
+   · [Sharing between your own devices](#sharing-between-your-own-devices)
+   · [Handing the save over](#handing-the-save-over)
+   · [Watching the other device's screen](#watching-the-other-devices-screen)
+   · [What a handoff replaces](#what-a-handoff-replaces-and-where-it-goes)
+   · [The symbol file stops travelling](#the-symbol-file-stops-travelling)
+   · [The code that came from somewhere else](#the-code-that-came-from-somewhere-else)
 10. [Keeping this honest](#10-keeping-this-honest)
 11. [Things that look like bugs and are not](#11-things-that-look-like-bugs-and-are-not)
 
@@ -1197,7 +1204,7 @@ the bag" rather than "did we gain any".
 
 ## 9. The interface
 
-<!-- covers: app/main.js index.html @ 69222255bf37 -->
+<!-- covers: app/main.js index.html @ 55a7111c71c5 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -1737,6 +1744,31 @@ the way `app/world.js` nearly did. The Firebase SDK itself is another origin
 and is deliberately not cached — offline you keep the app and lose sharing,
 which is the right way round.
 
+### The code that came from somewhere else
+
+Two folders here are copies, and neither is edited in place.
+
+| folder | canonical | what it does |
+| --- | --- | --- |
+| `sync/` | [kidsync](https://github.com/minormending/kidsync) | the room: Firebase, anonymous auth, rules, merge, debounce |
+| `baton/` | [baton](https://github.com/minormending/baton) | one blob, one holder: pack it, order it, hand it over |
+
+Vendored rather than imported, for the reason those repos give: these are
+offline-first apps with no build step, and a cross-origin import in the middle
+of a module graph is a dependency that fails exactly when the network does.
+What that costs is drift, and the answer to drift is that each canonical repo
+carries `tools/install` and `tools/check` — run `tools/check` there and it
+compares every consumer's copy against the original, byte for byte.
+
+`sync/bridge.js` is vendored and unused: it joins a host app's *classic
+scripts* to kidsync's ES module, and this app is modules end to end. Keeping the
+copy identical is what lets kidsync's own check stay green here.
+
+`check-app` asserts both folders are in the service worker shell. An unlisted
+module is served from the network and breaks offline use silently — the mistake
+`app/world.js` nearly shipped — and code from another repo is *more* likely to
+be forgotten, not less.
+
 ---
 
 ## 10. Keeping this honest
@@ -1805,10 +1837,11 @@ tools/check-app contrast     # or one group
 | `docshape` | the architecture diagram names and counts every module |
 | `names` | every capitalised name a module uses is imported or declared there |
 | `moves` | the moves that would knock out what you are catching stay out of weakening |
+| `symbols` | every symbol the app looks up is one it can hand to another device |
 
 Half of that table was missing until the marker above was added: six groups had
 been written and never listed, so the document described five checks while
-eleven ran. Nothing noticed, because no section had claimed to cover
+eleven ran, and the twelfth arrived later with the symbol digest. Nothing noticed, because no section had claimed to cover
 `tools/check-app` — which is the exact failure `docs-check` exists to catch,
 one file away from the prose explaining it.
 

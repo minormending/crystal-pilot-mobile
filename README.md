@@ -12,6 +12,11 @@ as a remote?
 on your phone, pick your own ROM and `.sym`, and it runs. Android will offer to
 install it to the home screen.
 
+It also runs on *both* your phone and your tablet: a room code carries the save
+between them, so you can put one down and pick the other up, and a second device
+needs only the ROM. What travels, and what never does, is set out in
+[What leaves the device](#what-leaves-the-device-and-when).
+
 Short answer: yes, in the browser — and this repo is a working spike that proves
 the hard part. It boots a Pokémon Crystal ROM on the device, reads the game's
 live state through the disassembly's symbol file, and drives it with synthetic
@@ -896,7 +901,7 @@ and loses to every real one.
 
 Storage throws rather than returning null in a private window or after cleared
 site data, so every access goes through one accessor that answers "nothing
-remembered". Eleven tests cover the deciding; the storage call itself is three
+remembered". Ten tests cover the deciding; the storage call itself is three
 lines and a `try`.
 
 ### The ROM, the symbol file, and your last save
@@ -905,8 +910,10 @@ Those three are far too big for localStorage — 2MB of ROM against a budget of
 about five, in strings — so they live in IndexedDB, and the app opens straight
 into the game rather than onto a card asking for two files you have to go and
 find. *Forget*, in the settings card, throws all three away; the row above it
-names what is being kept. Nothing is uploaded, exactly as before: the files are
-on your phone, in this browser's storage, and no game data is ever served.
+names what is being kept. None of it is uploaded: the files are on your phone,
+in this browser's storage, and no game data is ever served. Sharing is the one
+exception, and it is off until you press Share — see
+[What leaves the device](#what-leaves-the-device-and-when).
 
 **The save is kept because nothing else keeps it.** Measured: save the game,
 reload, and it is gone — the emulator library persists a cartridge only when
@@ -1029,6 +1036,43 @@ the test browser because a background tab never sends its ICE checks, and a
 standalone probe in the same browser passes video fine. On two real devices it
 should simply work — and if it does not, the row will tell you.
 
+## What leaves the device, and when
+
+Sharing changed the honest answer to "does anything leave my phone?", so here it
+is in one place. Until you press **Share**, nothing does — no room, no network,
+not even the Firebase SDK, which is fetched only when a room is opened.
+
+| | leaves | when |
+| --- | --- | --- |
+| the ROM | **never**, by any path | — |
+| the `.sym` file | **never** | — |
+| 45 addresses out of it | yes, ~1KB | while sharing |
+| your save | yes, ~1–10KB gzipped | on every in-game save, while sharing |
+| where you are, as a sentence | yes | with the save |
+| speed, grind preset, hunted species | yes | while sharing |
+| the picture, while *Show* is on | device to device, **not** to a server | while showing |
+
+A room is one key in a Firebase Realtime Database, named by its code. **The code
+is the password**: anyone holding it can read and write that room, and the save
+in it is gzipped, not encrypted. That is the right trade for your own two
+devices passing a game between them, and the wrong one for anything you would
+mind a stranger reading. Rooms cannot be deleted from inside the app — the rules
+reject it — so an abandoned one keeps its last save until you delete the node in
+the Firebase console.
+
+*Forget* throws away what this device keeps; **Stop** leaves the room without
+touching what is already in it.
+
+### If you clone this
+
+`sync/firebase-config.js` points at the Firebase project these apps share, and
+those values are public by design — they are an address, not a secret, and the
+[rules](sync/firebase-rules.json) are the protection. But they are *my* address:
+press Share on your own copy and you would be writing rooms into my database. So
+point it at your own project — kidsync's README has the five-minute setup — or
+delete the file, which leaves the app working exactly as it did before any of
+this, with sharing quietly unavailable.
+
 ## Controls
 
 Eight on-screen buttons: the D-pad, A, B, Select and Start. **Press and hold** —
@@ -1106,13 +1150,19 @@ you have.
 
 What the tests do **not** cover is anything that needs the emulator running —
 walking, the intro, the collision decode against a real map, and loading a save
-back into the cartridge. Those are still verified by hand against a local build.
+back into the cartridge. Nor anything that needs a network: the room, the
+handoff and the picture are all verified by hand, between two browser origins
+standing in for two devices. The one part not verified even that way is the
+video itself, for a reason the [remote play](#watching-it-on-the-other-device)
+section gives. Everything by hand runs against a local build.
 
 ## Running it
 
 Easiest: open **https://minormending.github.io/crystal-pilot-mobile/** and pick
-your ROM and `.sym`. Both files stay in the browser — nothing is uploaded, which
-is also why hosting this publicly is fine: no game data is served, only the app.
+your ROM and `.sym`. Both files stay in the browser, which is also why hosting
+this publicly is fine: no game data is served, only the app. Nothing is uploaded
+unless you press *Share*, and even then the ROM never is — see
+[What leaves the device](#what-leaves-the-device-and-when).
 
 It is a static site with no build step, so it runs anywhere that serves files:
 
