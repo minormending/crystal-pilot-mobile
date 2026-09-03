@@ -132,3 +132,46 @@ export function describeUndo(point, refused) {
   }
   return { text: 'nothing to undo yet', enabled: false };
 }
+
+/**
+ * What the Devices row says, and what its button offers.
+ *
+ * Here rather than in main.js for the same reason every other row's wording is
+ * here: this is four states and a code, and the only way to be sure all four
+ * read like sentences is to be able to run them.
+ *
+ * `status` is kidsync's: 'local' before a room exists, then 'connecting',
+ * 'synced', 'offline' -- plus 'unavailable' from room.js, which is what an
+ * offline first load looks like, when the Firebase SDK could not be fetched at
+ * all. That one is deliberately not an error: sharing is a bonus layer.
+ */
+export function describeRoom({ status = 'local', code = null } = {}) {
+  if (status === 'unavailable') {
+    return { text: 'no connection — sharing needs one', button: null, joining: false };
+  }
+  if (!code) {
+    return { text: 'not sharing', button: 'Share', joining: true };
+  }
+  if (status === 'connecting') {
+    return { text: `connecting to ${code}`, button: 'Stop', joining: false };
+  }
+  if (status === 'offline') {
+    return { text: `${code} — offline, will catch up`, button: 'Stop', joining: false };
+  }
+  return { text: `sharing as ${code}`, button: 'Stop', joining: false };
+}
+
+/**
+ * Why a code did not join, as a sentence.
+ *
+ * kidsync answers with a reason rather than throwing, because a mistyped code
+ * is a normal thing to do. The default is deliberately vague rather than
+ * silent: a reason this build has never heard of should still say something.
+ */
+export function joinFailure(reason) {
+  if (reason === 'malformed') return 'that is not a full code — three words and three numbers';
+  if (reason === 'not-found') return 'no room with that code — check for a typo, or press Share on the other device';
+  if (reason === 'not-configured') return 'this build has no Firebase config, so it cannot share';
+  if (reason === 'network') return 'could not reach the room — try again in a moment';
+  return `could not join: ${reason}`;
+}

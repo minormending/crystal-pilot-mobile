@@ -18,6 +18,11 @@ import tempfile
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 APP = sorted((ROOT / "app").glob("*.js"))
+# Code copied in from another repo of ours (kidsync's canonical copy lives in
+# ../kidsync, and its own tools/check is what catches edits in place). What this
+# repo has to enforce is narrower and its own business: that the copies are in
+# the offline shell.
+VENDORED = sorted((ROOT / "sync").glob("*.js"))
 INDEX = ROOT / "index.html"
 SW = ROOT / "sw.js"
 
@@ -87,6 +92,14 @@ def check_shell():
         rel = f"app/{src.name}"
         if rel not in listed:
             problems.append(f"on disk but not in SHELL: {rel}")
+    # Vendored modules too. They are ordinary same-origin files the app imports,
+    # so an unlisted one is served from the network and breaks offline use in
+    # exactly the way app/world.js nearly did -- and being someone else's code
+    # makes it *more* likely to be forgotten, not less.
+    for src in VENDORED:
+        rel = f"sync/{src.name}"
+        if rel not in listed:
+            problems.append(f"vendored but not in SHELL: {rel}")
     for p in problems:
         print(f"        {p}")
     return fail(f"{len(problems)} shell mismatch(es)") if problems \

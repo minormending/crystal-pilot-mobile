@@ -92,9 +92,9 @@ of the subtleties in sections 6 and 7.
 
 ## 2. The shape of it
 
-<!-- covers-api: app/main.js app/bootstrap.js app/tasks.js app/nav.js app/world.js app/collision.js app/state.js app/romdata.js app/symbols.js app/gb.js @ 059f78cd951a -->
+<!-- covers-api: app/main.js app/bootstrap.js app/tasks.js app/nav.js app/world.js app/collision.js app/state.js app/romdata.js app/symbols.js app/gb.js @ a1ec75657530 -->
 
-Eighteen modules. Arrows point from a module to the ones it imports.
+Nineteen modules. Arrows point from a module to the ones it imports.
 
 ```mermaid
 flowchart TD
@@ -108,6 +108,7 @@ flowchart TD
     rows["rows.js<br/>what each row says"]
     ver["version.js<br/>which build this is"]
     rem["remember.js<br/>what survives a reload"]
+    room["room.js<br/>sharing between your devices"]
     nav["nav.js<br/>walking"]
     world["world.js<br/>map graph"]
     coll["collision.js<br/>what is walkable"]
@@ -122,6 +123,7 @@ flowchart TD
     main --> rows
     main --> ver
     main --> rem
+    main --> room
     main --> nav
     main --> world
     main --> coll
@@ -165,6 +167,7 @@ flowchart TD
 | `rows.js` | "why is that button greyed out?" |
 | `version.js` | "which build am I running?" |
 | `remember.js` | "what did they choose last time?" |
+| `room.js` | "what has my other device chosen?" |
 | `main.js` | everything the person holding the phone touches |
 
 The dependency direction is the design: **nothing below `tasks.js` knows what a
@@ -1191,7 +1194,7 @@ the bag" rather than "did we gain any".
 
 ## 9. The interface
 
-<!-- covers: app/main.js index.html @ 4e3461c54a32 -->
+<!-- covers: app/main.js index.html @ e7058a2a58ce -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -1366,11 +1369,11 @@ range comes from the markup and the `SPEEDS` table rather than being written
 down twice, so a preset cannot outlive the button that offered it.
 
 **Each group carries when it was chosen.** A fourth field, `at`, stamped on
-every write. Nothing in the app reads it yet — it exists because ordering two
-devices' choices needs a stamp that survives a reload, and one invented at load
-time would make every reload look like a fresh decision. An absent or nonsense
-stamp reads as `0`, which loses to every real one; that is the safe direction,
-because the record with nothing in it is the one that must not win.
+every write — it is what lets one device's choices be ordered against another's,
+and it survives a reload because a stamp invented at load time would make every
+reload look like a fresh decision. An absent or nonsense stamp reads as `0`,
+which loses to every real one: the record with nothing in it is the one that
+must not win.
 
 **What is stored is the choice, never what the choice worked out to.** `+2`
 means two above the lead, so storing the `Lv12` it resolved to today would come
@@ -1450,6 +1453,56 @@ only copy of a game — no slot taken, no `.sav` downloaded. The slots are in th
 other database and are untouched, which the question says: "forget my files"
 must not read as "wipe everything".
 
+### Sharing between your own devices
+
+<!-- covers: app/room.js sync/kidsync.js @ 483b589b98a2 -->
+
+One person with a phone and a tablet, no accounts: a room code is the whole
+mechanism. `sync/` is [kidsync](https://github.com/minormending/kidsync)
+vendored — a room is one key in a Firebase Realtime Database, every device
+holding the code reads and writes it, and the code is the password. That shape
+is right for your own devices and wrong for anyone else's, so the code lives in
+your pocket and never in this repo.
+
+What travels today is the three remembered options, and that is on purpose:
+this is the small half, standing up the whole path — config, rules, anonymous
+sign-in, merge, debounce — with a slider position at stake rather than a save.
+
+**Nothing here may be able to break the app.** kidsync imports the Firebase SDK
+from `gstatic` at the top of its module, so importing it statically would put a
+cross-origin fetch in the middle of this app's module graph: offline that
+import fails, and everything downstream of it fails with it — which is the
+whole app, in an app whose service worker exists so it runs with no signal. So
+`room.js` loads it with a dynamic `import()` inside a `try`, and only when
+someone asks to share. kidsync's other consumers get this for free from
+`bridge.js`, which is a separate entry point after their classic scripts have
+run; an ES-module app has to insulate itself.
+
+**Opening the room is what reaches the network**, and it happens on a press or
+because this device has shared before. Someone who never shares never loads the
+SDK and never signs in.
+
+**Options are a settings group, not progress.** kidsync's grow-only merge is
+for stars and unlocks; every one of these three can be *changed back*, and a
+`Math.max` over a speed step would make the fastest speed either device ever
+chose the one neither can leave. So the newest group wins wholesale, by a
+stamp — and the group moves together, because the three are chosen in one
+sitting and interleaving halves of two sittings makes a state neither device
+ever had.
+
+**What arrives is checked by the same `sanitise` a stored record goes
+through**, for a stronger reason: a remembered `+3` is a preset this build
+dropped, while a remote one is a preset another build still offers. And it is
+never applied while a job is running — a target moving under a thumb mid-grind
+is alarming, and the task is holding the old value anyway, so it waits for the
+next quiet refresh.
+
+The service worker caches the vendored files, and `check-app` now asserts that:
+an unlisted one is served from the network and breaks offline use in exactly
+the way `app/world.js` nearly did. The Firebase SDK itself is another origin
+and is deliberately not cached — offline you keep the app and lose sharing,
+which is the right way round.
+
 ---
 
 ## 10. Keeping this honest
@@ -1496,7 +1549,7 @@ git config core.hooksPath .githooks
 
 ### The other checks
 
-<!-- covers: tools/check-app @ 9611aec23c55 -->
+<!-- covers: tools/check-app @ add179bc8581 -->
 
 `tools/check-app` runs everything that can be verified without a ROM:
 

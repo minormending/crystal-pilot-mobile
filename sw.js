@@ -5,7 +5,7 @@
 // in IndexedDB on the device by app/remember.js, so a reload does not send you
 // looking for them -- which is a different thing from being cached, and is
 // thrown away by Forget in the settings card.
-const CACHE = 'crystal-pilot-v76';
+const CACHE = 'crystal-pilot-v77';
 const SHELL = [
   './', './index.html', './manifest.webmanifest', './icon.svg',
   './vendor/wasmboy.umd.js',
@@ -14,7 +14,13 @@ const SHELL = [
   './app/taskbase.js', './app/menus.js', './app/battle.js', './app/jobs.js',
   './app/rows.js', './app/version.js', './app/remember.js',
   './app/collision.js', './app/nav.js', './app/romdata.js', './app/world.js',
-  './app/bootstrap.js',
+  './app/bootstrap.js', './app/room.js',
+  // Vendored from the kidsync repo, and cached for the same reason as the rest:
+  // unlisted means served from the network, which is invisible until someone is
+  // on a train. The Firebase SDK these pull from gstatic is *not* cached -- it
+  // is another origin, and this worker deliberately answers for this one only.
+  // Offline you keep the app and lose sharing, which is the right way round.
+  './sync/kidsync.js', './sync/bridge.js', './sync/firebase-config.js',
 ];
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));

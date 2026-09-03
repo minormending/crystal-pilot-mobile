@@ -1,10 +1,12 @@
 // Wiring: file pickers, the render loop, and dispatching a task.
 import { GameBoy } from './gb.js';
 import { Symbols } from './symbols.js';
-import { describeRows, describeSlot, describeUndo } from './rows.js';
+import { describeRoom, describeRows, describeSlot, describeUndo,
+         joinFailure } from './rows.js';
 import { VERSION } from './version.js';
 import { forgetKept, keepBattery, keepRom, keepSym, keptMeta, readOpts, recall,
-         writeOpts } from './remember.js';
+         sanitise, writeOpts } from './remember.js';
+import { openRoom, wasSharing } from './room.js';
 import { Cancelled } from './taskbase.js';
 import { Saves, SLOT_IDS, UNDO_SLOT } from './saves.js';
 import { GameState, TRAINER_BATTLE, MAX_PARTY } from './state.js';
@@ -39,9 +41,21 @@ const SPEEDS = [1, 2, 4, 8, 16];
 // button that offered it.
 const GRIND_SPECS = [...document.querySelectorAll('[data-target]')]
   .map((b) => b.dataset.target);
-// Last session's choices, checked against this build before anything uses
-// them. Read once: a second read mid-session would fight the person.
-const REMEMBERED = readOpts({ speeds: SPEEDS.length, grinds: GRIND_SPECS });
+const LIMITS = { speeds: SPEEDS.length, grinds: GRIND_SPECS };
+// The choices in force: last session's to begin with, and whatever another of
+// your devices has chosen since. Not a const any more, because a room can
+// change it -- but still only ever written through adoptOptions, so there is
+// one place where an option arriving from somewhere else is checked.
+let wanted = readOpts(LIMITS);
+// A room's options that arrived while a job was running. Never repaint under a
+// thumb mid-task: the target moving while a grind runs is alarming, and the
+// job is using the old value anyway.
+let optionsPending = false;
+// The room, once someone asks for one. Null until then, and null forever for
+// anyone who never shares -- opening it is what reaches the network.
+let room = null;
+// Set when the Firebase SDK could not be fetched -- an offline first load.
+let roomUnavailable = false;
 // Whether the remembered grind preset has been applied. It cannot be applied
 // at load: `+2` means two above the lead, and there is no party until a game
 // is running.
@@ -582,12 +596,14 @@ async function refresh() {
   if (romdata) refreshBag(s);
   // Remembered so the relative presets have something to be relative to.
   lastLead = s.party.length ? s.party[0].level : null;
+  // Options that arrived from another device while a job was running.
+  if (optionsPending && !running) applyWanted();
   // Last session's preset, applied the moment it means something and then
   // never again -- re-applying on every refresh would drag the target back
   // every time the person chose differently.
-  if (!grindRestored && REMEMBERED.grind && s.party.length) {
+  if (!grindRestored && wanted.grind && s.party.length) {
     grindRestored = true;
-    pickTarget(REMEMBERED.grind, false);
+    pickTarget(wanted.grind, false);
   }
   // Named in the Heal row, so the choice the pilot would make is visible
   // before it is asked to make it.
@@ -688,7 +704,7 @@ function pickTarget(spec, remember = true) {
   for (const other of $('#levels').querySelectorAll('button')) {
     other.classList.toggle('on', other.dataset.target === spec);
   }
-  if (remember) writeOpts({ grind: spec });
+  if (remember) saveOption({ grind: spec });
 }
 
 document.querySelectorAll('[data-target]').forEach((b) => {
@@ -830,7 +846,7 @@ async function refreshSpecies(s) {
     b.textContent = name;
     b.onclick = () => {
       huntWanted = name;
-      writeOpts({ hunt: name });
+      saveOption({ hunt: name });
       markSpecies(list);
       refresh();
     };
@@ -842,8 +858,8 @@ async function refreshSpecies(s) {
   // when nothing is chosen -- so this restores a choice and never overrides
   // one. The list is rebuilt whenever the map or the hour changes, which is
   // exactly when "is it here?" has a new answer.
-  if (!huntWanted && REMEMBERED.hunt && here.includes(REMEMBERED.hunt)) {
-    huntWanted = REMEMBERED.hunt;
+  if (!huntWanted && wanted.hunt && here.includes(wanted.hunt)) {
+    huntWanted = wanted.hunt;
   }
   markSpecies(list);
 }
@@ -878,19 +894,22 @@ $('#catch').onclick = async () => {
 // Only the idle loop is affected. Tasks drive their own frames as fast as they
 // can, which is what makes a grind worth starting.
 const speedInput = $('#speed');
+// At module scope rather than inside the block below, because an option
+// arriving from another device has to be able to repaint this too.
+function showSpeed() {
+  if (!speedInput) return;
+  speed = SPEEDS[Number(speedInput.value)];
+  $('#speedx').textContent = speed === SPEEDS[SPEEDS.length - 1]
+    ? 'max' : speed + '×';
+}
 if (speedInput) {
-  const showSpeed = () => {
-    speed = SPEEDS[Number(speedInput.value)];
-    $('#speedx').textContent = speed === SPEEDS[SPEEDS.length - 1]
-      ? 'max' : speed + '×';
-  };
-  if (REMEMBERED.speed !== null) speedInput.value = String(REMEMBERED.speed);
+  if (wanted.speed !== null) speedInput.value = String(wanted.speed);
   speedInput.addEventListener('input', showSpeed);
   // Written on `change` rather than `input`: dragging the slider fires input
   // for every step it passes through, and there is no reason to write four
   // records on the way to the fifth.
   speedInput.addEventListener('change',
-    () => writeOpts({ speed: Number(speedInput.value) }));
+    () => saveOption({ speed: Number(speedInput.value) }));
   showSpeed();
 }
 
@@ -1285,6 +1304,160 @@ $('#forget').onclick = async () => {
   paintFiles();
   progress('the files are no longer kept on this phone');
 };
+
+// --- sharing between your own devices ----------------------------------------
+//
+// One person, several devices, no accounts: a room code is the whole mechanism.
+// This is the small half of it -- the three remembered options -- and it exists
+// first because it proves the whole path with nothing at stake. If a slider
+// position can cross between two phones, so can a save.
+
+/**
+ * Remember one option locally, and tell the room if there is one.
+ *
+ * The local write happens either way. remember.js is the source of truth and
+ * works with no network, no room, and no Firebase config at all; the room is
+ * a layer on top that can be absent forever.
+ */
+function saveOption(patch) {
+  writeOpts(patch);
+  wanted = { ...wanted, ...patch };
+  // All three, not just the one that changed: the merge picks a whole group by
+  // its stamp, so a half group would be a state neither device ever had.
+  if (room) room.share(readOpts(LIMITS));
+}
+
+/**
+ * Take options from somewhere that is not this device.
+ *
+ * Through the same sanitise() a stored record goes through, and for a stronger
+ * reason: this came from another device, which may be running an older build.
+ * A remembered `+3` is a preset this build dropped; a remote one is a preset
+ * another build still offers.
+ */
+function adoptOptions(raw) {
+  const clean = sanitise(raw, LIMITS);
+  // An empty group is not a choice anybody made. A room nobody has written to
+  // answers with one, and adopting it would clear this device's options at the
+  // moment it joined -- which is exactly what happened the first time this ran.
+  if (clean.speed === null && clean.grind === null && clean.hunt === null) return;
+  // And an older group loses. Both devices stamp what they chose when they
+  // chose it, so this is the same comparison the room's own merge makes,
+  // repeated here because onChange also fires for this device's own writes.
+  if (clean.at < wanted.at) return;
+  if (clean.speed === wanted.speed && clean.grind === wanted.grind
+      && clean.hunt === wanted.hunt) return;
+  wanted = clean;
+  // The room is this device's memory now too, so a reload keeps what arrived,
+  // and it keeps *their* stamp rather than taking a new one here.
+  writeOpts(clean);
+  optionsPending = true;
+  if (!running) applyWanted();
+}
+
+/**
+ * Put the options in force in front of the person.
+ *
+ * Only when no job is running. A target or a quarry changing under a thumb
+ * mid-task is alarming, and the task is holding the old value anyway -- so a
+ * pending change waits for the next quiet refresh instead.
+ */
+function applyWanted() {
+  optionsPending = false;
+  if (speedInput && wanted.speed !== null) {
+    speedInput.value = String(wanted.speed);
+    showSpeed();
+  }
+  if (wanted.grind && lastLead !== null) pickTarget(wanted.grind, false);
+  if (wanted.hunt !== huntWanted) {
+    // Dropped rather than switched: refreshSpecies owns the rule about what can
+    // be hunted where and when, and clearing its key makes it rebuild and
+    // re-select *through* that rule rather than around it.
+    huntWanted = null;
+    speciesKey = '';
+  }
+}
+
+/** Say what sharing is doing, from rows.js so the four states can be tested. */
+function paintRoom() {
+  const said = describeRoom({
+    status: room ? room.status : (roomUnavailable ? 'unavailable' : 'local'),
+    code: room ? room.code : null,
+  });
+  $('#roomstate').textContent = said.text;
+  const btn = $('#share');
+  btn.textContent = said.button || 'Share';
+  btn.classList.toggle('hide', !said.button);
+  $('#joinrow').classList.toggle('hide', !said.joining);
+}
+
+/**
+ * Open the room, once. Nothing before this touches the network.
+ *
+ * Deliberately lazy: someone who never shares never loads the Firebase SDK,
+ * never signs in anonymously, and cannot be broken by either. That is also why
+ * room.js imports kidsync dynamically -- see the note at the top of it.
+ */
+async function ensureRoom() {
+  if (room) return room;
+  room = await openRoom({
+    options: readOpts(LIMITS),
+    onOptions: adoptOptions,
+    onStatus: paintRoom,
+  });
+  if (!room) roomUnavailable = true;
+  paintRoom();
+  return room;
+}
+
+$('#share').onclick = async () => {
+  const btn = $('#share');
+  btn.disabled = true;
+  try {
+    if (room && room.code) {
+      room.stop();
+      progress('this device has stopped sharing — your options are kept');
+    } else {
+      const r = await ensureRoom();
+      if (!r) { progress('sharing needs a connection'); return; }
+      const code = await r.start();
+      r.share(readOpts(LIMITS));
+      progress(`sharing as ${code} — type that on your other device`);
+    }
+  } catch (e) {
+    progress(`could not start sharing: ${e && e.message ? e.message : e}`);
+  } finally {
+    btn.disabled = false;
+    paintRoom();
+  }
+};
+
+$('#joingo').onclick = async () => {
+  const btn = $('#joingo'), input = $('#joincode');
+  btn.disabled = true;
+  try {
+    const r = await ensureRoom();
+    if (!r) { progress('sharing needs a connection'); return; }
+    const got = await r.join(input.value);
+    if (!got.ok) { progress(joinFailure(got.reason)); return; }
+    input.value = '';
+    progress(`sharing as ${got.code}`);
+  } finally {
+    btn.disabled = false;
+    paintRoom();
+  }
+};
+
+// Painted once at load, because the markup can only hold one of the four states
+// and the honest one before anything happens is "not sharing, here is how".
+paintRoom();
+// A device that has shared before picks the room up again on its own; one that
+// never has stays entirely local, network included.
+if (wasSharing()) ensureRoom();
+
+// A debounced write is lost if the tab goes away inside the window, and a phone
+// closes tabs without asking. kidsync's own advice.
+addEventListener('pagehide', () => { if (room) room.sync.flush(); });
 
 // --- slots, undo, and importing a save ---------------------------------------
 

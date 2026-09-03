@@ -142,6 +142,13 @@
   label.file.jgo input{position:absolute;inset:0;opacity:0;cursor:pointer}
   .themerow{display:flex;align-items:center;gap:10px}
   .themerow .val{flex:1 1 auto;font-size:12px;color:var(--dim)}
+  /* A room code is typed once per device and read off another screen, so it
+     gets the whole row and a font that tells O from 0. */
+  .themerow input.code{flex:1 1 auto;min-width:0;font:12px ui-monospace,
+                       SFMono-Regular,Menlo,monospace;letter-spacing:.02em;
+                       padding:7px 9px;border-radius:8px;text-transform:uppercase;
+                       border:1px solid var(--line);background:var(--panel);
+                       color:var(--ink)}
 
   button.themebtn{flex:0 0 auto;min-height:0;padding:6px 12px;font-size:12px;
                   letter-spacing:.06em;text-transform:uppercase;font-weight:600;
@@ -419,6 +426,16 @@
     <div class="themerow">
       <span class="lvlabel">Colour</span>
       <button class="themebtn" id="theme" aria-label="Colour theme">auto</button>
+    </div>
+    <div class="themerow">
+      <span class="lvlabel">Devices</span>
+      <span class="val" id="roomstate">not sharing</span>
+      <button class="themebtn" id="share">Share</button>
+    </div>
+    <div class="themerow hide" id="joinrow">
+      <input class="code" id="joincode" spellcheck="false" autocomplete="off"
+             placeholder="TIGER-COMET-BANJO-472" aria-label="Room code">
+      <button class="themebtn" id="joingo">Join</button>
     </div>
     <div class="themerow">
       <span class="lvlabel">Files</span>

@@ -1,0 +1,20 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+
+    "rooms": {
+      "$roomId": {
+        ".read":  "auth != null && $roomId.length >= 16",
+        ".write": "auth != null && $roomId.length >= 16 && newData.hasChildren(['state', 'rev', 'writer', 'updatedAt'])",
+
+        "state":     { ".validate": "newData.isString() && newData.val().length <= 32768" },
+        "rev":       { ".validate": "newData.isNumber() && newData.val() >= 0" },
+        "writer":    { ".validate": "newData.isString() && newData.val() == auth.uid" },
+        "updatedAt": { ".validate": "newData.isNumber()" },
+
+        "$other": { ".validate": false }
+      }
+    }
+  }
+}

@@ -6,7 +6,7 @@
 // out of the DOM.
 import { fakeRom, symbols, test, worldRam } from '../harness.mjs';
 import { GameState } from '../../app/state.js';
-import { describeRows, describeSlot, describeUndo } from '../../app/rows.js';
+import { describeRoom, joinFailure, describeRows, describeSlot, describeUndo } from '../../app/rows.js';
 
 const sym = symbols();
 const state = new GameState(sym);
@@ -137,4 +137,35 @@ test('undo tells apart "no job yet" from "that job could not be undone"', async 
                                lead: 'CYNDAQUIL Lv5' }, null);
   t.true(ready.enabled, 'there is a point to go back to');
   t.contains(ready.text, 'grinding to Lv6', 'naming the job it would undo');
+});
+
+test('the sharing row says which of the four states it is in', async (t) => {
+  // Four states and a code. The one that used to be a shrug is 'unavailable':
+  // an offline first load cannot fetch the Firebase SDK at all, and "sharing is
+  // broken" would be the wrong sentence for "you have no signal".
+  t.eq(describeRoom({ status: 'local', code: null }).text, 'not sharing',
+       'no room yet');
+  t.eq(describeRoom({ status: 'local', code: null }).button, 'Share',
+       'and the button offers one');
+  t.true(describeRoom({ status: 'local', code: null }).joining,
+         'the code box is there for the second device');
+  t.contains(describeRoom({ status: 'connecting', code: 'TIGER-COMET-BANJO-472' }).text,
+             'connecting', 'a room, not reached yet');
+  t.contains(describeRoom({ status: 'synced', code: 'TIGER-COMET-BANJO-472' }).text,
+             'sharing as TIGER-COMET-BANJO-472', 'connected, and says the code');
+  t.contains(describeRoom({ status: 'offline', code: 'TIGER-COMET-BANJO-472' }).text,
+             'will catch up', 'offline is a delay, not a failure');
+  t.eq(describeRoom({ status: 'unavailable' }).button, null,
+       'nothing to press when the SDK could not be fetched');
+  t.false(describeRoom({ status: 'synced', code: 'X-Y-Z-1' }).joining,
+          'no code box while already in a room');
+});
+
+test('a code that does not join says why, and never says nothing', async (t) => {
+  t.contains(joinFailure('malformed'), 'three words', 'a half-typed code');
+  t.contains(joinFailure('not-found'), 'typo', 'the room is not there');
+  t.contains(joinFailure('network'), 'try again', 'the network, not the code');
+  // A reason from a newer kidsync than this build knows about.
+  t.contains(joinFailure('rate-limited'), 'rate-limited',
+             'an unknown reason still reaches the person');
 });

@@ -890,10 +890,9 @@ meaning something nobody chose. The hunted species is restored only where it
 can actually be found, at this hour, and only when nothing is selected — so it
 restores a choice and never overrides one.
 
-Each group also carries **when it was chosen** — a stamp written on every
-change. Nothing reads it yet; it is there because ordering one device's choices
-against another's needs a stamp that survives a reload, and a missing or
-nonsense one reads as `0` so it loses to every real choice.
+Each group also carries **when it was chosen**, which is what orders your
+phone's choices against your tablet's. A missing or nonsense stamp reads as `0`
+and loses to every real one.
 
 Storage throws rather than returning null in a private window or after cleared
 site data, so every access goes through one accessor that answers "nothing
@@ -949,6 +948,28 @@ than reasoning about it:
   has just installed. `gb.awake()` runs frames until the machine demonstrably
   is one. The `.sav` and slot paths never met this, because by the time a
   person presses either, the emulator has been running for a while.
+
+### Sharing it with your other device
+
+One person, a phone and a tablet, no accounts: `sync/` is
+[kidsync](https://github.com/minormending/kidsync) vendored, a room is one key
+in a Firebase Realtime Database, and the code — `TIGER-COMET-BANJO-472` — is
+the password. Press **Share** on one device, type the code on the other, and
+what they remember stays in step. Because the code *is* the password, it lives
+in your pocket and never in this repo.
+
+What travels today is the three options above, which is the point: it stands up
+the whole path — config, rules, anonymous sign-in, merge, debounce — with a
+slider position at stake rather than a save. The save is the next piece.
+
+Two rules make it unable to hurt the app. Opening the room is the only thing
+that touches the network, and that happens on a press or because this device
+has shared before, so someone who never shares never loads the Firebase SDK at
+all. And it is loaded with a dynamic `import()` inside a `try`, because
+kidsync pulls the SDK from `gstatic` at the top of its module — a static import
+would put a cross-origin fetch in the middle of this app's module graph, and
+offline that takes the whole app down with it. Offline you lose sharing and
+keep the game.
 
 ## Controls
 
