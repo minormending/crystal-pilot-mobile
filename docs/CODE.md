@@ -1204,7 +1204,7 @@ the bag" rather than "did we gain any".
 
 ## 9. The interface
 
-<!-- covers: app/main.js index.html @ 55a7111c71c5 -->
+<!-- covers: app/main.js index.html @ e62db3c48c53 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -1465,7 +1465,7 @@ must not read as "wipe everything".
 
 ### Sharing between your own devices
 
-<!-- covers: app/room.js sync/kidsync.js @ 619b09847e62 -->
+<!-- covers: app/room.js sync/kidsync.js @ 1820c8c3a96e -->
 
 One person with a phone and a tablet, no accounts: a room code is the whole
 mechanism. `sync/` is [kidsync](https://github.com/minormending/kidsync)
@@ -1509,7 +1509,7 @@ next quiet refresh.
 
 ### Handing the save over
 
-<!-- covers: app/room.js baton/baton.js baton/codec.js @ 56e8fa34e38d -->
+<!-- covers: app/room.js baton/baton.js baton/codec.js @ 5af834628fb5 -->
 
 The same room carries the save, through
 [baton](https://github.com/minormending/baton) vendored in `baton/`. kidsync
@@ -1737,6 +1737,77 @@ digest needs it *before* `maybeStart` runs. The dev path was forgotten first
 time round and the symptom was silence: nothing published, and a second device
 that waited for a digest that never came. `maybeStart` re-takes it if it is
 missing, as a backstop for the fourth path someone adds later.
+
+<details>
+<summary><b>Advanced detail:</b> eleven things a review of this found</summary>
+
+All of the sharing above was written in one run and then read back as a
+stranger would. What that turned up is worth keeping, because the shape repeats:
+almost none of it was a wrong line, and almost all of it was a *state nobody had
+walked through*.
+
+**Two devices sharing one word.** `stopScreen` was the handler for both roles
+and cleared every note, so a watcher pressing Leave withdrew the host's
+announcement: the phone went on showing, its own row still said so, and no
+device could discover it again. Each side withdraws only what it owns now.
+
+**Leaving a room did not leave the session it introduced.** Stop detached
+kidsync while `watcher` stayed set, so the pad went on sending presses down a
+channel with no room behind it. Two rows also went on offering to share into a
+room this device had just left, because `leaveRoom()` leaves the handle in hand
+and they keyed off `room` rather than `room.code`.
+
+**A press on a watching device lit nothing.** `syncHeld` reads the local
+emulator's held set, which on a watcher is empty — and the page-wide tap
+highlight is off, so a press gave no sign at all. The very failure the comment
+above `syncHeld` describes, arriving through a door that did not exist when it
+was written. It has its own held set now.
+
+**The baton was claimed before it could be dropped.** `take()` claimed and
+returned bytes in one call, so an install that then refused — a hidden page —
+left the room saying this device was playing while it still had its old game.
+Taking and claiming are two calls in baton now, and the claim comes after the
+install lands. The same change made `take()` return the revision it handed
+over: recording the revision last *painted* meant a save published in between
+left this device believing it was behind a game it was already holding.
+
+**A withdrawal that was only an absence.** In `mergeSignal` an absent key lost
+to a present one, so clearing an offer had it handed straight back by the other
+device's stale copy — and after a reload, where the already-answered marks are
+gone, that ghost was answered again. Withdrawals are written down now, as
+`{gone: true, at}`, and `liveNotes` hides them from everyone upstream.
+
+**A fingerprint that existed only on HTTPS.** `crypto.subtle` needs a secure
+context, and this app is *told* to be served over plain HTTP on a home network.
+There the ROM tag came back empty — and an empty tag is not "unknown" to
+anything downstream, it reads as "matches anything", so a save from a different
+build would install without a word. It is arithmetic now, FNV-1a over the file,
+8ms for 2MB and the same answer on every origin. A fallback would have been
+worse than the bug: two devices hashing differently describe one cartridge two
+ways and refuse each other's saves.
+
+**Two openings of one room.** `ensureRoom` checked `if (room)` and then awaited,
+holding nothing in between, so a press during the startup open ran `createSync`
+twice. Firebase's `initializeApp` throws on the duplicate name, kidsync catches
+it and falls back to local-only, and the row would have claimed to be sharing
+while nothing moved. The promise is held now, not just the result.
+
+**An announcement that outlived its tab.** `showing` had no heartbeat, so a host
+that closed left "iPhone is showing its screen" standing for ever and Watch
+waited fifteen seconds for an offer nobody was there to make. It is re-stamped
+every thirty seconds, ignored after ninety, and withdrawn on `pagehide`.
+
+**Two smaller ones.** `room.baton` was captured by value while `rename()`
+replaced it, so the property and the methods would have disagreed from the first
+rename — it is a getter now, like `code` and `device`. And tied option stamps
+had each device keep its own, which never settles; the tie breaks on device id,
+the same rule baton already used for a tied revision.
+
+**And two comments describing the wrong function**, which in this repository is
+a bug: the block explaining `mergeOptions` sat above `mergeSymbols`, where it
+was read as authoritative and was entirely wrong.
+
+</details>
 
 The service worker caches the vendored files, and `check-app` now asserts that:
 an unlisted one is served from the network and breaks offline use in exactly

@@ -98,7 +98,19 @@ export function createBaton({
     },
 
     /**
-     * Take the bytes, and say that you have them.
+     * Take the bytes out. Claiming is a separate word on purpose.
+     *
+     * It used to claim the baton here, in the same call, and that was wrong in
+     * a way only a failure shows: what a caller does with a payload can fail --
+     * install it into a cartridge, write it to a file, hand it to a library
+     * that refuses on a hidden page -- and a claim made before that is a claim
+     * the room cannot take back. The other device reads "they are playing now"
+     * while nothing was ever taken. So this hands the bytes over, and `claim()`
+     * is what you call once they are actually somewhere.
+     *
+     * The revision comes back with them, because the room can move between a
+     * peek and a take: a caller that records the revision it saw rather than
+     * the one it got will believe it is behind a save it is already holding.
      *
      * `tag` is whatever the caller uses to mean "these bytes belong to that
      * thing" -- a ROM's fingerprint, a schema version. Baton never interprets
@@ -117,11 +129,15 @@ export function createBaton({
       } catch (e) {
         return { ok: false, reason: 'corrupt', detail: e.message };
       }
-      sync.set({ [holdKey]: { by: label, id: me(), rev: nextRev(), at: Date.now() } });
-      return { ok: true, bytes, says: c.says || '', by: c.by || '' };
+      return { ok: true, bytes, rev: c.rev || 0, says: c.says || '', by: c.by || '' };
     },
 
-    /** Say you are the one playing, without publishing anything new. */
+    /**
+     * Say you are the one holding it, without publishing anything new.
+     *
+     * Call it after a take has actually landed, and any time this device picks
+     * the thing up again by other means.
+     */
     claim() {
       sync.set({ [holdKey]: { by: label, id: me(), rev: nextRev(), at: Date.now() } });
     },

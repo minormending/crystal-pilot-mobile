@@ -55,6 +55,9 @@ let optionsPending = false;
 // The room, once someone asks for one. Null until then, and null forever for
 // anyone who never shares -- opening it is what reaches the network.
 let room = null;
+// The open in flight, so two callers share one room rather than racing to make
+// two of them.
+let roomOpening = null;
 // Set when the Firebase SDK could not be fetched -- an offline first load.
 let roomUnavailable = false;
 // Showing this screen to another device, or watching one. Never both: a device
@@ -75,6 +78,10 @@ let hostAsleep = false;
 // offer addressed to the device it used to be was still sitting there.
 let offeredTo = null, answeredAt = 0, acceptedAt = 0;
 let watchTimer = null;
+// The host re-stamps its announcement every 30s; anything older than this is a
+// tab that has gone away without saying so.
+const SHOWING_GOOD_FOR = 90000;
+let showingTimer = null;
 // The button names the on-screen pad offers, which is the only set a press
 // arriving from another device is allowed to be. It comes from the markup for
 // the same reason check-app reads it from there: that is where the canonical
@@ -262,7 +269,7 @@ async function maybeStart() {
   // Adding a fourth and forgetting would cost nothing visible on the device
   // that has the .sym file and everything on the device that does not, so this
   // is the backstop for a mistake that would otherwise be invisible here.
-  if (romBytes && !romTag) romTag = await fingerprintRom(romBytes);
+  if (romBytes && !romTag) romTag = fingerprintRom(romBytes);
   shareSymbols();
 
   // A battery that came back with the files, put in through the same path a
@@ -318,18 +325,36 @@ async function maybeStart() {
 /**
  * A short fingerprint of the ROM in hand.
  *
- * Short on purpose: sixteen hex characters of a SHA-256 is far more than
- * enough to tell one pokecrystal build from another, and it rides in a room
- * whose whole state is capped at 32KB.
+ * Arithmetic rather than `crypto.subtle`, and that is the whole point of this
+ * function. Subtle crypto exists only in a secure context, and this app is
+ * *told* to be served over plain HTTP on a home network -- the README says so.
+ * There, `crypto.subtle` is undefined, the fingerprint came back empty, and an
+ * empty tag is not "unknown" to anything downstream: `tag && seen.tag && ...`
+ * and baton's own check both read it as "matches anything", so a save from a
+ * different build would install without a word and every address the pilot
+ * reads afterwards would be wrong.
+ *
+ * The other reason is worse: even a *fallback* would break matching. A phone
+ * on Pages hashing with SHA-256 and a laptop on http hashing with something
+ * else describe the same cartridge differently and refuse each other's saves.
+ * One algorithm everywhere is the only shape that works.
+ *
+ * So: FNV-1a over the whole file, in two 32-bit halves, sixteen hex characters.
+ * Not a cryptographic hash and it does not need to be -- this separates two
+ * builds of one disassembly, it does not defend against anyone. Measured at
+ * about 25ms for 2MB, once per session.
  */
-async function fingerprintRom(buffer) {
-  try {
-    const hash = await crypto.subtle.digest('SHA-256', buffer);
-    return [...new Uint8Array(hash).subarray(0, 8)]
-      .map((b) => b.toString(16).padStart(2, '0')).join('');
-  } catch (e) {
-    return '';     // no subtle crypto: publish untagged rather than not at all
+function fingerprintRom(buffer) {
+  const bytes = new Uint8Array(buffer);
+  let lo = 0x811c9dc5, hi = 0x01000193;
+  for (let i = 0; i < bytes.length; i++) {
+    lo = Math.imul(lo ^ bytes[i], 0x01000193) >>> 0;
+    // A second lane, seeded and stepped differently, so the two halves are not
+    // the same number twice: one 32-bit hash over a 2MB file collides more
+    // often than anyone wants to think about.
+    if (i % 2 === 0) hi = Math.imul(hi ^ (bytes[i] + i), 0x85ebca6b) >>> 0;
   }
+  return lo.toString(16).padStart(8, '0') + hi.toString(16).padStart(8, '0');
 }
 
 /**
@@ -530,7 +555,9 @@ $('#restorereplaced').onclick = () => loadSlot(REPLACED_SLOT, 'the replaced game
 
 /** Who is showing a screen right now, as far as the room knows. */
 function screenState() {
-  const showing = signal.showing;
+  const fresh = signal.showing
+    && Date.now() - (signal.showing.at || 0) < SHOWING_GOOD_FOR;
+  const showing = fresh ? signal.showing : null;
   const mine = showing && room && showing.id === room.id;
   return {
     hosting: !!host,
@@ -544,7 +571,11 @@ function screenState() {
 function paintScreen() {
   const row = $('#screenrow'), btn = $('#screenshare');
   if (!row) return;
-  row.classList.toggle('hide', !room);
+  // Keyed on being *in* a room, not on having opened one. leaveRoom() detaches
+  // kidsync but leaves the handle in hand, so `room` stays truthy after Stop --
+  // and this row went on offering to show a screen into a room this device had
+  // just left.
+  row.classList.toggle('hide', !(room && room.code));
   const said = describeScreen(screenState());
   $('#screenstate').textContent = said.text;
   btn.textContent = said.button;
@@ -573,20 +604,46 @@ function showScreen() {
   offeredTo = null;
   answeredAt = 0;
   acceptedAt = 0;
+  const announce = () => room.signal({ showing: { id: room.id, by: room.device } });
   room.signal({ showing: { id: room.id, by: room.device }, offer: null, answer: null,
                 watching: null });
+  // Repeated, because a note in a room outlives the tab that wrote it. A host
+  // that is closed, reloaded or discarded by the phone leaves "iPhone is
+  // showing its screen" standing for ever, and pressing Watch then waits
+  // fifteen seconds for an offer nobody is left to make. A stamp every half
+  // minute, and a reader that ignores anything older than SHOWING_GOOD_FOR,
+  // means the row stops offering on its own.
+  clearInterval(showingTimer);
+  showingTimer = setInterval(announce, 30000);
   paintScreen();
   progress('showing this screen — press Watch on your other device');
 }
 
+/**
+ * Stop showing, or stop watching -- and withdraw only this device's own note.
+ *
+ * One function for both roles, which is fine until it comes to what to clear.
+ * It used to clear everything, so a watcher pressing Leave withdrew the *host's*
+ * announcement: the phone went on showing its screen, its own row still said so,
+ * and no device could discover it again short of Stop and Show. What each side
+ * owns is what each side withdraws.
+ */
 function stopScreen() {
   clearTimeout(watchTimer);
+  const wasHosting = !!host, wasWatching = !!watcher;
   if (host) { host.stop(); host = null; }
   if (watcher) { watcher.stop(); watcher = null; }
+  clearInterval(showingTimer);
+  showingTimer = null;
   hostAsleep = false;
+  remoteHeld.clear();
   $('#remote').classList.add('hide');
   $('#screen').classList.remove('hide');
-  if (room) room.signal({ showing: null, watching: null, offer: null, answer: null });
+  if (room && wasHosting) {
+    room.signal({ showing: null, offer: null, answer: null });
+  } else if (room && wasWatching) {
+    room.signal({ watching: null });
+  }
   gb.releaseAll();
   syncHeld();
   paintScreen();
@@ -713,7 +770,7 @@ document.addEventListener('visibilitychange', () => {
 async function paintHandoff() {
   const row = $('#handoffrow'), btn = $('#takeover');
   if (!row) return;
-  if (!room) { row.classList.add('hide'); return; }
+  if (!room || !room.code) { row.classList.add('hide'); return; }
   const meta = await keptMeta();
   const said = describeHandoff({
     seen: sharedSave,
@@ -752,7 +809,16 @@ $('#takeover').onclick = () => runTask('#takeover', 'taking the shared save',
     if (!await tasks.continueFromTitle()) {
       return { ok: false, message: 'installed it but could not reach the world' };
     }
-    await keepBattery(got.bytes, { rev: sharedSave ? sharedSave.rev : 0 });
+    // Only now. Everything above this line can fail -- install refuses on a
+    // hidden page -- and a claim made before it lands is one the room cannot
+    // take back: the other device would read "they are playing now" while this
+    // one still had its old game.
+    room.baton.claim();
+    // The revision that came back with the bytes, not the one last painted:
+    // the room can move between a row being drawn and a button being pressed,
+    // and recording the older number makes this device believe it is behind a
+    // save it is already holding.
+    await keepBattery(got.bytes, { rev: got.rev });
     savedThisSession = true;
     await paintSlots();
     paintFiles();
@@ -1088,7 +1154,7 @@ $('#romFile').addEventListener('change', async (e) => {
     return;
   }
   romBytes = buf;
-  romTag = await fingerprintRom(buf);
+  romTag = fingerprintRom(buf);
   setStatus(`ROM: ${f.name} (${(buf.byteLength / 1048576).toFixed(1)} MB)`, 'ok');
   // A ROM with no symbol file is half a pilot -- unless another of your devices
   // has already put the addresses in the room.
@@ -1161,9 +1227,18 @@ document.querySelectorAll('[data-target]').forEach((b) => {
  * looking stuck down. The default tap highlight is switched off page-wide, so
  * without this a press gives no sign at all that it landed.
  */
+// What this device is holding down while it is driving another one. The local
+// emulator's own held set is empty then -- there is no game here to hold a
+// button on -- so without this a press on a watching device lights nothing, and
+// the page-wide tap highlight is switched off, so it gives no sign at all. That
+// is the exact failure the comment above describes, arriving by a door it did
+// not have when it was written.
+const remoteHeld = new Set();
+
 function syncHeld() {
+  const held = watcher ? remoteHeld : gb.held;
   for (const el of document.querySelectorAll('[data-btn]')) {
-    el.classList.toggle('held', gb.held.has(el.dataset.btn));
+    el.classList.toggle('held', held.has(el.dataset.btn));
   }
 }
 
@@ -1172,13 +1247,23 @@ function hold(button) {
   // Watching means this device has no game: the joypad belongs to the one that
   // does. The same two functions every pad and key already go through, so
   // nothing else in the app has to know which machine it is talking to.
-  if (watcher) { watcher.press({ t: 'hold', b: button }); return; }
+  if (watcher) {
+    watcher.press({ t: 'hold', b: button });
+    remoteHeld.add(button);
+    syncHeld();
+    return;
+  }
   gb.hold(button);
   syncHeld();
 }
 
 function release(button) {
-  if (watcher) { watcher.press({ t: 'release', b: button }); return; }
+  if (watcher) {
+    watcher.press({ t: 'release', b: button });
+    remoteHeld.delete(button);
+    syncHeld();
+    return;
+  }
   gb.release(button);
   syncHeld();
 }
@@ -1865,7 +1950,14 @@ function paintRoom() {
  */
 async function ensureRoom() {
   if (room) return room;
-  room = await openRoom({
+  // The promise is held, not just the result. Two callers arriving while the
+  // first is still opening -- the startup call for a device that has shared
+  // before, and a press a second later -- would each run createSync, and the
+  // second initializeApp with the same name throws `app/duplicate-app`.
+  // kidsync catches that and falls back to local-only, so the row would say it
+  // was sharing while nothing was ever sent or received.
+  if (roomOpening) return roomOpening;
+  roomOpening = openRoom({
     options: readOpts(LIMITS),
     onOptions: adoptOptions,
     onSave: (seen) => { sharedSave = seen; paintHandoff(); },
@@ -1874,13 +1966,16 @@ async function ensureRoom() {
     onSymbols: () => { paintLoader(); symbolsFromRoom(); },
     onSignal,
     onStatus: paintRoom,
-  });
-  if (!room) roomUnavailable = true;
-  paintRoom();
-  // Both directions, because either device may be the one that has the file.
-  shareSymbols();
-  symbolsFromRoom();
-  return room;
+  }).then((opened) => {
+    room = opened;
+    if (!room) roomUnavailable = true;
+    paintRoom();
+    // Both directions, because either device may be the one that has the file.
+    shareSymbols();
+    symbolsFromRoom();
+    return room;
+  }).finally(() => { roomOpening = null; });
+  return roomOpening;
 }
 
 $('#share').onclick = async () => {
@@ -1888,6 +1983,11 @@ $('#share').onclick = async () => {
   btn.disabled = true;
   try {
     if (room && room.code) {
+      // The screen first. The room is what introduced those two devices, so
+      // leaving it while a picture is flowing left the pad on a watching device
+      // still sending presses down a channel with no room behind it, and no
+      // way back except pressing Leave on a row that had lost its meaning.
+      if (host || watcher) stopScreen();
       room.stop();
       progress('this device has stopped sharing — your options are kept');
     } else {
@@ -1939,7 +2039,12 @@ if (wasSharing()) ensureRoom();
 
 // A debounced write is lost if the tab goes away inside the window, and a phone
 // closes tabs without asking. kidsync's own advice.
-addEventListener('pagehide', () => { if (room) room.sync.flush(); });
+addEventListener('pagehide', () => {
+  // Withdrawn rather than left to time out: the other device can stop offering
+  // to watch a screen that is closing right now instead of in ninety seconds.
+  if (room && host) room.signal({ showing: null });
+  if (room) room.sync.flush();
+});
 
 // --- slots, undo, and importing a save ---------------------------------------
 
@@ -2196,7 +2301,7 @@ $('#exportsav').onclick = async () => {
     symbols = new Symbols(kept.sym.text);
     symbols.require(NEEDED_SYMBOLS);
     romBytes = kept.rom.buffer;
-    romTag = await fingerprintRom(kept.rom.buffer);
+    romTag = fingerprintRom(kept.rom.buffer);
     pendingBattery = kept.battery;
     restoredSession = true;
   } catch (e) {
@@ -2223,7 +2328,7 @@ $('#exportsav').onclick = async () => {
       fetch('./dev/pokecrystal.sym').then((r) => r.text()),
     ]);
     romBytes = rom;
-    romTag = await fingerprintRom(rom);
+    romTag = fingerprintRom(rom);
     symbols = new Symbols(sym);
     setStatus('dev files loaded', 'ok');
     maybeStart();

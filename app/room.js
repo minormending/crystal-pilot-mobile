@@ -33,14 +33,6 @@ import { createBaton } from '../baton/baton.js';
 // that share this Firebase project.
 const GAME = 'crystal-pilot';
 
-/**
- * What to call this device out loud, so a row can say "Phone is playing".
- *
- * A guess off the user agent, and deliberately a crude one: it only has to
- * tell your two devices apart in a sentence. Getting it wrong costs a word in
- * a status line, and asking someone to name their phone before they can share
- * a save costs more than that.
- */
 const NAME_KEY = 'crystal-pilot-device-name';
 
 /** The name you chose for this device, if you chose one. */
@@ -55,6 +47,19 @@ function rememberName(name) {
   try { localStorage.setItem(NAME_KEY, name); } catch (e) { /* fine */ }
 }
 
+/**
+ * What to call this device out loud, so a row can say "Phone is playing".
+ *
+ * A guess off the user agent, and deliberately a crude one: it only has to
+ * tell your two devices apart in a sentence. Getting it wrong costs a word in
+ * a status line, and asking someone to name their phone before they can share
+ * a save costs more than that.
+ *
+ * The guess is wrong in the way that matters when two of your devices are the
+ * same kind -- "Mac has the newer save" is no help when both are Macs -- so a
+ * name you choose overrides it, and that is what every sentence uses from then
+ * on.
+ */
 function deviceName() {
   const chosen = chosenName();
   if (chosen) return chosen;
@@ -66,27 +71,7 @@ function deviceName() {
   if (/Windows/.test(ua)) return 'PC';
   return 'this device';
 }
-// The guess is only ever a guess, and it is wrong in the way that matters when
-// two of your devices are the same kind: "Mac has the newer save" is no help
-// when both of them are Macs. So it can be overridden, and the override is
-// what any sentence about a device uses from then on.
 
-/**
- * Combine two devices' options.
- *
- * These are preferences, not progress: nothing here is a score to protect, and
- * every one of the three can be *changed back*. So this is kidsync's settings
- * pattern -- the newest group wins wholesale -- rather than its grow-only one.
- * A Math.max over a speed step would mean the fastest speed either device ever
- * chose becomes the speed neither can leave.
- *
- * Whole-group rather than per-field because the three are chosen together in
- * one sitting, and interleaving halves of two sittings makes a state neither
- * device ever had.
- *
- * It must settle, and it does: comparing two stamps gives the same answer
- * however many times it runs.
- */
 /**
  * Keep the newer symbol digest.
  *
@@ -124,13 +109,57 @@ export function mergeSignal(local, remote) {
   return Object.keys(out).length ? { rtc: out } : {};
 }
 
+/**
+ * The notes worth acting on: everything that has not been withdrawn.
+ *
+ * Withdrawing is a *note*, not a deletion, and that is the whole reason this
+ * function exists. In the merge above, an absent key always loses to a present
+ * one -- so a device that deletes its copy of an offer has it handed straight
+ * back by the other device's stale copy, and after a reload, where the
+ * already-answered marks are gone, that resurrected offer is answered again
+ * against a connection that no longer exists. A withdrawal has to be something
+ * the merge can see is newer, so it is `{ gone: true, at }`, and this is what
+ * hides them from everyone upstream.
+ */
+export function liveNotes(rtc) {
+  const out = {};
+  for (const [k, v] of Object.entries(rtc || {})) {
+    if (v && !v.gone) out[k] = v;
+  }
+  return out;
+}
+
+/**
+ * Combine two devices' options.
+ *
+ * These are preferences, not progress: nothing here is a score to protect, and
+ * every one of the three can be *changed back*. So this is kidsync's settings
+ * pattern -- the newest group wins wholesale -- rather than its grow-only one.
+ * A Math.max over a speed step would mean the fastest speed either device ever
+ * chose becomes the speed neither can leave.
+ *
+ * Whole-group rather than per-field because the three are chosen together in
+ * one sitting, and interleaving halves of two sittings makes a state neither
+ * device ever had.
+ *
+ * It must settle, and it does: comparing two stamps gives the same answer
+ * however many times it runs. A tie is broken by the device id rather than by
+ * preferring whichever side is asking, because two devices that each keep
+ * their own answer never agree -- the same rule baton uses on a tied revision.
+ */
 export function mergeOptions(local, remote) {
   const mine = (local && local.optsAt) || 0;
   const theirs = (remote && remote.optsAt) || 0;
-  const winner = mine >= theirs ? local : remote;
+  let winner = mine > theirs ? local : remote;
+  if (mine === theirs) {
+    const a = (local && local.optsBy) || '';
+    const b = (remote && remote.optsBy) || '';
+    winner = String(a) >= String(b) ? local : remote;
+  }
   return {
     opts: (winner && winner.opts) || {},
     optsAt: Math.max(mine, theirs),
+    optsBy: (winner && winner.optsBy) || '',
   };
 }
 
@@ -184,8 +213,9 @@ export async function openRoom({ options, onOptions, onSave, onSignal,
     // `{}` would hand the room an empty group -- and on the way back through
     // onChange, adopt it over its own choices. Measured, the first time this
     // ran: pressing Share emptied the record it was supposed to be sharing.
-    initialState: options ? { opts: options, optsAt: options.at || 0 }
-                          : { opts: {}, optsAt: 0 },
+    initialState: options
+      ? { opts: options, optsAt: options.at || 0, optsBy: '' }
+      : { opts: {}, optsAt: 0, optsBy: '' },
     // Two things share this room and each owns its own keys: the options merge
     // by stamp, the save by revision. Composed rather than combined, because
     // neither knows the other's rules and neither should.
@@ -206,14 +236,17 @@ export async function openRoom({ options, onOptions, onSave, onSignal,
       // happens when someone asks for the bytes.
       if (onSave && baton) onSave(baton.peek());
       if (onSymbols && state.sym) onSymbols(state.sym);
-      if (onSignal) onSignal(state.rtc || {});
+      if (onSignal) onSignal(liveNotes(state.rtc));
     },
     onStatus: (s) => { if (onStatus) onStatus(s); },
   });
   baton = createBaton({ sync, label: deviceName() });
   return {
     sync,
-    baton,
+    // A getter, not the value: rename() replaces the baton, and a property
+    // captured here would go on pointing at the one from before the rename
+    // while every method below used the new one.
+    get baton() { return baton; },
     /** What the room is holding, without paying to unpack it. */
     peekSave() { return baton.peek(); },
     /** Put this device's battery in the room and take the baton. */
@@ -238,9 +271,10 @@ export async function openRoom({ options, onOptions, onSave, onSignal,
     signal(patch) {
       const now = (sync.state && sync.state.rtc) || {};
       const next = { ...now };
+      const at = Date.now();
       for (const [k, v] of Object.entries(patch)) {
-        if (v === null) delete next[k];
-        else next[k] = { ...v, at: Date.now() };
+        // A withdrawal is written down rather than deleted -- see liveNotes.
+        next[k] = v === null ? { gone: true, at } : { ...v, at };
       }
       sync.set({ rtc: next });
       return sync.flush();
@@ -264,7 +298,9 @@ export async function openRoom({ options, onOptions, onSave, onSignal,
       return clean;
     },
     /** Publish the three options, with the stamp they were chosen at. */
-    share(opts) { sync.set({ opts, optsAt: opts.at || Date.now() }); },
+    share(opts) {
+      sync.set({ opts, optsAt: opts.at || Date.now(), optsBy: sync.deviceId });
+    },
     async start() {
       const code = await sync.createRoom();
       flag(true);
