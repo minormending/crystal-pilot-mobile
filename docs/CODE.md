@@ -1188,7 +1188,7 @@ the bag" rather than "did we gain any".
 
 ## 9. The interface
 
-<!-- covers: app/main.js index.html @ 115aa80ce359 -->
+<!-- covers: app/main.js index.html @ 8db45049aef3 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -1244,6 +1244,13 @@ come to more than 375px once a game is running and a newer build exists, and
 without `flex-wrap` the speed slider's `1×` was cut in half by the right edge.
 Nothing wraps in the ordinary case; `.where` carries `min-width:0` so the
 location is what gives first, being the one item that reads fine truncated.
+
+Moving Update up there is why it now asks before it runs, but only when
+`romBytes` is set. The reload empties the page and the ROM lives in the page,
+so an accidental press costs a file picker and everything since the last
+in-game save; the battery save survives in the library's own IndexedDB record,
+which is the line the question names. With nothing loaded it does not ask,
+because there is nothing to lose and the prompt would only be in the way.
 
 <details>
 <summary><b>Advanced detail:</b> the measurements, and one lifecycle rule</summary>

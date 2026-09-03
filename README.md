@@ -451,6 +451,15 @@ worker, deletes every cache, and only then reloads — because a plain reload is
 exactly what does not always work, and it is the sequence I ended up typing by
 hand over and over while building this.
 
+**It asks first if a game is loaded**, which it did not have to when it sat two
+screens down in the settings card. Next to the app's name it is a thumb's width
+from the title, and what it does is close the game: the reload empties the page,
+the ROM has to be picked again, and anything since your last in-game save goes
+with it. The battery save itself survives — it lives in the emulator's own
+per-cartridge record, not in the page — which is why the question names your
+last save as the line. With no ROM picked there is nothing to lose, so it does
+not ask.
+
 It is in the header because that is the one part of the app that is always
 there. For three versions it lived in the settings card, which does not exist
 until a ROM and a symbol file are loaded — so answering "am I running what I

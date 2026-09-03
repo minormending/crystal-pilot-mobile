@@ -1014,9 +1014,24 @@ async function showVersion() {
  *
  * The ROM is untouched: it lives in the page, never in a cache, and is picked
  * again next session anyway.
+ *
+ * It asks first when a game is loaded, which it did not need to when it sat in
+ * the settings card two screens down. Beside the app's name it is a thumb's
+ * width from the title, and what it does is close the game: the reload empties
+ * the page, the ROM has to be picked again, and whatever has happened since
+ * the last in-game save is gone with it. That is a fine trade when you meant
+ * to press it and a bad afternoon when you did not.
+ *
+ * The battery save survives -- it is in the library's own IndexedDB record,
+ * per cartridge, not in the page -- which is exactly why the question names
+ * the last save as the line. Nothing is asked before a ROM is picked, because
+ * then there is nothing to lose and being asked would only be in the way.
  */
 $('#update').onclick = async () => {
   const btn = $('#update');
+  if (romBytes && !confirm(
+    'Update now? The game closes and the ROM has to be picked again. '
+    + 'Anything since your last save is lost.')) return;
   btn.disabled = true;
   btn.textContent = 'updating…';
   try {
