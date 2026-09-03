@@ -988,6 +988,12 @@ installs the save and drives CONTINUE, and both rows then read *in step*.
 - **It carries a fingerprint of the ROM.** A save made with a different build
   loads and is then confidently wrong, so a mismatch is named and taking it is
   not offered.
+- **The second device does not need the `.sym` at all.** The file is 1.8MB and
+  the app reads 45 symbols in it, so the room carries those 45 addresses —
+  about a kilobyte — and a device with the ROM and no symbol file boots from
+  them. `check-app` asserts the shared list is every symbol the app looks up,
+  because a list that falls behind works perfectly on the device that has the
+  file and breaks only on the one that does not.
 - **It says when a save will not fit.** 32,768 characters is the room's cap; a
   raw base64 battery is 43,692 and never fits, gzipped it measured ~1,200.
   Compression is what makes it possible, not a guarantee — a refused publish

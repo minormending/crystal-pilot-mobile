@@ -1,6 +1,6 @@
 // Wiring: file pickers, the render loop, and dispatching a task.
 import { GameBoy } from './gb.js';
-import { Symbols } from './symbols.js';
+import { SHARED_SYMBOLS, Symbols } from './symbols.js';
 import { describeHandoff, describeRoom, describeRows, describeSlot,
          describeUndo, joinFailure } from './rows.js';
 import { VERSION } from './version.js';
@@ -233,9 +233,13 @@ async function maybeStart() {
   startLoop();
 
   paintFiles();
-  // Before anything can be published, and cheap: 2MB through SHA-256 once per
-  // session.
-  romTag = await fingerprintRom(romBytes);
+  // A safety net, not the usual path: the three places a ROM arrives each take
+  // the fingerprint, because the digest needs it before this function runs.
+  // Adding a fourth and forgetting would cost nothing visible on the device
+  // that has the .sym file and everything on the device that does not, so this
+  // is the backstop for a mistake that would otherwise be invisible here.
+  if (romBytes && !romTag) romTag = await fingerprintRom(romBytes);
+  shareSymbols();
 
   // A battery that came back with the files, put in through the same path a
   // .sav import uses: write the library's record and re-load the ROM. That
@@ -402,6 +406,60 @@ async function shareGame(bytes) {
   // tell "the same save" from "also a save" when it looks at the room again.
   await keepBattery(bytes, { rev: said.rev });
   paintHandoff();
+}
+
+/**
+ * Hand this device's addresses to the room, for one that has no .sym.
+ *
+ * Only the names this app reads -- 45 of them, about a kilobyte, against the
+ * 1.8MB file they were parsed out of. The fingerprint goes with them because
+ * an address is only true of the build it came from.
+ */
+function shareSymbols() {
+  if (!room || !symbols || !romTag) return;
+  // Not from a digest we were given: passing one on would spread a set of
+  // addresses further than the cartridge that vouched for them.
+  if (symbols.size > SHARED_SYMBOLS.length) {
+    room.shareSymbols(symbols.digest(SHARED_SYMBOLS), romTag);
+  }
+}
+
+/**
+ * Take the addresses from the room, if this device has the ROM and no .sym.
+ *
+ * The fingerprint is checked first and the digest is checked after: a set of
+ * addresses from another build reads memory that looks plausible and is not,
+ * and a short digest from an older build of this app would fail later, deep
+ * inside a task, rather than here.
+ */
+function symbolsFromRoom() {
+  if (symbols || !romBytes || !romTag || !room) return false;
+  const offered = room.symbols();
+  if (!offered || !offered.map) return false;
+  if (offered.tag !== romTag) {
+    setStatus('your other device shared addresses for a different ROM', 'bad');
+    return false;
+  }
+  try {
+    const from = Symbols.fromDigest(offered.map);
+    from.require(NEEDED_SYMBOLS);
+    symbols = from;
+  } catch (e) {
+    setStatus(`the shared addresses are not usable: ${e.message}`, 'bad');
+    return false;
+  }
+  setStatus(`symbols: ${symbols.size} addresses from your other device`, 'ok');
+  // Caught, because this is the one path where the addresses were not read off
+  // a file this device chose. A digest missing something the app reads throws
+  // from inside maybeStart -- and unhandled, that leaves "booting…" on screen
+  // for good with the reason only in the console. Measured, by shipping a
+  // digest that was short of ItemNames.
+  maybeStart().catch((e) => {
+    symbols = null;
+    setStatus(`the shared addresses are incomplete: ${e && e.message ? e.message : e}`,
+              'bad');
+  });
+  return true;
 }
 
 /** Say what the room is holding, and offer to take it if it is ahead. */
@@ -778,7 +836,11 @@ $('#romFile').addEventListener('change', async (e) => {
     return;
   }
   romBytes = buf;
+  romTag = await fingerprintRom(buf);
   setStatus(`ROM: ${f.name} (${(buf.byteLength / 1048576).toFixed(1)} MB)`, 'ok');
+  // A ROM with no symbol file is half a pilot -- unless another of your devices
+  // has already put the addresses in the room.
+  symbolsFromRoom();
   // Kept before the emulator is handed it, not after: the core takes the bytes
   // and there is no promise that the buffer this side of it stays readable.
   keepRom(f.name, buf).then(paintFiles);
@@ -1526,10 +1588,16 @@ async function ensureRoom() {
     options: readOpts(LIMITS),
     onOptions: adoptOptions,
     onSave: (seen) => { sharedSave = seen; paintHandoff(); },
+    // A digest can arrive after the ROM was picked, so this is a second chance
+    // rather than only a first one.
+    onSymbols: () => symbolsFromRoom(),
     onStatus: paintRoom,
   });
   if (!room) roomUnavailable = true;
   paintRoom();
+  // Both directions, because either device may be the one that has the file.
+  shareSymbols();
+  symbolsFromRoom();
   return room;
 }
 
@@ -1836,6 +1904,7 @@ $('#exportsav').onclick = async () => {
     symbols = new Symbols(kept.sym.text);
     symbols.require(NEEDED_SYMBOLS);
     romBytes = kept.rom.buffer;
+    romTag = await fingerprintRom(kept.rom.buffer);
     pendingBattery = kept.battery;
     restoredSession = true;
   } catch (e) {
@@ -1862,6 +1931,7 @@ $('#exportsav').onclick = async () => {
       fetch('./dev/pokecrystal.sym').then((r) => r.text()),
     ]);
     romBytes = rom;
+    romTag = await fingerprintRom(rom);
     symbols = new Symbols(sym);
     setStatus('dev files loaded', 'ok');
     maybeStart();

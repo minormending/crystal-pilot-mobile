@@ -67,6 +67,21 @@ function deviceName() {
  * It must settle, and it does: comparing two stamps gives the same answer
  * however many times it runs.
  */
+/**
+ * Keep the newer symbol digest.
+ *
+ * Simplest possible rule, and it is enough: a digest only changes when the ROM
+ * does, and whoever takes one checks the fingerprint against their own
+ * cartridge before believing a single address. So the worst a wrong winner can
+ * do is be ignored.
+ */
+export function mergeSymbols(local, remote) {
+  const mine = (local && local.sym && local.sym.at) || 0;
+  const theirs = (remote && remote.sym && remote.sym.at) || 0;
+  const winner = theirs > mine ? remote : local;
+  return (winner && winner.sym) ? { sym: winner.sym } : {};
+}
+
 export function mergeOptions(local, remote) {
   const mine = (local && local.optsAt) || 0;
   const theirs = (remote && remote.optsAt) || 0;
@@ -102,7 +117,8 @@ export function wasSharing() { return flag(); }
  * Resolves to null when there is nothing to open or the SDK could not be
  * fetched, and never throws: every caller of this treats sharing as a bonus.
  */
-export async function openRoom({ options, onOptions, onSave, onStatus } = {}) {
+export async function openRoom({ options, onOptions, onSave, onSymbols,
+                                 onStatus } = {}) {
   let createSync;
   try {
     ({ createSync } = await import('../sync/kidsync.js'));
@@ -133,6 +149,7 @@ export async function openRoom({ options, onOptions, onSave, onStatus } = {}) {
     // neither knows the other's rules and neither should.
     merge: (a, b) => ({
       ...mergeOptions(a, b),
+      ...mergeSymbols(a, b),
       ...(baton ? baton.merge(a, b) : {}),
     }),
     onChange: (state) => {
@@ -145,6 +162,7 @@ export async function openRoom({ options, onOptions, onSave, onStatus } = {}) {
       // Metadata only. Nothing decompresses a payload to paint a row -- that
       // happens when someone asks for the bytes.
       if (onSave && baton) onSave(baton.peek());
+      if (onSymbols && state.sym) onSymbols(state.sym);
     },
     onStatus: (s) => { if (onStatus) onStatus(s); },
   });
@@ -158,6 +176,13 @@ export async function openRoom({ options, onOptions, onSave, onStatus } = {}) {
     publishSave(bytes, says, tag) { return baton.publish(bytes, { says, tag }); },
     /** The bytes back, refused if they belong to a different cartridge. */
     takeSave(tag) { return baton.take({ tag }); },
+    /**
+     * Publish the addresses this app reads, for a device that has the ROM and
+     * not the .sym. About a kilobyte, against the 1.8MB file they came from.
+     */
+    shareSymbols(map, tag) { sync.set({ sym: { map, tag, at: Date.now() } }); },
+    /** What the room is offering, or null. The caller checks the tag. */
+    symbols() { return (sync.state && sync.state.sym) || null; },
     get device() { return baton.label; },
     /** Publish the three options, with the stamp they were chosen at. */
     share(opts) { sync.set({ opts, optsAt: opts.at || Date.now() }); },

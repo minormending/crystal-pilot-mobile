@@ -92,7 +92,7 @@ of the subtleties in sections 6 and 7.
 
 ## 2. The shape of it
 
-<!-- covers-api: app/main.js app/bootstrap.js app/tasks.js app/nav.js app/world.js app/collision.js app/state.js app/romdata.js app/symbols.js app/gb.js @ d144ae63da09 -->
+<!-- covers-api: app/main.js app/bootstrap.js app/tasks.js app/nav.js app/world.js app/collision.js app/state.js app/romdata.js app/symbols.js app/gb.js @ 06cf5b353b03 -->
 
 Nineteen modules. Arrows point from a module to the ones it imports.
 
@@ -288,7 +288,7 @@ watching.
 
 ### `symbols.js` — where things live
 
-<!-- covers: app/symbols.js @ 708380d6929a -->
+<!-- covers: app/symbols.js @ 67ab125c0fa4 -->
 
 Parses the `.sym` file into `name → { bank, addr }`. First definition wins;
 later duplicates are aliases and locals.
@@ -1194,7 +1194,7 @@ the bag" rather than "did we gain any".
 
 ## 9. The interface
 
-<!-- covers: app/main.js index.html @ 58c92e53ac61 -->
+<!-- covers: app/main.js index.html @ 1f8818afcdbb -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -1455,7 +1455,7 @@ must not read as "wipe everything".
 
 ### Sharing between your own devices
 
-<!-- covers: app/room.js sync/kidsync.js @ 19b76e3e94b5 -->
+<!-- covers: app/room.js sync/kidsync.js @ b4fc30ece2bb -->
 
 One person with a phone and a tablet, no accounts: a room code is the whole
 mechanism. `sync/` is [kidsync](https://github.com/minormending/kidsync)
@@ -1499,7 +1499,7 @@ next quiet refresh.
 
 ### Handing the save over
 
-<!-- covers: app/room.js baton/baton.js baton/codec.js @ 41915203bbb8 -->
+<!-- covers: app/room.js baton/baton.js baton/codec.js @ f0b0e07fde35 -->
 
 The same room carries the save, through
 [baton](https://github.com/minormending/baton) vendored in `baton/`. kidsync
@@ -1548,6 +1548,64 @@ about 1,200. Compression is what makes it possible and is not a guarantee, so
 `publish` refuses with the numbers and writes nothing — the save is still kept
 on the device, and the other one must not be left showing an older game with no
 explanation.
+
+### The symbol file stops travelling
+
+The `.sym` is 1.8MB and this app looks up **45 symbols in it**. So the room
+carries those 45 lines — about a kilobyte, `{name: [bank, addr]}` — and a
+second device needs the ROM and nothing else. `Symbols.fromDigest` builds a
+table that behaves like the parsed file; `size` is the only honest difference,
+and it reports 45 because that is how many symbols it has.
+
+The list lives in `app/symbols.js` as `SHARED_SYMBOLS`, written by hand,
+because nothing at run time can know which names the code is *going* to ask
+for. That makes it exactly the kind of list that rots, and rot here is
+invisible where it is written: every device with the file keeps working, and
+only the one handed a digest fails — hours later, on the second phone.
+
+So `check-app` reads every lookup in the app and fails if one is missing from
+the list. It caught two on the way in, and the second one is why the check
+looks the way it does.
+
+<details>
+<summary><b>Advanced detail:</b> the lookup the first check could not see</summary>
+
+The first version matched `symbols.addr('X')`, which is how nearly every
+module reads an address. `romdata.js` does not: it wraps the pair once —
+
+```js
+this.at = (name) => ({ bank: symbols.bank(name), addr: symbols.addr(name) });
+this.items = this.at('ItemNames');
+```
+
+— so `ItemNames` and `KantoGrassWildMons` were reached through a variable the
+pattern could not follow. The check passed, the digest shipped two names short,
+and the device with no `.sym` booted to `symbol not in this .sym file:
+ItemNames` and sat on **booting…** for good, with the reason only in the
+console. The pattern knows both shapes now, and the two names that were missing
+were added by the check itself telling me about them — along with
+`sCheckValue1` and `sCheckValue2`, which are read the same way.
+
+Two things changed because of that hour:
+
+- **The check asserts one direction only.** A name in the list that nothing
+  looks up costs twenty-five bytes in a digest; a name looked up that is not in
+  the list costs a device the whole app. Requiring exact equality would also
+  mean an exemption for every symbol reached through a filter, which is how
+  `KantoGrassWildMons` is read — it is optional, and present in some builds.
+- **`maybeStart` is called with a `catch` on the digest path.** It is the one
+  route where the addresses were not read off a file this device chose, and an
+  unhandled rejection there is a spinner that never resolves. It says what is
+  missing now.
+
+</details>
+
+Where the fingerprint is taken matters too. A ROM arrives three ways — the
+picker, the kept-files store, and `?dev=1` — and each takes it, because the
+digest needs it *before* `maybeStart` runs. The dev path was forgotten first
+time round and the symptom was silence: nothing published, and a second device
+that waited for a digest that never came. `maybeStart` re-takes it if it is
+missing, as a backstop for the fourth path someone adds later.
 
 The service worker caches the vendored files, and `check-app` now asserts that:
 an unlisted one is served from the network and breaks offline use in exactly
@@ -1601,7 +1659,7 @@ git config core.hooksPath .githooks
 
 ### The other checks
 
-<!-- covers: tools/check-app @ d0275027d646 -->
+<!-- covers: tools/check-app @ 8239c9aabd23 -->
 
 `tools/check-app` runs everything that can be verified without a ROM:
 

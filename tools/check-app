@@ -375,6 +375,58 @@ def check_wiring():
         else ok(f"{len(ids)} markup ids and every import resolve")
 
 
+# Two shapes, because the app has two. Most modules call symbols.addr('X')
+# directly; romdata.js wraps the pair in `this.at = (name) => ...` and calls
+# `this.at('ItemNames')`, which the first pattern cannot see -- and did not,
+# until a device with no .sym file booted to "symbol not in this .sym file:
+# ItemNames" while every check here passed.
+SYMBOL_USE = re.compile(
+    r"\b(?:symbols|sym)\.(?:addr|bank|has)\('([A-Za-z_]\w*)'\)"
+    r"|\bat\('([A-Za-z_]\w*)'\)")
+SYMBOL_LIST = re.compile(r"const NEEDED_SYMBOLS = \[(.*?)\];|require\(\[(.*?)\]\)", re.S)
+
+
+def check_symbols():
+    """Every symbol the app looks up is one it can hand to another device.
+
+    app/symbols.js carries the list of names a digest is built from, because a
+    device with a ROM and no .sym is given those addresses instead of the file.
+    Nothing at run time can know which names the code will ask for, so the list
+    is written by hand -- and a hand-written list of 45 things is exactly what
+    rots the first time someone adds a lookup.
+
+    What rot costs here is worth spelling out: the app keeps working perfectly
+    on every device that has the .sym file, and throws "symbol not in this .sym
+    file" only on the one that was handed a digest. That is a failure that
+    reaches a person on their second phone, hours later, having passed every
+    check on the machine it was written on.
+    """
+    src = (ROOT / "app" / "symbols.js").read_text()
+    m = re.search(r"SHARED_SYMBOLS = \[(.*?)\];", src, re.S)
+    if not m:
+        return fail("app/symbols.js has no SHARED_SYMBOLS list")
+    shared = set(re.findall(r"'([A-Za-z_]\w*)'", m.group(1)))
+
+    used = set()
+    for path in APP:
+        text = path.read_text()
+        for a, b in SYMBOL_USE.findall(text):
+            used.add(a or b)
+        for a, b in SYMBOL_LIST.findall(text):
+            used |= set(re.findall(r"'([A-Za-z_]\w*)'", a or b))
+
+    # One direction only. A name in the list that nothing looks up costs about
+    # twenty-five bytes in a digest; a name looked up that is not in the list
+    # costs a device with no .sym file the whole app. Those are not the same
+    # size of mistake, and requiring exact equality would mean an exemption for
+    # every symbol reached through a filter or a variable.
+    problems = [f"{n} is looked up but not in SHARED_SYMBOLS" for n in sorted(used - shared)]
+    for p in problems:
+        print(f"        {p}")
+    return fail(f"{len(problems)} symbol list problem(s)") if problems \
+        else ok(f"all {len(shared)} shared symbols are the ones the app reads")
+
+
 def check_version():
     """app/version.js and the service worker's cache name say the same thing.
 
@@ -588,6 +640,7 @@ CHECKS = {
     "buttons": check_buttons,
     "wiring": check_wiring,
     "version": check_version,
+    "symbols": check_symbols,
     "docshape": check_docs_shape,
     "names": check_names,
     "moves": check_moves,
