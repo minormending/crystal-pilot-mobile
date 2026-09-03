@@ -1384,6 +1384,8 @@ git config core.hooksPath .githooks
 
 ### The other checks
 
+<!-- covers: tools/check-app @ 9611aec23c55 -->
+
 `tools/check-app` runs everything that can be verified without a ROM:
 
 ```bash
@@ -1398,11 +1400,24 @@ tools/check-app contrast     # or one group
 | `markup` | `index.html` tags and CSS braces balance |
 | `contrast` | the palette still meets contrast, in both themes |
 | `gamefiles` | no ROM, save or symbol file has been committed |
+| `buttons` | every button name handed to `press`/`hold`/`release` is one the core knows |
+| `wiring` | every `$('#id')` is in the markup, and every import is really exported |
+| `version` | `version.js` and the worker's cache name agree, and the display is in the header |
+| `docshape` | the architecture diagram names and counts every module |
+| `names` | every capitalised name a module uses is imported or declared there |
+| `moves` | the moves that would knock out what you are catching stay out of weakening |
 
-CI (`.github/workflows/checks.yml`) runs `check-app` and `docs-check` on every
-push. There is deliberately no emulator in CI: driving the game needs a ROM
-built from the disassembly, and none is distributed, so the tasks are verified
-by hand against a local build. The job is named `static-checks` for that reason.
+Half of that table was missing until the marker above was added: six groups had
+been written and never listed, so the document described five checks while
+eleven ran. Nothing noticed, because no section had claimed to cover
+`tools/check-app` — which is the exact failure `docs-check` exists to catch,
+one file away from the prose explaining it.
+
+CI (`.github/workflows/checks.yml`) runs `check-app`, the behaviour tests and
+`docs-check` on every push. There is deliberately no emulator in CI: driving
+the game needs a ROM built from the disassembly, and none is distributed, so
+the tasks are verified by hand against a local build. The workflow is named
+`checks` rather than `tests` for that reason — it does not run the game.
 
 <details>
 <summary><b>Advanced detail:</b> two of those groups exist because of a real slip</summary>
