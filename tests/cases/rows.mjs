@@ -6,7 +6,8 @@
 // out of the DOM.
 import { fakeRom, symbols, test, worldRam } from '../harness.mjs';
 import { GameState } from '../../app/state.js';
-import { describeRoom, joinFailure, describeRows, describeSlot, describeUndo } from '../../app/rows.js';
+import { describeHandoff, describeRoom, joinFailure, describeRows, describeSlot,
+         describeUndo } from '../../app/rows.js';
 
 const sym = symbols();
 const state = new GameState(sym);
@@ -168,4 +169,39 @@ test('a code that does not join says why, and never says nothing', async (t) => 
   // A reason from a newer kidsync than this build knows about.
   t.contains(joinFailure('rate-limited'), 'rate-limited',
              'an unknown reason still reaches the person');
+});
+
+test('the handoff row tells the two devices apart, and only offers when it should', async (t) => {
+  const there = { empty: false, rev: 5, by: 'iPhone', says: 'Route 29 · TOTODILE Lv5', tag: 'abc123' };
+
+  t.eq(describeHandoff({ seen: null }).button, null, 'nothing shared, nothing to take');
+  t.contains(describeHandoff({ seen: null }).text, 'save the game',
+             'and it says how to put something there');
+
+  const behind = describeHandoff({ seen: there, rev: 4, tag: 'abc123' });
+  t.eq(behind.button, 'Take over', 'their save is newer than ours');
+  t.contains(behind.text, 'iPhone', 'and it says whose');
+  t.contains(behind.text, 'Route 29 · TOTODILE Lv5', 'and where it is');
+
+  t.eq(describeHandoff({ seen: there, rev: 6, tag: 'abc123' }).button, null,
+       'ours is newer: nothing to take');
+  t.contains(describeHandoff({ seen: there, rev: 6, tag: 'abc123' }).text, 'save again',
+             'and it says how to share it');
+
+  const level = describeHandoff({ seen: there, rev: 5, tag: 'abc123' });
+  t.eq(level.button, null, 'the same save on both: nothing to do');
+  t.contains(level.text, 'in step', 'and it says so rather than staying blank');
+});
+
+test('a save from a different ROM is named, not offered', async (t) => {
+  // The addresses the pilot reads and the layout a save is written in come out
+  // of the same build. Bytes from another one load, and then everything after
+  // is confidently wrong -- which is worse than not loading at all.
+  const said = describeHandoff({
+    seen: { empty: false, rev: 9, by: 'iPad', says: 'Goldenrod', tag: 'other-build' },
+    rev: 0,
+    tag: 'abc123',
+  });
+  t.eq(said.button, null, 'no offer to take it');
+  t.contains(said.text, 'different ROM', 'and the reason is on screen');
 });

@@ -27,10 +27,29 @@
 // this only carries them between devices. If the room never answers, the app
 // behaves exactly as it did before this file existed.
 import { firebaseConfig } from '../sync/firebase-config.js';
+import { createBaton } from '../baton/baton.js';
 
 // Namespaces rooms, so a code here can never collide with one from the games
 // that share this Firebase project.
 const GAME = 'crystal-pilot';
+
+/**
+ * What to call this device out loud, so a row can say "Phone is playing".
+ *
+ * A guess off the user agent, and deliberately a crude one: it only has to
+ * tell your two devices apart in a sentence. Getting it wrong costs a word in
+ * a status line, and asking someone to name their phone before they can share
+ * a save costs more than that.
+ */
+function deviceName() {
+  const ua = navigator.userAgent || '';
+  if (/iPhone/.test(ua)) return 'iPhone';
+  if (/iPad/.test(ua)) return 'iPad';
+  if (/Android/.test(ua)) return 'Android';
+  if (/Macintosh/.test(ua)) return 'Mac';
+  if (/Windows/.test(ua)) return 'PC';
+  return 'this device';
+}
 
 /**
  * Combine two devices' options.
@@ -83,7 +102,7 @@ export function wasSharing() { return flag(); }
  * Resolves to null when there is nothing to open or the SDK could not be
  * fetched, and never throws: every caller of this treats sharing as a bonus.
  */
-export async function openRoom({ options, onOptions, onStatus } = {}) {
+export async function openRoom({ options, onOptions, onSave, onStatus } = {}) {
   let createSync;
   try {
     ({ createSync } = await import('../sync/kidsync.js'));
@@ -92,7 +111,14 @@ export async function openRoom({ options, onOptions, onStatus } = {}) {
     if (onStatus) onStatus('unavailable');
     return null;
   }
-  const sync = await createSync({
+  // Both `let`, and every use guarded, because kidsync calls onChange -- and
+  // can call merge -- from inside createSync, before the handle it returns
+  // exists. Written the obvious way round this throws "Cannot access 'sync'
+  // before initialization" on the first load and the app never starts. baton's
+  // own demo page met this first; see its README.
+  let sync = null;
+  let baton = null;
+  sync = await createSync({
     firebaseConfig,
     game: GAME,
     // Seeded with what this device already remembers, not with an empty group.
@@ -102,17 +128,37 @@ export async function openRoom({ options, onOptions, onStatus } = {}) {
     // ran: pressing Share emptied the record it was supposed to be sharing.
     initialState: options ? { opts: options, optsAt: options.at || 0 }
                           : { opts: {}, optsAt: 0 },
-    merge: mergeOptions,
+    // Two things share this room and each owns its own keys: the options merge
+    // by stamp, the save by revision. Composed rather than combined, because
+    // neither knows the other's rules and neither should.
+    merge: (a, b) => ({
+      ...mergeOptions(a, b),
+      ...(baton ? baton.merge(a, b) : {}),
+    }),
     onChange: (state) => {
-      if (!onOptions || !state || !state.opts) return;
-      // The stamp travels with the group: whoever adopts it has to order it
-      // against their own, and their clock is not the one that chose it.
-      onOptions({ ...state.opts, at: state.optsAt || 0 });
+      if (!state) return;
+      if (onOptions && state.opts) {
+        // The stamp travels with the group: whoever adopts it has to order it
+        // against their own, and their clock is not the one that chose it.
+        onOptions({ ...state.opts, at: state.optsAt || 0 });
+      }
+      // Metadata only. Nothing decompresses a payload to paint a row -- that
+      // happens when someone asks for the bytes.
+      if (onSave && baton) onSave(baton.peek());
     },
     onStatus: (s) => { if (onStatus) onStatus(s); },
   });
+  baton = createBaton({ sync, label: deviceName() });
   return {
     sync,
+    baton,
+    /** What the room is holding, without paying to unpack it. */
+    peekSave() { return baton.peek(); },
+    /** Put this device's battery in the room and take the baton. */
+    publishSave(bytes, says, tag) { return baton.publish(bytes, { says, tag }); },
+    /** The bytes back, refused if they belong to a different cartridge. */
+    takeSave(tag) { return baton.take({ tag }); },
+    get device() { return baton.label; },
     /** Publish the three options, with the stamp they were chosen at. */
     share(opts) { sync.set({ opts, optsAt: opts.at || Date.now() }); },
     async start() {

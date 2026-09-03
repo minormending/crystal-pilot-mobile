@@ -1,8 +1,8 @@
 // Wiring: file pickers, the render loop, and dispatching a task.
 import { GameBoy } from './gb.js';
 import { Symbols } from './symbols.js';
-import { describeRoom, describeRows, describeSlot, describeUndo,
-         joinFailure } from './rows.js';
+import { describeHandoff, describeRoom, describeRows, describeSlot,
+         describeUndo, joinFailure } from './rows.js';
 import { VERSION } from './version.js';
 import { forgetKept, keepBattery, keepRom, keepSym, keptMeta, readOpts, recall,
          sanitise, writeOpts } from './remember.js';
@@ -56,6 +56,14 @@ let optionsPending = false;
 let room = null;
 // Set when the Firebase SDK could not be fetched -- an offline first load.
 let roomUnavailable = false;
+// What the room is holding, as metadata. Kept rather than asked for on every
+// paint because a peek is cheap only if nothing unpacks the payload.
+let sharedSave = null;
+// Which cartridge this device has, as a short hash of the ROM. Travels with a
+// published save so another device can refuse bytes from a different build:
+// the addresses the pilot reads and the layout the save is written in both
+// come out of the same build, and mixing them reads garbage confidently.
+let romTag = '';
 // Whether the remembered grind preset has been applied. It cannot be applied
 // at load: `+2` means two above the lead, and there is no party until a game
 // is running.
@@ -225,6 +233,9 @@ async function maybeStart() {
   startLoop();
 
   paintFiles();
+  // Before anything can be published, and cheap: 2MB through SHA-256 once per
+  // session.
+  romTag = await fingerprintRom(romBytes);
 
   // A battery that came back with the files, put in through the same path a
   // .sav import uses: write the library's record and re-load the ROM. That
@@ -274,6 +285,23 @@ async function maybeStart() {
     }
   }
   awaitWorld();
+}
+
+/**
+ * A short fingerprint of the ROM in hand.
+ *
+ * Short on purpose: sixteen hex characters of a SHA-256 is far more than
+ * enough to tell one pokecrystal build from another, and it rides in a room
+ * whose whole state is capped at 32KB.
+ */
+async function fingerprintRom(buffer) {
+  try {
+    const hash = await crypto.subtle.digest('SHA-256', buffer);
+    return [...new Uint8Array(hash).subarray(0, 8)]
+      .map((b) => b.toString(16).padStart(2, '0')).join('');
+  } catch (e) {
+    return '';     // no subtle crypto: publish untagged rather than not at all
+  }
 }
 
 /**
@@ -335,11 +363,104 @@ async function keepGame() {
     if (!state.saveIsPresent(bytes)) return false;
     const ok = await keepBattery(bytes);
     paintFiles();
+    await shareGame(bytes);
     return ok;
   } catch (e) {
     return false;
   }
 }
+
+/**
+ * Put this device's save in the room, if there is a room.
+ *
+ * Called from the one place that already knows the bytes just moved, which is
+ * the only honest moment to publish: there is no event for "the game saved" in
+ * a browser, and a timer would either miss saves or upload the same one over
+ * and over.
+ *
+ * A room that refuses the payload is not an error worth interrupting anyone
+ * for -- the save is still on this device, kept -- but it must be *said*, or
+ * the other device will sit there showing an older game with no explanation.
+ */
+async function shareGame(bytes) {
+  if (!room) return;
+  let says = '';
+  try {
+    const now = await describeGame();
+    says = now.lead ? `${now.where} · ${now.lead}` : now.where;
+  } catch (e) {
+    // Mid-title, or no party yet. A save with no description is still a save.
+  }
+  const said = await room.publishSave(bytes, says, romTag);
+  if (!said.ok) {
+    progress(said.reason === 'too-big'
+      ? `this save is ${said.chars} characters packed, over the ${said.cap} a room holds — it stays on this device`
+      : `could not share this save: ${said.reason}`);
+    return;
+  }
+  // The revision is stored beside the bytes it belongs to, so this device can
+  // tell "the same save" from "also a save" when it looks at the room again.
+  await keepBattery(bytes, { rev: said.rev });
+  paintHandoff();
+}
+
+/** Say what the room is holding, and offer to take it if it is ahead. */
+async function paintHandoff() {
+  const row = $('#handoffrow'), btn = $('#takeover');
+  if (!row) return;
+  if (!room) { row.classList.add('hide'); return; }
+  const meta = await keptMeta();
+  const said = describeHandoff({
+    seen: sharedSave,
+    rev: (meta && meta.rev) || 0,
+    tag: romTag,
+  });
+  row.classList.remove('hide');
+  $('#handoffstate').textContent = said.text;
+  btn.textContent = said.button || 'Take over';
+  btn.classList.toggle('hide', !said.button);
+}
+
+/**
+ * Take the save the other device shared, and carry on from it.
+ *
+ * Through runTask with an undo point, unlike the .sav and slot paths: those
+ * are a person choosing bytes they can see, and this is bytes chosen on
+ * another device, possibly hours ago. The undo point is the local game -- one
+ * press back if this was not what you wanted.
+ */
+$('#takeover').onclick = () => runTask('#takeover', 'taking the shared save',
+  async () => {
+    if (!room) return { ok: false, message: 'not sharing' };
+    const got = await room.takeSave(romTag);
+    if (!got.ok) {
+      return { ok: false, message: got.reason === 'tag'
+        ? 'that save was made with a different ROM'
+        : `nothing to take: ${got.reason}` };
+    }
+    await saves.install(got.bytes);
+    if (!await tasks.continueFromTitle()) {
+      return { ok: false, message: 'installed it but could not reach the world' };
+    }
+    await keepBattery(got.bytes, { rev: sharedSave ? sharedSave.rev : 0 });
+    savedThisSession = true;
+    await paintSlots();
+    paintFiles();
+    // After the revision is stored, not before: the row compares the two, and
+    // painting it first left it saying the other device was still ahead.
+    await paintHandoff();
+    const now = await describeGame();
+    const said = `took ${got.by}'s save — ${now.where}`
+      + (now.lead ? ` with ${now.lead}` : '');
+    // Into the log as well as the status line, because the idle refresh writes
+    // "ready" over the status a second later. The one case where even the log
+    // does not keep it is a device that had no game at all until this moment:
+    // awaitWorld is still clearing both every tick while it waits for a world,
+    // and it gets its wish half a second after this line. The handoff row is
+    // the durable statement either way.
+    progress(said);
+    return { ok: true, message: said };
+  }, { needsWorld: false, takeUndoPoint: true });
 
 /**
  * Wait until a game is actually underway, then offer the pilot.
@@ -1380,6 +1501,7 @@ function applyWanted() {
 
 /** Say what sharing is doing, from rows.js so the four states can be tested. */
 function paintRoom() {
+  paintHandoff();
   const said = describeRoom({
     status: room ? room.status : (roomUnavailable ? 'unavailable' : 'local'),
     code: room ? room.code : null,
@@ -1403,6 +1525,7 @@ async function ensureRoom() {
   room = await openRoom({
     options: readOpts(LIMITS),
     onOptions: adoptOptions,
+    onSave: (seen) => { sharedSave = seen; paintHandoff(); },
     onStatus: paintRoom,
   });
   if (!room) roomUnavailable = true;

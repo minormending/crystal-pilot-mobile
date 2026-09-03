@@ -92,7 +92,7 @@ of the subtleties in sections 6 and 7.
 
 ## 2. The shape of it
 
-<!-- covers-api: app/main.js app/bootstrap.js app/tasks.js app/nav.js app/world.js app/collision.js app/state.js app/romdata.js app/symbols.js app/gb.js @ a1ec75657530 -->
+<!-- covers-api: app/main.js app/bootstrap.js app/tasks.js app/nav.js app/world.js app/collision.js app/state.js app/romdata.js app/symbols.js app/gb.js @ d144ae63da09 -->
 
 Nineteen modules. Arrows point from a module to the ones it imports.
 
@@ -1194,7 +1194,7 @@ the bag" rather than "did we gain any".
 
 ## 9. The interface
 
-<!-- covers: app/main.js index.html @ e7058a2a58ce -->
+<!-- covers: app/main.js index.html @ 58c92e53ac61 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -1349,7 +1349,7 @@ game's own picture, not on a surface of ours.
 
 ### What it remembers
 
-<!-- covers: app/remember.js @ 636b6f49f051 -->
+<!-- covers: app/remember.js @ 273b20ee63e1 -->
 
 The app forgets everything on a reload, and a reload is not rare: the Update
 button causes one deliberately, and a phone discards a background tab whenever
@@ -1455,7 +1455,7 @@ must not read as "wipe everything".
 
 ### Sharing between your own devices
 
-<!-- covers: app/room.js sync/kidsync.js @ 483b589b98a2 -->
+<!-- covers: app/room.js sync/kidsync.js @ 19b76e3e94b5 -->
 
 One person with a phone and a tablet, no accounts: a room code is the whole
 mechanism. `sync/` is [kidsync](https://github.com/minormending/kidsync)
@@ -1496,6 +1496,58 @@ dropped, while a remote one is a preset another build still offers. And it is
 never applied while a job is running — a target moving under a thumb mid-grind
 is alarming, and the task is holding the old value anyway, so it waits for the
 next quiet refresh.
+
+### Handing the save over
+
+<!-- covers: app/room.js baton/baton.js baton/codec.js @ 41915203bbb8 -->
+
+The same room carries the save, through
+[baton](https://github.com/minormending/baton) vendored in `baton/`. kidsync
+moves state that merges; a battery does not merge. Two devices that both played
+cannot be reconciled, only chosen between — so the save is a *baton*: one
+device holds it, publishes it, the other takes it.
+
+```mermaid
+sequenceDiagram
+    participant P as phone
+    participant R as room
+    participant T as tablet
+    P->>P: save the game
+    P->>R: publish · gzipped battery, rev 5, "Route 29 · TOTODILE Lv5"
+    R-->>T: a save at rev 5
+    Note over T: its own battery is rev 4,<br/>so it offers Take over
+    T->>R: take · rev 6, held by tablet
+    T->>T: undo point, install, CONTINUE
+```
+
+**Publishing happens where the app already knows the bytes moved** —
+`keepGame`, which fires after a save it drove, a `.sav` it installed, a slot it
+loaded, and before the Update button reloads. There is no "the game saved"
+event in a browser, and a timer would either miss saves or send the same one
+repeatedly.
+
+**The revision is stored beside the bytes it belongs to**, in the same kept
+record. That is what lets the row say *in step* rather than merely *both have a
+save*: a revision without its bytes would claim this device is level with a
+save it does not hold.
+
+**It travels with a fingerprint of the ROM**, sixteen hex characters of a
+SHA-256. Addresses the pilot reads and the layout a save is written in both
+come out of the same build, so bytes from another one load and then everything
+after is confidently wrong — worse than not loading. A mismatch is named in the
+row and the button is not offered.
+
+**Taking over runs through `runTask` with an undo point**, unlike the `.sav`
+and slot paths. Those are a person choosing bytes in front of them; this is
+bytes chosen on another device, possibly hours ago, so the local game is worth
+one press back.
+
+**A save that will not fit is said out loud.** The room holds 32,768 characters
+of JSON; a raw base64 battery is 43,692 and never fits, gzipped it measured
+about 1,200. Compression is what makes it possible and is not a guarantee, so
+`publish` refuses with the numbers and writes nothing — the save is still kept
+on the device, and the other one must not be left showing an older game with no
+explanation.
 
 The service worker caches the vendored files, and `check-app` now asserts that:
 an unlisted one is served from the network and breaks offline use in exactly
@@ -1549,7 +1601,7 @@ git config core.hooksPath .githooks
 
 ### The other checks
 
-<!-- covers: tools/check-app @ add179bc8581 -->
+<!-- covers: tools/check-app @ d0275027d646 -->
 
 `tools/check-app` runs everything that can be verified without a ROM:
 

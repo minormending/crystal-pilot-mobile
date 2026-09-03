@@ -5,7 +5,7 @@
 // in IndexedDB on the device by app/remember.js, so a reload does not send you
 // looking for them -- which is a different thing from being cached, and is
 // thrown away by Forget in the settings card.
-const CACHE = 'crystal-pilot-v77';
+const CACHE = 'crystal-pilot-v78';
 const SHELL = [
   './', './index.html', './manifest.webmanifest', './icon.svg',
   './vendor/wasmboy.umd.js',
@@ -21,6 +21,7 @@ const SHELL = [
   // is another origin, and this worker deliberately answers for this one only.
   // Offline you keep the app and lose sharing, which is the right way round.
   './sync/kidsync.js', './sync/bridge.js', './sync/firebase-config.js',
+  './baton/baton.js', './baton/codec.js',
 ];
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));

@@ -971,6 +971,29 @@ would put a cross-origin fetch in the middle of this app's module graph, and
 offline that takes the whole app down with it. Offline you lose sharing and
 keep the game.
 
+### Handing the game over
+
+The same room carries the save. [baton](https://github.com/minormending/baton),
+vendored in `baton/`, is the other shape of sync: kidsync moves state that
+merges, and a battery does not merge — two devices that both played can only be
+chosen between. So one device holds it, publishes it, and the other takes it.
+
+Save on the phone and the tablet's settings card says **iPhone has the newer
+save · Route 29 · TOTODILE Lv5**, with **Take over**. That takes an undo point,
+installs the save and drives CONTINUE, and both rows then read *in step*.
+
+- **It publishes where the app already knows the bytes moved** — after a save it
+  drove, a `.sav` it installed, a slot it loaded, and before the Update button
+  reloads. There is no "the game saved" event in a browser.
+- **It carries a fingerprint of the ROM.** A save made with a different build
+  loads and is then confidently wrong, so a mismatch is named and taking it is
+  not offered.
+- **It says when a save will not fit.** 32,768 characters is the room's cap; a
+  raw base64 battery is 43,692 and never fits, gzipped it measured ~1,200.
+  Compression is what makes it possible, not a guarantee — a refused publish
+  keeps the save on the device and says so, rather than leaving your other
+  device showing an older game for no visible reason.
+
 ## Controls
 
 Eight on-screen buttons: the D-pad, A, B, Select and Start. **Press and hold** —

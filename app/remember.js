@@ -232,10 +232,14 @@ export async function keepSym(name, text) {
   } catch (e) { return false; }
 }
 
-export async function keepBattery(bytes) {
+export async function keepBattery(bytes, extra = {}) {
   try {
     await work('readwrite', (s) => s.put(Uint8Array.from(bytes), BATTERY));
-    await patchMeta({ battery: true, batteryAt: Date.now() });
+    // `extra` is how the room's revision gets stored beside the bytes it
+    // belongs to. Kept here rather than in its own record because the two are
+    // only ever true together: a revision without the bytes it names would
+    // claim this device is in step with a save it does not have.
+    await patchMeta({ battery: true, batteryAt: Date.now(), ...extra });
     return true;
   } catch (e) { return false; }
 }

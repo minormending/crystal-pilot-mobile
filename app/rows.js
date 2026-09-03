@@ -175,3 +175,36 @@ export function joinFailure(reason) {
   if (reason === 'network') return 'could not reach the room — try again in a moment';
   return `could not join: ${reason}`;
 }
+
+/**
+ * What the handoff row says, and whether taking over is on offer.
+ *
+ * The states are what one person with two devices actually meets, and the
+ * wording of each is the whole feature: this row is the only place the app can
+ * tell you that the game you want is on the other device.
+ *
+ * `seen` is baton's peek(); `rev` is the revision this device's own battery
+ * corresponds to, so "in step" means the bytes here and the bytes there are
+ * the same save rather than merely both existing.
+ */
+export function describeHandoff({ seen = null, rev = 0, tag = null } = {}) {
+  if (!seen || seen.empty) {
+    return { text: 'nothing shared yet — save the game to put it here',
+             button: null };
+  }
+  if (tag && seen.tag && seen.tag !== tag) {
+    // Addresses and save layout both come from the build, so bytes from
+    // another ROM are not a save this cartridge would load.
+    return { text: `${seen.by} shared a save from a different ROM`,
+             button: null };
+  }
+  if (seen.rev > rev) {
+    const where = seen.says ? ` · ${seen.says}` : '';
+    return { text: `${seen.by} has the newer save${where}`, button: 'Take over' };
+  }
+  if (seen.rev < rev) {
+    return { text: 'this device has the newer save — save again to share it',
+             button: null };
+  }
+  return { text: seen.says ? `in step · ${seen.says}` : 'in step', button: null };
+}
