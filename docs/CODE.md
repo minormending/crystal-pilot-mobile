@@ -94,7 +94,7 @@ of the subtleties in sections 6 and 7.
 
 <!-- covers-api: app/main.js app/bootstrap.js app/tasks.js app/nav.js app/world.js app/collision.js app/state.js app/romdata.js app/symbols.js app/gb.js @ f455d9f8c1c4 -->
 
-Sixteen modules. Arrows point from a module to the ones it imports.
+Seventeen modules. Arrows point from a module to the ones it imports.
 
 ```mermaid
 flowchart TD
@@ -106,6 +106,7 @@ flowchart TD
     menus["menus.js<br/>the game's own menus"]
     tbase["taskbase.js<br/>machine and snapshot"]
     rows["rows.js<br/>what each row says"]
+    ver["version.js<br/>which build this is"]
     nav["nav.js<br/>walking"]
     world["world.js<br/>map graph"]
     coll["collision.js<br/>what is walkable"]
@@ -118,6 +119,7 @@ flowchart TD
     main --> boot
     main --> tasks
     main --> rows
+    main --> ver
     main --> nav
     main --> world
     main --> coll
@@ -159,6 +161,7 @@ flowchart TD
 | `bootstrap.js` | "start a new game", "fetch Poké Balls" |
 | `saves.js` | "keep this in slot 2", "put that .sav into the cartridge" |
 | `rows.js` | "why is that button greyed out?" |
+| `version.js` | "which build am I running?" |
 | `main.js` | everything the person holding the phone touches |
 
 The dependency direction is the design: **nothing below `tasks.js` knows what a
@@ -927,7 +930,7 @@ running the thing.
 
 ## 7b. Saving, and getting the save out
 
-<!-- covers: app/tasks.js app/taskbase.js app/battle.js app/jobs.js app/state.js -->
+<!-- covers: app/tasks.js app/taskbase.js app/battle.js app/jobs.js app/state.js @ 1fa777531a3e -->
 
 ```mermaid
 flowchart TD
@@ -1004,7 +1007,7 @@ Tackle and Leer. Two emulators, two implementations, one save file.
 
 ## 7c. Slots, undo, and bringing a save in
 
-<!-- covers: app/saves.js -->
+<!-- covers: app/saves.js @ 61ca4c4f1724 -->
 
 Three slots a person picks, plus one the pilot writes before every job. A slot
 holds a **battery save** — the 32KB the cartridge writes — and not a machine

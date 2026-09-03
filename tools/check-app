@@ -386,6 +386,56 @@ def check_version():
     return ok(f"version {m.group(1)} matches the service worker cache")
 
 
+def check_docs_shape():
+    """The architecture diagram names every module, and counts them correctly.
+
+    docs-check notices when described code changes; it cannot notice a module
+    that was never described. So a new file is invisible to it -- version.js was
+    added, drawn nowhere, and the prose went on saying "Sixteen modules" while
+    there were seventeen. A diagram reads as the map of the code, which makes a
+    missing module worse than a stale paragraph.
+    """
+    doc = ROOT / "docs" / "CODE.md"
+    if not doc.exists():
+        print("  skip  documentation shape (no docs/CODE.md)")
+        return 0
+    text = doc.read_text()
+    problems = []
+
+    modules = {p.name for p in APP}
+    block = re.search(r"```mermaid\n(flowchart TD\n(?:.|\n)*?)```", text)
+    if block is None:
+        problems.append("no architecture flowchart found")
+    else:
+        drawn = set(re.findall(r'\["?([\w-]+\.js)', block.group(1)))
+        for missing in sorted(modules - drawn):
+            problems.append(f"{missing} is not in the architecture diagram")
+        for ghost in sorted(drawn - modules):
+            problems.append(f"the diagram names {ghost}, which does not exist")
+
+    # The prose count, spelled out in words as the document does.
+    WORDS = {10: "Ten", 11: "Eleven", 12: "Twelve", 13: "Thirteen",
+             14: "Fourteen", 15: "Fifteen", 16: "Sixteen", 17: "Seventeen",
+             18: "Eighteen", 19: "Nineteen", 20: "Twenty"}
+    want = WORDS.get(len(modules))
+    said = re.search(r"^(\w+) modules\. Arrows", text, re.M)
+    if said is None:
+        problems.append("the module count sentence is gone")
+    elif want and said.group(1) != want:
+        problems.append(f"the prose says {said.group(1)} modules, "
+                        f"there are {len(modules)} ({want})")
+
+    # Every module should also appear in the "what does it answer" table.
+    for name in sorted(modules):
+        if f"| `{name}` |" not in text:
+            problems.append(f"{name} is not in the module table")
+
+    for p in problems:
+        print(f"        {p}")
+    return fail(f"{len(problems)} documentation-shape problem(s)") if problems \
+        else ok(f"all {len(modules)} modules are drawn, counted and tabled")
+
+
 CHECKS = {
     "syntax": check_syntax,
     "shell": check_shell,
@@ -395,6 +445,7 @@ CHECKS = {
     "buttons": check_buttons,
     "wiring": check_wiring,
     "version": check_version,
+    "docshape": check_docs_shape,
     "moves": check_moves,
 }
 
