@@ -1191,7 +1191,7 @@ the bag" rather than "did we gain any".
 
 ## 9. The interface
 
-<!-- covers: app/main.js index.html @ 04205fb5ce60 -->
+<!-- covers: app/main.js index.html @ 4e3461c54a32 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -1408,9 +1408,24 @@ flowchart TD
     V -- no --> W["wait for visibilitychange"] --> V
     V -- yes --> A["run frames until the machine is executing"]
     A --> I["write the library's record, re-load the ROM"]
-    I --> C["drive CONTINUE"]
+    I --> S{"a save in the cartridge?"}
+    S -- no --> P["the title screen, and Start is yours"]
+    S -- yes --> C["drive CONTINUE"]
     C --> D["back where you saved"]
 ```
+
+**Continuing is gated on that save existing, and on the session being a
+restored one.** START-then-A is CONTINUE with a save in the cartridge and NEW
+GAME without one, and NEW GAME lands in the NAME menu where the only thing an
+auto-pilot can do is spell AAAAA — so the gate is what keeps "start a game"
+the player's. The second half of it is subtler: a hand-picked session stays at
+the title screen because that menu is the only route to NEW GAME, and driving
+past it would leave nobody a way back. A kept game's route back is *Forget*.
+
+The save is asked of the cartridge rather than of what this session installed,
+because `loadCartridgeRam` pushes the library's record in on every load: a
+restored session can arrive holding a game nothing in this session put there,
+which is just as much a game to carry on from.
 
 Both gates in that diagram were found by doing it. **The page has to be
 visible**, because the re-load goes through the library's `pause()` and a

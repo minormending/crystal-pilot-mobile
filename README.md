@@ -913,8 +913,25 @@ app knows the bytes have just moved — a save it drove, a `.sav` it installed, 
 slot it loaded, and the moment before the Update button reloads the page.
 
 Putting it back goes through the same path a `.sav` import uses: write the
-library's record, re-load the ROM, drive CONTINUE. Two things had to be true
-first, and both were found by doing it rather than reasoning about it:
+library's record, re-load the ROM, then drive CONTINUE — so a restored session
+opens **in the game**, not at a title screen with Start to press. You did not
+ask for the reload; it should not cost you two presses.
+
+That last step is gated twice, and both gates matter. It happens only when a
+save is actually in the cartridge, because START-then-A is CONTINUE with a save
+and **NEW GAME** without one — and that lands in the NAME menu, where the only
+thing an auto-pilot can do is spell AAAAA. And it happens only for a session
+restored from the store: a hand-picked one is left at the title screen, because
+that menu is where NEW GAME lives and continuing past it would leave no way
+back to it. *Forget* is the way back for a kept game.
+
+The save is read off the cartridge rather than from what this session
+installed, because the library pushes its own record in on every ROM load — a
+restored session can arrive holding a game nothing in this session put there,
+and it is just as much a game to carry on from.
+
+Two more things had to be true first, and both were found by doing it rather
+than reasoning about it:
 
 * **The page has to be visible.** Re-loading the ROM goes through the library's
   `pause()`, which waits for an animation frame a hidden page never gets, so

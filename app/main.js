@@ -50,6 +50,14 @@ let grindRestored = false;
 // maybeStart runs so that the one place which decides "are we in the world
 // now?" can see it.
 let pendingBattery = null;
+// Whether this session's files came out of the store rather than a file
+// picker. It decides whether the app continues the game for you: a restored
+// session is one you were already playing, and a reload you did not ask for
+// should not cost you two presses. A hand-picked one is left at the title
+// screen, where NEW GAME is -- the app's own bootstrap button aside, that
+// menu is the only way to start a game, and continuing past it would leave
+// nobody a way back to it.
+let restoredSession = false;
 // How long an idle-loop step may be outstanding before it is treated as lost.
 const LOST_STEP_MS = 1000;
 let speed = 1;
@@ -204,14 +212,10 @@ async function maybeStart() {
 
   paintFiles();
 
-  // A battery that came back with the files. Installed through the same path a
-  // .sav import uses -- write the library's record, re-load the ROM, drive
-  // CONTINUE -- because that path is the one that was watched putting a real
-  // save into a real game, and this is the same job without the file picker.
-  //
-  // Continuing is not the same decision as starting: a new game is the
-  // player's, which is why nothing here presses A at a NAME menu. But this
-  // person was already playing, and the reload was the app's idea.
+  // A battery that came back with the files, put in through the same path a
+  // .sav import uses: write the library's record and re-load the ROM. That
+  // path is the one that was watched putting a real save into a real game,
+  // and this is the same job without the file picker.
   if (pendingBattery) {
     const bytes = pendingBattery;
     pendingBattery = null;
@@ -235,23 +239,48 @@ async function maybeStart() {
       // early, which is why this is the only caller.
       await gb.awake();
       await saves.install(bytes);
-      if (!await tasks.continueFromTitle()) {
-        // Through the log, not the status line: awaitWorld below writes the
-        // status a moment later, and a message about a save that did not come
-        // back must not be the one that gets overwritten.
-        progress('your game is on the cartridge — press Start to continue');
-      }
     } catch (e) {
+      // Through the log, not the status line: awaitWorld writes the status a
+      // moment later, and a message about a save that did not come back must
+      // not be the one that gets overwritten.
       progress(`the kept save could not be loaded: ${e.message}`);
     }
-  } else if (AUTOSTART) {
+  }
+
+  if (AUTOSTART) {
     setStatus('starting the game…', 'busy');
     if (!await tasks.continueGame()) {
       setStatus('could not reach the overworld — is this a Crystal ROM?', 'bad');
       return;
     }
+  } else if (restoredSession && await saveIsInCartridge()) {
+    setStatus('carrying on where you left off…', 'busy');
+    if (!await tasks.continueFromTitle()) {
+      progress('your game is on the cartridge — press Start to continue');
+    }
   }
   awaitWorld();
+}
+
+/**
+ * Is there a save in the cartridge to carry on from?
+ *
+ * The gate on continuing for you, and it has to be a gate: continueFromTitle
+ * presses START and then A, which is CONTINUE when a save exists and NEW GAME
+ * when it does not -- and that lands in the NAME menu, where the only thing an
+ * auto-pilot can do is spell AAAAA. Starting a game stays the player's.
+ *
+ * Asked of the cartridge rather than of what this session installed, because
+ * the library pushes its own record in on every ROM load: a restored session
+ * can arrive with a save that nothing in this session put there, and it is
+ * just as much a game to carry on from.
+ */
+async function saveIsInCartridge() {
+  try {
+    return state.saveIsPresent(await gb.batterySave());
+  } catch (e) {
+    return false;      // an unreadable battery is not one to press A at
+  }
 }
 
 /**
@@ -1512,6 +1541,7 @@ $('#exportsav').onclick = async () => {
     symbols.require(NEEDED_SYMBOLS);
     romBytes = kept.rom.buffer;
     pendingBattery = kept.battery;
+    restoredSession = true;
   } catch (e) {
     // A record this build cannot use is not something to argue with: drop it
     // and let the loader card ask, which is where the person already is.
