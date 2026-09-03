@@ -208,3 +208,16 @@ export function describeHandoff({ seen = null, rev = 0, tag = null } = {}) {
   }
   return { text: seen.says ? `in step · ${seen.says}` : 'in step', button: null };
 }
+
+/**
+ * What the replaced-game row says.
+ *
+ * It exists only when a handoff has actually replaced something, because a row
+ * reading "nothing was replaced" is a row explaining a mechanism nobody has
+ * met yet. When it does exist it has to say enough to be worth pressing:
+ * whose game went away, and where it was.
+ */
+export function describeReplaced(meta) {
+  if (!meta) return { text: '', enabled: false, show: false };
+  return { text: describeSlot(meta), enabled: true, show: true };
+}

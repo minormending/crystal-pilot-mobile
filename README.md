@@ -988,6 +988,11 @@ installs the save and drives CONTINUE, and both rows then read *in step*.
 - **It carries a fingerprint of the ROM.** A save made with a different build
   loads and is then confidently wrong, so a mismatch is named and taking it is
   not offered.
+- **What a handoff replaces is kept.** Taking a save overwrites the game on
+  this device, so the one it displaced goes into a slot of its own that only a
+  handoff writes — the undo point is written before every job and would be gone
+  by the time you noticed. *Put back what a handoff replaced* appears whenever
+  there is one.
 - **The second device does not need the `.sym` at all.** The file is 1.8MB and
   the app reads 45 symbols in it, so the room carries those 45 addresses —
   about a kilobyte — and a device with the ROM and no symbol file boots from

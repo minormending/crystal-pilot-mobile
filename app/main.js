@@ -1,14 +1,14 @@
 // Wiring: file pickers, the render loop, and dispatching a task.
 import { GameBoy } from './gb.js';
 import { SHARED_SYMBOLS, Symbols } from './symbols.js';
-import { describeHandoff, describeRoom, describeRows, describeSlot,
-         describeUndo, joinFailure } from './rows.js';
+import { describeHandoff, describeReplaced, describeRoom, describeRows,
+         describeSlot, describeUndo, joinFailure } from './rows.js';
 import { VERSION } from './version.js';
 import { forgetKept, keepBattery, keepRom, keepSym, keptMeta, readOpts, recall,
          sanitise, writeOpts } from './remember.js';
-import { openRoom, wasSharing } from './room.js';
+import { chosenName, openRoom, wasSharing } from './room.js';
 import { Cancelled } from './taskbase.js';
-import { Saves, SLOT_IDS, UNDO_SLOT } from './saves.js';
+import { REPLACED_SLOT, Saves, SLOT_IDS, UNDO_SLOT } from './saves.js';
 import { GameState, TRAINER_BATTLE, MAX_PARTY } from './state.js';
 import { Tasks } from './tasks.js';
 import { CollisionMap } from './collision.js';
@@ -222,7 +222,6 @@ async function maybeStart() {
   $('#loader').classList.add('hide');
   $('#intro').classList.add('hide');
   $('#ctrls').classList.remove('hide');
-  $('#speedcard').classList.remove('hide');
   $('#speedbox').classList.remove('hide');
   $('#huntcard').classList.remove('hide');
   $('#savecard').classList.remove('hide');
@@ -462,6 +461,40 @@ function symbolsFromRoom() {
   return true;
 }
 
+/**
+ * Copy the game this device is holding into the reserved slot.
+ *
+ * Only what the cartridge already has: a battery with no save in it is not a
+ * game anyone loses. Failure is not worth stopping a handoff for -- the undo
+ * point is still there for the next few minutes -- but it is worth saying.
+ */
+async function keepReplaced() {
+  if (!saves || !state || !gb.rom) return false;
+  try {
+    const bytes = await gb.batterySave();
+    if (!state.saveIsPresent(bytes)) return false;
+    const where = await describeGame();
+    const kept = await saves.capture(REPLACED_SLOT, where);
+    if (!kept.ok) progress(`could not keep the replaced game: ${kept.message || ''}`);
+    return kept.ok;
+  } catch (e) {
+    progress(`could not keep the replaced game: ${e.message}`);
+    return false;
+  }
+}
+
+/** Offer the replaced game back, for as long as there is one. */
+async function paintReplaced() {
+  const row = $('#job-replaced');
+  if (!row || !saves) return;
+  const all = await saves.list();
+  const said = describeReplaced(all[REPLACED_SLOT]);
+  row.classList.toggle('hide', !said.show);
+  if (said.show) $('#replacedstate').textContent = said.text;
+}
+
+$('#restorereplaced').onclick = () => loadSlot(REPLACED_SLOT, 'the replaced game');
+
 /** Say what the room is holding, and offer to take it if it is ahead. */
 async function paintHandoff() {
   const row = $('#handoffrow'), btn = $('#takeover');
@@ -496,6 +529,11 @@ $('#takeover').onclick = () => runTask('#takeover', 'taking the shared save',
         ? 'that save was made with a different ROM'
         : `nothing to take: ${got.reason}` };
     }
+    // The game about to be replaced, kept where the next job cannot reach it.
+    // runTask has already taken an undo point, but the undo slot is written
+    // before *every* job -- one grind after a handoff you did not want and it
+    // is gone. This slot is only ever written here.
+    await keepReplaced();
     await saves.install(got.bytes);
     if (!await tasks.continueFromTitle()) {
       return { ok: false, message: 'installed it but could not reach the world' };
@@ -1561,9 +1599,32 @@ function applyWanted() {
   }
 }
 
+/**
+ * Say what the loader card still needs.
+ *
+ * A device that has joined a room where the addresses are already shared needs
+ * one file, not two -- and it had no way of knowing that. It asked for both,
+ * took the ROM, and then silently started, which reads like a bug even when it
+ * is the feature working.
+ */
+function paintLoader() {
+  const note = $('#loadernote');
+  if (!note) return;
+  const offered = room && room.symbols();
+  note.textContent = offered
+    ? 'Just the ROM — your other device is sharing the addresses.'
+    : 'Pick the ROM first; the symbol file can follow.';
+}
+
 /** Say what sharing is doing, from rows.js so the four states can be tested. */
 function paintRoom() {
   paintHandoff();
+  paintLoader();
+  const nameRow = $('#namerow');
+  if (nameRow) {
+    nameRow.classList.toggle('hide', !(room && room.code));
+    if (room) $('#devicename').placeholder = room.device;
+  }
   const said = describeRoom({
     status: room ? room.status : (roomUnavailable ? 'unavailable' : 'local'),
     code: room ? room.code : null,
@@ -1590,7 +1651,7 @@ async function ensureRoom() {
     onSave: (seen) => { sharedSave = seen; paintHandoff(); },
     // A digest can arrive after the ROM was picked, so this is a second chance
     // rather than only a first one.
-    onSymbols: () => symbolsFromRoom(),
+    onSymbols: () => { paintLoader(); symbolsFromRoom(); },
     onStatus: paintRoom,
   });
   if (!room) roomUnavailable = true;
@@ -1623,6 +1684,14 @@ $('#share').onclick = async () => {
   }
 };
 
+$('#rename').onclick = () => {
+  if (!room) return;
+  const said = room.rename($('#devicename').value);
+  $('#devicename').value = '';
+  paintRoom();
+  progress(`your other devices will call this one ${said}`);
+};
+
 $('#joingo').onclick = async () => {
   const btn = $('#joingo'), input = $('#joincode');
   btn.disabled = true;
@@ -1641,6 +1710,7 @@ $('#joingo').onclick = async () => {
 
 // Painted once at load, because the markup can only hold one of the four states
 // and the honest one before anything happens is "not sharing, here is how".
+if ($('#devicename') && chosenName()) $('#devicename').placeholder = chosenName();
 paintRoom();
 // A device that has shared before picks the room up again on its own; one that
 // never has stays entirely local, network included.
@@ -1748,6 +1818,7 @@ async function loadSlot(slot, what) {
 }
 
 async function paintSlots() {
+  paintReplaced();
   const host = $('#slotrows');
   if (!host || !saves) return;
   const all = await saves.list();

@@ -462,8 +462,19 @@ def check_version():
         return fail("index.html has no <header> to show the version in")
     missing = [i for i in ("version", "update") if f'id="{i}"' not in head.group(1)]
     if missing:
-        print("        the settings card only exists once a ROM is loaded")
         return fail(f"{', '.join(missing)} is not in the header")
+
+    # And the settings card is reachable before a ROM is, for the same reason
+    # one level down. It holds the theme, this device's name, the room and the
+    # kept files -- none of which need a game, and the device that most needs
+    # the room is the one that has no game yet. It spent a while hidden behind
+    # a loaded cartridge, which made joining a room from a fresh phone
+    # impossible: the button existed and nothing could press it.
+    card = re.search(r'<div class="card([^"]*)" id="speedcard">', INDEX.read_text())
+    if not card:
+        return fail("index.html has no settings card")
+    if "hide" in card.group(1):
+        return fail("the settings card is hidden until a ROM is loaded")
     return ok(f"version {m.group(1)} matches the cache, and shows with no ROM")
 
 

@@ -6,8 +6,8 @@
 // out of the DOM.
 import { fakeRom, symbols, test, worldRam } from '../harness.mjs';
 import { GameState } from '../../app/state.js';
-import { describeHandoff, describeRoom, joinFailure, describeRows, describeSlot,
-         describeUndo } from '../../app/rows.js';
+import { describeHandoff, describeReplaced, describeRoom, joinFailure,
+         describeRows, describeSlot, describeUndo } from '../../app/rows.js';
 
 const sym = symbols();
 const state = new GameState(sym);
@@ -204,4 +204,13 @@ test('a save from a different ROM is named, not offered', async (t) => {
   });
   t.eq(said.button, null, 'no offer to take it');
   t.contains(said.text, 'different ROM', 'and the reason is on screen');
+});
+
+test('the replaced game is offered back only when there is one', async (t) => {
+  // A row reading "nothing was replaced" explains a mechanism nobody has met.
+  t.false(describeReplaced(null).show, 'no handoff has replaced anything yet');
+  const said = describeReplaced({ where: 'Route 29', lead: 'TOTODILE Lv5', party: 1,
+                                  when: Date.now() });
+  t.true(said.show, 'a handoff replaced a game, so the way back is on screen');
+  t.contains(said.text, 'Route 29', 'and it says which game it was');
 });

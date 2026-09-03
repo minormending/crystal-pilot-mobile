@@ -92,7 +92,7 @@ of the subtleties in sections 6 and 7.
 
 ## 2. The shape of it
 
-<!-- covers-api: app/main.js app/bootstrap.js app/tasks.js app/nav.js app/world.js app/collision.js app/state.js app/romdata.js app/symbols.js app/gb.js @ 06cf5b353b03 -->
+<!-- covers-api: app/main.js app/bootstrap.js app/tasks.js app/nav.js app/world.js app/collision.js app/state.js app/romdata.js app/symbols.js app/gb.js @ 7056b4a352a9 -->
 
 Nineteen modules. Arrows point from a module to the ones it imports.
 
@@ -1013,7 +1013,7 @@ Tackle and Leer. Two emulators, two implementations, one save file.
 
 ## 7c. Slots, undo, and bringing a save in
 
-<!-- covers: app/saves.js @ 61ca4c4f1724 -->
+<!-- covers: app/saves.js @ ad6a741b77e4 -->
 
 Three slots a person picks, plus one the pilot writes before every job. A slot
 holds a **battery save** — the 32KB the cartridge writes — and not a machine
@@ -1194,7 +1194,7 @@ the bag" rather than "did we gain any".
 
 ## 9. The interface
 
-<!-- covers: app/main.js index.html @ 1f8818afcdbb -->
+<!-- covers: app/main.js index.html @ 38b8d56eef56 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -1455,7 +1455,7 @@ must not read as "wipe everything".
 
 ### Sharing between your own devices
 
-<!-- covers: app/room.js sync/kidsync.js @ b4fc30ece2bb -->
+<!-- covers: app/room.js sync/kidsync.js @ 4b6a9b513135 -->
 
 One person with a phone and a tablet, no accounts: a room code is the whole
 mechanism. `sync/` is [kidsync](https://github.com/minormending/kidsync)
@@ -1499,7 +1499,7 @@ next quiet refresh.
 
 ### Handing the save over
 
-<!-- covers: app/room.js baton/baton.js baton/codec.js @ f0b0e07fde35 -->
+<!-- covers: app/room.js baton/baton.js baton/codec.js @ b1e38b4a226f -->
 
 The same room carries the save, through
 [baton](https://github.com/minormending/baton) vendored in `baton/`. kidsync
@@ -1548,6 +1548,39 @@ about 1,200. Compression is what makes it possible and is not a guarantee, so
 `publish` refuses with the numbers and writes nothing — the save is still kept
 on the device, and the other one must not be left showing an older game with no
 explanation.
+
+### What a handoff replaces, and where it goes
+
+Taking a save from another device overwrites the game on this one. `runTask`
+already takes an undo point before every job, and for a handoff that is not
+enough: the undo slot is written before *every* job, so one grind after a
+handoff you did not want and the game you had is gone.
+
+So a reserved slot — `REPLACED_SLOT`, beside the undo one — holds the game a
+handoff displaced, and only a handoff ever writes it. The row offering it back
+appears only when it holds something, because a row reading "nothing was
+replaced" explains a mechanism nobody has met.
+
+**The settings card stopped hiding behind a loaded game**, and that is the
+same bug the version display had at v71, one level down. The card holds the
+theme, this device's name, which room it is in and which files it keeps —
+none of which need a cartridge — and the device that most needs the room is
+precisely the one with no game yet. Joining a room from a fresh phone was
+impossible through the interface: the button existed and nothing could press
+it. `check-app` asserts the card is not hidden, next to where it asserts the
+version display is in the header.
+
+The loader card says what is still needed, too. A device in a room where the
+addresses are already shared needs one file, not two, and had no way to know
+that — it asked for both, took the ROM, and then started on its own, which
+reads like a bug even when it is the feature working.
+
+And a device can be **called something**. The name is guessed from the user
+agent, which is wrong in exactly the case that matters: two Macs, and "Mac has
+the newer save" helps nobody. The override is stored on the device and the
+baton is rebuilt when it changes rather than mutated, because a published save
+carries the name the device had when it published — nothing should reach back
+and change what a past handover said.
 
 ### The symbol file stops travelling
 
@@ -1659,7 +1692,7 @@ git config core.hooksPath .githooks
 
 ### The other checks
 
-<!-- covers: tools/check-app @ 8239c9aabd23 -->
+<!-- covers: tools/check-app @ f98878a862f2 -->
 
 `tools/check-app` runs everything that can be verified without a ROM:
 

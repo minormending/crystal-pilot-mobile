@@ -422,7 +422,13 @@
   </div>
   <p class="tiphint hide" id="taphint">Tap the screen to walk there.</p>
 
-  <div class="card hide" id="speedcard">
+  <!-- Not hidden until a game loads, unlike everything below it. Nothing in
+       this card needs one: the theme, what this device is called, which room it
+       is in, and which files it is keeping are all true before a ROM is picked
+       -- and the device that most needs the room is the one with no game yet,
+       which could not reach these controls at all while they lived behind a
+       loaded cartridge. The version display learnt this the same way. -->
+  <div class="card" id="speedcard">
     <div class="themerow">
       <span class="lvlabel">Colour</span>
       <button class="themebtn" id="theme" aria-label="Colour theme">auto</button>
@@ -431,6 +437,12 @@
       <span class="lvlabel">Devices</span>
       <span class="val" id="roomstate">not sharing</span>
       <button class="themebtn" id="share">Share</button>
+    </div>
+    <div class="themerow hide" id="namerow">
+      <span class="lvlabel">Called</span>
+      <input class="code" id="devicename" spellcheck="false" autocomplete="off"
+             maxlength="24" placeholder="iPhone" aria-label="What to call this device">
+      <button class="themebtn" id="rename">Set</button>
     </div>
     <div class="themerow hide" id="handoffrow">
       <span class="val" id="handoffstate">&mdash;</span>
@@ -500,7 +512,7 @@
       <label class="file">ROM (.gbc)<input type="file" id="romFile"></label>
       <label class="file">Symbols (.sym)<input type="file" id="symFile"></label>
     </div>
-    <footer>Pick the ROM first; the symbol file can follow.</footer>
+    <footer id="loadernote">Pick the ROM first; the symbol file can follow.</footer>
   </div>
 
   <div class="card" id="statuscard">
@@ -641,6 +653,14 @@
         <span class="jstate" id="undostate">nothing to undo yet</span>
       </div>
       <button class="jgo" id="undo" disabled>Undo</button>
+    </div>
+
+    <div class="job hide" id="job-replaced">
+      <div class="what">
+        <span class="jname">Put back what a handoff replaced</span>
+        <span class="jstate" id="replacedstate">&mdash;</span>
+      </div>
+      <button class="jgo" id="restorereplaced">Put back</button>
     </div>
 
     <div class="param slots">

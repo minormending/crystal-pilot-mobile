@@ -35,7 +35,13 @@ const WASMBOY_STORE = 'keyval';
 /** The slots a person picks, and the one the pilot writes before it acts. */
 export const SLOT_IDS = ['1', '2', '3'];
 export const UNDO_SLOT = 'undo';
-export const ALL_SLOTS = [...SLOT_IDS, UNDO_SLOT];
+// Where the game that was *replaced* goes when a save arrives from another
+// device. Its own slot rather than the undo point, because the undo point is
+// written before every job and would be gone by the time anyone noticed the
+// handoff was the wrong one -- and unlike slots 1 to 3, nothing a person does
+// on purpose can land here, so it is always the last game this device had.
+export const REPLACED_SLOT = 'replaced';
+export const ALL_SLOTS = [...SLOT_IDS, UNDO_SLOT, REPLACED_SLOT];
 
 function open(name, version, upgrade) {
   return new Promise((resolve, reject) => {

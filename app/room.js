@@ -41,7 +41,23 @@ const GAME = 'crystal-pilot';
  * a status line, and asking someone to name their phone before they can share
  * a save costs more than that.
  */
+const NAME_KEY = 'crystal-pilot-device-name';
+
+/** The name you chose for this device, if you chose one. */
+export function chosenName() {
+  try {
+    if (typeof localStorage === 'undefined') return '';
+    return localStorage.getItem(NAME_KEY) || '';
+  } catch (e) { return ''; }
+}
+
+function rememberName(name) {
+  try { localStorage.setItem(NAME_KEY, name); } catch (e) { /* fine */ }
+}
+
 function deviceName() {
+  const chosen = chosenName();
+  if (chosen) return chosen;
   const ua = navigator.userAgent || '';
   if (/iPhone/.test(ua)) return 'iPhone';
   if (/iPad/.test(ua)) return 'iPad';
@@ -50,6 +66,10 @@ function deviceName() {
   if (/Windows/.test(ua)) return 'PC';
   return 'this device';
 }
+// The guess is only ever a guess, and it is wrong in the way that matters when
+// two of your devices are the same kind: "Mac has the newer save" is no help
+// when both of them are Macs. So it can be overridden, and the override is
+// what any sentence about a device uses from then on.
 
 /**
  * Combine two devices' options.
@@ -184,6 +204,21 @@ export async function openRoom({ options, onOptions, onSave, onSymbols,
     /** What the room is offering, or null. The caller checks the tag. */
     symbols() { return (sync.state && sync.state.sym) || null; },
     get device() { return baton.label; },
+    /**
+     * Call this device something else.
+     *
+     * The baton is rebuilt rather than mutated: its label is fixed at
+     * construction, on purpose -- a published save carries the name the device
+     * had when it published, and nothing should be able to reach back and
+     * change what a past handover said.
+     */
+    rename(name) {
+      const clean = String(name || '').trim().slice(0, 24);
+      if (!clean) return baton.label;
+      rememberName(clean);
+      baton = createBaton({ sync, label: clean });
+      return clean;
+    },
     /** Publish the three options, with the stamp they were chosen at. */
     share(opts) { sync.set({ opts, optsAt: opts.at || Date.now() }); },
     async start() {
