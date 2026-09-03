@@ -2,6 +2,7 @@
 import { GameBoy } from './gb.js';
 import { Symbols } from './symbols.js';
 import { describeRows, describeSlot, describeUndo } from './rows.js';
+import { VERSION } from './version.js';
 import { Cancelled } from './taskbase.js';
 import { Saves, SLOT_IDS, UNDO_SLOT } from './saves.js';
 import { GameState, TRAINER_BATTLE, MAX_PARTY } from './state.js';
@@ -155,6 +156,7 @@ async function maybeStart() {
   $('#intro').classList.add('hide');
   $('#ctrls').classList.remove('hide');
   $('#speedcard').classList.remove('hide');
+  showVersion();
   $('#speedbox').classList.remove('hide');
   $('#huntcard').classList.remove('hide');
   $('#savecard').classList.remove('hide');
@@ -952,6 +954,70 @@ $('#stopRun').onclick = () => {
   progress('stopping…');
 };
 
+// --- which build this is -----------------------------------------------------
+
+/**
+ * Show the running version, and whether the server has a newer one.
+ *
+ * The version comes from the module, so it is the identity of the code actually
+ * executing. The comparison comes from the network, because that is the only
+ * way to answer "am I behind?" -- and being behind without knowing it is how
+ * you end up chasing a bug that was fixed two deploys ago.
+ *
+ * The service worker fetches network-first now, so a reload normally does pick
+ * up a new build. Normally is not always: the browser's own HTTP cache can
+ * still hand back a module, which cost me most of a day before it was
+ * understood. So this both tells you and offers to do something about it.
+ */
+async function showVersion() {
+  const el = $('#version'), btn = $('#update');
+  if (!el) return;
+  el.textContent = VERSION;
+  el.classList.remove('stale');
+  btn.classList.add('hide');
+  try {
+    const text = await (await fetch('./sw.js', { cache: 'no-store' })).text();
+    const live = text.match(/crystal-pilot-(v\d+)/);
+    if (!live) return;
+    if (live[1] !== VERSION) {
+      el.textContent = `${VERSION} \u2014 ${live[1]} is available`;
+      el.classList.add('stale');
+      btn.classList.remove('hide');
+    } else {
+      el.textContent = `${VERSION} \u00b7 up to date`;
+    }
+  } catch (e) {
+    // Offline is not an error worth shouting about; the version still shows.
+    el.textContent = `${VERSION} \u00b7 offline`;
+  }
+}
+
+/**
+ * Throw away everything cached and reload.
+ *
+ * Deliberately heavy-handed. A plain reload is what did not work for the person
+ * pressing this, so it unregisters the worker, deletes every cache, and only
+ * then reloads -- which is exactly the sequence I ended up typing by hand over
+ * and over while working on this app.
+ *
+ * The ROM is untouched: it lives in the page, never in a cache, and is picked
+ * again next session anyway.
+ */
+$('#update').onclick = async () => {
+  const btn = $('#update');
+  btn.disabled = true;
+  btn.textContent = 'updating…';
+  try {
+    const regs = await navigator.serviceWorker.getRegistrations();
+    await Promise.all(regs.map((r) => r.unregister()));
+    const keys = await caches.keys();
+    await Promise.all(keys.map((k) => caches.delete(k)));
+  } catch (e) {
+    // Even if clearing fails, a reload is still worth a try.
+  }
+  location.reload();
+};
+
 // --- slots, undo, and importing a save ---------------------------------------
 
 /**
@@ -1210,4 +1276,7 @@ window.PILOT = {
   get romdata() { return romdata; },
   get boot() { return boot; },
   walkToTap,
+  // Exposed for the same reason as the rest of this object: so the version
+  // check can be driven and watched rather than reasoned about.
+  showVersion,
 };

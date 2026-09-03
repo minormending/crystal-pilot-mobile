@@ -362,6 +362,30 @@ def check_wiring():
         else ok(f"{len(ids)} markup ids and every import resolve")
 
 
+def check_version():
+    """app/version.js and the service worker's cache name say the same thing.
+
+    The version row exists so a person can tell whether they are running the
+    build they think they are. That only works if the number is true, and it is
+    written in two files: the module the page reports, and the cache name a
+    deploy bumps. Nothing but this stops them drifting -- and a version display
+    that lies is worse than none, because it turns "am I out of date?" from an
+    open question into a wrong answer.
+    """
+    mod = (ROOT / "app" / "version.js").read_text()
+    m = re.search(r"VERSION\s*=\s*'(v\d+)'", mod)
+    if not m:
+        return fail("app/version.js has no VERSION = 'vNN'")
+    sw = re.search(r"crystal-pilot-(v\d+)", SW.read_text())
+    if not sw:
+        return fail("sw.js has no crystal-pilot-vNN cache name")
+    if m.group(1) != sw.group(1):
+        print(f"        app/version.js says {m.group(1)}, "
+              f"sw.js says {sw.group(1)}")
+        return fail("the version and the cache name disagree")
+    return ok(f"version {m.group(1)} matches the service worker cache")
+
+
 CHECKS = {
     "syntax": check_syntax,
     "shell": check_shell,
@@ -370,6 +394,7 @@ CHECKS = {
     "gamefiles": check_no_game_files,
     "buttons": check_buttons,
     "wiring": check_wiring,
+    "version": check_version,
     "moves": check_moves,
 }
 

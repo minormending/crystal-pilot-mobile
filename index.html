@@ -110,6 +110,14 @@
                  position:relative;overflow:hidden;cursor:pointer}
   label.file.jgo input{position:absolute;inset:0;opacity:0;cursor:pointer}
   .themerow{display:flex;align-items:center;gap:10px}
+  .vnum{flex:1 1 auto;font-size:12px;color:var(--dim);
+        font-variant-numeric:tabular-nums}
+  /* Bold ink rather than a colour. --mark reads 1.90:1 on a card in the light
+     theme, which the contrast check caught -- and the signal should not have
+     been colour alone regardless: the sentence says a newer version exists and
+     the Update button appears next to it. */
+  .vnum.stale{color:var(--ink);font-weight:700}
+
   button.themebtn{flex:0 0 auto;min-height:0;padding:6px 12px;font-size:12px;
                   letter-spacing:.06em;text-transform:uppercase;font-weight:600;
                   color:var(--ink);background:var(--raise);border-radius:7px;
@@ -384,6 +392,11 @@
     <div class="themerow">
       <span class="lvlabel">Colour</span>
       <button class="themebtn" id="theme" aria-label="Colour theme">auto</button>
+    </div>
+    <div class="themerow">
+      <span class="lvlabel">Version</span>
+      <span class="vnum" id="version">&mdash;</span>
+      <button class="themebtn hide" id="update">Update</button>
     </div>
     <details class="how">
       <summary>How this works</summary>

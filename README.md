@@ -444,9 +444,22 @@ a game in both directions.
 
 ## A note on updates
 
-The app is a PWA with a service worker, and it fetches **network first, falling
-back to the cache**. That is the opposite of the usual offline-first advice, on
-purpose.
+**The settings card shows which build you are running**, and whether the server
+has a newer one: `v68 · up to date`, or `v68 — v69 is available` with an Update
+button beside it. That button is deliberately heavy-handed — it unregisters the
+service worker, deletes every cache, and only then reloads — because a plain
+reload is exactly what does not always work, and it is the sequence I ended up
+typing by hand over and over while building this.
+
+The number lives in `app/version.js`, so it is the identity of the code actually
+running rather than of whatever the server has. That is the distinction that
+makes the row useful: reading the version off the network tells you what is
+deployed, which is not the question you are asking when a bug you saw fixed is
+still in front of you. `tools/check-app` asserts that number matches the service
+worker's cache name, because a version display that lies is worse than none.
+
+The worker fetches **network first, falling back to the cache**. That is the
+opposite of the usual offline-first advice, on purpose.
 
 Cache-first looked like it worked and was wrong. A returning visitor got the
 *previous* deploy's shell: the new worker installs and claims the page, but the
