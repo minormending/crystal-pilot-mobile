@@ -1188,7 +1188,7 @@ the bag" rather than "did we gain any".
 
 ## 9. The interface
 
-<!-- covers: app/main.js index.html @ e651354e6157 -->
+<!-- covers: app/main.js index.html @ 115aa80ce359 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -1231,6 +1231,19 @@ Two rows used to set their `blocked` class by reading their own button's
 `disabled` property back out of the DOM. That happened to work and meant the
 class and the button could in principle disagree; both now come from one flag,
 and the browser was checked to confirm they agree on every row.
+
+**The running version sits in the header, with the app's name.** Everything
+else in the app needs a game; this does not, and the question it answers — is
+this the build I just deployed? — is asked most often when there is no ROM
+loaded at all. It spent three versions in the settings card, which `maybeStart`
+reveals, so reading it cost picking a 2MB ROM and a symbol file first. `check-app`
+asserts the markup is inside `<header>` for that reason.
+
+The header wraps rather than clips. Name, version, Update, location and speed
+come to more than 375px once a game is running and a newer build exists, and
+without `flex-wrap` the speed slider's `1×` was cut in half by the right edge.
+Nothing wraps in the ordinary case; `.where` carries `min-width:0` so the
+location is what gives first, being the one item that reads fine truncated.
 
 <details>
 <summary><b>Advanced detail:</b> the measurements, and one lifecycle rule</summary>

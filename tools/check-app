@@ -383,7 +383,23 @@ def check_version():
         print(f"        app/version.js says {m.group(1)}, "
               f"sw.js says {sw.group(1)}")
         return fail("the version and the cache name disagree")
-    return ok(f"version {m.group(1)} matches the service worker cache")
+
+    # And it is on screen without a ROM. The display spent three versions
+    # inside the settings card, which does not exist until a game is loaded --
+    # so "which build am I running?" could only be answered by picking a 2MB
+    # ROM and a symbol file first, to read a number the page knew on its first
+    # frame. That is not a wording problem or a layout preference: a version
+    # display you cannot reach when you want it is the same as not having one,
+    # and nothing else here would have noticed. The header is the one part of
+    # the app that is always there.
+    head = re.search(r"<header>(.*?)</header>", INDEX.read_text(), re.S)
+    if not head:
+        return fail("index.html has no <header> to show the version in")
+    missing = [i for i in ("version", "update") if f'id="{i}"' not in head.group(1)]
+    if missing:
+        print("        the settings card only exists once a ROM is loaded")
+        return fail(f"{', '.join(missing)} is not in the header")
+    return ok(f"version {m.group(1)} matches the cache, and shows with no ROM")
 
 
 def check_docs_shape():

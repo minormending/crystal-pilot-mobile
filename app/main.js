@@ -156,7 +156,6 @@ async function maybeStart() {
   $('#intro').classList.add('hide');
   $('#ctrls').classList.remove('hide');
   $('#speedcard').classList.remove('hide');
-  showVersion();
   $('#speedbox').classList.remove('hide');
   $('#huntcard').classList.remove('hide');
   $('#savecard').classList.remove('hide');
@@ -968,10 +967,25 @@ $('#stopRun').onclick = () => {
  * up a new build. Normally is not always: the browser's own HTTP cache can
  * still hand back a module, which cost me most of a day before it was
  * understood. So this both tells you and offers to do something about it.
+ *
+ * Called once at load, and the display lives in the header, because the
+ * question is asked *before* a game is loaded at least as often as during one:
+ * you deploy, open the app, and want to know whether the phone in your hand is
+ * running what you just pushed. It used to run from maybeStart and write into
+ * the settings card, so answering that meant picking a 2MB ROM and a symbol
+ * file first -- to read a number the app already knew on the first frame.
+ *
+ * The wording is short because that row already holds the app's name, where
+ * you are and the speed slider, and 375px does not fit a sentence as well. Up
+ * to date says nothing, so it says nothing; the two states worth words are a
+ * newer version and a server that did not answer.
  */
 async function showVersion() {
   const el = $('#version'), btn = $('#update');
   if (!el) return;
+  // Written before the fetch, not after it: the running version is known here
+  // and now, and there is no reason to show an em dash while the network
+  // decides. What comes back can only add to it.
   el.textContent = VERSION;
   el.classList.remove('stale');
   btn.classList.add('hide');
@@ -980,11 +994,9 @@ async function showVersion() {
     const live = text.match(/crystal-pilot-(v\d+)/);
     if (!live) return;
     if (live[1] !== VERSION) {
-      el.textContent = `${VERSION} \u2014 ${live[1]} is available`;
+      el.textContent = `${VERSION} \u2192 ${live[1]}`;
       el.classList.add('stale');
       btn.classList.remove('hide');
-    } else {
-      el.textContent = `${VERSION} \u00b7 up to date`;
     }
   } catch (e) {
     // Offline is not an error worth shouting about; the version still shows.
@@ -1017,6 +1029,8 @@ $('#update').onclick = async () => {
   }
   location.reload();
 };
+
+showVersion();
 
 // --- slots, undo, and importing a save ---------------------------------------
 

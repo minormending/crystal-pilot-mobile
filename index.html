@@ -82,10 +82,41 @@
   body{margin:0;background:var(--bg);color:var(--ink);
        font:15px/1.45 ui-sans-serif,-apple-system,system-ui,sans-serif;
        padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
-  header{display:flex;gap:8px;align-items:baseline;padding:10px 14px;
-         border-bottom:1px solid var(--line)}
-  header h1{font-size:15px;margin:0}
-  header .where{margin-left:auto;color:var(--dim);font-size:13px;
+  /* Wraps rather than clipping. Five things share this row once a game is
+     loaded and a newer version exists -- name, version, Update, location,
+     speed -- and at 375px they add up to more than fits. Without a wrap the
+     last one loses: the speed slider's `1x` was cut in half by the right
+     edge, which is a worse outcome than a header that is briefly two rows
+     tall. Nothing wraps in the normal case, because nothing has to. */
+  header{display:flex;flex-wrap:wrap;gap:8px;align-items:baseline;
+         padding:10px 14px;border-bottom:1px solid var(--line)}
+  header h1{font-size:15px;margin:0;flex:0 0 auto;white-space:nowrap}
+  /* The version belongs with the app's name, not in a card. What it answers --
+     which build is this? -- is asked before a ROM is picked as often as after,
+     and the settings card does not exist until a game is loaded.
+
+     Terse on purpose: this row is shared with the location, and at 375px there
+     is no width for a sentence. The number alone is the whole answer when there
+     is no news, and the two states that *are* news get words -- a newer
+     version, or a server that could not be reached. */
+  header .vnum{flex:0 0 auto;font-size:12px;color:var(--dim);
+               font-variant-numeric:tabular-nums}
+  /* Bold ink rather than a colour. --mark reads 1.90:1 on a card in the light
+     theme, which the contrast check caught -- and the signal should not have
+     been colour alone regardless: the text names the newer version and the
+     Update button appears next to it. */
+  header .vnum.stale{color:var(--ink);font-weight:700}
+  /* Narrower than the same button in a card: the header is crowded on a
+     phone, and `min-width:5.2em` there -- which keeps Auto and Light the
+     same width as each other -- was 79px of a 375px row for the word Update.
+     Written `header button.themebtn` so it wins on specificity rather than on
+     being further down the file. */
+  header button.themebtn{min-width:0;padding:5px 10px;font-size:11px}
+  /* min-width:0 so this is what gives when the row is full. A flex item will
+     not shrink below its own text otherwise, and the location is the one item
+     here that reads fine truncated -- the title is the app's name, and a
+     version with letters missing is a version that lies. */
+  header .where{margin-left:auto;min-width:0;color:var(--dim);font-size:13px;
                 white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   /* Speed is status, not a task: it belongs beside where you are, not wedged
      between the screen and the buttons you press. */
@@ -110,13 +141,6 @@
                  position:relative;overflow:hidden;cursor:pointer}
   label.file.jgo input{position:absolute;inset:0;opacity:0;cursor:pointer}
   .themerow{display:flex;align-items:center;gap:10px}
-  .vnum{flex:1 1 auto;font-size:12px;color:var(--dim);
-        font-variant-numeric:tabular-nums}
-  /* Bold ink rather than a colour. --mark reads 1.90:1 on a card in the light
-     theme, which the contrast check caught -- and the signal should not have
-     been colour alone regardless: the sentence says a newer version exists and
-     the Update button appears next to it. */
-  .vnum.stale{color:var(--ink);font-weight:700}
 
   button.themebtn{flex:0 0 auto;min-height:0;padding:6px 12px;font-size:12px;
                   letter-spacing:.06em;text-transform:uppercase;font-weight:600;
@@ -374,6 +398,8 @@
 <body>
 <header>
   <h1>crystal-pilot</h1>
+  <span class="vnum" id="version">&mdash;</span>
+  <button class="themebtn hide" id="update">Update</button>
   <span class="where" id="where">no ROM loaded</span>
   <span class="speed hide" id="speedbox">
     <input type="range" id="speed" min="0" max="4" step="1" value="0"
@@ -392,11 +418,6 @@
     <div class="themerow">
       <span class="lvlabel">Colour</span>
       <button class="themebtn" id="theme" aria-label="Colour theme">auto</button>
-    </div>
-    <div class="themerow">
-      <span class="lvlabel">Version</span>
-      <span class="vnum" id="version">&mdash;</span>
-      <button class="themebtn hide" id="update">Update</button>
     </div>
     <details class="how">
       <summary>How this works</summary>

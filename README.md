@@ -444,16 +444,29 @@ a game in both directions.
 
 ## A note on updates
 
-**The settings card shows which build you are running**, and whether the server
-has a newer one: `v68 · up to date`, or `v68 — v69 is available` with an Update
-button beside it. That button is deliberately heavy-handed — it unregisters the
-service worker, deletes every cache, and only then reloads — because a plain
-reload is exactly what does not always work, and it is the sequence I ended up
-typing by hand over and over while building this.
+**The header shows which build you are running**, next to the app's name:
+`v71`, and when the server has a newer one `v70 → v71` with an Update button
+beside it. That button is deliberately heavy-handed — it unregisters the service
+worker, deletes every cache, and only then reloads — because a plain reload is
+exactly what does not always work, and it is the sequence I ended up typing by
+hand over and over while building this.
+
+It is in the header because that is the one part of the app that is always
+there. For three versions it lived in the settings card, which does not exist
+until a ROM and a symbol file are loaded — so answering "am I running what I
+just deployed?" meant picking two files first, to read a number the page knew on
+its first frame. `tools/check-app` now asserts the display is in the header,
+because a version you cannot reach when you want it is much the same as not
+having one.
+
+The wording is short because that row is shared with the location and the speed
+slider, and 375px does not fit a sentence. Up to date says nothing, so it says
+nothing: the two states worth words are a newer version and a server that did
+not answer.
 
 The number lives in `app/version.js`, so it is the identity of the code actually
 running rather than of whatever the server has. That is the distinction that
-makes the row useful: reading the version off the network tells you what is
+makes the display useful: reading the version off the network tells you what is
 deployed, which is not the question you are asking when a bug you saw fixed is
 still in front of you. `tools/check-app` asserts that number matches the service
 worker's cache name, because a version display that lies is worse than none.
