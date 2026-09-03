@@ -76,6 +76,30 @@ export class GameBoy {
   }
 
   /**
+   * Run frames until the machine is demonstrably executing.
+   *
+   * The core will not take a *second* ROM while it is still coming up.
+   * Measured: a re-load called a moment after the first one left
+   * `executeFrame` doing nothing at all and every work-RAM read zero, so the
+   * app sat at a title screen it could not drive with a save it had just put
+   * in. The .sav and slot paths never met this, because by the time a person
+   * has pressed either, the emulator has been running for a while -- it took
+   * restoring a session automatically at load to reach a re-load that early.
+   *
+   * Executing is read off work RAM rather than asked of the core: a machine
+   * that has run any code at all has non-zero bytes in there, and one that has
+   * not is exactly the all-zero read that gave this away.
+   */
+  async awake(frames = 30, tries = 20) {
+    for (let i = 0; i < tries; i++) {
+      await this.run(frames);
+      const wram = await this.readWram(0x200);
+      if (wram.some((b) => b !== 0)) return true;
+    }
+    return false;
+  }
+
+  /**
    * A snapshot of work RAM: Game Boy 0xC000-0xDFFF, plus the GBC banks.
    *
    * _getWasmMemorySection does not reliably honour its range -- it has been

@@ -92,7 +92,7 @@ of the subtleties in sections 6 and 7.
 
 ## 2. The shape of it
 
-<!-- covers-api: app/main.js app/bootstrap.js app/tasks.js app/nav.js app/world.js app/collision.js app/state.js app/romdata.js app/symbols.js app/gb.js @ b3b05d02ad2d -->
+<!-- covers-api: app/main.js app/bootstrap.js app/tasks.js app/nav.js app/world.js app/collision.js app/state.js app/romdata.js app/symbols.js app/gb.js @ 059f78cd951a -->
 
 Eighteen modules. Arrows point from a module to the ones it imports.
 
@@ -200,7 +200,7 @@ was cheaper than moving the boundary.
 
 ### `gb.js` — the emulator
 
-<!-- covers: app/gb.js @ 16d3c58c2cb3 -->
+<!-- covers: app/gb.js @ 7853a0caa030 -->
 
 Wraps WasmBoy. Runs frames, reads work RAM, holds and releases buttons.
 
@@ -1191,7 +1191,7 @@ the bag" rather than "did we gain any".
 
 ## 9. The interface
 
-<!-- covers: app/main.js index.html @ 491d03b565ca -->
+<!-- covers: app/main.js index.html @ 04205fb5ce60 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -1249,11 +1249,14 @@ Nothing wraps in the ordinary case; `.where` carries `min-width:0` so the
 location is what gives first, being the one item that reads fine truncated.
 
 Moving Update up there is why it now asks before it runs, but only when
-`romBytes` is set. The reload empties the page and the ROM lives in the page,
-so an accidental press costs a file picker and everything since the last
-in-game save; the battery save survives in the library's own IndexedDB record,
-which is the line the question names. With nothing loaded it does not ask,
-because there is nothing to lose and the prompt would only be in the way.
+`romBytes` is set. The question is built from what is true at the time rather
+than written once: with the files kept the reload brings them and the last save
+back, so the cost is the current moment; without them it is that plus two file
+pickers. With nothing loaded it does not ask at all, because there is nothing
+to lose and the prompt would only be in the way.
+
+An earlier version of this said the battery survives a reload by itself. It
+does not — see *What it remembers* below, which is also why it does now.
 
 <details>
 <summary><b>Advanced detail:</b> the measurements, and one lifecycle rule</summary>
@@ -1343,7 +1346,7 @@ game's own picture, not on a surface of ours.
 
 ### What it remembers
 
-<!-- covers: app/remember.js @ 138c74bad538 -->
+<!-- covers: app/remember.js @ 53a197324fef -->
 
 The app forgets everything on a reload, and a reload is not rare: the Update
 button causes one deliberately, and a phone discards a background tab whenever
@@ -1379,6 +1382,51 @@ Storage throws rather than returning null — private windows, cleared site data
 accessor answers "nothing remembered" for all of it. The colour theme keeps its
 own older key: moving it would cost a migration for people who have already
 chosen and buy nothing.
+
+**The ROM, the .sym and the battery are kept too, in IndexedDB.** 2MB and
+1.8MB against a localStorage budget of about five, in strings, settles where.
+Its own database settles the other question: `saves.js` opens `crystal-pilot`
+at version 1 by name and number, so a second store in there would mean version
+2 — and any tab still running the older module, which is exactly the staleness
+the version display exists for, would then open a v2 database at v1, get a
+`VersionError`, and take the save slots with it.
+
+The battery is in there because it is what makes the rest worth having.
+Measured, having believed the opposite: save the game, reload, and the save is
+gone. WasmBoy's own `keyval` store held **zero records** after a save this app
+had verified byte for byte — the library persists a cartridge only when
+something asks it to. So the copy is taken when the app knows the bytes moved:
+a save it drove, a `.sav` it installed, a slot it loaded, and immediately
+before the Update button's reload.
+
+```mermaid
+flowchart TD
+    O["app opens"] --> R{"a kept pair?"}
+    R -- no --> L["the loader card asks for two files"]
+    R -- yes --> B["boot the emulator"]
+    B --> V{"page visible?"}
+    V -- no --> W["wait for visibilitychange"] --> V
+    V -- yes --> A["run frames until the machine is executing"]
+    A --> I["write the library's record, re-load the ROM"]
+    I --> C["drive CONTINUE"]
+    C --> D["back where you saved"]
+```
+
+Both gates in that diagram were found by doing it. **The page has to be
+visible**, because the re-load goes through the library's `pause()` and a
+hidden page gets no animation frame — in a hidden pane the restore did nothing
+while the settings row went on claiming the save was kept. **And the emulator
+has to have started**: a second `loadROM` a moment after the first leaves the
+core executing nothing, every work-RAM read zero, the app at a title screen it
+cannot drive with a save it has just installed. `gb.awake()` runs frames until
+work RAM is non-zero, which is the same all-zero read that gave the bug away.
+Neither gate was needed by the `.sav` or slot paths, because by the time a
+person presses either, the emulator has been running for a while.
+
+*Forget* deletes all three and asks first, because the kept battery can be the
+only copy of a game — no slot taken, no `.sav` downloaded. The slots are in the
+other database and are untouched, which the question says: "forget my files"
+must not read as "wipe everything".
 
 ---
 

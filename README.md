@@ -453,12 +453,18 @@ hand over and over while building this.
 
 **It asks first if a game is loaded**, which it did not have to when it sat two
 screens down in the settings card. Next to the app's name it is a thumb's width
-from the title, and what it does is close the game: the reload empties the page,
-the ROM has to be picked again, and anything since your last in-game save goes
-with it. The battery save itself survives — it lives in the emulator's own
-per-cartridge record, not in the page — which is why the question names your
-last save as the line. With no ROM picked there is nothing to lose, so it does
-not ask.
+from the title, and what it does is close the game. With the files kept, the
+reload brings them and your last save back, so the cost is the current moment —
+steps since you saved, a battle in progress. Without them it is that plus two
+file pickers, and the question says which. With no ROM picked there is nothing
+to lose, so it does not ask at all.
+
+An earlier version of this paragraph said the battery save survives a reload on
+its own. **It does not**, and that was worth measuring rather than assuming:
+the emulator library persists a cartridge only when something asks it to, and
+its own store held zero records after a save this app had verified byte for
+byte. Saving then reloading lost the game. The save survives now because the
+app keeps a copy itself — see below.
 
 It is in the header because that is the one part of the app that is always
 there. For three versions it lived in the settings card, which does not exist
@@ -888,6 +894,39 @@ Storage throws rather than returning null in a private window or after cleared
 site data, so every access goes through one accessor that answers "nothing
 remembered". Nine tests cover the deciding; the storage call itself is three
 lines and a `try`.
+
+### The ROM, the symbol file, and your last save
+
+Those three are far too big for localStorage — 2MB of ROM against a budget of
+about five, in strings — so they live in IndexedDB, and the app opens straight
+into the game rather than onto a card asking for two files you have to go and
+find. *Forget*, in the settings card, throws all three away; the row above it
+names what is being kept. Nothing is uploaded, exactly as before: the files are
+on your phone, in this browser's storage, and no game data is ever served.
+
+**The save is kept because nothing else keeps it.** Measured: save the game,
+reload, and it is gone — the emulator library persists a cartridge only when
+something asks it to, and its own store held zero records after a save this app
+had verified byte for byte. So keeping the files without the battery would open
+the app on a title screen with no game behind it. The copy is taken when the
+app knows the bytes have just moved — a save it drove, a `.sav` it installed, a
+slot it loaded, and the moment before the Update button reloads the page.
+
+Putting it back goes through the same path a `.sav` import uses: write the
+library's record, re-load the ROM, drive CONTINUE. Two things had to be true
+first, and both were found by doing it rather than reasoning about it:
+
+* **The page has to be visible.** Re-loading the ROM goes through the library's
+  `pause()`, which waits for an animation frame a hidden page never gets, so
+  the restore waits for you to look at it. A phone restoring a background tab
+  is one of the ordinary ways this app opens, and in a hidden pane the restore
+  did nothing at all while the settings row went on saying the save was kept.
+* **The emulator has to have started.** A second `loadROM` a moment after the
+  first leaves the core executing nothing — every work-RAM read comes back
+  zero, and the app sits at a title screen it cannot drive, holding a save it
+  has just installed. `gb.awake()` runs frames until the machine demonstrably
+  is one. The `.sav` and slot paths never met this, because by the time a
+  person presses either, the emulator has been running for a while.
 
 ## Controls
 

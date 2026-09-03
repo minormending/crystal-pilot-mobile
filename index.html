@@ -141,6 +141,7 @@
                  position:relative;overflow:hidden;cursor:pointer}
   label.file.jgo input{position:absolute;inset:0;opacity:0;cursor:pointer}
   .themerow{display:flex;align-items:center;gap:10px}
+  .themerow .val{flex:1 1 auto;font-size:12px;color:var(--dim)}
 
   button.themebtn{flex:0 0 auto;min-height:0;padding:6px 12px;font-size:12px;
                   letter-spacing:.06em;text-transform:uppercase;font-weight:600;
@@ -419,6 +420,11 @@
       <span class="lvlabel">Colour</span>
       <button class="themebtn" id="theme" aria-label="Colour theme">auto</button>
     </div>
+    <div class="themerow">
+      <span class="lvlabel">Files</span>
+      <span class="val" id="filestate">re-picked each session</span>
+      <button class="themebtn hide" id="forget">Forget</button>
+    </div>
     <details class="how">
       <summary>How this works</summary>
       <p>The pilot reads the game's own memory through the symbol file — your
@@ -457,7 +463,10 @@
       <code>make</code> and you get the pair.</p>
     <div class="note">Neither file leaves your phone. They are read in the page
       and never uploaded, which is also why this can be hosted publicly — no
-      game data is served, only the app.</div>
+      game data is served, only the app. Both are kept in this browser's own
+      storage so a reload does not send you looking for them again, with your
+      last save beside them; <em>Forget</em> in the settings card throws all
+      three away.</div>
   </div>
 
   <div class="card" id="loader">

@@ -110,3 +110,148 @@ export function writeOpts(patch, given = null) {
   }
 }
 
+// --- the files, and the game that goes with them -----------------------------
+//
+// The ROM and the .sym used to be re-picked every session, which is two file
+// pickers and a 2MB read before anything happens -- and the Update button
+// causes a reload on purpose, so the app's own way of getting a fix to you was
+// also the thing that made you go and find your files again.
+//
+// localStorage cannot hold them: a ~5MB budget of *strings* against 2MB of ROM
+// and 1.8MB of symbols. IndexedDB takes both as they are.
+//
+// This is its own database, deliberately. saves.js opens `crystal-pilot` at
+// version 1, by name and number. Putting a store for this in there would mean
+// version 2, and then any tab still running the older module -- a background
+// tab, a stale HTTP-cached copy, exactly the staleness that made the version
+// display necessary -- opens a v2 database at v1 and gets a VersionError,
+// taking the save slots down with it. A second small database has no version
+// to coordinate.
+//
+// The battery is kept here too, and that is not scope creep: it is what makes
+// the rest worth having. Measured, because the opposite had been written down
+// and believed: save the game, reload, and the save is gone. WasmBoy's own
+// `keyval` store held zero records after a save the app had verified byte for
+// byte -- the library only persists a cartridge when something asks it to, and
+// nothing here was asking. So remembering the files without the battery would
+// bring the game back to a title screen with no game behind it.
+const FILES_DB = 'crystal-pilot-files';
+const STORE = 'kept';
+const ROM = 'rom', SYM = 'sym', BATTERY = 'battery', META = 'meta';
+
+function openFiles() {
+  return new Promise((resolve, reject) => {
+    // No `indexedDB` at all in a locked-down browser, and `open` itself throws
+    // in a Firefox private window rather than firing onerror.
+    let req;
+    try {
+      if (typeof indexedDB === 'undefined') throw new Error('no indexedDB');
+      req = indexedDB.open(FILES_DB, 1);
+    } catch (e) { reject(e); return; }
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE);
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+    req.onblocked = () => reject(new Error('another tab is holding the database'));
+  });
+}
+
+function work(mode, job) {
+  return openFiles().then((db) => new Promise((resolve, reject) => {
+    const t = db.transaction(STORE, mode);
+    let out;
+    try { out = job(t.objectStore(STORE)); } catch (e) { reject(e); return; }
+    t.oncomplete = () => resolve(out);
+    t.onerror = () => reject(t.error);
+    t.onabort = () => reject(t.error);
+  }));
+}
+
+const one = (store, key) => new Promise((resolve, reject) => {
+  const r = store.get(key);
+  r.onsuccess = () => resolve(r.result);
+  r.onerror = () => reject(r.error);
+});
+
+/**
+ * What is kept, without reading the 4MB to find out.
+ *
+ * A record of its own rather than the byteLengths of the real ones, because
+ * the settings row is painted on every refresh and pulling two megabytes
+ * through a transaction to print a filename would be absurd.
+ */
+export async function keptMeta() {
+  try {
+    return (await work('readonly', (s) => one(s, META))) || null;
+  } catch (e) {
+    return null;
+  }
+}
+
+async function patchMeta(patch) {
+  const now = (await keptMeta()) || {};
+  await work('readwrite', (s) => s.put(Object.assign(now, patch), META));
+}
+
+/**
+ * Keep the ROM, the symbol file, or the battery.
+ *
+ * Each answers whether it stuck. A phone that is full, or a browser that
+ * refuses storage, is not an error worth a dialog -- the app works exactly as
+ * it did before this file existed -- but the settings row must not then claim
+ * the files are kept, so the answer is not thrown away.
+ */
+export async function keepRom(name, buffer) {
+  try {
+    await work('readwrite', (s) => s.put({ name, buffer }, ROM));
+    await patchMeta({ romName: name, romBytes: buffer.byteLength });
+    return true;
+  } catch (e) { return false; }
+}
+
+export async function keepSym(name, text) {
+  try {
+    await work('readwrite', (s) => s.put({ name, text }, SYM));
+    await patchMeta({ symName: name, symChars: text.length });
+    return true;
+  } catch (e) { return false; }
+}
+
+export async function keepBattery(bytes) {
+  try {
+    await work('readwrite', (s) => s.put(Uint8Array.from(bytes), BATTERY));
+    await patchMeta({ battery: true, batteryAt: Date.now() });
+    return true;
+  } catch (e) { return false; }
+}
+
+/**
+ * Everything kept, for a session that is starting.
+ *
+ * The pair is all or nothing: a ROM without its symbol file cannot start the
+ * pilot, and half a restore that leaves one picker to find is worse than
+ * asking for both -- it looks broken rather than like a question.
+ */
+export async function recall() {
+  try {
+    const [rom, sym, battery] = await work('readonly', (s) => Promise.all([
+      one(s, ROM), one(s, SYM), one(s, BATTERY),
+    ]));
+    if (!rom || !rom.buffer || !sym || !sym.text) return null;
+    return { rom, sym, battery: battery || null };
+  } catch (e) {
+    return null;
+  }
+}
+
+/** Forget the lot, for a phone that is not yours or a ROM that is not this one. */
+export async function forgetKept() {
+  try {
+    await work('readwrite', (s) => {
+      for (const k of [ROM, SYM, BATTERY, META]) s.delete(k);
+    });
+    return true;
+  } catch (e) { return false; }
+}

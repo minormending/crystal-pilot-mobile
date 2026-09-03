@@ -3,7 +3,8 @@ import { GameBoy } from './gb.js';
 import { Symbols } from './symbols.js';
 import { describeRows, describeSlot, describeUndo } from './rows.js';
 import { VERSION } from './version.js';
-import { readOpts, writeOpts } from './remember.js';
+import { forgetKept, keepBattery, keepRom, keepSym, keptMeta, readOpts, recall,
+         writeOpts } from './remember.js';
 import { Cancelled } from './taskbase.js';
 import { Saves, SLOT_IDS, UNDO_SLOT } from './saves.js';
 import { GameState, TRAINER_BATTLE, MAX_PARTY } from './state.js';
@@ -45,6 +46,10 @@ const REMEMBERED = readOpts({ speeds: SPEEDS.length, grinds: GRIND_SPECS });
 // at load: `+2` means two above the lead, and there is no party until a game
 // is running.
 let grindRestored = false;
+// A remembered battery, to be installed once the emulator is up. Set before
+// maybeStart runs so that the one place which decides "are we in the world
+// now?" can see it.
+let pendingBattery = null;
 // How long an idle-loop step may be outstanding before it is treated as lost.
 const LOST_STEP_MS = 1000;
 let speed = 1;
@@ -142,6 +147,25 @@ const progress = (m) => {
   log.classList.remove('hide');
 };
 
+/**
+ * Resolve once the page is actually being looked at.
+ *
+ * There is one thing in this app that cannot be done in a hidden tab -- see
+ * the ROM re-load in saves.install -- and this is how the wait is expressed
+ * rather than each caller inventing it.
+ */
+function whenVisible() {
+  if (!document.hidden) return Promise.resolve();
+  return new Promise((resolve) => {
+    const wake = () => {
+      if (document.hidden) return;
+      document.removeEventListener('visibilitychange', wake);
+      resolve();
+    };
+    document.addEventListener('visibilitychange', wake);
+  });
+}
+
 async function maybeStart() {
   if (!romBytes || !symbols) return;
   setStatus('booting…', 'busy');
@@ -178,7 +202,49 @@ async function maybeStart() {
   $('#taphint').classList.remove('hide');
   startLoop();
 
-  if (AUTOSTART) {
+  paintFiles();
+
+  // A battery that came back with the files. Installed through the same path a
+  // .sav import uses -- write the library's record, re-load the ROM, drive
+  // CONTINUE -- because that path is the one that was watched putting a real
+  // save into a real game, and this is the same job without the file picker.
+  //
+  // Continuing is not the same decision as starting: a new game is the
+  // player's, which is why nothing here presses A at a NAME menu. But this
+  // person was already playing, and the reload was the app's idea.
+  if (pendingBattery) {
+    const bytes = pendingBattery;
+    pendingBattery = null;
+    // Not while nobody is looking. Installing re-loads the ROM, which goes
+    // through the library's pause() and waits on an animation frame a hidden
+    // page never gets -- so saves.install refuses outright rather than
+    // hanging. And a hidden page is not a corner case here: a phone restoring
+    // a background tab is one of the ordinary ways this app is opened, and
+    // measured in a hidden pane the restore did nothing at all while the
+    // settings row went on saying the save was kept.
+    //
+    // The status is set before the wait rather than after it. On a page nobody
+    // is looking at that is written for nobody, but "booting…" left standing
+    // would be a lie the moment the page is looked at again.
+    setStatus('your game is waiting to be put back…', 'busy');
+    await whenVisible();
+    setStatus('putting your game back…', 'busy');
+    try {
+      // Installing re-loads the ROM, and a core still coming up will not take
+      // one -- see gb.awake. Nothing else in the app asks for a re-load this
+      // early, which is why this is the only caller.
+      await gb.awake();
+      await saves.install(bytes);
+      if (!await tasks.continueFromTitle()) {
+        // Through the log, not the status line: awaitWorld below writes the
+        // status a moment later, and a message about a save that did not come
+        // back must not be the one that gets overwritten.
+        progress('your game is on the cartridge — press Start to continue');
+      }
+    } catch (e) {
+      progress(`the kept save could not be loaded: ${e.message}`);
+    }
+  } else if (AUTOSTART) {
     setStatus('starting the game…', 'busy');
     if (!await tasks.continueGame()) {
       setStatus('could not reach the overworld — is this a Crystal ROM?', 'bad');
@@ -186,6 +252,50 @@ async function maybeStart() {
     }
   }
   awaitWorld();
+}
+
+/**
+ * Say what is being kept on this phone, from the record rather than from what
+ * a write here believed.
+ *
+ * Painted from `keptMeta` because a write can fail -- a full phone, a browser
+ * that refuses storage -- and a row claiming the files are kept when they are
+ * not would send someone into a reload expecting their game back.
+ */
+async function paintFiles() {
+  const el = $('#filestate'), btn = $('#forget');
+  if (!el) return;
+  const meta = await keptMeta();
+  if (!meta || !meta.romName || !meta.symName) {
+    el.textContent = 're-picked each session';
+    btn.classList.add('hide');
+    return;
+  }
+  const mb = meta.romBytes ? ` · ${(meta.romBytes / 1048576).toFixed(1)} MB` : '';
+  el.textContent = `${meta.romName}, ${meta.symName}`
+    + (meta.battery ? ' and your last save' : '') + mb;
+  btn.classList.remove('hide');
+}
+
+/**
+ * Copy the battery out of the cartridge, if there is a save in it.
+ *
+ * Called when the app knows the bytes have just moved -- a save it drove, a
+ * .sav it installed, a slot it loaded -- rather than on a timer. There is no
+ * event for "the game saved" in a browser, and polling 32KB forever to catch
+ * something the app itself caused would be silly.
+ */
+async function keepGame() {
+  if (!gb.rom || !state) return false;
+  try {
+    const bytes = await gb.batterySave();
+    if (!state.saveIsPresent(bytes)) return false;
+    const ok = await keepBattery(bytes);
+    paintFiles();
+    return ok;
+  } catch (e) {
+    return false;
+  }
 }
 
 /**
@@ -469,6 +579,22 @@ async function refresh() {
 // mysterious failure to boot.
 const NINTENDO_LOGO = [0xce, 0xed, 0x66, 0x66, 0xcc, 0x0d];
 
+// What a .sym has to contain to be this game's. Hoisted out of the picker
+// because a kept file comes back a different way and has to meet the same bar:
+// a record written by an older build, or one truncated by a phone that ran out
+// of room mid-write, must fail here rather than deep inside a task.
+const NEEDED_SYMBOLS = [
+  'wPartyCount', 'wPartyMon1', 'wBattleMode', 'wMapGroup',
+  'wMapStatus', 'wMenuCursorY', 'wPlayerTileCollision',
+  // tap-to-walk: the collision map and the window stack
+  'wOverworldMapBlocks', 'wMapWidth', 'wMapHeight',
+  'wTilesetCollisionBank', 'wTilesetCollisionAddress',
+  'wWindowStackSize', 'CollisionPermissionTable',
+  'wPlayerBGMapOffsetX', 'wPlayerBGMapOffsetY',
+  // hunting: names and wild tables come out of the ROM
+  'PokemonNames', 'JohtoGrassWildMons', 'wTimeOfDay',
+];
+
 function looksLikeGameBoyRom(buf) {
   if (buf.byteLength < 0x8000) return false;
   const head = new Uint8Array(buf, 0x104, NINTENDO_LOGO.length);
@@ -487,6 +613,9 @@ $('#romFile').addEventListener('change', async (e) => {
   }
   romBytes = buf;
   setStatus(`ROM: ${f.name} (${(buf.byteLength / 1048576).toFixed(1)} MB)`, 'ok');
+  // Kept before the emulator is handed it, not after: the core takes the bytes
+  // and there is no promise that the buffer this side of it stays readable.
+  keepRom(f.name, buf).then(paintFiles);
   maybeStart();
 });
 
@@ -499,16 +628,9 @@ $('#symFile').addEventListener('change', async (e) => {
       throw new Error(`${f.name} does not look like an rgblink .sym file`);
     }
     symbols = new Symbols(text);
-    symbols.require(['wPartyCount', 'wPartyMon1', 'wBattleMode', 'wMapGroup',
-                     'wMapStatus', 'wMenuCursorY', 'wPlayerTileCollision',
-                     // tap-to-walk: the collision map and the window stack
-                     'wOverworldMapBlocks', 'wMapWidth', 'wMapHeight',
-                     'wTilesetCollisionBank', 'wTilesetCollisionAddress',
-                     'wWindowStackSize', 'CollisionPermissionTable',
-                     'wPlayerBGMapOffsetX', 'wPlayerBGMapOffsetY',
-                     // hunting: names and wild tables come out of the ROM
-                     'PokemonNames', 'JohtoGrassWildMons', 'wTimeOfDay']);
+    symbols.require(NEEDED_SYMBOLS);
     setStatus(`symbols: ${symbols.size.toLocaleString()} loaded`, 'ok');
+    keepSym(f.name, text).then(paintFiles);
   } catch (err) {
     symbols = null;
     setStatus(err.message, 'bad');
@@ -1072,21 +1194,34 @@ async function showVersion() {
  *
  * It asks first when a game is loaded, which it did not need to when it sat in
  * the settings card two screens down. Beside the app's name it is a thumb's
- * width from the title, and what it does is close the game: the reload empties
- * the page, the ROM has to be picked again, and whatever has happened since
- * the last in-game save is gone with it. That is a fine trade when you meant
- * to press it and a bad afternoon when you did not.
+ * width from the title, and what it does is close the game.
  *
- * The battery save survives -- it is in the library's own IndexedDB record,
- * per cartridge, not in the page -- which is exactly why the question names
- * the last save as the line. Nothing is asked before a ROM is picked, because
- * then there is nothing to lose and being asked would only be in the way.
+ * What that costs has changed twice, so the question is built from what is
+ * true now rather than from a sentence written once. When the files are kept,
+ * the reload brings them and the last save back and the cost is the current
+ * moment -- steps since you saved, a battle in progress. When they are not,
+ * it is that plus two file pickers.
+ *
+ * The earlier version of this said the battery save survives a reload. It does
+ * not, and that was worth measuring rather than assuming: the library persists
+ * a cartridge only when something asks it to, and its own store held zero
+ * records after a save this app had verified byte for byte. The save is kept
+ * because this file keeps it now.
  */
 $('#update').onclick = async () => {
   const btn = $('#update');
-  if (romBytes && !confirm(
-    'Update now? The game closes and the ROM has to be picked again. '
-    + 'Anything since your last save is lost.')) return;
+  if (romBytes) {
+    const meta = await keptMeta();
+    const kept = meta && meta.romName && meta.battery;
+    if (!confirm(kept
+      ? 'Update now? The game closes and comes back at your last save. '
+        + 'Anything since then is lost.'
+      : 'Update now? The game closes and the ROM has to be picked again. '
+        + 'Anything not kept in a slot is lost.')) return;
+    // The moment before a reload the app is causing is the one moment worth
+    // spending 32KB on unasked.
+    await keepGame();
+  }
   btn.disabled = true;
   btn.textContent = 'updating…';
   try {
@@ -1101,6 +1236,26 @@ $('#update').onclick = async () => {
 };
 
 showVersion();
+
+/**
+ * Throw away the files and the save kept on this phone.
+ *
+ * Asks, because this is the one control here that destroys something: the kept
+ * battery can be the only copy of a game if no slot was taken and no .sav was
+ * downloaded. The slots are in a different database and are not touched, which
+ * the question says, because "forget my files" should not read as "wipe
+ * everything".
+ */
+$('#forget').onclick = async () => {
+  const meta = await keptMeta();
+  const alsoSave = meta && meta.battery ? ' and the saved game beside them' : '';
+  if (!confirm(`Forget ${meta && meta.romName ? meta.romName : 'the ROM'} and the `
+    + `symbol file${alsoSave}? You will pick them again next time. `
+    + 'Your slots are kept.')) return;
+  await forgetKept();
+  paintFiles();
+  progress('the files are no longer kept on this phone');
+};
 
 // --- slots, undo, and importing a save ---------------------------------------
 
@@ -1192,6 +1347,7 @@ async function loadSlot(slot, what) {
     if (!await tasks.continueFromTitle()) {
       return { ok: false, message: 'loaded the save but could not reach the world' };
     }
+    await keepGame();
     const now = await describeGame();
     return { ok: true, message: `back at ${now.where}`
       + (now.lead ? ` with ${now.lead}` : '') };
@@ -1223,6 +1379,7 @@ async function paintSlots() {
       savedThisSession = true;
       const where = await describeGame();
       const kept = await saves.capture(id, where);
+      await keepGame();
       await paintSlots();
       return kept.ok
         ? { ok: true, message: `slot ${id}: ${describeSlot({ ...where, when: kept.when })}` }
@@ -1272,6 +1429,7 @@ $('#importsav').onchange = async (ev) => {
       return { ok: false, message: 'loaded the file but could not reach the world' };
     }
     savedThisSession = true;
+    await keepGame();
     const now = await describeGame();
     await paintSlots();
     return { ok: true, message: `loaded ${file.name} \u2014 ${now.where}`
@@ -1282,7 +1440,10 @@ $('#importsav').onchange = async (ev) => {
 // --- saving, and getting the save off the phone ------------------------------
 $('#savegame').onclick = () => runTask('#savegame', 'saving', async () => {
   const r = await tasks.saveGame();
-  if (r.ok) savedThisSession = true;
+  if (r.ok) {
+    savedThisSession = true;
+    await keepGame();
+  }
   return r;
 });
 
@@ -1325,6 +1486,44 @@ $('#exportsav').onclick = async () => {
     setStatus(`could not read the save: ${e && e.message ? e.message : e}`, 'bad');
   }
 };
+
+/**
+ * Start from what was kept, if anything was.
+ *
+ * This is the whole point of keeping the files: the app opens and the game is
+ * there, rather than opening on a card asking for two files you have to go and
+ * find. It runs before nothing and after nothing -- there is no ROM in the
+ * page at load, so either this finds one or the loader card is the right thing
+ * to be looking at.
+ *
+ * `?dev=1` wins, because a dev run is deliberately reading ./dev/ and a kept
+ * ROM from an earlier session would silently take its place.
+ */
+(async () => {
+  if (DEV) return;
+  const kept = await recall();
+  if (!kept) return;
+  setStatus(`opening ${kept.rom.name}\u2026`, 'busy');
+  try {
+    if (!looksLikeGameBoyRom(kept.rom.buffer)) {
+      throw new Error(`${kept.rom.name} is not a Game Boy ROM`);
+    }
+    symbols = new Symbols(kept.sym.text);
+    symbols.require(NEEDED_SYMBOLS);
+    romBytes = kept.rom.buffer;
+    pendingBattery = kept.battery;
+  } catch (e) {
+    // A record this build cannot use is not something to argue with: drop it
+    // and let the loader card ask, which is where the person already is.
+    symbols = null;
+    romBytes = null;
+    setStatus('the kept files could not be read — pick them again', 'bad');
+    await forgetKept();
+    paintFiles();
+    return;
+  }
+  maybeStart();
+})();
 
 // Dev convenience: with ?dev=1 the ROM and .sym are fetched from ./dev/ instead
 // of being picked by hand, so the whole flow can be exercised by a test driver.

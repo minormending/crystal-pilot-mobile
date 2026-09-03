@@ -1,7 +1,11 @@
-// Cache the shell so the app opens with no network once installed. The ROM and
-// .sym are never cached: they are yours, they stay in the page, and they are
-// re-picked each session.
-const CACHE = 'crystal-pilot-v73';
+// Cache the shell so the app opens with no network once installed.
+//
+// The ROM and .sym are never in *this* cache, and never on the wire: they are
+// yours, read in the page, and no game data is served from here. They are kept
+// in IndexedDB on the device by app/remember.js, so a reload does not send you
+// looking for them -- which is a different thing from being cached, and is
+// thrown away by Forget in the settings card.
+const CACHE = 'crystal-pilot-v74';
 const SHELL = [
   './', './index.html', './manifest.webmanifest', './icon.svg',
   './vendor/wasmboy.umd.js',
