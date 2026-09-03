@@ -890,9 +890,14 @@ meaning something nobody chose. The hunted species is restored only where it
 can actually be found, at this hour, and only when nothing is selected — so it
 restores a choice and never overrides one.
 
+Each group also carries **when it was chosen** — a stamp written on every
+change. Nothing reads it yet; it is there because ordering one device's choices
+against another's needs a stamp that survives a reload, and a missing or
+nonsense one reads as `0` so it loses to every real choice.
+
 Storage throws rather than returning null in a private window or after cleared
 site data, so every access goes through one accessor that answers "nothing
-remembered". Nine tests cover the deciding; the storage call itself is three
+remembered". Eleven tests cover the deciding; the storage call itself is three
 lines and a `try`.
 
 ### The ROM, the symbol file, and your last save

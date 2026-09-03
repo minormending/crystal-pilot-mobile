@@ -32,9 +32,19 @@ function refusingStore(which) {
 test('nothing usable comes out of nothing, or out of junk', async (t) => {
   for (const raw of [null, undefined, 'v70', 42, [], true]) {
     const got = sanitise(raw, LIMITS);
-    t.eq([got.speed, got.grind, got.hunt], [null, null, null],
+    t.eq([got.speed, got.grind, got.hunt, got.at], [null, null, null, 0],
          `${JSON.stringify(raw) ?? 'undefined'} yields no options`);
   }
+});
+
+test('a stamp that is not a stamp loses to every real one', async (t) => {
+  // 0 is what an unstamped record gets, and it must lose: the case that
+  // matters is an empty group arriving from a room that nobody has written
+  // yet, which must not beat what this device already had.
+  t.eq(sanitise({ at: 'yesterday' }, LIMITS).at, 0, 'a word');
+  t.eq(sanitise({ at: -5 }, LIMITS).at, 0, 'before the epoch');
+  t.eq(sanitise({ at: Infinity }, LIMITS).at, 0, 'not a moment');
+  t.eq(sanitise({ at: 1788446310223 }, LIMITS).at, 1788446310223, 'a real one');
 });
 
 test('a speed index this build cannot use is dropped, not clamped', async (t) => {
@@ -77,7 +87,8 @@ test('a field written by a build that no longer exists is dropped on the next wr
   const st = fakeStore(JSON.stringify({ speed: 2, stepper: 7 }));
   writeOpts({ hunt: 'RATTATA' }, st);
   const stored = JSON.parse(st.getItem('crystal-pilot-opts'));
-  t.eq(Object.keys(stored).sort(), ['hunt', 'speed'], 'stepper is gone, speed stays');
+  t.eq(Object.keys(stored).sort(), ['at', 'hunt', 'speed'],
+       'stepper is gone; speed stays, and the write stamped itself');
 });
 
 test('passing null forgets that one', async (t) => {

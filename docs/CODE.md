@@ -1346,7 +1346,7 @@ game's own picture, not on a surface of ours.
 
 ### What it remembers
 
-<!-- covers: app/remember.js @ 53a197324fef -->
+<!-- covers: app/remember.js @ 636b6f49f051 -->
 
 The app forgets everything on a reload, and a reload is not rare: the Update
 button causes one deliberately, and a phone discards a background tab whenever
@@ -1364,6 +1364,13 @@ grind preset the markup no longer offers has no nearest neighbour either: `+5`
 and `Lv20` are different intentions, not different amounts of one. The valid
 range comes from the markup and the `SPEEDS` table rather than being written
 down twice, so a preset cannot outlive the button that offered it.
+
+**Each group carries when it was chosen.** A fourth field, `at`, stamped on
+every write. Nothing in the app reads it yet — it exists because ordering two
+devices' choices needs a stamp that survives a reload, and one invented at load
+time would make every reload look like a fresh decision. An absent or nonsense
+stamp reads as `0`, which loses to every real one; that is the safe direction,
+because the record with nothing in it is the one that must not win.
 
 **What is stored is the choice, never what the choice worked out to.** `+2`
 means two above the lead, so storing the `Lv12` it resolved to today would come

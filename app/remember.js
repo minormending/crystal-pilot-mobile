@@ -26,7 +26,12 @@
 const OPTS_KEY = 'crystal-pilot-opts';
 // The only keys kept. Anything else in the record is dropped on the next
 // write, so a field this build has stopped using does not live forever.
-const OPT_KEYS = ['speed', 'grind', 'hunt'];
+//
+// `at` is when the three were last chosen *on this device*, and it is stored
+// rather than derived because it has to survive a reload: it is what orders
+// this device's choices against another device's, and a stamp invented at load
+// time would make every reload look like a fresh decision.
+const OPT_KEYS = ['speed', 'grind', 'hunt', 'at'];
 
 function store(given) {
   if (given) return given;
@@ -52,8 +57,12 @@ function store(given) {
  * record than a number to be salvaged.
  */
 export function sanitise(raw, { speeds = 0, grinds = [] } = {}) {
-  const out = { speed: null, grind: null, hunt: null };
+  const out = { speed: null, grind: null, hunt: null, at: 0 };
   if (!raw || typeof raw !== 'object') return out;
+  // A stamp, not a date: anything that is not a positive finite number is no
+  // ordering at all, and 0 loses to every real choice, which is the safe way
+  // for a record with no stamp to lose.
+  if (Number.isFinite(raw.at) && raw.at > 0) out.at = raw.at;
   if (Number.isInteger(raw.speed) && raw.speed >= 0 && raw.speed < speeds) {
     out.speed = raw.speed;
   }
@@ -93,6 +102,10 @@ export function readOpts(limits = {}, given = null) {
 export function writeOpts(patch, given = null) {
   const st = store(given);
   if (!st) return;
+  // Stamped here unless the caller brought its own, which is what adopting
+  // another device's choices does -- their stamp travels with them, or this
+  // device's clock would make every arrival look like the newest decision.
+  if (!('at' in patch)) patch = { ...patch, at: Date.now() };
   let raw = {};
   try {
     raw = JSON.parse(st.getItem(OPTS_KEY)) || {};
