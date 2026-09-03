@@ -1204,7 +1204,7 @@ the bag" rather than "did we gain any".
 
 ## 9. The interface
 
-<!-- covers: app/main.js index.html @ e62db3c48c53 -->
+<!-- covers: app/main.js index.html @ 635027c6b65f -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -1359,7 +1359,7 @@ game's own picture, not on a surface of ours.
 
 ### What it remembers
 
-<!-- covers: app/remember.js @ 273b20ee63e1 -->
+<!-- covers: app/remember.js @ bcb5a774746b -->
 
 The app forgets everything on a reload, and a reload is not rare: the Update
 button causes one deliberately, and a phone discards a background tab whenever
@@ -1737,6 +1737,47 @@ digest needs it *before* `maybeStart` runs. The dev path was forgotten first
 time round and the symptom was silence: nothing published, and a second device
 that waited for a digest that never came. `maybeStart` re-takes it if it is
 missing, as a backstop for the fourth path someone adds later.
+
+<details>
+<summary><b>Advanced detail:</b> seven more, from reviewing the fixes</summary>
+
+Reviewing the fixes turned up a second, quieter set — mostly in the storage
+underneath rather than in the sharing on top.
+
+**The record of what is kept was written by read-then-write.** `patchMeta` read
+the meta record in one transaction and wrote it back in another, so two writes
+in flight together clobbered each other — and the ordinary first run does
+exactly that, picking a ROM and then a symbol file. Whichever wrote last dropped
+the other's name, and since the Files row needs both to say anything, it read
+"re-picked each session" while both files sat in the store. The same race
+dropped the revision beside a kept battery, which is the number the handoff row
+compares against. It is one transaction now; IndexedDB serialises overlapping
+readwrite transactions on a store, so the second sees what the first wrote.
+Verified by starting five writes at once and finding every field.
+
+**And every call opened its own connection.** `keepBattery` alone opened three,
+and `paintHandoff` opens one per room update. Nothing closed them; garbage
+collection eventually did. Beyond the waste, a live handle blocks a version
+change on that database, so a future migration would wait behind whatever
+happened to still be open. The handle is cached now, with `onversionchange`
+standing it aside and `onclose` forgetting it — a cached connection that has
+quietly died would otherwise fail every call after it. Verified by asking for a
+version change and watching it complete rather than block.
+
+**Three smaller ones in the screen code.** A connection failing while a button
+was held left it lit, because `remoteHeld` was only cleared by Stop. The
+withdrawal written when a host stops was not awaited before `leaveRoom()`, so
+it could be abandoned in flight — the ninety-second freshness window was the
+only thing covering it. And the startup `ensureRoom()` had nothing attached to
+its promise, so a rejection from inside `createSync` would have surfaced as an
+unhandled rejection rather than the "no connection" row this app has words for.
+
+**One comment lying about a measurement** — it claimed 25ms for the ROM
+fingerprint where the real figure is 8 — and **baton's demo teaching the
+opposite of its own rule**, because it was not updated when taking stopped
+claiming: press Take there and the holder never moved.
+
+</details>
 
 <details>
 <summary><b>Advanced detail:</b> eleven things a review of this found</summary>

@@ -152,7 +152,16 @@ const FILES_DB = 'crystal-pilot-files';
 const STORE = 'kept';
 const ROM = 'rom', SYM = 'sym', BATTERY = 'battery', META = 'meta';
 
+// The open database, kept. Every call used to open its own connection and
+// leave it to garbage collection -- three of them for a single keepBattery,
+// and one per room update through paintHandoff. Beyond the waste, a live
+// handle blocks a version change on this database, so a future migration would
+// wait behind whatever happened to still be open. saves.js has always cached
+// its handle; this is the same idea arriving late.
+let held = null;
+
 function openFiles() {
+  if (held) return Promise.resolve(held);
   return new Promise((resolve, reject) => {
     // No `indexedDB` at all in a locked-down browser, and `open` itself throws
     // in a Firefox private window rather than firing onerror.
@@ -165,7 +174,15 @@ function openFiles() {
       const db = req.result;
       if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE);
     };
-    req.onsuccess = () => resolve(req.result);
+    req.onsuccess = () => {
+      held = req.result;
+      // Let go when another tab wants to change the schema, and forget a
+      // connection that closes under us -- a cached handle that is no longer
+      // open would fail every call after it with no way to recover.
+      held.onversionchange = () => { held.close(); held = null; };
+      held.onclose = () => { held = null; };
+      resolve(held);
+    };
     req.onerror = () => reject(req.error);
     req.onblocked = () => reject(new Error('another tab is holding the database'));
   });
@@ -173,6 +190,10 @@ function openFiles() {
 
 function work(mode, job) {
   return openFiles().then((db) => new Promise((resolve, reject) => {
+    // A connection that has gone away throws here rather than firing onerror,
+    // and a cached one can go away without warning -- a browser reclaiming
+    // storage, a private window ending. Dropping it lets the next call reopen.
+    if (!db.objectStoreNames.contains(STORE)) { held = null; reject(new Error('store is gone')); return; }
     const t = db.transaction(STORE, mode);
     let out;
     try { out = job(t.objectStore(STORE)); } catch (e) { reject(e); return; }
@@ -203,9 +224,26 @@ export async function keptMeta() {
   }
 }
 
-async function patchMeta(patch) {
-  const now = (await keptMeta()) || {};
-  await work('readwrite', (s) => s.put(Object.assign(now, patch), META));
+/**
+ * Merge fields into the record of what is kept.
+ *
+ * Read and write in *one* transaction, which is the whole point. It used to
+ * read in one and write in another, and two of these in flight at once then
+ * clobbered each other: picking a ROM and a symbol file in the ordinary way
+ * runs keepRom and keepSym seconds apart, both read the record before either
+ * writes, and whichever wrote last dropped the other's name. The Files row
+ * needs both to say anything, so it read "re-picked each session" while both
+ * files were sitting in the store. The same race dropped the revision beside a
+ * kept battery, which is what the handoff row compares against.
+ *
+ * IndexedDB serialises overlapping readwrite transactions on a store, so this
+ * is enough: the second one sees what the first wrote.
+ */
+function patchMeta(patch) {
+  return work('readwrite', (store) => {
+    const r = store.get(META);
+    r.onsuccess = () => store.put(Object.assign({}, r.result || {}, patch), META);
+  });
 }
 
 /**

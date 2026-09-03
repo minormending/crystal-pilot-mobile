@@ -342,7 +342,7 @@ async function maybeStart() {
  * So: FNV-1a over the whole file, in two 32-bit halves, sixteen hex characters.
  * Not a cryptographic hash and it does not need to be -- this separates two
  * builds of one disassembly, it does not defend against anyone. Measured at
- * about 25ms for 2MB, once per session.
+ * 8ms for this 2MB ROM, once per session.
  */
 function fingerprintRom(buffer) {
   const bytes = new Uint8Array(buffer);
@@ -628,7 +628,7 @@ function showScreen() {
  * and no device could discover it again short of Stop and Show. What each side
  * owns is what each side withdraws.
  */
-function stopScreen() {
+async function stopScreen() {
   clearTimeout(watchTimer);
   const wasHosting = !!host, wasWatching = !!watcher;
   if (host) { host.stop(); host = null; }
@@ -639,10 +639,14 @@ function stopScreen() {
   remoteHeld.clear();
   $('#remote').classList.add('hide');
   $('#screen').classList.remove('hide');
+  // Awaited, because the caller may be about to leave the room: leaveRoom()
+  // unsubscribes immediately, and a withdrawal still in the debounce goes with
+  // it -- leaving the other device offering to watch a screen that has gone
+  // until the freshness window closes ninety seconds later.
   if (room && wasHosting) {
-    room.signal({ showing: null, offer: null, answer: null });
+    await room.signal({ showing: null, offer: null, answer: null });
   } else if (room && wasWatching) {
-    room.signal({ watching: null });
+    await room.signal({ watching: null });
   }
   gb.releaseAll();
   syncHeld();
@@ -680,6 +684,13 @@ function watchScreen() {
       if (st === 'failed') {
         progress('could not reach the other device — same wifi works, across '
           + 'networks may not');
+      }
+      if (st === 'failed' || st === 'closed' || st === 'disconnected') {
+        // Whatever was under a thumb when the connection went is not held by
+        // anything any more, and a button left lit says a game is being played
+        // that cannot be reached.
+        remoteHeld.clear();
+        syncHeld();
       }
       paintScreen();
     },
@@ -757,7 +768,7 @@ $('#screenshare').onclick = () => {
   const said = describeScreen(screenState());
   if (said.button === 'Show') showScreen();
   else if (said.button === 'Watch') watchScreen();
-  else stopScreen();
+  else stopScreen();      // nothing waits on it here; the room is staying open
 };
 
 // A hidden page runs about one frame a second, so a host that goes away says
@@ -1987,7 +1998,7 @@ $('#share').onclick = async () => {
       // leaving it while a picture is flowing left the pad on a watching device
       // still sending presses down a channel with no room behind it, and no
       // way back except pressing Leave on a row that had lost its meaning.
-      if (host || watcher) stopScreen();
+      if (host || watcher) await stopScreen();
       room.stop();
       progress('this device has stopped sharing — your options are kept');
     } else {
@@ -2035,7 +2046,13 @@ if ($('#devicename') && chosenName()) $('#devicename').placeholder = chosenName(
 paintRoom();
 // A device that has shared before picks the room up again on its own; one that
 // never has stays entirely local, network included.
-if (wasSharing()) ensureRoom();
+if (wasSharing()) {
+  // Caught, because nothing is waiting on this one. openRoom answers null for
+  // the failures it expects, but a rejection from inside createSync would
+  // otherwise surface as an unhandled promise rather than as the row this app
+  // already has words for.
+  ensureRoom().catch(() => { roomUnavailable = true; paintRoom(); });
+}
 
 // A debounced write is lost if the tab goes away inside the window, and a phone
 // closes tabs without asking. kidsync's own advice.
