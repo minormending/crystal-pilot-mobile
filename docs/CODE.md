@@ -213,7 +213,7 @@ was cheaper than moving the boundary.
 
 ### `gb.js` — the emulator
 
-<!-- covers: app/gb.js @ 7853a0caa030 -->
+<!-- covers: app/gb.js @ 8a62b88ab9c9 -->
 
 Wraps WasmBoy. Runs frames, reads work RAM, holds and releases buttons.
 
@@ -1023,7 +1023,7 @@ Tackle and Leer. Two emulators, two implementations, one save file.
 
 ## 7c. Slots, undo, and bringing a save in
 
-<!-- covers: app/saves.js @ ad6a741b77e4 -->
+<!-- covers: app/saves.js @ 4d332255b465 -->
 
 Three slots a person picks, plus one the pilot writes before every job. A slot
 holds a **battery save** — the 32KB the cartridge writes — and not a machine
@@ -1204,7 +1204,7 @@ the bag" rather than "did we gain any".
 
 ## 9. The interface
 
-<!-- covers: app/main.js index.html @ 635027c6b65f -->
+<!-- covers: app/main.js index.html @ 1f3021a49a26 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -1737,6 +1737,40 @@ digest needs it *before* `maybeStart` runs. The dev path was forgotten first
 time round and the symptom was silence: nothing published, and a second device
 that waited for a digest that never came. `maybeStart` re-takes it if it is
 missing, as a backstop for the fourth path someone adds later.
+
+<details>
+<summary><b>Advanced detail:</b> four in the code that predates all this</summary>
+
+A third pass, over the parts written before any of the sharing existed and
+never reviewed. The interesting one is a collision between old code and new.
+
+**The ROM picker could start the emulator twice.** It calls `symbolsFromRoom()`
+— which starts the emulator itself when the room is already offering the
+addresses — and then called `maybeStart()` again on the next line. Nothing made
+`maybeStart` idempotent, so on the ordinary second-device path both ran: two
+`gb.start()`, two `loadROM` racing in a core that will not take a second ROM
+while it is still coming up, two sets of tasks, and two `awaitWorld` intervals
+polling for the rest of the session. The boot is a held promise now, and the
+idle interval is cleared before it is set.
+
+**A slot row cost 32KB to draw.** `list()` said "without the 32KB" in its own
+comment and then read the whole record, five times, on every repaint after
+every job. The summary is a second record beside the slot — a key, not a store,
+so nothing to migrate — written in the same transaction. A slot from before
+falls back to the long way once and is rewritten on its next capture. Measured
+at 1ms for five slots afterwards.
+
+**`press()` cleared the joypad outright**, which was harmless while only a task
+could press and a task locks the player out — and stopped being harmless when
+presses started arriving from a watching device. One press during a held
+direction dropped it while `held` went on claiming it was down. It restores the
+held set now, and three tests cover the joypad bookkeeping that had none.
+
+**And WasmBoy's own database was reopened and never closed**, the same shape as
+the leak fixed in `remember.js` an hour earlier: every slot load, import and
+handoff added a connection for garbage collection to find.
+
+</details>
 
 <details>
 <summary><b>Advanced detail:</b> seven more, from reviewing the fixes</summary>

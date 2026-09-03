@@ -187,13 +187,23 @@ export class GameBoy {
     this.core.setJoypadState(state);
   }
 
-  /** Hold `buttons` for `frames`, then release. */
+  /**
+   * Hold `buttons` for `frames`, then release -- and put back whatever was
+   * already being held.
+   *
+   * The clearing at the end used to be absolute, which was fine while only a
+   * task could press and a task runs with the player's input locked out. It
+   * stopped being fine the moment presses could arrive from another device:
+   * one press() during a held direction would leave the core with nothing
+   * down, `held` still claiming a button was, and the pad on two devices
+   * lighting a button that is not pressed.
+   */
   async press(buttons, frames = 6, gap = 6) {
     const state = {};
     for (const b of [].concat(buttons)) state[b] = true;
     this.core.setJoypadState(state);
     await this.run(frames);
-    this.core.setJoypadState({});
+    this.applyHeld();
     if (gap) await this.run(gap);
   }
 

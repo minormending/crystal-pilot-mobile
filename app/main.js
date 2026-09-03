@@ -104,6 +104,10 @@ let grindRestored = false;
 // maybeStart runs so that the one place which decides "are we in the world
 // now?" can see it.
 let pendingBattery = null;
+// The boot in flight, so two callers share one start rather than racing.
+let starting = null;
+// The 1.2s repaint while nobody is driving. One of them, always.
+let idleRefresh = null;
 // Whether this session's files came out of the store rather than a file
 // picker. It decides whether the app continues the game for you: a restored
 // session is one you were already playing, and a reload you did not ask for
@@ -228,8 +232,27 @@ function whenVisible() {
   });
 }
 
-async function maybeStart() {
-  if (!romBytes || !symbols) return;
+/**
+ * Boot the emulator, once, whoever asks.
+ *
+ * Idempotent because two callers can arrive together and did: the ROM picker
+ * calls symbolsFromRoom() -- which starts the emulator itself when the room is
+ * already offering the addresses -- and then called maybeStart() again on the
+ * next line. That is the ordinary second-device path, and it ran two starts
+ * concurrently: two gb.start(), two loadROM racing each other in a core that
+ * will not take a second ROM while it is still coming up, two sets of tasks,
+ * and two awaitWorld intervals polling for the rest of the session.
+ *
+ * The promise is held rather than a flag, so a caller that awaits gets the
+ * same start rather than a resolved nothing.
+ */
+function maybeStart() {
+  if (!romBytes || !symbols) return Promise.resolve();
+  if (!starting) starting = reallyStart().finally(() => { starting = null; });
+  return starting;
+}
+
+async function reallyStart() {
   setStatus('booting…', 'busy');
   await gb.start($('#screen'));
   await gb.loadRom(romBytes);
@@ -889,7 +912,11 @@ async function awaitWorld() {
     progress('');
   }
   refresh();
-  setInterval(() => { if (!running) refresh(); }, 1200);
+  // Cleared first: this used to be a fresh interval per call to awaitWorld, and
+  // two of those poll twice as often for ever. maybeStart is idempotent now, so
+  // this is the belt to that pair of braces.
+  clearInterval(idleRefresh);
+  idleRefresh = setInterval(() => { if (!running) refresh(); }, 1200);
 }
 
 /**

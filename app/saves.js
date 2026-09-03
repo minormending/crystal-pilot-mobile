@@ -42,6 +42,9 @@ export const UNDO_SLOT = 'undo';
 // on purpose can land here, so it is always the last game this device had.
 export const REPLACED_SLOT = 'replaced';
 export const ALL_SLOTS = [...SLOT_IDS, UNDO_SLOT, REPLACED_SLOT];
+// Where a slot's one-line summary lives, beside the slot itself. A key rather
+// than a second store, so no version change and nothing to migrate.
+const summaryKey = (slot) => `${slot}:about`;
 
 function open(name, version, upgrade) {
   return new Promise((resolve, reject) => {
@@ -76,6 +79,16 @@ export class Saves {
     this.log = log;
   }
 
+  /** WasmBoy's own database, opened once rather than per call. */
+  async libraryDb() {
+    if (!this._wdb) {
+      this._wdb = await open(WASMBOY_DB);
+      this._wdb.onversionchange = () => { this._wdb.close(); this._wdb = null; };
+      this._wdb.onclose = () => { this._wdb = null; };
+    }
+    return this._wdb;
+  }
+
   async db() {
     if (!this._db) {
       this._db = await open(DB_NAME, DB_VERSION, (db) => {
@@ -103,7 +116,15 @@ export class Saves {
       ...extra,
     };
     const db = await this.db();
-    await tx(db, STORE, 'readwrite', (os) => os.put(record, slot));
+    // The summary is written beside the record, under its own key, because a
+    // row that says "Route 29 · TOTODILE Lv5 · 17:26" should not cost 32KB to
+    // draw. Both in one transaction so a slot can never have one without the
+    // other.
+    const { bytes: _drop, ...summary } = record;
+    await tx(db, STORE, 'readwrite', (os) => {
+      os.put(record, slot);
+      os.put(summary, summaryKey(slot));
+    });
     return { ok: true, message: `kept in slot ${slot}`, when: record.when };
   }
 
@@ -113,11 +134,25 @@ export class Saves {
     return rec || null;
   }
 
-  /** Everything a slot row needs to describe itself, without the 32KB. */
+  /**
+   * Everything a slot row needs to describe itself, without the 32KB.
+   *
+   * It used to say that and then read the whole record anyway -- five slots of
+   * battery data deserialised on every repaint, after every job, to print four
+   * fields. The summaries are separate records now; a slot written before they
+   * existed falls back to the long way round, once, and is rewritten the next
+   * time it is captured.
+   */
   async list() {
     const db = await this.db();
     const out = {};
+    await tx(db, STORE, 'readonly', (os) => {
+      for (const slot of ALL_SLOTS) {
+        wrap(os.get(summaryKey(slot))).then((s) => { out[slot] = s || null; });
+      }
+    });
     for (const slot of ALL_SLOTS) {
+      if (out[slot]) continue;
       const rec = await tx(db, STORE, 'readonly', (os) => wrap(os.get(slot)));
       out[slot] = rec ? { when: rec.when, where: rec.where, lead: rec.lead,
                           party: rec.party } : null;
@@ -127,12 +162,15 @@ export class Saves {
 
   async clear(slot) {
     const db = await this.db();
-    await tx(db, STORE, 'readwrite', (os) => os.delete(slot));
+    await tx(db, STORE, 'readwrite', (os) => {
+      os.delete(slot);
+      os.delete(summaryKey(slot));
+    });
   }
 
   /** The key the library has already used here, or null if it has none. */
   async _existingKey() {
-    const wdb = await open(WASMBOY_DB);
+    const wdb = await this.libraryDb();
     if (!wdb.objectStoreNames.contains(WASMBOY_STORE)) return null;
     const keys = await tx(wdb, WASMBOY_STORE, 'readonly',
                           (os) => wrap(os.getAllKeys()));
@@ -212,7 +250,7 @@ export class Saves {
     // -- creating a database the library then finds already there and wrong.
     // If the store is not there yet the honest answer is that there is nothing
     // to write into, not that we should build it.
-    const wdb = await open(WASMBOY_DB);
+    const wdb = await this.libraryDb();
     if (!wdb.objectStoreNames.contains(WASMBOY_STORE)) {
       throw new Error('the emulator has not stored anything for this cartridge '
         + 'yet — load the ROM first');
