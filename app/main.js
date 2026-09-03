@@ -1,6 +1,7 @@
 // Wiring: file pickers, the render loop, and dispatching a task.
 import { GameBoy } from './gb.js';
 import { Symbols } from './symbols.js';
+import { describeRows, describeSlot, describeUndo } from './rows.js';
 import { Cancelled } from './taskbase.js';
 import { Saves, SLOT_IDS, UNDO_SLOT } from './saves.js';
 import { GameState, TRAINER_BATTLE, MAX_PARTY } from './state.js';
@@ -363,92 +364,39 @@ async function runTask(id, busy, work,
  * "Pick one to look for" was an instruction wearing a button's clothes, and it
  * sat below the chips that were the actual control.
  */
+/**
+ * Put a row's description on screen.
+ *
+ * The decision of what it should say is in rows.js; this only applies it. The
+ * `blocked` class and the disabled button always agree because they are set
+ * from the same flag, which they did not always -- one row read its own
+ * button's disabled property back out of the DOM to decide.
+ */
+function paintRow(row, stateSel, buttonSel, rowSel) {
+  $(stateSel).textContent = row.text;
+  if (buttonSel) $(buttonSel).disabled = !row.enabled;
+  if (rowSel) $(rowSel).classList.toggle('blocked', !row.enabled);
+}
+
 function paintJobs(s) {
-  const lead = s.party[0];
-  const leadName = lead && romdata ? romdata.speciesName(lead.species) : null;
+  const rows = describeRows(s, {
+    rom: romdata, target, huntWanted, ballId, savedThisSession, healPlace,
+  });
 
-  $('#grindstate').textContent = lead
-    ? `${leadName} \u2192 Lv${target}`
-    : 'no party yet';
-  $('#go').disabled = !lead;
-  $('#job-grind').classList.toggle('blocked', !lead);
-  $('#levels').hidden = !lead;
+  paintRow(rows.grind, '#grindstate', '#go', '#job-grind');
+  $('#levels').hidden = !rows.grind.levels;
 
-  $('#huntstate').textContent = huntWanted
-    ? `${huntWanted} \u00b7 here now`
-    : 'pick something below';
-  $('#hunt').disabled = !huntWanted;
-  $('#job-hunt').classList.toggle('blocked', !huntWanted);
+  paintRow(rows.hunt, '#huntstate', '#hunt', '#job-hunt');
 
-  // Catch owns its own prerequisite. The errand used to be a peer button in
-  // this card, below Catch, next to bag advice that contradicted it -- and it
-  // is a one-time thing anyway: run it twice and it returns "already carrying
-  // 5 ball(s)" without moving. So it is Catch's empty state instead.
-  const balls = (s.balls || []).filter(([, q]) => q > 0);
-  const ballName = ballId && romdata ? romdata.itemName(ballId) : null;
-  const needsBalls = !ballId;
-  $('#errand').classList.toggle('hide', !needsBalls);
-  $('#catch').classList.toggle('hide', needsBalls);
-  $('#catchstate').textContent = needsBalls
-    ? 'no Poké Balls yet — fetch them first'
-    : huntWanted
-      ? `${huntWanted} \u00b7 ${ballName}`
-      : 'pick something below';
-  $('#catch').disabled = !(ballId && huntWanted);
-  $('#job-catch').classList.toggle('blocked', needsBalls || !huntWanted);
+  paintRow(rows.catch, '#catchstate', '#catch', '#job-catch');
+  $('#errand').classList.toggle('hide', !rows.catch.needsBalls);
+  $('#catch').classList.toggle('hide', rows.catch.needsBalls);
 
-  // Saving needs the world and a quiet screen; it drives the START menu, and
-  // that menu does not open in a battle or mid-script.
-  const canSave = s.worldLoaded && !s.inBattle && !s.scriptRunning;
-  $('#savestate').textContent = !s.worldLoaded
-    ? 'start a game first'
-    : s.inBattle
-      ? 'finish the battle first'
-      : s.scriptRunning
-        ? 'wait for the screen to settle'
-        : savedThisSession
-          ? 'saved this session'
-          : 'not saved yet';
-  $('#savegame').disabled = !canSave;
-  $('#job-save').classList.toggle('blocked', !canSave);
-  $('#exportstate').textContent = savedThisSession
-    ? 'ready — the battery has this session in it'
-    : 'the battery save, for another emulator';
-
-  // The three below act on the situation you are already in, so what they can
-  // do is decided by the game rather than by anything picked on this page.
-  const foe = s.inBattle && romdata ? romdata.speciesName(s.enemy.species) : null;
-  const trainer = s.battleMode === TRAINER_BATTLE;
-
-  $('#battlestate').textContent = !s.inBattle
-    ? 'not in a battle'
-    : `${trainer ? 'trainer' : 'wild'} ${foe} Lv${s.enemy.level}`;
-  $('#battle').disabled = !s.inBattle;
-  $('#job-battle').classList.toggle('blocked', !s.inBattle);
-
-  $('#herestate').textContent = !s.inBattle
-    ? 'not in a battle'
-    : trainer
-      ? 'a trainer\u2019s Pokémon cannot be caught'
-      : s.party.length >= MAX_PARTY
-        ? 'the party is full'
-        : needsBalls
-          ? 'no Poké Balls yet'
-          : `${foe} Lv${s.enemy.level} · ${ballName || 'a ball'}`;
-  $('#catchhere').disabled = !(s.inBattle && !trainer && ballId
-                               && s.party.length < MAX_PARTY);
-  $('#job-here').classList.toggle('blocked', $('#catchhere').disabled);
-
-  const hurt = s.party.filter((m) => m.hp < m.maxHp);
-  $('#healstate').textContent = s.inBattle
-    ? 'finish the battle first'
-    : !s.party.length
-      ? 'no party yet'
-      : hurt.length
-        ? `${hurt.length} hurt · nearest is ${healPlace || 'a Center'}`
-        : 'everyone is at full health';
-  $('#heal').disabled = s.inBattle || !hurt.length;
-  $('#job-heal').classList.toggle('blocked', $('#heal').disabled);
+  paintRow(rows.save, '#savestate', '#savegame', '#job-save');
+  paintRow(rows.export, '#exportstate');
+  paintRow(rows.battle, '#battlestate', '#battle', '#job-battle');
+  paintRow(rows.here, '#herestate', '#catchhere', '#job-here');
+  paintRow(rows.heal, '#healstate', '#heal', '#job-heal');
 }
 
 /** One party member: who it is, and how close it is to fainting. */
@@ -1079,32 +1027,10 @@ async function keepUndoPoint(label) {
   paintUndo();
 }
 
-function describeSlot(meta) {
-  if (!meta) return 'empty';
-  const bits = [];
-  if (meta.where) bits.push(meta.where);
-  if (meta.lead) bits.push(meta.lead);
-  if (meta.when) {
-    const d = new Date(meta.when);
-    bits.push(`${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`);
-  }
-  return bits.join(' \u00b7 ') || 'kept';
-}
-
 function paintUndo() {
   const row = $('#undostate'), btn = $('#undo');
   if (!row || !btn) return;
-  if (!undoPoint) {
-    row.textContent = undoRefused
-      ? `the last job could not be undone \u2014 ${undoRefused}`
-      : 'nothing to undo yet';
-    btn.disabled = true;
-    $('#job-undo').classList.add('blocked');
-    return;
-  }
-  row.textContent = `back to before ${undoPoint.job} \u00b7 ${describeSlot(undoPoint)}`;
-  btn.disabled = false;
-  $('#job-undo').classList.remove('blocked');
+  paintRow(describeUndo(undoPoint, undoRefused), '#undostate', '#undo', '#job-undo');
 }
 
 /** Put the game back to a slot, and pick the save up at the title screen. */

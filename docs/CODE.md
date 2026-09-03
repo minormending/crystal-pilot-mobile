@@ -92,9 +92,9 @@ of the subtleties in sections 6 and 7.
 
 ## 2. The shape of it
 
-<!-- covers-api: app/main.js app/bootstrap.js app/tasks.js app/nav.js app/world.js app/collision.js app/state.js app/romdata.js app/symbols.js app/gb.js @ 7daf7d995fd5 -->
+<!-- covers-api: app/main.js app/bootstrap.js app/tasks.js app/nav.js app/world.js app/collision.js app/state.js app/romdata.js app/symbols.js app/gb.js @ 6add804033e7 -->
 
-Fifteen modules. Arrows point from a module to the ones it imports.
+Sixteen modules. Arrows point from a module to the ones it imports.
 
 ```mermaid
 flowchart TD
@@ -105,6 +105,7 @@ flowchart TD
     btl["battle.js<br/>one turn"]
     menus["menus.js<br/>the game's own menus"]
     tbase["taskbase.js<br/>machine and snapshot"]
+    rows["rows.js<br/>what each row says"]
     nav["nav.js<br/>walking"]
     world["world.js<br/>map graph"]
     coll["collision.js<br/>what is walkable"]
@@ -116,6 +117,7 @@ flowchart TD
 
     main --> boot
     main --> tasks
+    main --> rows
     main --> nav
     main --> world
     main --> coll
@@ -156,6 +158,7 @@ flowchart TD
 | `jobs.js` | "grind to level 12", "catch a Sentret" |
 | `bootstrap.js` | "start a new game", "fetch Poké Balls" |
 | `saves.js` | "keep this in slot 2", "put that .sav into the cartridge" |
+| `rows.js` | "why is that button greyed out?" |
 | `main.js` | everything the person holding the phone touches |
 
 The dependency direction is the design: **nothing below `tasks.js` knows what a
@@ -1182,7 +1185,7 @@ the bag" rather than "did we gain any".
 
 ## 9. The interface
 
-<!-- covers: app/main.js index.html @ 1c0efd400784 -->
+<!-- covers: app/main.js index.html @ 69bdbf9c1149 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -1213,6 +1216,18 @@ stateDiagram-v2
 The pilot's jobs are a **list, not a toolbar**, because `runTask` opens with
 `if (running) return null` — only one job can ever be underway, so they are one
 mutually exclusive choice.
+
+**What a row says is decided somewhere it can be tested.** `rows.js` takes the
+game state and the handful of choices the person has made, and returns text and
+an enabled flag for each row; `main.js` applies that to the DOM and nothing
+more. Before the split it was one 89-line function with fifty-odd `textContent`
+assignments interleaved with the reasoning, which is why none of the "why is
+that greyed out?" logic had ever been tested.
+
+Two rows used to set their `blocked` class by reading their own button's
+`disabled` property back out of the DOM. That happened to work and meant the
+class and the button could in principle disagree; both now come from one flag,
+and the browser was checked to confirm they agree on every row.
 
 <details>
 <summary><b>Advanced detail:</b> the measurements, and one lifecycle rule</summary>
