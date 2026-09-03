@@ -92,7 +92,7 @@ of the subtleties in sections 6 and 7.
 
 ## 2. The shape of it
 
-<!-- covers-api: app/main.js app/bootstrap.js app/tasks.js app/nav.js app/world.js app/collision.js app/state.js app/romdata.js app/symbols.js app/gb.js @ 954789513785 -->
+<!-- covers-api: app/main.js app/bootstrap.js app/tasks.js app/nav.js app/world.js app/collision.js app/state.js app/romdata.js app/symbols.js app/gb.js @ 7daf7d995fd5 -->
 
 Fifteen modules. Arrows point from a module to the ones it imports.
 
@@ -242,6 +242,19 @@ is what makes it hold one. Verified against real save data rather than only for
 size: a battery this read produced was written to a file, opened in the desktop
 pilot under PyBoy, and read back the same game — Route 29, `CYNDAQUIL Lv5
 20/20` — and then imported back into this app, which loaded it.
+
+**A full snapshot costs the same as reading eight bytes**, so polling loops do
+not need trimming. Measured in the browser: `readWram()` 0.043 ms,
+`readBytes(addr, 8)` 0.030 ms, a whole `snap()` including the decode 0.031 ms —
+a battle turn at 120 polls is about 4 ms. The cost is the round trip to the
+worker, not the payload, and the eight kilobytes ride along for nothing. Worth
+writing down because the obvious optimisation is to read fewer bytes, and it
+would buy nothing.
+
+The comment above warns the core has been seen ignoring the range it was asked
+for. Four probes at different moments all came back with exactly the 8192 bytes
+requested, so that is not happening now — but the normalisation stays, because
+one afternoon's probes are not evidence it never happens.
 
 **Frames must be stepped differently when the page is hidden.** `_runNumberOfFrames`
 awaits `pause()`, which needs an animation frame, and a hidden page does not get
@@ -613,6 +626,23 @@ mechanical move of 1300 lines something you can verify rather than hope about.
 The service worker's shell check caught the four new files immediately, which is
 exactly the kind of thing a move like this forgets.
 
+**Stop unwinds rather than being polled for.** Every loop that drives the
+machine goes through `step()` or `push()` on the base, and those throw
+`Cancelled` if Stop has been pressed — before advancing and after. That makes
+cancellation one decision instead of seventeen: the loops used to check
+`this.cancelled` only in the outer jobs, so a Stop pressed during `awaitQuiet`
+did nothing for 250 polls. Measured in the browser afterwards: it now unwinds in
+0.9 ms. Jobs still handle the tidy case themselves and return their own message;
+`runTask` catches the sentinel for the case where it interrupts a primitive, and
+reports it as a stop rather than as a failure.
+
+**One table says what a capture outcome means.** `captureHere` reports a code
+and two callers translated it — a switch in `catchHere`, an if-chain in
+`catch_` — which had drifted to eleven cases against six. `CAPTURE_OUTCOMES`
+holds the message and a `stop` flag, that flag being the only thing the two
+callers legitimately disagree about: a knockout ends a single catch and is bad
+luck to a hunt that can go and find another.
+
 **`menuCursor()` is the one behaviour change.** The two-line incantation for
 reading the menu window appeared five times in the save-driving code; it is one
 method on the base now. That is a read of a handful of bytes rather than the
@@ -622,7 +652,7 @@ eight kilobytes a full snapshot copies, which is worth keeping distinct.
 
 ## 6. Battles
 
-<!-- covers: app/tasks.js app/taskbase.js app/battle.js app/jobs.js app/state.js @ fd2f46f04543 -->
+<!-- covers: app/tasks.js app/taskbase.js app/battle.js app/jobs.js app/state.js @ 1fa777531a3e -->
 
 ### Is it our turn?
 
@@ -746,7 +776,7 @@ fainted.
 
 ## 7. Catching something
 
-<!-- covers: app/tasks.js app/jobs.js app/battle.js app/romdata.js @ bafe7e2dbfa5 -->
+<!-- covers: app/tasks.js app/jobs.js app/battle.js app/romdata.js @ 3599defc56a7 -->
 
 Catching is the most involved loop, because a Poké Ball's odds turn on how much
 HP is left. Throwing at a full-health target is mostly throwing balls away.
@@ -832,7 +862,7 @@ precedes it defaults to yes, which is what we want; the nickname box does not.
 
 ## 7a. Three that act on where you already are
 
-<!-- covers: app/tasks.js app/jobs.js app/menus.js app/bootstrap.js @ e2be60bdcafa -->
+<!-- covers: app/tasks.js app/jobs.js app/menus.js app/bootstrap.js @ 70fdc2a5193d -->
 
 Grind, hunt and catch all go *looking* for something. These three do the obvious
 thing with the situation you are already in, and take no parameters:
@@ -1152,7 +1182,7 @@ the bag" rather than "did we gain any".
 
 ## 9. The interface
 
-<!-- covers: app/main.js index.html @ ae260376e49b -->
+<!-- covers: app/main.js index.html @ 1c0efd400784 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.

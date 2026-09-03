@@ -17,6 +17,19 @@ export const QUIET_TRIES = 250;
 // Long enough for the pack to write wCurItem for the pocket now showing.
 export const SETTLE_FRAMES = 20;
 
+/**
+ * Thrown when Stop is pressed, to unwind out of whatever loop was running.
+ *
+ * A sentinel rather than a return value because the alternative was a check in
+ * every polling loop -- seventeen of them, each with its own idea of what to
+ * return when it gives up, and every new loop another chance to forget. Jobs
+ * catch this at their top level and report "stopped"; nothing else needs to
+ * know it exists.
+ */
+export class Cancelled extends Error {
+  constructor() { super('stopped'); this.name = 'Cancelled'; }
+}
+
 export class TaskBase {
   constructor(gb, state, onProgress = () => {}, rom = null) {
     this.gb = gb;
@@ -61,7 +74,7 @@ export class TaskBase {
   say(msg) { this.onProgress(msg); }
 
   async closeMenus(times = 4) {
-    for (let i = 0; i < times; i++) await this.gb.press('B', 5, 10);
+    for (let i = 0; i < times; i++) await this.push('B', 5, 10);
   }
 
   /** Tap through whatever text is left until the game stops asking. */
@@ -69,7 +82,7 @@ export class TaskBase {
     for (let i = 0; i < taps; i++) {
       const s = await this.snap();
       if (!s.inBattle && !s.windowOpen && !s.scriptRunning) return;
-      await this.gb.press('A', 4, 8);
+      await this.push('A', 4, 8);
       await this.pump();
     }
   }
@@ -91,10 +104,34 @@ export class TaskBase {
     let s = await this.snap();
     for (let i = 0; i < tries; i++) {
       if (s.worldLoaded && !s.scriptRunning && !s.inBattle) return s;
-      await this.gb.run(SETTLE_FRAMES);
+      await this.step(SETTLE_FRAMES);
       s = await this.snap();
     }
     return s;
+  }
+
+  /**
+   * Advance the machine, and stop if Stop has been pressed.
+   *
+   * Every loop that drives the game goes through here or `push` below, which
+   * makes cancellation one decision instead of seventeen. Loops that do not
+   * touch the machine cannot hang, so they do not need it.
+   *
+   * Checked before and after: before, so a Stop already pressed does not buy
+   * another few hundred frames; after, so a long run does not finish and then
+   * carry on regardless.
+   */
+  async step(frames = 1) {
+    if (this.cancelled) throw new Cancelled();
+    await this.gb.run(frames);
+    if (this.cancelled) throw new Cancelled();
+  }
+
+  /** Press a button, and stop if Stop has been pressed. */
+  async push(buttons, frames = 6, gap = 6) {
+    if (this.cancelled) throw new Cancelled();
+    await this.gb.press(buttons, frames, gap);
+    if (this.cancelled) throw new Cancelled();
   }
 
   /**

@@ -1,6 +1,7 @@
 // Wiring: file pickers, the render loop, and dispatching a task.
 import { GameBoy } from './gb.js';
 import { Symbols } from './symbols.js';
+import { Cancelled } from './taskbase.js';
 import { Saves, SLOT_IDS, UNDO_SLOT } from './saves.js';
 import { GameState, TRAINER_BATTLE, MAX_PARTY } from './state.js';
 import { Tasks } from './tasks.js';
@@ -335,6 +336,14 @@ async function runTask(id, busy, work,
     setStatus(res.message, res.ok ? 'ok' : 'bad');
     return res;
   } catch (e) {
+    // Stop is not a failure. It unwinds as a thrown sentinel so that a press
+    // lands immediately rather than after whatever loop was running finishes,
+    // and it arrives here when it interrupts a primitive -- the jobs handle the
+    // tidier case themselves and return their own message.
+    if (e instanceof Cancelled) {
+      setStatus('stopped', 'ok');
+      return null;
+    }
     // Surfaced rather than swallowed: a task that dies silently looks
     // indistinguishable from one still working.
     setStatus(`${busy}: ${e && e.message ? e.message : e}`, 'bad');

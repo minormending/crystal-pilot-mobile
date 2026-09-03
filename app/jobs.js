@@ -10,6 +10,48 @@ const MAX_STUCK_BATTLES = 5;
 // Swings at one target before giving up on weakening it any further.
 const MAX_CHIPS = 8;
 
+/**
+ * What each capture outcome means, in one place.
+ *
+ * captureHere reports an outcome code; two callers used to translate it -- a
+ * switch in catchHere and an if-chain in catch_ -- and they had drifted: the
+ * chain handled six of the eleven codes and fell through for the rest. Adding
+ * an outcome meant remembering both, which was already got wrong once.
+ *
+ * `stop` is the one thing the two callers legitimately disagree about: a
+ * knockout ends a single catch, and is only bad luck to a hunt that can go and
+ * find another one.
+ */
+const CAPTURE_OUTCOMES = {
+  caught:     { ok: true,  stop: true,
+                say: (r, balls) => `caught ${r.name}${r.level ? ` Lv${r.level}` : ''} `
+                                   + `with ${balls(r.thrown)}` },
+  nobattle:   { stop: true, say: () => 'not in a battle' },
+  trainer:    { stop: true,
+                say: () => "that is a trainer's Pok\u00e9mon \u2014 it cannot be caught" },
+  full:       { stop: true,
+                say: () => 'the party is full \u2014 a caught Pok\u00e9mon would go to the '
+                           + 'PC, which this does not handle. Free a slot first.' },
+  noballs:    { stop: true, say: () => 'no balls of that kind in the bag' },
+  nopack:     { stop: true, say: () => 'could not reach the ball in the pack' },
+  ranout:     { stop: true,
+                say: (r, balls) => `used ${balls(r.thrown)} and then had none left` },
+  knockedOut: { stop: false, say: (r) => `knocked the ${r.name} out` },
+  gone:       { stop: false, say: (r) => `the ${r.name} got away` },
+  lost:       { stop: true,
+                say: (r) => `your lead fainted before the ${r.name} could be caught` },
+  stuck:      { stop: true, say: () => 'lost track of the battle' },
+  cancelled:  { stop: true, say: () => 'stopped' },
+  budget:     { stop: true,
+                say: (r, balls) => `used ${balls(r.thrown)} without catching it` },
+};
+
+/** The outcome's entry, or a safe stand-in for a code nobody has taught it. */
+export function captureOutcome(code) {
+  return CAPTURE_OUTCOMES[code]
+    || { stop: true, say: () => `the catch ended unexpectedly (${code})` };
+}
+
 export function withJobs(Base) {
   // Named, so a stack trace says which of these a frame came from.
   return class WithJobs extends Base {
@@ -35,7 +77,7 @@ export function withJobs(Base) {
         }
         // The species is not readable the instant the battle flag flips; give
         // the encounter a moment to load before believing what it says.
-        await this.gb.run(40);
+        await this.step(40);
         s = await this.snap();
       }
       stats.encounters++;
@@ -167,7 +209,7 @@ export function withJobs(Base) {
           // inside the move list and the throw could not find a ball.
           weakening = false;
           await this.closeMenus(2);
-          await this.gb.run(SETTLE_FRAMES);
+          await this.step(SETTLE_FRAMES);
           this.say(how === 'nomove'
             ? 'nothing gentle enough to weaken it with' : 'throwing as it is');
         }
@@ -209,43 +251,8 @@ export function withJobs(Base) {
     const stats = { thrown: r.thrown || 0, chips: r.chips || 0,
                     seconds: ((Date.now() - started) / 1000).toFixed(1) };
     const balls = (n) => `${n} ${r.ballName}${n === 1 ? '' : 's'}`;
-    switch (r.outcome) {
-      case 'caught':
-        return { ok: true, stats,
-                 message: `caught ${r.name}${r.level ? ` Lv${r.level}` : ''} `
-                          + `with ${balls(r.thrown)}` };
-      case 'nobattle':
-        return { ok: false, stats, message: 'not in a battle' };
-      case 'trainer':
-        return { ok: false, stats,
-                 message: "that is a trainer's Pokémon — it cannot be caught" };
-      case 'full':
-        return { ok: false, stats, message:
-          'the party is full — a caught Pokémon would go to the PC, '
-          + 'which this does not handle. Free a slot first.' };
-      case 'noballs':
-        return { ok: false, stats, message: 'no balls of that kind in the bag' };
-      case 'nopack':
-        return { ok: false, stats,
-                 message: 'could not reach the ball in the pack' };
-      case 'ranout':
-        return { ok: false, stats,
-                 message: `used ${balls(r.thrown)} and then had none left` };
-      case 'knockedOut':
-        return { ok: false, stats, message: `knocked the ${r.name} out` };
-      case 'gone':
-        return { ok: false, stats, message: `the ${r.name} got away` };
-      case 'lost':
-        return { ok: false, stats,
-                 message: `your lead fainted before the ${r.name} could be caught` };
-      case 'stuck':
-        return { ok: false, stats, message: 'lost track of the battle' };
-      case 'cancelled':
-        return { ok: false, stats, message: 'stopped' };
-      default:
-        return { ok: false, stats,
-                 message: `used ${balls(r.thrown)} without catching it` };
-    }
+    const how = captureOutcome(r.outcome);
+    return { ok: !!how.ok, stats, message: how.say(r, balls) };
   }
 
   /**
@@ -319,7 +326,7 @@ export function withJobs(Base) {
           return { ok: false, stats,
                    message: 'no wild Pokemon appeared — are you standing in grass?' };
         }
-        await this.gb.run(40);
+        await this.step(40);
         s = await this.snap();
       }
       stats.encounters++;
@@ -339,43 +346,33 @@ export function withJobs(Base) {
       stats.thrown += r.thrown || 0;
       if (r.chips) stats.chips = (stats.chips || 0) + r.chips;
 
+      const balls = (n) => `${n} ${ballName}${n === 1 ? '' : 's'}`;
+      const how = captureOutcome(r.outcome);
       if (r.outcome === 'caught') {
         stats.spent = stats.thrown;
         stats.seconds = ((Date.now() - started) / 1000).toFixed(1);
-        return { ok: true, stats,
-                 message: `caught ${name}${r.level ? ` Lv${r.level}` : ''} `
-                          + `with ${stats.spent} ${ballName}`
-                          + `${stats.spent === 1 ? '' : 's'}` };
+        return { ok: true, stats, message: how.say({ ...r, name }, balls) };
       }
-      if (r.outcome === 'knockedOut') {
-        // Not a failure worth stopping for: there is another one in the grass.
-        stats.knockedOut = (stats.knockedOut || 0) + 1;
-        this.say(`knocked the ${name} out — looking for another`);
+      if (!how.stop) {
+        // Bad luck rather than a reason to give up: there is another one in the
+        // grass. The table decides which outcomes those are, so a hunt and a
+        // single catch cannot disagree about it by accident.
+        if (r.outcome === 'knockedOut') {
+          stats.knockedOut = (stats.knockedOut || 0) + 1;
+        }
+        this.say(`${how.say({ ...r, name }, balls)} \u2014 looking for another`);
         await this.settleText();
         continue;
       }
-      if (r.outcome === 'gone') {
-        this.say(`${name} got away`);
-        continue;
-      }
-      if (r.outcome === 'nopack') {
-        return { ok: false, stats,
-                 message: 'could not reach the ball in the pack' };
-      }
-      if (r.outcome === 'ranout') {
-        return { ok: false, stats, message:
-          `used ${stats.thrown} ${ballName}${stats.thrown === 1 ? '' : 's'} `
-          + 'and then had none left' };
-      }
-      if (r.outcome === 'stuck') {
-        return { ok: false, stats, message: 'lost track of the battle' };
-      }
       if (r.outcome === 'lost') {
-        // Stop. Unlike a grind this has no heal hook, so carrying on would
-        // walk into the next encounter with a fainted lead and spend the rest
-        // of the budget answering party screens.
+        // Unlike a grind this has no heal hook, so carrying on would walk into
+        // the next encounter with a fainted lead and spend the rest of the
+        // budget answering party screens.
         return { ok: false, stats,
-                 message: 'your lead fainted while weakening — heal and retry' };
+                 message: 'your lead fainted while weakening \u2014 heal and retry' };
+      }
+      if (r.outcome !== 'budget') {
+        return { ok: false, stats, message: how.say({ ...r, name }, balls) };
       }
       if (stats.thrown >= maxBalls) {
         return { ok: false, stats,

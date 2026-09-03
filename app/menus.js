@@ -24,7 +24,7 @@ export function withMenus(Base) {
    * see their own intro and pick their own name; see main.js.
    */
   async continueGame(maxFrames = 20000) {
-    await this.gb.run(2500);
+    await this.step(2500);
     let spent = 2500;
     // Two different checks at two different rates. "Has the world loaded?"
     // needs a whole snapshot, which is expensive, and being a few presses late
@@ -33,13 +33,13 @@ export function withMenus(Base) {
     // choice, and one stray A takes NEW NAME and drops us in the letter grid.
     for (let i = 0; spent < maxFrames; i++) {
       if (await this.takeNameMenu()) continue;
-      await this.gb.press('A', 5, 8);
+      await this.push('A', 5, 8);
       await this.pump();
       spent += 13;
       if (i % 10 !== 0) continue;
       const s = await this.snap();
       if (s.worldLoaded) {
-        await this.gb.run(30);
+        await this.step(30);
         return true;
       }
     }
@@ -68,12 +68,12 @@ export function withMenus(Base) {
         this.state.menuWindow.addr, this.state.menuWindow.len);
       const cur = this.state.menuCursorY(now);
       if (cur === NAME_MENU_FIRST_PRESET) {
-        await this.gb.press('A', 6, 20);
+        await this.push('A', 6, 20);
         this.named = true;
         this.say('picked one of the game\'s own names');
         return true;
       }
-      await this.gb.press(cur < NAME_MENU_FIRST_PRESET ? 'DOWN' : 'UP', 4, 6);
+      await this.push(cur < NAME_MENU_FIRST_PRESET ? 'DOWN' : 'UP', 4, 6);
     }
     return false;
   }
@@ -87,14 +87,14 @@ export function withMenus(Base) {
    * and the A behind it answers yes, which is the exact failure being avoided.
    */
   async declineNickname(tries = 14) {
-    await this.gb.run(24);
+    await this.step(24);
     for (let i = 0; i < tries; i++) {
       const s = await this.snap();
       if (!s.windowOpen) return false;
       const row = s.menu[1];
-      if (row === 2) { await this.gb.press('A', 6, 10); return true; }
-      if (row === 0) { await this.gb.run(6); continue; }
-      await this.gb.press('DOWN', 4, 6);
+      if (row === 2) { await this.push('A', 6, 10); return true; }
+      if (row === 0) { await this.step(6); continue; }
+      await this.push('DOWN', 4, 6);
     }
     return false;
   }
@@ -161,7 +161,7 @@ export function withMenus(Base) {
         this.say('the menu went through but the battery did not change');
       }
       await this.closeMenus(6);
-      await this.gb.run(SETTLE_FRAMES);
+      await this.step(SETTLE_FRAMES);
     }
     if (this.cancelled) return { ok: false, message: 'stopped' };
     return { ok: false, message: 'could not get the game to save' };
@@ -192,8 +192,8 @@ export function withMenus(Base) {
     if (!await this._openStartMenu()) return false;
     if (!await this._driveMenuCursor(row, count)) return false;
 
-    await this.gb.press('A', 5, 10);
-    await this.gb.run(SAVE_PROMPT_FRAMES);
+    await this.push('A', 5, 10);
+    await this.step(SAVE_PROMPT_FRAMES);
 
     // "Would you like to save the game?" -- YES is preselected, and the box is
     // not interactive the moment it appears. Waiting for its cursor is the
@@ -201,9 +201,9 @@ export function withMenus(Base) {
     // and the next one answers something else.
     for (let i = 0; i < SAVE_CONFIRM_TRIES; i++) {
       if (await this.menuCursor() === 1) break;
-      await this.gb.run(6);
+      await this.step(6);
     }
-    await this.gb.press('A', 5, 10);
+    await this.push('A', 5, 10);
     await this.settleText();
 
     // Back in the world with no window open is what a finished save looks like.
@@ -214,9 +214,9 @@ export function withMenus(Base) {
   /** Open the START menu and confirm it really opened. */
   async _openStartMenu(tries = 3) {
     for (let attempt = 0; attempt < tries; attempt++) {
-      await this.gb.press('START', 5, 10);
+      await this.push('START', 5, 10);
       for (let i = 0; i < MENU_OPEN_TRIES; i++) {
-        await this.gb.run(6);
+        await this.step(6);
         if (await this.menuCursor() !== 0) return true;
       }
     }
@@ -239,7 +239,7 @@ export function withMenus(Base) {
       const cur = await this.menuCursor();
       if (seen.includes(cur)) break;
       seen.push(cur);
-      await this.gb.press('DOWN', 5, 8);
+      await this.push('DOWN', 5, 8);
       const now = (await this.snap()).pos;
       if (now[0] !== start[0] || now[1] !== start[1]) {
         this.say('the START menu was not open — the player moved');
@@ -252,7 +252,7 @@ export function withMenus(Base) {
   async _driveMenuCursor(target, count) {
     for (let i = 0; i < count + 2; i++) {
       if (await this.menuCursor() === target) return true;
-      await this.gb.press('DOWN', 5, 8);
+      await this.push('DOWN', 5, 8);
     }
     return await this.menuCursor() === target;
   }
@@ -270,8 +270,8 @@ export function withMenus(Base) {
     for (let i = 0; i < rounds && !this.cancelled; i++) {
       const s = await this.snap();
       if (s.worldLoaded) return true;
-      await this.gb.press(i % 2 === 0 ? 'START' : 'A', 6, 12);
-      await this.gb.run(90);
+      await this.push(i % 2 === 0 ? 'START' : 'A', 6, 12);
+      await this.step(90);
     }
     return (await this.snap()).worldLoaded;
   }

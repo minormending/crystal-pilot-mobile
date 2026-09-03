@@ -62,7 +62,7 @@ export function withBattle(Base) {
   async paceUntilBattle(maxSteps = 400) {
     let dir = 'LEFT';
     for (let i = 0; i < maxSteps && !this.cancelled; i++) {
-      await this.gb.press(dir, 10, 4);
+      await this.push(dir, 10, 4);
       await this.pump();
       const s = await this.snap();
       if (s.inBattle) return s;
@@ -87,12 +87,12 @@ export function withBattle(Base) {
    * the moment the menu is live, so a high ceiling costs nothing.
    */
   async awaitBattleMenu(tries = 150) {
-    await this.gb.run(40);
+    await this.step(40);
     for (let i = 0; i < tries; i++) {
       const s = await this.snap();
       if (!s.inBattle) return null;
       if (Tasks.menuIsLive(s)) return s;
-      await this.gb.press('A', 4, 6);   // push through text
+      await this.push('A', 4, 6);   // push through text
     }
     return null;
   }
@@ -105,10 +105,10 @@ export function withBattle(Base) {
       const s = await this.snap();
       const [x, y] = s.menu;
       if (x === wantX && y === wantY) break;
-      if (x !== wantX) await this.gb.press(wantX > x ? 'RIGHT' : 'LEFT', 4, 6);
-      else if (y !== wantY) await this.gb.press(wantY > y ? 'DOWN' : 'UP', 4, 6);
+      if (x !== wantX) await this.push(wantX > x ? 'RIGHT' : 'LEFT', 4, 6);
+      else if (y !== wantY) await this.push(wantY > y ? 'DOWN' : 'UP', 4, 6);
     }
-    await this.gb.press('A', 6, 10);
+    await this.push('A', 6, 10);
   }
 
   /** Pick a move with PP left. The move menu is a wrapping vertical list. */
@@ -123,14 +123,14 @@ export function withBattle(Base) {
       ? (prefer ? prefer(usable, mon) : usable[0])
       : -1;
     if (idx < 0) {                 // everything is out of PP: the game forces Struggle
-      await this.gb.press('A', 6, 10);
+      await this.push('A', 6, 10);
       return -1;
     }
     const target = idx + 1;
     for (let i = 0; i < 6; i++) {
       const s = await this.snap();
       if (s.menu[1] === target) break;
-      await this.gb.press('DOWN', 4, 6);
+      await this.push('DOWN', 4, 6);
     }
     // Confirm only if the cursor really is on the move we meant. Pressing A
     // regardless picks whatever is highlighted, and when that is a move with no
@@ -138,10 +138,10 @@ export function withBattle(Base) {
     // fresh turn, so it was chosen again, forever. Eighty-four "battles" in one
     // grind were that same refusal.
     if ((await this.snap()).menu[1] !== target) {
-      await this.gb.press('B', 4, 8);
+      await this.push('B', 4, 8);
       return null;
     }
-    await this.gb.press('A', 6, 10);
+    await this.push('A', 6, 10);
     return idx;
   }
 
@@ -154,7 +154,7 @@ export function withBattle(Base) {
    * victories while the party sat at 0 HP.
    */
   async _outcome() {
-    await this.gb.run(20);                      // let the last HP write land
+    await this.step(20);                      // let the last HP write land
     const s = await this.snap();
     if (s.inBattle) return 'stuck';
     if (s.party.length && s.party.every((m) => m.hp === 0)) return 'lost';
@@ -201,8 +201,8 @@ export function withBattle(Base) {
     // fainted lead. Pressed by hand with a pause between each one it worked
     // first time, which is what pointed at the gap rather than the buttons.
     const nudge = async (button, hold = PARTY_HOLD) => {
-      await this.gb.press(button, hold, PARTY_GAP);
-      await this.gb.run(PARTY_SETTLE);
+      await this.push(button, hold, PARTY_GAP);
+      await this.step(PARTY_SETTLE);
     };
 
     await nudge('B', 6);                 // clear whatever text is still up
@@ -215,7 +215,7 @@ export function withBattle(Base) {
         if (!now.inBattle) return 'ended';
         if (now.active.maxHp > 0 && now.active.hp > 0) return 'ok';
         if (i > 2 && Tasks.menuIsLive(now)) return 'ok';
-        await this.gb.press('A', 4, 6);
+        await this.push('A', 4, 6);
         await this.pump();
       }
       // Nothing came out, so that slot was refused. Clear the message, step
@@ -250,14 +250,14 @@ export function withBattle(Base) {
       if (menu === null) return this._outcome();
       if (menu.party.length && menu.party.every((m) => m.hp === 0)) return 'lost';
       await this.chooseAction(FIGHT);
-      await this.gb.run(30);
+      await this.step(30);
       let inMoves = await this.snap();
       // No move menu means something is still on screen -- most often the
       // message refusing the move just picked. Back out and look again rather
       // than pressing A into it, which only re-picks the refused move.
       if (inMoves.inBattle && inMoves.menu[1] < 1) {
-        await this.gb.press('B', 4, 8);
-        await this.gb.run(30);
+        await this.push('B', 4, 8);
+        await this.step(30);
         inMoves = await this.snap();
       }
       if (inMoves.inBattle && inMoves.menu[1] >= 1) {
@@ -271,7 +271,7 @@ export function withBattle(Base) {
         const s = await this.snap();
         if (!s.inBattle) return this._outcome();
         if (i > 3 && Tasks.menuIsLive(s)) break;
-        await this.gb.press('A', 4, 6);
+        await this.push('A', 4, 6);
         await this.pump();
       }
     }
@@ -327,11 +327,11 @@ export function withBattle(Base) {
     if (!mon.moves.some((_, i) => canChip(i))) return 'nomove';
 
     await this.chooseAction(FIGHT);
-    await this.gb.run(30);
+    await this.step(30);
     let inMoves = await this.snap();
     if (inMoves.inBattle && inMoves.menu[1] < 1) {
-      await this.gb.press('B', 4, 8);
-      await this.gb.run(30);
+      await this.push('B', 4, 8);
+      await this.step(30);
       inMoves = await this.snap();
     }
     if (!inMoves.inBattle) return 'ended';
@@ -350,7 +350,7 @@ export function withBattle(Base) {
       if (!now.inBattle) return 'ended';
       if (now.enemy.hp === 0) return 'fainted';
       if (i > 3 && Tasks.menuIsLive(now)) return 'ok';
-      await this.gb.press('A', 4, 6);
+      await this.push('A', 4, 6);
       await this.pump();
     }
     return 'stuck';
@@ -373,7 +373,7 @@ export function withBattle(Base) {
         const s = await this.snap();
         if (!s.inBattle) return true;
         if (i > 3 && Tasks.menuIsLive(s)) break;   // it refused; ask again
-        await this.gb.press('A', 4, 6);
+        await this.push('A', 4, 6);
         await this.pump();
       }
     }
@@ -398,7 +398,7 @@ export function withBattle(Base) {
     // this did not.
     if (await this.awaitBattleMenu() === null) return false;
     await this.chooseAction(PACK);
-    await this.gb.run(60);
+    await this.step(60);
     let s = await this.snap();
     if ((s.curItem === 0 || s.curItem === 0xff) && s.curPocket > 3) {
       await this.closeMenus();          // the pack never opened
@@ -409,10 +409,10 @@ export function withBattle(Base) {
     // that stale value is what broke this: the pack was already sitting on the
     // ball, the stale read said otherwise, and the cursor was walked off the end
     // of a one-item list.
-    const settled = async () => { await this.gb.run(SETTLE_FRAMES); return this.snap(); };
+    const settled = async () => { await this.step(SETTLE_FRAMES); return this.snap(); };
 
     for (let i = 0; i < 10 && s.curPocket !== BALL_POCKET; i++) {
-      await this.gb.press('RIGHT', 4, 8);
+      await this.push('RIGHT', 4, 8);
       s = await settled();
     }
     if (s.curPocket !== BALL_POCKET) { await this.closeMenus(); return false; }
@@ -422,20 +422,20 @@ export function withBattle(Base) {
     // through. The pocket opens on its first item, so usually nothing to do.
     for (let i = 0; i < 12 && s.curItem !== ballId; i++) {
       if (s.curItem === CANCEL_ITEM) {
-        await this.gb.press('UP', 4, 8);
+        await this.push('UP', 4, 8);
         s = await settled();
         if (s.curItem === ballId) break;
         await this.closeMenus();
         return false;
       }
-      await this.gb.press('DOWN', 4, 8);
+      await this.push('DOWN', 4, 8);
       s = await settled();
     }
     if (s.curItem !== ballId) { await this.closeMenus(); return false; }
-    await this.gb.press('A', 6, 10);
-    await this.gb.run(40);              // USE / QUIT, cursor starts on USE
-    await this.gb.press('A', 6, 10);
-    await this.gb.run(40);
+    await this.push('A', 6, 10);
+    await this.step(40);              // USE / QUIT, cursor starts on USE
+    await this.push('A', 6, 10);
+    await this.step(40);
     return true;
   }
 
@@ -465,7 +465,7 @@ export function withBattle(Base) {
         await this.settleText();
         return 'caught';
       }
-      await this.gb.press('A', 4, 6);
+      await this.push('A', 4, 6);
       await this.pump();
     }
     return 'stuck';
