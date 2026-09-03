@@ -2,11 +2,12 @@
 import { GameBoy } from './gb.js';
 import { SHARED_SYMBOLS, Symbols } from './symbols.js';
 import { describeHandoff, describeReplaced, describeRoom, describeRows,
-         describeSlot, describeUndo, joinFailure } from './rows.js';
+         describeScreen, describeSlot, describeUndo, joinFailure } from './rows.js';
 import { VERSION } from './version.js';
 import { forgetKept, keepBattery, keepRom, keepSym, keptMeta, readOpts, recall,
          sanitise, writeOpts } from './remember.js';
 import { chosenName, openRoom, wasSharing } from './room.js';
+import { createHost, createWatcher } from './stream.js';
 import { Cancelled } from './taskbase.js';
 import { REPLACED_SLOT, Saves, SLOT_IDS, UNDO_SLOT } from './saves.js';
 import { GameState, TRAINER_BATTLE, MAX_PARTY } from './state.js';
@@ -56,6 +57,30 @@ let optionsPending = false;
 let room = null;
 // Set when the Firebase SDK could not be fetched -- an offline first load.
 let roomUnavailable = false;
+// Showing this screen to another device, or watching one. Never both: a device
+// that is watching has no game of its own to show.
+let host = null, watcher = null;
+// What the room last said about who is showing a screen, and who asked to see
+// one. The handshake is three notes long and each device writes two of them.
+let signal = {};
+// True while the device we are watching says its screen is off. It cannot send
+// a picture then -- a hidden page runs about one frame a second -- so it says
+// so instead, and the row stops pretending.
+let hostAsleep = false;
+// Which note each side has already acted on. A room is a mailbox, not a
+// stream: notes stay where they were left, so both devices see every note
+// again on every change and would answer the same offer forever. Worse, a note
+// left behind by a session that has since reloaded blocked the next one --
+// measured, with a watcher that could never be offered a picture because an
+// offer addressed to the device it used to be was still sitting there.
+let offeredTo = null, answeredAt = 0, acceptedAt = 0;
+let watchTimer = null;
+// The button names the on-screen pad offers, which is the only set a press
+// arriving from another device is allowed to be. It comes from the markup for
+// the same reason check-app reads it from there: that is where the canonical
+// spelling lives.
+const PAD_BUTTONS = new Set(
+  [...document.querySelectorAll('[data-btn]')].map((b) => b.dataset.btn));
 // What the room is holding, as metadata. Kept rather than asked for on every
 // paint because a peek is cheap only if nothing unpacks the payload.
 let sharedSave = null;
@@ -494,6 +519,195 @@ async function paintReplaced() {
 }
 
 $('#restorereplaced').onclick = () => loadSlot(REPLACED_SLOT, 'the replaced game');
+
+// --- showing this screen to your other device --------------------------------
+//
+// The picture goes straight between the two devices; the room only introduces
+// them. Three notes, and each device writes two of them: the watcher asks, the
+// host offers, the watcher answers. Then the notes are cleared, because a
+// stale offer in a room is an introduction to a connection that no longer
+// exists.
+
+/** Who is showing a screen right now, as far as the room knows. */
+function screenState() {
+  const showing = signal.showing;
+  const mine = showing && room && showing.id === room.id;
+  return {
+    hosting: !!host,
+    watching: !!watcher,
+    host: showing && !mine ? showing.by : null,
+    viewer: host && signal.watching ? signal.watching.by : null,
+    asleep: hostAsleep,
+  };
+}
+
+function paintScreen() {
+  const row = $('#screenrow'), btn = $('#screenshare');
+  if (!row) return;
+  row.classList.toggle('hide', !room);
+  const said = describeScreen(screenState());
+  $('#screenstate').textContent = said.text;
+  btn.textContent = said.button;
+}
+
+/**
+ * Start showing this screen.
+ *
+ * Announced rather than connected: there is nobody to connect to yet. The
+ * offer is made when a device asks, because an offer is only good for the one
+ * device it was made for.
+ */
+function showScreen() {
+  if (!room) return;
+  host = createHost({
+    canvas: $('#screen'),
+    onInput: applyRemoteInput,
+    onStatus: (st) => {
+      if (st === 'failed' || st === 'closed') progress('the watching device dropped');
+      paintScreen();
+    },
+  });
+  // Anything left over from a session that has since reloaded is cleared with
+  // the same write that announces this one: a stale offer is an introduction
+  // to a connection that no longer exists.
+  offeredTo = null;
+  answeredAt = 0;
+  acceptedAt = 0;
+  room.signal({ showing: { id: room.id, by: room.device }, offer: null, answer: null,
+                watching: null });
+  paintScreen();
+  progress('showing this screen — press Watch on your other device');
+}
+
+function stopScreen() {
+  clearTimeout(watchTimer);
+  if (host) { host.stop(); host = null; }
+  if (watcher) { watcher.stop(); watcher = null; }
+  hostAsleep = false;
+  $('#remote').classList.add('hide');
+  $('#screen').classList.remove('hide');
+  if (room) room.signal({ showing: null, watching: null, offer: null, answer: null });
+  gb.releaseAll();
+  syncHeld();
+  paintScreen();
+}
+
+/** Ask the device that is showing to include this one. */
+function watchScreen() {
+  if (!room || !signal.showing) return;
+  // A connection that is going to work is up in a second or two on the same
+  // wifi. One still trying after this is one that needs a relay nobody here
+  // is running, and saying so beats a spinner: across networks, and behind
+  // some routers, this does not connect at all.
+  clearTimeout(watchTimer);
+  watchTimer = setTimeout(() => {
+    if (watcher && watcher.state !== 'connected') {
+      progress('could not reach the other device — this works on one wifi, and '
+        + 'across networks it often will not');
+    }
+  }, 15000);
+  watcher = createWatcher({
+    onTrack: (stream) => {
+      const v = $('#remote');
+      v.srcObject = stream;
+      v.classList.remove('hide');
+      $('#screen').classList.add('hide');
+      $('#screenwrap').classList.remove('hide');
+      $('#ctrls').classList.remove('hide');
+      paintScreen();
+    },
+    onTell: (msg) => {
+      if (msg && msg.t === 'asleep') { hostAsleep = !!msg.v; paintScreen(); }
+    },
+    onStatus: (st) => {
+      if (st === 'failed') {
+        progress('could not reach the other device — same wifi works, across '
+          + 'networks may not');
+      }
+      paintScreen();
+    },
+  });
+  room.signal({ watching: { id: room.id, by: room.device } });
+  paintScreen();
+}
+
+/**
+ * A button from the device that is watching.
+ *
+ * Checked against the pad's own names, because this arrives over a room and an
+ * unknown name would be handed to the core, which ignores it silently -- the
+ * exact failure check-app exists to catch in this app's own code. And ignored
+ * while a job is running, for the same reason the local pad is: the pilot owns
+ * the joypad until it is finished.
+ */
+function applyRemoteInput(msg) {
+  if (!host || !msg) return;
+  if (msg.t === 'gone') { gb.releaseAll(); syncHeld(); return; }
+  if (!PAD_BUTTONS.has(msg.b)) return;
+  if (running) return;
+  if (msg.t === 'hold') gb.hold(msg.b);
+  else if (msg.t === 'release') gb.release(msg.b);
+  syncHeld();
+}
+
+/**
+ * Work through whatever the room is saying about screens.
+ *
+ * Both sides run this on every change, and each acts only on the note addressed
+ * to it -- which is why the handshake needs no ordering beyond "is this for
+ * me?".
+ */
+async function onSignal(rtc) {
+  signal = rtc || {};
+  paintScreen();
+  if (!room) return;
+  const me = room.id;
+  try {
+    // Host: somebody is asking, and it is not the device this connection was
+    // made for. An offer is only good for the device it was made for, so a new
+    // asker gets a new one rather than the old one being left to fail.
+    if (host && signal.watching && signal.watching.id !== offeredTo) {
+      offeredTo = signal.watching.id;
+      answeredAt = 0;
+      acceptedAt = 0;
+      const offer = await host.offer();
+      room.signal({ offer: { to: offeredTo, sdp: offer } });
+      return;
+    }
+    // Watcher: an offer addressed to this device that it has not answered.
+    if (watcher && signal.offer && signal.offer.to === me
+        && (signal.offer.at || 0) > answeredAt) {
+      answeredAt = signal.offer.at || Date.now();
+      const answer = await watcher.answer(signal.offer.sdp);
+      room.signal({ answer: { from: me, sdp: answer } });
+      return;
+    }
+    // Host: the answer to the offer it actually made. After this the picture is
+    // flowing and the notes are litter -- but `showing` stays, because that is
+    // what tells a third device there is a screen to ask for.
+    if (host && signal.answer && signal.answer.from === offeredTo
+        && (signal.answer.at || 0) > acceptedAt) {
+      acceptedAt = signal.answer.at || Date.now();
+      await host.accept(signal.answer.sdp);
+      room.signal({ offer: null, answer: null });
+    }
+  } catch (e) {
+    progress(`could not set up the picture: ${e && e.message ? e.message : e}`);
+  }
+}
+
+$('#screenshare').onclick = () => {
+  const said = describeScreen(screenState());
+  if (said.button === 'Show') showScreen();
+  else if (said.button === 'Watch') watchScreen();
+  else stopScreen();
+};
+
+// A hidden page runs about one frame a second, so a host that goes away says
+// so rather than sending a still picture and letting the other end guess.
+document.addEventListener('visibilitychange', () => {
+  if (host) host.tell({ t: 'asleep', v: document.hidden });
+});
 
 /** Say what the room is holding, and offer to take it if it is ahead. */
 async function paintHandoff() {
@@ -955,11 +1169,16 @@ function syncHeld() {
 
 function hold(button) {
   if (running) return;
+  // Watching means this device has no game: the joypad belongs to the one that
+  // does. The same two functions every pad and key already go through, so
+  // nothing else in the app has to know which machine it is talking to.
+  if (watcher) { watcher.press({ t: 'hold', b: button }); return; }
   gb.hold(button);
   syncHeld();
 }
 
 function release(button) {
+  if (watcher) { watcher.press({ t: 'release', b: button }); return; }
   gb.release(button);
   syncHeld();
 }
@@ -1620,6 +1839,7 @@ function paintLoader() {
 function paintRoom() {
   paintHandoff();
   paintLoader();
+  paintScreen();
   const nameRow = $('#namerow');
   if (nameRow) {
     nameRow.classList.toggle('hide', !(room && room.code));
@@ -1652,6 +1872,7 @@ async function ensureRoom() {
     // A digest can arrive after the ROM was picked, so this is a second chance
     // rather than only a first one.
     onSymbols: () => { paintLoader(); symbolsFromRoom(); },
+    onSignal,
     onStatus: paintRoom,
   });
   if (!room) roomUnavailable = true;
@@ -2029,4 +2250,9 @@ window.PILOT = {
   // Exposed for the same reason as the rest of this object: so the version
   // check can be driven and watched rather than reasoned about.
   showVersion,
+  // Same again for the picture. A connection either carries frames or does
+  // not, and the only way to know which is to ask the connection -- from a
+  // console, or from whatever is driving the two devices in a test.
+  get host() { return host; },
+  get watcher() { return watcher; },
 };

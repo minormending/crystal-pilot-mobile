@@ -221,3 +221,27 @@ export function describeReplaced(meta) {
   if (!meta) return { text: '', enabled: false, show: false };
   return { text: describeSlot(meta), enabled: true, show: true };
 }
+
+/**
+ * What the screen-sharing row says, and what its button offers.
+ *
+ * Five states, and the two that matter most are the ones that are not about
+ * this device: someone else is showing, and you are watching them. The others
+ * only have to stay out of the way.
+ */
+export function describeScreen({ hosting = false, watching = false, host = null,
+                                 viewer = null, asleep = false } = {}) {
+  if (hosting) {
+    return viewer
+      ? { text: `showing this screen to ${viewer}`, button: 'Stop' }
+      : { text: 'showing this screen — press Watch on the other device',
+          button: 'Stop' };
+  }
+  if (watching) {
+    return asleep
+      ? { text: `${host || 'the other device'} has its screen off`, button: 'Leave' }
+      : { text: `watching ${host || 'the other device'}`, button: 'Leave' };
+  }
+  if (host) return { text: `${host} is showing its screen`, button: 'Watch' };
+  return { text: 'not showing this screen', button: 'Show' };
+}

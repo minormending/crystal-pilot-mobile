@@ -92,9 +92,9 @@ of the subtleties in sections 6 and 7.
 
 ## 2. The shape of it
 
-<!-- covers-api: app/main.js app/bootstrap.js app/tasks.js app/nav.js app/world.js app/collision.js app/state.js app/romdata.js app/symbols.js app/gb.js @ 7056b4a352a9 -->
+<!-- covers-api: app/main.js app/bootstrap.js app/tasks.js app/nav.js app/world.js app/collision.js app/state.js app/romdata.js app/symbols.js app/gb.js @ 409418ac980b -->
 
-Nineteen modules. Arrows point from a module to the ones it imports.
+Twenty modules. Arrows point from a module to the ones it imports.
 
 ```mermaid
 flowchart TD
@@ -109,6 +109,7 @@ flowchart TD
     ver["version.js<br/>which build this is"]
     rem["remember.js<br/>what survives a reload"]
     room["room.js<br/>sharing between your devices"]
+    stream["stream.js<br/>this screen, on another device"]
     nav["nav.js<br/>walking"]
     world["world.js<br/>map graph"]
     coll["collision.js<br/>what is walkable"]
@@ -124,6 +125,7 @@ flowchart TD
     main --> ver
     main --> rem
     main --> room
+    main --> stream
     main --> nav
     main --> world
     main --> coll
@@ -168,6 +170,7 @@ flowchart TD
 | `version.js` | "which build am I running?" |
 | `remember.js` | "what did they choose last time?" |
 | `room.js` | "what has my other device chosen?" |
+| `stream.js` | "can I watch, and play, from the other one?" |
 | `main.js` | everything the person holding the phone touches |
 
 The dependency direction is the design: **nothing below `tasks.js` knows what a
@@ -1194,7 +1197,7 @@ the bag" rather than "did we gain any".
 
 ## 9. The interface
 
-<!-- covers: app/main.js index.html @ 38b8d56eef56 -->
+<!-- covers: app/main.js index.html @ 69222255bf37 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -1455,7 +1458,7 @@ must not read as "wipe everything".
 
 ### Sharing between your own devices
 
-<!-- covers: app/room.js sync/kidsync.js @ 4b6a9b513135 -->
+<!-- covers: app/room.js sync/kidsync.js @ 619b09847e62 -->
 
 One person with a phone and a tablet, no accounts: a room code is the whole
 mechanism. `sync/` is [kidsync](https://github.com/minormending/kidsync)
@@ -1499,7 +1502,7 @@ next quiet refresh.
 
 ### Handing the save over
 
-<!-- covers: app/room.js baton/baton.js baton/codec.js @ b1e38b4a226f -->
+<!-- covers: app/room.js baton/baton.js baton/codec.js @ 56e8fa34e38d -->
 
 The same room carries the save, through
 [baton](https://github.com/minormending/baton) vendored in `baton/`. kidsync
@@ -1548,6 +1551,94 @@ about 1,200. Compression is what makes it possible and is not a guarantee, so
 `publish` refuses with the numbers and writes nothing — the save is still kept
 on the device, and the other one must not be left showing an older game with no
 explanation.
+
+### Watching the other device's screen
+
+<!-- covers: app/stream.js @ 73982cbe3aeb -->
+
+One device shows its screen; the other watches it and can play. The picture
+goes straight between them over WebRTC and never touches a server — the room
+only introduces them, three notes of a few kilobytes each, and `stream.js`
+never touches the room. The caller passes the two descriptions back and forth,
+the same way `baton` knows nothing about Firebase.
+
+```mermaid
+sequenceDiagram
+    participant W as watcher
+    participant R as room
+    participant H as host
+    H->>R: showing · {id, by}
+    Note over W: the row offers Watch
+    W->>R: watching · {id, by}
+    H->>H: captureStream(30), data channel, offer
+    H->>R: offer · {to: watcher, sdp}
+    W->>R: answer · {from: watcher, sdp}
+    H->>H: accept — the picture flows, direct
+    H->>R: offer/answer cleared
+    W-->>H: joypad, over the data channel
+```
+
+**A room is a mailbox, not a stream.** Notes stay where they are left, so both
+devices see every note again on every change — and a note from a session that
+has since reloaded is worse than noise. Each side records which one it has
+acted on, and the host offers again whenever the device asking is not the one
+it last offered to. Without that, a watcher that reloaded could never be shown
+anything: an offer addressed to the device it used to be sat in the room
+forever, blocking the next one.
+
+**The joypad routes through the two functions the pad already used.** `hold`
+and `release` send over the data channel when this device is watching, and
+nothing else in the app knows which machine it is talking to. Buttons arriving
+the other way are checked against the pad's own names before they reach the
+core — an unknown name is ignored silently by the core, which is the exact
+failure `check-app` exists to catch in this app's own code — and ignored
+entirely while a job is running, because the pilot owns the joypad until it
+finishes.
+
+<details>
+<summary><b>Advanced detail:</b> why the host has to be awake, measured</summary>
+
+The obvious worry is that a hidden page stops capturing. It does not: a probe
+page painting a canvas on a timer, captured and sent over a loopback peer
+connection, delivered **5 frames in 4 seconds** while hidden. What it also did
+was paint 8 times in those 4 seconds instead of 120 — because a hidden page is
+throttled whole: timers clamped to about one a second, animation frames absent
+altogether.
+
+So a backgrounded host does not go silent, it goes *slow*, which is worse:
+the watcher sees a picture that looks live and is a second or more behind, on a
+game that is itself running at one frame a second. On top of that this app's
+own `gb.run` skips the drawing when hidden — deliberately, because there is
+nothing to draw for a screen nobody is looking at — so the canvas would not
+change at all.
+
+Rather than pretend, the host sends `{t:'asleep'}` on `visibilitychange` and
+the watching row says the other device's screen is off. Hosting means a
+foreground tab with the screen awake, and that is a property of browsers rather
+than of this code.
+
+</details>
+
+<details>
+<summary><b>Advanced detail:</b> what could not be verified here, and why</summary>
+
+Everything up to the media is verified between two origins standing in for two
+devices: the three-note handshake, both sides' rows, the video element taking
+the canvas's place, the pad appearing on a device with no game, and the stale
+note that used to block a reconnecting watcher.
+
+The picture itself is not, and the reason is the same throttling. In the test
+pane the host's ICE agent never sends its connectivity checks — the watcher's
+pairs succeed and the host's sit in `waiting` with `sent=0` — so the connection
+stalls in `checking` and no frames are encoded. A standalone probe in the same
+browser connects and passes video fine, which places the failure in the
+background tab rather than in this code.
+
+That is worth stating plainly rather than describing this as tested: on two
+real devices on one wifi it should connect in a second or two, and if it does
+not, the row says so after fifteen seconds instead of spinning.
+
+</details>
 
 ### What a handoff replaces, and where it goes
 
@@ -1692,7 +1783,7 @@ git config core.hooksPath .githooks
 
 ### The other checks
 
-<!-- covers: tools/check-app @ f98878a862f2 -->
+<!-- covers: tools/check-app @ 37d3edb8d72c -->
 
 `tools/check-app` runs everything that can be verified without a ROM:
 

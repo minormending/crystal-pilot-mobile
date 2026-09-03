@@ -6,8 +6,8 @@
 // out of the DOM.
 import { fakeRom, symbols, test, worldRam } from '../harness.mjs';
 import { GameState } from '../../app/state.js';
-import { describeHandoff, describeReplaced, describeRoom, joinFailure,
-         describeRows, describeSlot, describeUndo } from '../../app/rows.js';
+import { describeHandoff, describeReplaced, describeRoom, describeScreen,
+         joinFailure, describeRows, describeSlot, describeUndo } from '../../app/rows.js';
 
 const sym = symbols();
 const state = new GameState(sym);
@@ -213,4 +213,27 @@ test('the replaced game is offered back only when there is one', async (t) => {
                                   when: Date.now() });
   t.true(said.show, 'a handoff replaced a game, so the way back is on screen');
   t.contains(said.text, 'Route 29', 'and it says which game it was');
+});
+
+test('the screen row says whose screen, and what pressing it would do', async (t) => {
+  t.eq(describeScreen({}).button, 'Show', 'nobody is showing anything');
+  t.eq(describeScreen({ host: 'iPhone' }).button, 'Watch',
+       'someone else is showing, so this device can ask to see it');
+  t.contains(describeScreen({ host: 'iPhone' }).text, 'iPhone is showing',
+             'and it says who');
+  t.contains(describeScreen({ hosting: true }).text, 'press Watch on the other device',
+             'showing, with nobody watching yet, says what to do next');
+  t.contains(describeScreen({ hosting: true, viewer: 'iPad' }).text, 'to iPad',
+             'and names the device once one is watching');
+  t.eq(describeScreen({ watching: true, host: 'iPhone' }).button, 'Leave',
+       'watching offers the way out');
+});
+
+test('a host with its screen off says so rather than showing a still picture', async (t) => {
+  // A hidden page runs about one frame a second, measured -- so the picture
+  // stops being a picture and starts being a photograph. Saying it beats
+  // letting someone tap a pad that is going nowhere.
+  const said = describeScreen({ watching: true, host: 'iPhone', asleep: true });
+  t.contains(said.text, 'screen off', 'the row explains the frozen picture');
+  t.eq(said.button, 'Leave', 'and leaving is still on offer');
 });

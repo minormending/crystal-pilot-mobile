@@ -1005,6 +1005,30 @@ installs the save and drives CONTINUE, and both rows then read *in step*.
   keeps the save on the device and says so, rather than leaving your other
   device showing an older game for no visible reason.
 
+### Watching it on the other device
+
+Press **Show** on the device with the game and **Watch** on the other one, and
+the second device gets the screen and a working pad — no ROM, no symbol file,
+nothing but the room code. The picture goes straight between the two devices
+over WebRTC; the room only introduces them.
+
+It needs the showing device to be **awake and in the foreground**, and that is
+a browser fact rather than a choice: measured, a hidden page is throttled to
+about one turn a second — timers clamped, animation frames gone — so a
+backgrounded host would send a picture that looks live and is seconds behind.
+When the screen goes off it says so, and the watching row stops pretending.
+
+Two devices on one wifi find each other directly. Across networks they often
+will not: that needs a relay this app does not run, so after fifteen seconds of
+trying it says so rather than spinning.
+
+**The picture itself is the one part of this app not verified end to end.** The
+handshake, both sides' rows, the pad on a device with no game and the swap of
+video for canvas are all tested between two origins; the media path stalls in
+the test browser because a background tab never sends its ICE checks, and a
+standalone probe in the same browser passes video fine. On two real devices it
+should simply work — and if it does not, the row will tell you.
+
 ## Controls
 
 Eight on-screen buttons: the D-pad, A, B, Select and Start. **Press and hold** —

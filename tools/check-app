@@ -534,6 +534,9 @@ BROWSER_GLOBALS = {
     "Promise", "Error", "TypeError", "RangeError", "Set", "Map", "WeakMap",
     "Symbol", "Proxy", "Reflect", "RegExp", "Function", "BigInt",
     "Uint8Array", "Uint16Array", "Int8Array", "Uint8ClampedArray",
+    # Names the platform provides that this app reaches for by name.
+    "RTCPeerConnection", "CompressionStream", "DecompressionStream",
+    "MediaStream", "DataTransfer",
     "Uint32Array", "Int32Array", "Float32Array", "Float64Array",
     "ArrayBuffer", "DataView", "TextEncoder", "TextDecoder",
     "URL", "URLSearchParams", "Blob", "File", "FileReader", "FormData",

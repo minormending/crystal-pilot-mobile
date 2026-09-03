@@ -102,6 +102,28 @@ export function mergeSymbols(local, remote) {
   return (winner && winner.sym) ? { sym: winner.sym } : {};
 }
 
+/**
+ * Keep the newest of each half of an introduction.
+ *
+ * The three fields are written by two different devices -- a watcher asks, the
+ * host offers, the watcher answers -- so a whole-object rule would have each
+ * side's write erase the other's half and the handshake would never complete.
+ * Per-field by stamp, and it settles because comparing two stamps gives the
+ * same answer however often it runs.
+ */
+export function mergeSignal(local, remote) {
+  const a = (local && local.rtc) || {};
+  const b = (remote && remote.rtc) || {};
+  const out = {};
+  for (const k of new Set([...Object.keys(a), ...Object.keys(b)])) {
+    const mine = a[k], theirs = b[k];
+    if (!mine) { out[k] = theirs; continue; }
+    if (!theirs) { out[k] = mine; continue; }
+    out[k] = (theirs.at || 0) > (mine.at || 0) ? theirs : mine;
+  }
+  return Object.keys(out).length ? { rtc: out } : {};
+}
+
 export function mergeOptions(local, remote) {
   const mine = (local && local.optsAt) || 0;
   const theirs = (remote && remote.optsAt) || 0;
@@ -137,8 +159,8 @@ export function wasSharing() { return flag(); }
  * Resolves to null when there is nothing to open or the SDK could not be
  * fetched, and never throws: every caller of this treats sharing as a bonus.
  */
-export async function openRoom({ options, onOptions, onSave, onSymbols,
-                                 onStatus } = {}) {
+export async function openRoom({ options, onOptions, onSave, onSignal,
+                                 onSymbols, onStatus } = {}) {
   let createSync;
   try {
     ({ createSync } = await import('../sync/kidsync.js'));
@@ -170,6 +192,7 @@ export async function openRoom({ options, onOptions, onSave, onSymbols,
     merge: (a, b) => ({
       ...mergeOptions(a, b),
       ...mergeSymbols(a, b),
+      ...mergeSignal(a, b),
       ...(baton ? baton.merge(a, b) : {}),
     }),
     onChange: (state) => {
@@ -183,6 +206,7 @@ export async function openRoom({ options, onOptions, onSave, onSymbols,
       // happens when someone asks for the bytes.
       if (onSave && baton) onSave(baton.peek());
       if (onSymbols && state.sym) onSymbols(state.sym);
+      if (onSignal) onSignal(state.rtc || {});
     },
     onStatus: (s) => { if (onStatus) onStatus(s); },
   });
@@ -203,6 +227,26 @@ export async function openRoom({ options, onOptions, onSave, onSymbols,
     shareSymbols(map, tag) { sync.set({ sym: { map, tag, at: Date.now() } }); },
     /** What the room is offering, or null. The caller checks the tag. */
     symbols() { return (sync.state && sync.state.sym) || null; },
+
+    /**
+     * Leave a note for the other device, on the way to a direct connection.
+     *
+     * Merged field by field and flushed immediately: a handshake sitting in the
+     * debounce is half a second of nothing happening while two people watch a
+     * button they just pressed.
+     */
+    signal(patch) {
+      const now = (sync.state && sync.state.rtc) || {};
+      const next = { ...now };
+      for (const [k, v] of Object.entries(patch)) {
+        if (v === null) delete next[k];
+        else next[k] = { ...v, at: Date.now() };
+      }
+      sync.set({ rtc: next });
+      return sync.flush();
+    },
+    /** Whose device this is, for addressing a note to the other one. */
+    get id() { return sync.deviceId; },
     get device() { return baton.label; },
     /**
      * Call this device something else.
