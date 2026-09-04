@@ -5,8 +5,8 @@
 // under test is the decision made between them, not the button pressing. Each
 // stub records what it was asked to do, so a test can assert on the sequence.
 import { FakeGameBoy, fakeRom, symbols, test, worldRam } from '../harness.mjs';
-import { GameState } from '../../app/state.js';
-import { Tasks } from '../../app/tasks.js';
+import { GameState } from '../../gen2/state.js';
+import { Tasks } from '../../gen2/tasks.js';
 
 const POKE_BALL = 5;
 

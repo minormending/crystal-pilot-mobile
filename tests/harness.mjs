@@ -11,8 +11,8 @@
 // leaving the interface stuck after a throw. None of those need a real
 // cartridge. They need a plausible work-RAM snapshot and a way to watch what
 // the code does with it, which is what the fakes below provide.
-import { RomData } from '../app/romdata.js';
-import { Symbols } from '../app/symbols.js';
+import { RomData } from '../gen2/romdata.js';
+import { Symbols } from '../gen2/symbols.js';
 
 const GB_WRAM_START = 0xc000;
 const WRAM_BYTES = 0x2000;

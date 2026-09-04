@@ -2,7 +2,7 @@
 // about. Cheap to test and worth testing, because everything downstream trusts
 // it -- a misread here shows up much later as a bad decision.
 import { FakeGameBoy, symbols, test, worldRam, markSaved } from '../harness.mjs';
-import { GameState, MAX_PARTY, TRAINER_BATTLE } from '../../app/state.js';
+import { GameState, MAX_PARTY, TRAINER_BATTLE } from '../../gen2/state.js';
 
 test('a party is read back with levels, HP and moves intact', async (t) => {
   const sym = symbols();

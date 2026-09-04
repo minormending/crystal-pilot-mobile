@@ -6,7 +6,7 @@
 // and a bad value here is not a wrong preference, it is `SPEEDS[9]` coming
 // back undefined and the idle loop stepping the emulator undefined frames.
 import { test } from '../harness.mjs';
-import { readOpts, sanitise, writeOpts } from '../../app/remember.js';
+import { readOpts, sanitise, writeOpts } from '../../gbcore/remember.js';
 
 const LIMITS = { speeds: 5, grinds: ['+2', '+5', '10', '20'] };
 

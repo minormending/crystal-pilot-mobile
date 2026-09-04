@@ -146,7 +146,7 @@ In the order that would pay off:
    Center healing, and therefore unattended grinding, possible.~~ ~~The
    remaining work there is the route between maps rather than the route across
    one.~~ Both done — see [Tap to walk](docs/USING.md#tap-to-walk) for the collision map, and
-   `app/world.js` for the map graph.
+   `gen2/world.js` for the map graph.
 4. **Then reconsider native.** If 15× real time on a phone turns out to be too
    slow in practice, a JNI core is the fix — but by then the task logic exists
    in a portable form and the rewrite is only the platform layer.

@@ -3,7 +3,7 @@
 // browser or Firebase -- which is the only reason the bugs below were fixable
 // with a test rather than with two phones and some patience.
 import { test } from '../harness.mjs';
-import { liveNotes, mergeOptions, mergeSignal } from '../../app/room.js';
+import { liveNotes, mergeOptions, mergeSignal } from '../../gbcore/room.js';
 
 test('a withdrawn note stays withdrawn, however it is merged', async (t) => {
   // The bug: a cleared key was simply absent, and in the merge an absent key

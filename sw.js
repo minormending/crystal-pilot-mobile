@@ -9,12 +9,12 @@ const CACHE = 'crystal-pilot-v103';
 const SHELL = [
   './', './index.html', './manifest.webmanifest', './icon.svg',
   './vendor/wasmboy.umd.js',
-  './app/main.js', './app/gb.js', './app/state.js',
-  './app/symbols.js', './app/tasks.js', './app/saves.js',
-  './app/taskbase.js', './app/menus.js', './app/battle.js', './app/jobs.js',
-  './app/rows.js', './app/version.js', './app/remember.js',
-  './app/collision.js', './app/nav.js', './app/romdata.js', './app/world.js',
-  './app/journey.js', './app/crystal.js', './app/room.js', './app/stream.js',
+  './app/main.js', './gbcore/gb.js', './gen2/state.js',
+  './gen2/symbols.js', './gen2/tasks.js', './gbcore/saves.js',
+  './gbcore/taskbase.js', './gen2/menus.js', './gen2/battle.js', './gen2/jobs.js',
+  './app/rows.js', './gbcore/version.js', './gbcore/remember.js',
+  './gen2/collision.js', './gen2/nav.js', './gen2/romdata.js', './gen2/world.js',
+  './gen2/journey.js', './titles/crystal.js', './gbcore/room.js', './gbcore/stream.js',
   // Vendored from the kidsync repo, and cached for the same reason as the rest:
   // unlisted means served from the network, which is invisible until someone is
   // on a train. The Firebase SDK these pull from gstatic is *not* cached -- it

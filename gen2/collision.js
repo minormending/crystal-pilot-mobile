@@ -18,7 +18,7 @@
 // every read comes from one work-RAM snapshot taken per plan, since crossing
 // into the emulator per byte would make a search of a few hundred tiles slow
 // enough to feel broken.
-import { GameBoy } from './gb.js';
+import { GameBoy } from '../gbcore/gb.js';
 
 const b = GameBoy.byteAt;
 

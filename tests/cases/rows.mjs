@@ -5,8 +5,8 @@
 // and why one row decided its own state by reading a disabled property back
 // out of the DOM.
 import { fakeRom, symbols, test, worldRam } from '../harness.mjs';
-import { GameState } from '../../app/state.js';
-import { readCode } from '../../app/room.js';
+import { GameState } from '../../gen2/state.js';
+import { readCode } from '../../gbcore/room.js';
 import { describeHandoff, describeOffers, describeParty, describeReplaced,
          describeRoom, describeScreen, joinFailure, describeRows, describeSlot,
          describeUndo } from '../../app/rows.js';

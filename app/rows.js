@@ -9,7 +9,7 @@
 // main.js applies what comes back. That division is worth keeping: a wrong
 // string here is a wrong string, but a wrong string tangled up with the DOM is
 // a bug you can only find by loading a phone and squinting at it.
-import { MAX_PARTY, TRAINER_BATTLE } from './state.js';
+import { MAX_PARTY, TRAINER_BATTLE } from '../gen2/state.js';
 
 /**
  * `ctx` is everything outside the game that changes what a row says:

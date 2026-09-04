@@ -1,5 +1,5 @@
 // Typed reads of the game, from one work-RAM snapshot per poll.
-import { GameBoy } from './gb.js';
+import { GameBoy } from '../gbcore/gb.js';
 import { MON, PARTY_STRUCT } from './symbols.js';
 
 const b = GameBoy.byteAt, w = GameBoy.wordAt;

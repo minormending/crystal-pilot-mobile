@@ -1,8 +1,8 @@
 // Battle decisions. Every test here corresponds to something that was once
 // wrong in a way no static check could see.
 import { FakeGameBoy, fakeRom, romReading, symbols, test, worldRam } from '../harness.mjs';
-import { GameState } from '../../app/state.js';
-import { Tasks } from '../../app/tasks.js';
+import { GameState } from '../../gen2/state.js';
+import { Tasks } from '../../gen2/tasks.js';
 
 function pilot({ wram = null, onPress = null } = {}) {
   const sym = symbols();

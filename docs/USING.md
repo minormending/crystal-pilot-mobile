@@ -80,7 +80,7 @@ stays on its tile.
 
 The overworld is drawn in 16×16 tiles, so the 160×144 screen is 10×9 of them and
 the player is always the one at (4, 4) — the camera keeps them centred rather
-than clamping at map edges. That makes a tap a map coordinate, and `app/collision.js`
+than clamping at map edges. That makes a tap a map coordinate, and `gen2/collision.js`
 turns the map into something you can search: Gen 2 keeps the loaded blocks in
 `wOverworldMapBlocks` and the per-quadrant collision values in ROM at
 `wTilesetCollisionAddress`, which together give the collision byte for any tile.
@@ -315,7 +315,7 @@ a game in both directions.
 
 Three slots you pick, plus two the app writes for itself: an undo point before
 every job it runs, and — only ever if a handoff has replaced your game — the
-game it displaced. Five records in all, and `ALL_SLOTS` in `app/saves.js` is the
+game it displaced. Five records in all, and `ALL_SLOTS` in `gbcore/saves.js` is the
 list.
 
 **Each one remembers which ROM it came from.** A save is written in the layout
@@ -384,7 +384,7 @@ slider, and 375px does not fit a sentence. Up to date says nothing, so it says
 nothing: the two states worth words are a newer version and a server that did
 not answer.
 
-The number lives in `app/version.js`, so it is the identity of the code actually
+The number lives in `gbcore/version.js`, so it is the identity of the code actually
 running rather than of whatever the server has. That is the distinction that
 makes the display useful: reading the version off the network tells you what is
 deployed, which is not the question you are asking when a bug you saw fixed is

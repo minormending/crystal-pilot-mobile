@@ -1,23 +1,23 @@
 // Wiring: file pickers, the render loop, and dispatching a task.
-import { GameBoy } from './gb.js';
-import { SHARED_SYMBOLS, Symbols } from './symbols.js';
+import { GameBoy } from '../gbcore/gb.js';
+import { SHARED_SYMBOLS, Symbols } from '../gen2/symbols.js';
 import { describeHandoff, describeOffers, describeParty, describeReplaced,
          describeRoom, describeRows, describeScreen, describeSlot,
          describeUndo, joinFailure } from './rows.js';
-import { VERSION } from './version.js';
+import { VERSION } from '../gbcore/version.js';
 import { forgetKept, keepBattery, keepRom, keepSym, keptMeta, readOpts, recall,
-         sanitise, writeOpts } from './remember.js';
-import { chosenName, openRoom, wasSharing } from './room.js';
-import { createHost, createWatcher } from './stream.js';
-import { Cancelled } from './taskbase.js';
-import { REPLACED_SLOT, Saves, SLOT_IDS, UNDO_SLOT } from './saves.js';
-import { GameState, TRAINER_BATTLE, MAX_PARTY } from './state.js';
-import { Tasks } from './tasks.js';
-import { CollisionMap } from './collision.js';
-import { Nav } from './nav.js';
-import { RomData, normalise } from './romdata.js';
-import { Crystal } from './crystal.js';
-import { World } from './world.js';
+         sanitise, writeOpts } from '../gbcore/remember.js';
+import { chosenName, openRoom, wasSharing } from '../gbcore/room.js';
+import { createHost, createWatcher } from '../gbcore/stream.js';
+import { Cancelled } from '../gbcore/taskbase.js';
+import { REPLACED_SLOT, Saves, SLOT_IDS, UNDO_SLOT } from '../gbcore/saves.js';
+import { GameState, TRAINER_BATTLE, MAX_PARTY } from '../gen2/state.js';
+import { Tasks } from '../gen2/tasks.js';
+import { CollisionMap } from '../gen2/collision.js';
+import { Nav } from '../gen2/nav.js';
+import { RomData, normalise } from '../gen2/romdata.js';
+import { Crystal } from '../titles/crystal.js';
+import { World } from '../gen2/world.js';
 
 const $ = (s) => document.querySelector(s);
 const PARAMS = new URLSearchParams(location.search);

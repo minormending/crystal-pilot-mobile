@@ -103,41 +103,64 @@ of the subtleties in sections 6 and 7.
 
 ## 2. The shape of it
 
-<!-- covers-api: app/main.js app/journey.js app/crystal.js app/tasks.js app/nav.js app/world.js app/collision.js app/state.js app/romdata.js app/symbols.js app/gb.js @ 76cd3bf3f7da -->
+<!-- covers-api: app/main.js gen2/journey.js titles/crystal.js gen2/tasks.js gen2/nav.js gen2/world.js gen2/collision.js gen2/state.js gen2/romdata.js gen2/symbols.js gbcore/gb.js @ 340d55eb2962 -->
 
-Twenty-one modules. Arrows point from a module to the ones it imports.
+Twenty-one modules, in four directories, and the directories are the design:
+**an import may point down this list and never up.**
+
+| | holds | may import from |
+| --- | --- | --- |
+| `gbcore/` | the emulator, storage, sharing, the task lifecycle | nothing of ours; only vendored `sync/` and `baton/` |
+| `gen2/` | what a Gen 2 cartridge is: structs, collision, the map graph, menus, battles, jobs, journeys | `gbcore/` |
+| `titles/` | what one cartridge *is*: Crystal's maps, doors, people, errands | `gen2/` |
+| `app/` | the interface and its wiring | all three |
+
+Nothing in `gbcore/` knows this is a Pokémon game. Nothing in `gen2/` knows
+*which* Pokémon game. Only `titles/` names a map. `check-app` enforces the
+arrows — see [section 10](#10-keeping-this-honest) — because a layering nothing
+checks is a layering that lasts until the next hurry.
+
+Arrows below point from a module to the ones it imports. Drawn left to right,
+which is not a preference: `main.js` imports sixteen modules, and top to bottom
+that fan-out lays them in one row 3,214px wide, which shrinks to an unreadable
+band in a page this width. Sideways the same graph is 1,283 × 1,773 and scales
+to the column.
 
 ```mermaid
-flowchart TD
-    main["main.js<br/>the page and its controls"]
-    title["crystal.js<br/>the story this cartridge has"]
-    jour["journey.js<br/>getting somewhere"]
-    tasks["tasks.js<br/>composes the four below"]
-    jobs["jobs.js<br/>grind · hunt · catch"]
-    btl["battle.js<br/>one turn"]
-    menus["menus.js<br/>the game's own menus"]
-    tbase["taskbase.js<br/>machine and snapshot"]
-    rows["rows.js<br/>what each row says"]
-    ver["version.js<br/>which build this is"]
-    rem["remember.js<br/>what survives a reload"]
-    room["room.js<br/>sharing between your devices"]
-    stream["stream.js<br/>this screen, on another device"]
-    nav["nav.js<br/>walking"]
-    world["world.js<br/>map graph"]
-    coll["collision.js<br/>what is walkable"]
-    state["state.js<br/>live game state"]
-    rom["romdata.js<br/>cartridge tables"]
-    sym["symbols.js<br/>the .sym file"]
-    saves["saves.js<br/>slots and .sav files"]
-    gb["gb.js<br/>emulator wrapper"]
+flowchart LR
+    subgraph app["app/ — the interface"]
+        main["main.js<br/>the page and its controls"]
+        rows["rows.js<br/>what each row says"]
+    end
+    subgraph titles["titles/ — one cartridge"]
+        title["crystal.js<br/>Crystal's maps and errands"]
+    end
+    subgraph gen2["gen2/ — any Gen 2 cartridge"]
+        tasks["tasks.js<br/>composes the four below"]
+        jour["journey.js<br/>getting somewhere"]
+        jobs["jobs.js<br/>grind · hunt · catch"]
+        btl["battle.js<br/>one turn"]
+        menus["menus.js<br/>the game's own menus"]
+        nav["nav.js<br/>walking"]
+        world["world.js<br/>map graph"]
+        coll["collision.js<br/>what is walkable"]
+        state["state.js<br/>live game state"]
+        rom["romdata.js<br/>cartridge tables"]
+        sym["symbols.js<br/>the .sym file"]
+    end
+    subgraph gbcore["gbcore/ — any Game Boy"]
+        tbase["taskbase.js<br/>machine and snapshot"]
+        saves["saves.js<br/>slots and .sav files"]
+        rem["remember.js<br/>what survives a reload"]
+        room["room.js<br/>sharing between your devices"]
+        stream["stream.js<br/>this screen, on another device"]
+        ver["version.js<br/>which build this is"]
+        gb["gb.js<br/>emulator wrapper"]
+    end
 
     main --> title
-    main --> tasks
     main --> rows
-    main --> ver
-    main --> rem
-    main --> room
-    main --> stream
+    main --> tasks
     main --> nav
     main --> world
     main --> coll
@@ -146,18 +169,24 @@ flowchart TD
     main --> sym
     main --> gb
     main --> saves
-    saves --> gb
-    saves --> state
+    main --> rem
+    main --> room
+    main --> stream
+    main --> ver
+    main --> tbase
+    rows --> state
     title --> jour
     jour --> coll
     jour --> state
     tasks --> jobs
     tasks --> btl
     tasks --> menus
+    tasks --> tbase
+    jobs --> state
     jobs --> tbase
     btl --> tbase
+    menus --> state
     menus --> tbase
-    tbase --> state
     nav --> coll
     coll --> gb
     state --> gb
@@ -187,6 +216,12 @@ flowchart TD
 | `room.js` | "what has my other device chosen?" |
 | `stream.js` | "can I watch, and play, from the other one?" |
 | `main.js` | everything the person holding the phone touches |
+
+Two arrows the old drawing had are gone, and their absence is the more accurate
+statement: `saves.js` was drawn importing `gb.js` and `state.js`, and it imports
+neither — it is handed both at construction. A diagram whose caption says
+*arrows point from a module to the ones it imports* should not draw arrows for
+things passed in.
 
 The dependency direction is the design: **nothing below `tasks.js` knows what a
 task is, and only `crystal.js` knows the name of a single map.**
@@ -230,7 +265,7 @@ was cheaper than moving the boundary.
 
 ### `gb.js` — the emulator
 
-<!-- covers: app/gb.js @ 8a62b88ab9c9 -->
+<!-- covers: gbcore/gb.js @ a550184abf5c -->
 
 Wraps WasmBoy. Runs frames, reads work RAM, holds and releases buttons.
 
@@ -316,14 +351,14 @@ watching.
 
 ### `symbols.js` — where things live
 
-<!-- covers: app/symbols.js @ 67ab125c0fa4 -->
+<!-- covers: gen2/symbols.js @ c00068f7470d -->
 
 Parses the `.sym` file into `name → { bank, addr }`. First definition wins;
 later duplicates are aliases and locals.
 
 ### `state.js` — what the game is doing right now
 
-<!-- covers: app/state.js @ cbb3860281e9 -->
+<!-- covers: gen2/state.js @ 64525387718d -->
 
 One snapshot, many answers: `inBattle`, `party`, `pos`, `onGrass`,
 `worldLoaded`, `menu`, `balls`, and the enemy's HP.
@@ -352,7 +387,7 @@ and in `bootstrap.js`, with nothing able to notice if they drifted.
 
 ### `romdata.js` — what the cartridge knows
 
-<!-- covers: app/romdata.js @ f218aefa92d9 -->
+<!-- covers: gen2/romdata.js @ b3dc96d461e4 -->
 
 Species names, item names, wild-encounter tables, move power. All read out of
 the ROM, not shipped as a copy, so they cannot drift from the build being driven.
@@ -387,7 +422,7 @@ the ROM, not shipped as a copy, so they cannot drift from the build being driven
 
 ### `collision.js` — what you can walk on
 
-<!-- covers: app/collision.js @ bcf56deca762 -->
+<!-- covers: gen2/collision.js @ cd5eb078d515 -->
 
 Decodes the loaded map into "can I stand on this tile", and does breadth-first
 pathfinding over the result. This is what turns walking from trial and error
@@ -431,13 +466,13 @@ Two more things the map alone will not tell you:
 
 ### `nav.js` — walking
 
-<!-- covers: app/nav.js @ 9d1b6ede4f12 -->
+<!-- covers: gen2/nav.js @ 5bda9405ee92 -->
 
 `step()` takes one tile. `walkTo()` gets to a tile, re-planning every step.
 
 ### `world.js` — which map adjoins which
 
-<!-- covers: app/world.js @ 5e2c55feb792 -->
+<!-- covers: gen2/world.js @ f0eda3b06009 -->
 
 The map graph, read out of the cartridge: edge connections *and* warps, so it can
 route out of a building rather than only across a route.
@@ -468,7 +503,7 @@ Route 30's door to it at `(17,5)`.
 
 ## 4. Taking one step, and planning a walk
 
-<!-- covers: app/nav.js app/collision.js @ 2e522063e501 -->
+<!-- covers: gen2/nav.js gen2/collision.js @ 7d0479684c7f -->
 
 ### One step
 
@@ -566,7 +601,7 @@ point those coordinates mean somewhere else entirely.
 
 ## 5. Crossing to the next map
 
-<!-- covers: app/journey.js app/world.js @ 518c5519a4cc -->
+<!-- covers: gen2/journey.js gen2/world.js @ 632f6a46291d -->
 
 A connection spans only part of a shared edge, so "walk west until something
 happens" does not work. `crossEdge()` closes the distance in stages, then tries
@@ -698,7 +733,7 @@ eight kilobytes a full snapshot copies, which is worth keeping distinct.
 
 ## 6. Battles
 
-<!-- covers: app/tasks.js app/taskbase.js app/battle.js app/jobs.js app/state.js @ 309a1a8c286f -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 574d4e20e31d -->
 
 ### Is it our turn?
 
@@ -822,7 +857,7 @@ fainted.
 
 ## 7. Catching something
 
-<!-- covers: app/tasks.js app/jobs.js app/battle.js app/romdata.js @ 02003213a83a -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ 3a5452c052a8 -->
 
 Catching is the most involved loop, because a Poké Ball's odds turn on how much
 HP is left. Throwing at a full-health target is mostly throwing balls away.
@@ -908,7 +943,7 @@ precedes it defaults to yes, which is what we want; the nickname box does not.
 
 ## 7a. Three that act on where you already are
 
-<!-- covers: app/tasks.js app/jobs.js app/menus.js app/journey.js @ 2dee848429f0 -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ b5cbb42dfdec -->
 
 Grind, hunt and catch all go *looking* for something. These three do the obvious
 thing with the situation you are already in, and take no parameters:
@@ -970,7 +1005,7 @@ running the thing.
 
 ## 7b. Saving, and getting the save out
 
-<!-- covers: app/tasks.js app/taskbase.js app/battle.js app/jobs.js app/state.js @ 309a1a8c286f -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 574d4e20e31d -->
 
 ```mermaid
 flowchart TD
@@ -1047,7 +1082,7 @@ Tackle and Leer. Two emulators, two implementations, one save file.
 
 ## 7c. Slots, undo, and bringing a save in
 
-<!-- covers: app/saves.js @ ae994d95ab85 -->
+<!-- covers: gbcore/saves.js @ edb065772d05 -->
 
 Three slots a person picks, plus an undo point the pilot writes before every
 job and the game a handoff replaced, if there is one — five records. A slot
@@ -1140,7 +1175,7 @@ because that failure is only otherwise discovered by reaching for the undo.
 
 ## 8. The errands
 
-<!-- covers: app/crystal.js app/journey.js @ a513dc1a7217 -->
+<!-- covers: titles/crystal.js gen2/journey.js @ 95005674e6c0 -->
 
 Everything in this section is `crystal.js` — the only file in the app that names
 a Crystal map, a Crystal door or a Crystal NPC. What it stands on is
@@ -1254,7 +1289,7 @@ This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ 1b9b31a0e590 -->
+<!-- covers: app/main.js index.html @ 3c3ee612d455 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -1763,7 +1798,7 @@ game's own picture, not on a surface of ours.
 
 ### What it remembers
 
-<!-- covers: app/remember.js @ bcb5a774746b -->
+<!-- covers: gbcore/remember.js @ 24ba57802ae1 -->
 
 The app forgets everything on a reload, and a reload is not rare: the Update
 button causes one deliberately, and a phone discards a background tab whenever
@@ -1906,7 +1941,7 @@ five slots once the summaries existed.
 
 ### Sharing between your own devices
 
-<!-- covers: app/room.js sync/kidsync.js @ 71b1159181f1 -->
+<!-- covers: gbcore/room.js sync/kidsync.js @ a157ae0f01c8 -->
 
 One person with a phone and a tablet, no accounts: a room code is the whole
 mechanism. `sync/` is [kidsync](https://github.com/minormending/kidsync)
@@ -2023,7 +2058,7 @@ way any newer value does.
 
 ### Handing the save over
 
-<!-- covers: app/room.js baton/baton.js baton/codec.js @ 3b54d1386bc6 -->
+<!-- covers: gbcore/room.js baton/baton.js baton/codec.js @ 301464a5be94 -->
 
 The same room carries the save, through
 [baton](https://github.com/minormending/baton) vendored in `baton/`. kidsync
@@ -2108,7 +2143,7 @@ they have been installed.
 
 ### Watching the other device's screen
 
-<!-- covers: app/stream.js @ 453d378a47cf -->
+<!-- covers: gbcore/stream.js @ 9c0d2f8c8cdb -->
 
 One device shows its screen; the other watches it, and plays it if the first
 one says so. The picture goes straight between them over WebRTC and never
@@ -2327,7 +2362,7 @@ flowchart LR
     C{{"check-app: is SHARED_SYMBOLS<br/>every name the app looks up?"}} -.-> D
 ```
 
-The list lives in `app/symbols.js` as `SHARED_SYMBOLS`, written by hand,
+The list lives in `gen2/symbols.js` as `SHARED_SYMBOLS`, written by hand,
 because nothing at run time can know which names the code is *going* to ask
 for. That makes it exactly the kind of list that rots, and rot here is
 invisible where it is written: every device with the file keeps working, and
@@ -2525,7 +2560,7 @@ was read as authoritative and was entirely wrong.
 
 The service worker caches the vendored files, and `check-app` now asserts that:
 an unlisted one is served from the network and breaks offline use in exactly
-the way `app/world.js` nearly did. The Firebase SDK itself is another origin
+the way `gen2/world.js` nearly did. The Firebase SDK itself is another origin
 and is deliberately not cached — offline you keep the app and lose sharing,
 which is the right way round.
 
@@ -2551,7 +2586,7 @@ copy identical is what lets kidsync's own check stay green here.
 
 `check-app` asserts both folders are in the service worker shell. An unlisted
 module is served from the network and breaks offline use silently — the mistake
-`app/world.js` nearly shipped — and code from another repo is *more* likely to
+`gen2/world.js` nearly shipped — and code from another repo is *more* likely to
 be forgotten, not less.
 
 ---
@@ -2563,7 +2598,7 @@ code carry a marker naming the files they cover and the content hash at the time
 the prose was last checked:
 
 ```html
-<!-- covers: app/nav.js app/collision.js @ a1b2c3d4e5f6 -->
+<!-- covers: gen2/nav.js gen2/collision.js @ a1b2c3d4e5f6 -->
 ```
 
 Sections that describe how the modules fit together — the diagram and table in
@@ -2571,7 +2606,7 @@ Sections that describe how the modules fit together — the diagram and table in
 `import` and `export` lines:
 
 ```html
-<!-- covers-api: app/nav.js app/world.js @ a1b2c3d4e5f6 -->
+<!-- covers-api: gen2/nav.js gen2/world.js @ a1b2c3d4e5f6 -->
 ```
 
 Such a section goes stale when the module surface changes, not when a comment
@@ -2607,7 +2642,7 @@ about that code did not.
 
 ### The other checks
 
-<!-- covers: tools/check-app @ 5b97a4501364 -->
+<!-- covers: tools/check-app @ 4497411d7e68 -->
 
 `tools/check-app` runs everything that can be verified without a ROM:
 
@@ -2649,7 +2684,7 @@ the tasks are verified by hand against a local build. The workflow is named
 **`shell` checks both directions.** A file listed in the service worker but
 absent on disk makes the install reject, which takes the whole offline story
 with it. A module present but *unlisted* is quietly served from the network and
-breaks offline use with no error at all — which is how `app/world.js` was
+breaks offline use with no error at all — which is how `gen2/world.js` was
 nearly shipped when it was added.
 
 **`contrast` encodes pairs that were measured once by hand.** Four of them were

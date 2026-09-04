@@ -6,7 +6,7 @@
 // stubbed for the same reason run() consults it -- a hidden page steps frames
 // directly, which is exactly the path a test wants: no animation frames.
 import { test } from '../harness.mjs';
-import { GameBoy } from '../../app/gb.js';
+import { GameBoy } from '../../gbcore/gb.js';
 
 function machine() {
   if (typeof globalThis.document === 'undefined') {

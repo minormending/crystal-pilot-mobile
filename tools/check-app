@@ -530,9 +530,16 @@ def check_docs_shape():
     problems = []
 
     modules = {p.name for p in APP}
-    block = re.search(r"```mermaid\n(flowchart TD\n(?:.|\n)*?)```", text)
+    # Anchored on the section, not on "flowchart TD". It used to take the first
+    # top-down flowchart in the file, which stopped being the architecture one
+    # the moment that diagram was drawn left to right -- and the check then
+    # measured some other diagram and reported every module missing. The section
+    # heading is the thing that actually identifies it.
+    shape = re.search(r"\n## 2\..*?(?=\n## )", text, re.S)
+    block = re.search(r"```mermaid\n(flowchart (?:TD|LR)\n(?:.|\n)*?)```",
+                      shape.group(0)) if shape else None
     if block is None:
-        problems.append("no architecture flowchart found")
+        problems.append("no architecture flowchart found in section 2")
     else:
         drawn = set(re.findall(r'\["?([\w-]+\.js)', block.group(1)))
         for missing in sorted(modules - drawn):
@@ -555,7 +562,11 @@ def check_docs_shape():
              27: "Twenty-seven", 28: "Twenty-eight", 29: "Twenty-nine",
              30: "Thirty"}
     want = WORDS.get(len(modules))
-    said = re.search(r"^([\w-]+) modules\. Arrows", text, re.M)
+    # Anchored on the count, not on the sentence that used to follow it. The
+    # pattern wanted "... modules. Arrows point from" and the prose grew a
+    # comma, which is a checker failing over its own phrasing rather than over
+    # anything true.
+    said = re.search(r"^([\w-]+) modules\b", text, re.M)
     if said is None:
         problems.append("the module count sentence is gone")
     elif want is None:

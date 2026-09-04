@@ -4,7 +4,7 @@
 // battle primitives, decides when to stop, and returns { ok, message, stats }
 // -- the shape the interface renders without knowing what happened.
 import { MAX_PARTY, TRAINER_BATTLE } from './state.js';
-import { SETTLE_FRAMES } from './taskbase.js';
+import { SETTLE_FRAMES } from '../gbcore/taskbase.js';
 // Consecutive unresolved battles that mean the pilot has lost the thread.
 const MAX_STUCK_BATTLES = 5;
 // Swings at one target before giving up on weakening it any further.

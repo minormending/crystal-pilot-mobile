@@ -1,6 +1,6 @@
 // The symbol table, and the small version of it that crosses between devices.
 import { symbols, test } from '../harness.mjs';
-import { Symbols } from '../../app/symbols.js';
+import { Symbols } from '../../gen2/symbols.js';
 
 test('a digest of the names an app uses behaves like the file it came from', async (t) => {
   // 1.8MB of .sym against about a kilobyte of the 45 lines that get read. The

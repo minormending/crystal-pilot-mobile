@@ -2,7 +2,7 @@
 //
 // Everything here works on the situation in front of it and reports what
 // happened. Deciding whether a battle was worth having is jobs.js's problem.
-import { SETTLE_FRAMES } from './taskbase.js';
+import { SETTLE_FRAMES } from '../gbcore/taskbase.js';
 const FIGHT = 1;   // wBattleMenuCursorPosition: 1 FIGHT 2 PKMN 3 PACK 4 RUN
 const PACK = 3;
 const RUN = 4;

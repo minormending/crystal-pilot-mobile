@@ -342,4 +342,4 @@ Both cost real time here, and both fail quietly rather than loudly:
 2. `_getWasmConstant('WORK_RAM_LOCATION')` returns `undefined` until a ROM is
    loaded. Fetch it during `config()` and every later read is silently empty.
 
-`app/gb.js` guards against both.
+`gbcore/gb.js` guards against both.

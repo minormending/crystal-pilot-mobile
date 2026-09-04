@@ -5,7 +5,7 @@
 // matter -- no method is overridden -- but it reads outwards from the machine:
 // the base talks to the emulator, menus and battle drive the game, and jobs are
 // what a person asked for.
-import { TaskBase } from './taskbase.js';
+import { TaskBase } from '../gbcore/taskbase.js';
 import { withMenus } from './menus.js';
 import { withBattle } from './battle.js';
 import { withJobs } from './jobs.js';

@@ -4,7 +4,7 @@
 // presses from an assumed origin -- the cursor persists between openings, so
 // an assumed origin is wrong exactly when it matters.
 import { NAME_MENU_FIRST_PRESET } from './state.js';
-import { SETTLE_FRAMES } from './taskbase.js';
+import { SETTLE_FRAMES } from '../gbcore/taskbase.js';
 // Times to try the whole START -> SAVE -> YES flow before giving up.
 const SAVE_ATTEMPTS = 3;
 // Frames for the save prompt to appear after SAVE is chosen.

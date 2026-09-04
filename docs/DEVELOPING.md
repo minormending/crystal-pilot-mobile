@@ -97,7 +97,7 @@ fine and is wrong at run time:
 | `buttons` | every button name handed to `press`/`hold` is one the core knows |
 | `wiring` | every `$('#id')` exists in the markup, and every named import — same directory, another one, or a vendored module — resolves to something that exports it |
 | `symbols` | the shared digest is every symbol the app looks up |
-| `version` | `app/version.js` and `sw.js` agree, and both doors are reachable with no ROM |
+| `version` | `gbcore/version.js` and `sw.js` agree, and both doors are reachable with no ROM |
 | `docshape` | the architecture diagram draws, counts and tables all 20 modules |
 | `names` | every capitalised name a module uses is one it can see |
 
@@ -106,7 +106,7 @@ code: a documentation section opts in with a marker naming the files it covers
 and the hash those files had when it was last read against them.
 
 ```
-<!-- covers: app/nav.js app/collision.js @ a1b2c3d4e5f6 -->
+<!-- covers: gen2/nav.js gen2/collision.js @ a1b2c3d4e5f6 -->
 ```
 
 The guarantee is deliberately modest — that prose was *looked at* since the code

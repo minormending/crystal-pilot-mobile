@@ -1,9 +1,9 @@
 // Stopping a job, and the one table that says what a capture outcome means.
 import { FakeGameBoy, fakeRom, symbols, test, worldRam } from '../harness.mjs';
-import { GameState } from '../../app/state.js';
-import { Cancelled, TaskBase } from '../../app/taskbase.js';
-import { Tasks } from '../../app/tasks.js';
-import { captureOutcome } from '../../app/jobs.js';
+import { GameState } from '../../gen2/state.js';
+import { Cancelled, TaskBase } from '../../gbcore/taskbase.js';
+import { Tasks } from '../../gen2/tasks.js';
+import { captureOutcome } from '../../gen2/jobs.js';
 
 function pilot(opts = {}) {
   const sym = symbols();
