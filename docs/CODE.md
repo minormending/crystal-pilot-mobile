@@ -1204,7 +1204,7 @@ the bag" rather than "did we gain any".
 
 ## 9. The interface
 
-<!-- covers: app/main.js index.html @ 0ddedc12b0ea -->
+<!-- covers: app/main.js index.html @ 26ec6835f00a -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -1225,7 +1225,7 @@ stateDiagram-v2
 ```
 
 **The machine is furniture; only the middle moves.** `main` is a three-row grid
-— the screen, a scrolling flow, the pad — sized in `dvh`, and the page itself
+— the screen, the status line, the pad — sized in `dvh`, and the page itself
 does not scroll at all. Before this the pad was a card among cards, so on a
 short phone the buttons scrolled away from the screen they drive, and in
 landscape the two could not both be on screen at any scroll position.
@@ -1233,13 +1233,59 @@ landscape the two could not both be on screen at any scroll position.
 | | holds | scrolls |
 | --- | --- | --- |
 | `.stage` | the screen and the tap hint | never |
-| `.flow` | status, the jobs, the save, the party, settings | yes, and only this |
+| `.bar` | what is happening, Stop, and the door | never |
+| `.sheet` | the jobs, the save, the party, settings | yes, and only this |
 | `.padwrap` | the eight buttons | never |
 
 The switch that used to reorder the pad is gone with it: a task dims the pad
 rather than moving it, because it no longer has anywhere to move and a thumb
-should find it in the same place either way. Which card sits at the top of the
-flow is still worth switching, and still is.
+should find it in the same place either way.
+
+**The menu opens over the game, and the status line is its handle.** `.sheet`
+shares the stage's grid area — two items in one area overlap, which is the whole
+trick — so opening it costs the screen nothing and moves neither the bar nor the
+pad. It is open until a game is running, because until then it holds the only
+two things there are to do; after that it is closed by default, and closed again
+by every job that starts, since asking the pilot to do something is asking to
+watch it. Closing is one-way: a job that ends leaves the screen alone rather
+than throwing a menu over whatever it just did.
+
+The bar is a row of two buttons rather than one tappable strip. Stop has to be
+reachable without the door opening under the thumb that meant to press it, and
+the repository had already written down the rule that made this whole step
+necessary: *a page you scroll to read is fine, a page you must scroll to stop
+the pilot is not* — and Stop lived in a card that scrolled. The last line the
+pilot said is mirrored from the log onto the outside of the door, because the
+log is behind a door the job just closed and a ninety-second run would otherwise
+show one busy dot and no sign of life.
+
+Two consequences worth stating, because both were bugs before they were rules.
+The sheet's bottom edge fades with a `mask-image`, which makes the sheet itself
+transparent there — over the page background that reads as *more below*, and
+over a running game it read as the game bleeding through the menu, so
+`body.menuopen` hides the stage. And the run log's card had been kept alive by
+the status line living inside it; with that gone, a quiet game opened the menu
+onto an empty white box, so `paintStatusCard` hides a card whose only two
+children are hidden.
+
+**The screen measures the box it is in, rather than being told a number.** It
+used to size itself with `calc((100dvh - var(--reserve)) * 160 / 144)`, where
+`--reserve` was a hand-tuned guess at the height of everything else on the page:
+460px in portrait, 105px in landscape, wrong by 36px the first time, and wrong
+again the moment the status line moved out of the scroller. The screen now sits
+alone in a `.shot` box with `container-type:size`, and takes
+`width:min(100%, calc(100cqh * 160 / 144))` with `aspect-ratio:160/144`. If the
+height binds, the ratio gives the width; if the width binds, `min()` clamps it
+and the ratio gives the height back. Measured: 259×233 at 375×667 and 366×329 at
+390×844, both 1.111 to three places, with no constant in either. The tablet is
+the one layout that still states a size, because there the point is an integer
+scale — 3× is 480×432, and a Game Boy picture at 2.7× has visibly uneven pixels
+— and a grid row sized `auto` has no height for `cqh` to measure anyway.
+
+A tablet and a phone in landscape have room for the game and the menu at once,
+so in both of those layouts the sheet is a column that is always open and the
+chevron is hidden: an affordance for a door that is not there is worse than no
+affordance. `showSheet` still runs, and simply has nothing to move.
 
 The pilot's jobs are a **list, not a toolbar**, because `runTask` opens with
 `if (running) return null` — only one job can ever be underway, so they are one

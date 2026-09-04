@@ -186,10 +186,43 @@ $('#theme').onclick = () => {
   applyTheme(THEMES[(THEMES.indexOf(themeChoice) + 1) % THEMES.length]);
 };
 
+/**
+ * Hide the run log's card when there is no log and no offer in it.
+ *
+ * The status line used to live in this card and gave it a reason to exist at
+ * all times. It does not any more, so on a quiet game the sheet opened onto an
+ * empty white box -- which is worse than the clutter this step is removing.
+ */
+function paintStatusCard() {
+  const empty = $('#runlog').classList.contains('hide')
+                && $('#bootrow').classList.contains('hide');
+  $('#statuscard').classList.toggle('hide', empty);
+}
+
 const setStatus = (text, kind = '') => {
   $('#dot').className = 'dot ' + kind;
   $('#status').textContent = text;
 };
+
+/**
+ * Open or close the menu over the screen.
+ *
+ * Open until a game is running, because until then the sheet holds the only two
+ * things there are to do -- read what this is, and pick the files -- and a door
+ * closed over an empty screen would be an app with nothing in it. After that it
+ * is closed by default and by every job that starts: you asked the pilot to do
+ * something, so the thing to look at is the game.
+ *
+ * The tablet and landscape layouts pin the sheet open in CSS and hide the
+ * chevron, so this still runs there and simply has nothing to move.
+ */
+function showSheet(open) {
+  $('#sheet').classList.toggle('open', open);
+  document.body.classList.toggle('menuopen', open);
+  $('#door').setAttribute('aria-expanded', open ? 'true' : 'false');
+  $('#chev').textContent = open ? 'Close ▾' : 'Menu ▴';
+}
+const sheetOpen = () => $('#sheet').classList.contains('open');
 // The pilot's own account of what it is doing, kept rather than overwritten.
 // It emits exactly the right events already -- "heading left", "healing up",
 // "slot 1 is down - sending out slot 2" -- and a single label threw all but
@@ -200,7 +233,15 @@ let runLines = [];
 
 const progress = (m) => {
   const log = $('#runlog');
-  if (!m) { runLines = []; log.textContent = ''; log.classList.add('hide'); return; }
+  // The log itself is behind the door, which a job has just closed, so the
+  // newest line is mirrored onto the bar. Without it a ninety-second job shows
+  // one busy dot and no sign of progress.
+  $('#steps').textContent = m || '';
+  if (!m) {
+    runLines = []; log.textContent = ''; log.classList.add('hide');
+    paintStatusCard();
+    return;
+  }
   // Repeats are common -- several legs say "heading left" -- and stacking
   // identical lines reads as being stuck rather than as making progress.
   if (runLines[runLines.length - 1] !== m) runLines.push(m);
@@ -212,6 +253,7 @@ const progress = (m) => {
     log.appendChild(li);
   }
   log.classList.remove('hide');
+  paintStatusCard();
 };
 
 /**
@@ -285,6 +327,8 @@ async function reallyStart() {
   paintUndo();
   $('#screenwrap').classList.remove('hide');
   $('#taphint').classList.remove('hide');
+  // There is something to look at now, so the menu gets out of the way.
+  showSheet(false);
   startLoop();
 
   paintFiles();
@@ -890,6 +934,7 @@ async function awaitWorld() {
   progress('the pilot waits here — a new game is yours to start');
   $('#bootrow').classList.remove('hide');
   $('#bootnote').classList.remove('hide');
+  paintStatusCard();
   // The header tracks where you are, and it is filled in by refresh() once
   // there is a game to describe. Until then it still read "no ROM loaded",
   // which is untrue the moment a ROM has been picked.
@@ -909,6 +954,7 @@ async function awaitWorld() {
   if (bootStage !== 'grass') {
     $('#bootrow').classList.add('hide');
     $('#bootnote').classList.add('hide');
+    paintStatusCard();
     setStatus('ready', 'ok');
     progress('');
   }
@@ -999,6 +1045,9 @@ function startLoop() {
 function setMode(piloting) {
   document.body.classList.toggle('piloting', piloting);
   $('#stopRun').classList.toggle('hide', !piloting);
+  // Asking for a job is asking to watch it. Only one way: a job that ends does
+  // not re-open the menu, because the person may well be reading the screen.
+  if (piloting) showSheet(false);
 }
 
 async function runTask(id, busy, work,
@@ -1393,6 +1442,7 @@ $('#boot').onclick = async () => {
         + 'Totodile, Chikorita. Walk up to one and press A — you are standing '
         + 'in front of the middle ball.';
       $('#bootnote').classList.remove('hide');
+      paintStatusCard();
     }
     return;
   }
@@ -1400,6 +1450,7 @@ $('#boot').onclick = async () => {
   if (res && res.ok) {
     $('#bootrow').classList.add('hide');
     $('#bootnote').classList.add('hide');
+    paintStatusCard();
   }
 };
 
@@ -1774,6 +1825,10 @@ $('#heal').onclick = async () => {
   if (!boot) return;
   await runTask('#heal', 'off to heal', () => boot.healNow());
 };
+
+$('#door').onclick = () => showSheet(!sheetOpen());
+// The log's card starts empty, and nothing paints it until a job runs.
+paintStatusCard();
 
 $('#stopRun').onclick = () => {
   // Reaches both kinds of work: the task flag, which a walk never reads, and
