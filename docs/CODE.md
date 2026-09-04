@@ -1204,7 +1204,7 @@ the bag" rather than "did we gain any".
 
 ## 9. The interface
 
-<!-- covers: app/main.js index.html @ 8d32514c0fb1 -->
+<!-- covers: app/main.js index.html @ 1048ca1ffa17 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -1296,6 +1296,15 @@ in the width that is left.
 
 Keyed on height rather than `orientation`, because what breaks is a short
 viewport: a tablet held sideways is landscape and has room to spare.
+
+**A tablet is not a big phone.** Portrait iPad used 560px of an 820px viewport
+and still ran to two screens, stacking the cards under a 482px picture with
+260px of width sitting empty beside them. Above 760 × 620 the flow moves
+alongside instead: the screen takes an **integer 3× scale** — 480 × 432, since
+a Game Boy picture at 2.7× has visibly uneven pixels — the pad sits under it at
+the bottom of its column where two hands hold the thing, and the cards get the
+rest. Measured: 820 of 820 pixels in use, 292px of flow in portrait and 652 in
+landscape, and nothing scrolling in either.
 
 <details>
 <summary><b>Advanced detail:</b> three cascade traps in one media query</summary>

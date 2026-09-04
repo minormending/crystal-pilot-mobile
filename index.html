@@ -473,6 +473,28 @@
     body.piloting .dpad,body.piloting .face,body.piloting .menus{
       opacity:.4;pointer-events:none;filter:saturate(.4)}
   }
+
+  /* A tablet is not a big phone. Portrait iPad measured 560px of a 820px
+     viewport in use and 2.0 screens of page: the cards were stacked under a
+     482px picture with 260px of width sitting empty beside them. A door exists
+     because a phone has no room for both the game and the menu; a tablet has,
+     so the flow moves alongside and stops being something you scroll to.
+     The screen takes an integer scale rather than the room going spare -- 3x
+     is 480x432, and a Game Boy picture at 2.7x has visibly uneven pixels.
+     Guarded on height as well as width so a phone in landscape, which is also
+     wide, keeps the layout above. */
+  @media (min-width:760px) and (min-height:620px){
+    main{max-width:none;padding:16px;gap:16px;
+         grid-template:"stage flow" auto
+                       "pad   flow" minmax(0,1fr)
+                       /minmax(0,480px) minmax(0,1fr)}
+    #screenwrap{max-width:min(100%,480px)}
+    .flow{padding-right:2px}
+    /* As wide as the screen rather than as wide as the tablet, and at the
+       bottom of its column: a tablet is held in two hands and the thumbs are
+       nowhere near the middle. */
+    .padwrap{max-width:480px;width:100%;align-self:end}
+  }
 </style>
 </head>
 <body>

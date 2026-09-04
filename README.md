@@ -1036,6 +1036,28 @@ the test browser because a background tab never sends its ICE checks, and a
 standalone probe in the same browser passes video fine. On two real devices it
 should simply work — and if it does not, the row will tell you.
 
+## Three layouts, one machine
+
+The screen and the pad are furniture: they hold their places and the cards
+between them are the only thing that scrolls. What changes with the room is how
+that furniture is arranged.
+
+| | screen | the rest |
+| --- | --- | --- |
+| **Portrait phone** | full width, letterboxed on short phones | flow between screen and pad |
+| **Landscape phone** | between your thumbs | D-pad left, A/B right, cards beside |
+| **Tablet** | an integer 3× — 480 × 432 | the flow alongside, no scrolling |
+
+Landscape was not cramped before this, it was unusable: at 844 × 390 the page
+ran to six screens and the pad started at 575px, so the game and the buttons
+that drive it could not both be seen at any scroll position. A phone in
+landscape now puts the D-pad under one thumb and A/B under the other with the
+picture between them, which is where a handheld has always put them.
+
+Sizes are in `dvh`, because mobile browser chrome comes and goes and a pad
+positioned against `100vh` sits under the address bar exactly when a thumb
+reaches for it.
+
 ## What leaves the device, and when
 
 Sharing changed the honest answer to "does anything leave my phone?", so here it
