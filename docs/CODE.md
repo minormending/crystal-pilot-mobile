@@ -1204,7 +1204,7 @@ the bag" rather than "did we gain any".
 
 ## 9. The interface
 
-<!-- covers: app/main.js index.html @ 03f2f0756b14 -->
+<!-- covers: app/main.js index.html @ 5e91d28cb6e1 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -1320,6 +1320,27 @@ half that matters.
 Nothing is deleted: the line is a `<summary>` and the bars are one tap below it.
 With no party the whole box is hidden rather than summarising nothing — the hint
 under the offers already says that most jobs want a Pokémon along.
+
+**Two doors, and never two panels.** Colour, the room, this device's name, the
+kept files and *How this works* are preferences and mechanisms — set once and
+then read never — and they were the first card in the menu, so opening the
+pilot's list meant scrolling past the colour theme. They move behind a ⚙ in the
+header, into a second overlay that shares the first one's grid area and sits a
+layer above it, because in the tablet and landscape layouts the menu is a column
+that never closes and settings has to cover it.
+
+`showPanel` takes one of `'menu'`, `'settings'` or `null` rather than keeping two
+open flags: "both open" is a state with no meaning, and two booleans would let it
+happen. Both doors are also visible with no game loaded — the device that most
+needs the room code is the one with no ROM on it yet, which is the same reason
+the version display moved into the header in v71.
+
+The gear made the header seven items wide, and at 375px the row wrapped: flex
+lays items onto lines *before* it shrinks them, so an item that does not fit
+takes a new line rather than squeezing the ones beside it. The gap went 8→6, the
+speed slider 74→56, and the row measures 50px tall at both 375 and 390 with
+everything on one line. The wrap is still there for the case it was built for — a
+game running with a newer build to announce.
 
 The pilot's jobs are a **list, not a toolbar**, because `runTask` opens with
 `if (running) return null` — only one job can ever be underway, so they are one

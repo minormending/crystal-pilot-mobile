@@ -88,8 +88,12 @@
      last one loses: the speed slider's `1x` was cut in half by the right
      edge, which is a worse outcome than a header that is briefly two rows
      tall. Nothing wraps in the normal case, because nothing has to. */
-  header{display:flex;flex-wrap:wrap;gap:8px;align-items:baseline;
-         padding:10px 14px;border-bottom:1px solid var(--line)}
+  /* Six things now, and the gear made it seven at 375px -- so the gap and the
+     slider gave up the width rather than the row giving up and wrapping. The
+     wrap is still there for the case it was built for: a game running and a
+     newer build to announce. */
+  header{display:flex;flex-wrap:wrap;gap:6px;align-items:baseline;
+         padding:10px 12px;border-bottom:1px solid var(--line)}
   header h1{font-size:15px;margin:0;flex:0 0 auto;white-space:nowrap}
   /* The version belongs with the app's name, not in a card. What it answers --
      which build is this? -- is asked before a ROM is picked as often as after,
@@ -142,6 +146,9 @@
   label.file.jgo input{position:absolute;inset:0;opacity:0;cursor:pointer}
   .themerow{display:flex;align-items:center;gap:10px}
   .themerow .val{flex:1 1 auto;font-size:12px;color:var(--dim)}
+  /* Last in the header and pushed to the edge, so it is in the same place
+     whether or not a game is loaded and whatever the location line says. */
+  header button.gear{min-width:0;padding:6px 9px;font-size:15px;line-height:1}
   /* What would add to the list, when that is worth saying. Deliberately quiet:
      it is the one line left of what used to be four rows of apology. */
   .offerhint{margin:8px 2px 0;font-size:12px;color:var(--dim);line-height:1.4}
@@ -158,8 +165,8 @@
                   letter-spacing:.06em;text-transform:uppercase;font-weight:600;
                   color:var(--ink);background:var(--raise);border-radius:7px;
                   border:1px solid var(--line);min-width:5.2em}
-  header .speed{display:flex;align-items:center;gap:7px;flex:0 0 auto}
-  header .speed input[type=range]{width:74px;accent-color:var(--accent);
+  header .speed{display:flex;align-items:center;gap:6px;flex:0 0 auto}
+  header .speed input[type=range]{width:56px;accent-color:var(--accent);
                                   background:transparent;margin:0}
   header .speed .x{font-variant-numeric:tabular-nums;font-weight:700;
                    font-size:12px;color:var(--dim);min-width:2.2em;
@@ -202,14 +209,17 @@
      opening it costs the screen nothing and moves neither the bar nor the pad.
      A phone has no room for both the game and the menu; that is why there is a
      door at all, and why the tablet and landscape rules below take it away. */
-  .sheet{grid-area:stage;z-index:3;background:var(--bg);
+  .sheet,.setsheet{grid-area:stage;z-index:3;background:var(--bg);
          min-height:0;overflow-y:auto;overscroll-behavior:contain;
          display:flex;flex-direction:column;gap:10px;padding-bottom:2px;
          /* The bottom edge fades, so a card cut off mid-button reads as "there
             is more below" rather than as a rendering fault. */
          mask-image:linear-gradient(to bottom,#000 calc(100% - 14px),transparent);
          -webkit-mask-image:linear-gradient(to bottom,#000 calc(100% - 14px),transparent)}
-  .sheet:not(.open){display:none}
+  .sheet:not(.open),.setsheet:not(.open){display:none}
+  /* Above the menu rather than beside it, because in the two wide layouts the
+     menu is a column that never closes and this has to cover it. */
+  .setsheet{z-index:4}
   /* The fade at the sheet's bottom edge is a mask, which makes the sheet
      transparent there -- over the page background that reads as "more below",
      and over the running game it read as the game bleeding through the menu.
@@ -550,6 +560,7 @@
        to do: the sheet is a column and stays open. The chevron goes with it --
        an affordance for a door that is not there is worse than no affordance. */
     .sheet,.sheet:not(.open){display:flex;grid-area:sheet}
+    .setsheet{grid-area:sheet}
     /* Both at once here, so the stage is never the thing being covered. */
     body.menuopen .stage{visibility:visible}
     .chev{display:none}
@@ -581,6 +592,7 @@
     .shot{container-type:normal}
     #screenwrap{width:min(100%,480px)}
     .sheet,.sheet:not(.open){display:flex;grid-area:sheet}
+    .setsheet{grid-area:sheet}
     .sheet{padding-right:2px}
     /* Both at once here, so the stage is never the thing being covered. */
     body.menuopen .stage{visibility:visible}
@@ -603,6 +615,10 @@
            aria-label="Emulator speed">
     <span class="x" id="speedx">1×</span>
   </span>
+  <!-- Not hidden behind a loaded game, like the card it opens: the device that
+       most needs the room code is the one with no ROM on it yet. -->
+  <button class="themebtn gear" id="gear" aria-label="Settings"
+          aria-expanded="false" aria-controls="setsheet">⚙</button>
 </header>
 <main>
   <!-- The machine. The screen and the pad hold their places on the page; the
@@ -836,13 +852,19 @@
       you download it.</footer>
   </div>
 
-  <!-- Not hidden until a game loads, unlike everything below it. Nothing in
-       this card needs one: the theme, what this device is called, which room it
-       is in, and which files it is keeping are all true before a ROM is picked
-       -- and the device that most needs the room is the one with no game yet,
-       which could not reach these controls at all while they lived behind a
-       loaded cartridge. The version display learnt this the same way. -->
+  </div>
+
+  <!-- Behind the gear. Everything in here is a preference or a mechanism: set
+       once and then read never, which is what a door is for. It was the first
+       card in the menu, so opening the pilot's list meant scrolling past the
+       colour theme to reach it. -->
+  <div class="setsheet" id="setsheet">
+  <!-- Reachable with no game loaded, which the version display learnt the same
+       way: the theme, what this device is called, which room it is in and which
+       files it keeps are all true before a ROM is picked, and the device that
+       most needs the room is the one with no game on it yet. -->
   <div class="card" id="speedcard">
+    <h2>Settings</h2>
     <div class="themerow">
       <span class="lvlabel">Colour</span>
       <button class="themebtn" id="theme" aria-label="Colour theme">auto</button>
@@ -896,8 +918,8 @@
         emulator — and one Stop sits under the screen.</p>
     </details>
   </div>
-
   </div>
+
   <div class="padwrap">
   <div class="card hide" id="ctrls">
     <h2>Play</h2>

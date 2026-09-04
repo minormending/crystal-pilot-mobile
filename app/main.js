@@ -205,24 +205,33 @@ const setStatus = (text, kind = '') => {
 };
 
 /**
- * Open or close the menu over the screen.
+ * Show one of the two panels over the screen, or neither.
  *
- * Open until a game is running, because until then the sheet holds the only two
- * things there are to do -- read what this is, and pick the files -- and a door
- * closed over an empty screen would be an app with nothing in it. After that it
- * is closed by default and by every job that starts: you asked the pilot to do
- * something, so the thing to look at is the game.
+ * There are two doors and never two panels: the status line opens the menu, the
+ * gear opens settings, and opening either closes the other. One `panel` value
+ * rather than two open flags, because "both open" is a state with no meaning
+ * that two booleans would let happen.
  *
- * The tablet and landscape layouts pin the sheet open in CSS and hide the
- * chevron, so this still runs there and simply has nothing to move.
+ * The menu is open until a game is running, because until then it holds the
+ * only two things there are to do -- read what this is, and pick the files --
+ * and a door closed over an empty screen would be an app with nothing in it.
+ * After that it is closed by default and by every job that starts: you asked
+ * the pilot to do something, so the thing to look at is the game.
+ *
+ * The tablet and landscape layouts pin the menu open in CSS and hide its
+ * chevron, so this still runs there and simply has nothing to move for 'menu'.
  */
-function showSheet(open) {
-  $('#sheet').classList.toggle('open', open);
-  document.body.classList.toggle('menuopen', open);
-  $('#door').setAttribute('aria-expanded', open ? 'true' : 'false');
-  $('#chev').textContent = open ? 'Close ▾' : 'Menu ▴';
+let panel = 'menu';
+function showPanel(which) {
+  panel = which;
+  $('#sheet').classList.toggle('open', which === 'menu');
+  $('#setsheet').classList.toggle('open', which === 'settings');
+  document.body.classList.toggle('menuopen', !!which);
+  $('#door').setAttribute('aria-expanded', which === 'menu' ? 'true' : 'false');
+  $('#chev').textContent = which === 'menu' ? 'Close ▾' : 'Menu ▴';
+  $('#gear').setAttribute('aria-expanded',
+                          which === 'settings' ? 'true' : 'false');
 }
-const sheetOpen = () => $('#sheet').classList.contains('open');
 // The pilot's own account of what it is doing, kept rather than overwritten.
 // It emits exactly the right events already -- "heading left", "healing up",
 // "slot 1 is down - sending out slot 2" -- and a single label threw all but
@@ -328,7 +337,7 @@ async function reallyStart() {
   $('#screenwrap').classList.remove('hide');
   $('#taphint').classList.remove('hide');
   // There is something to look at now, so the menu gets out of the way.
-  showSheet(false);
+  showPanel(null);
   startLoop();
 
   paintFiles();
@@ -1047,7 +1056,7 @@ function setMode(piloting) {
   $('#stopRun').classList.toggle('hide', !piloting);
   // Asking for a job is asking to watch it. Only one way: a job that ends does
   // not re-open the menu, because the person may well be reading the screen.
-  if (piloting) showSheet(false);
+  if (piloting) showPanel(null);
 }
 
 async function runTask(id, busy, work,
@@ -1837,7 +1846,8 @@ $('#heal').onclick = async () => {
   await runTask('#heal', 'off to heal', () => boot.healNow());
 };
 
-$('#door').onclick = () => showSheet(!sheetOpen());
+$('#door').onclick = () => showPanel(panel === 'menu' ? null : 'menu');
+$('#gear').onclick = () => showPanel(panel === 'settings' ? null : 'settings');
 // The log's card starts empty, and nothing paints it until a job runs.
 paintStatusCard();
 
