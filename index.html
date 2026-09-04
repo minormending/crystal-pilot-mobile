@@ -506,6 +506,15 @@
        display:inline-block;margin-right:6px}
   .dot.busy{background:var(--accent)} .dot.ok{background:var(--ok)}
   .dot.bad{background:var(--bad)}
+  /* A running job dims the pad, because a running job already refuses its
+     presses: `hold` opens with `if (running) return`. That guard has always
+     been in every layout and the dimming has not -- it was written for the
+     landscape rule, where the pad is taken apart, and stayed there. So on a
+     phone held upright the pad looked exactly as available as ever and quietly
+     did nothing, which is the same rule the offers list is built on read
+     backwards: a control that cannot act should not look like it can. */
+  body.piloting .dpad,body.piloting .face,body.piloting .menus{
+    opacity:.4;pointer-events:none;filter:saturate(.4)}
   .hide{display:none!important}
   /* The `hidden` attribute only carries `display:none` from the UA sheet, which
      any class in here outranks -- so `.param`/`.levels` set to display:flex have
@@ -565,9 +574,6 @@
     body.menuopen .stage{visibility:visible}
     .chev{display:none}
     #taphint{display:none}
-    /* The dimming lived on the pad's card, which is not a box any more. */
-    body.piloting .dpad,body.piloting .face,body.piloting .menus{
-      opacity:.4;pointer-events:none;filter:saturate(.4)}
   }
 
   /* A tablet is not a big phone. Portrait iPad measured 560px of a 820px
