@@ -248,7 +248,8 @@ The `undefined` fields were not the real story. They come from the library's
 memory module, which this app never initialises because it steps frames itself
 and never calls `play()`. Call `play()` once and `saveState()` returns
 everything populated — cartridge RAM 32768, Game Boy memory 65536, internal
-state 1024, palette 128 — and persists it, so `getSaveStates()` lists them back.
+state 1024, palette 128 — and persists it, so the library's own
+`getSaveStates()` lists them back.
 
 `loadState()` is the half that genuinely does not work. It rejects with
 `undefined` on states the library created itself, fetched from its own
@@ -1029,7 +1030,8 @@ Tackle and Leer. Two emulators, two implementations, one save file.
 
 <!-- covers: app/saves.js @ 4d332255b465 -->
 
-Three slots a person picks, plus one the pilot writes before every job. A slot
+Three slots a person picks, plus an undo point the pilot writes before every
+job and the game a handoff replaced, if there is one — five records. A slot
 holds a **battery save** — the 32KB the cartridge writes — and not a machine
 state, and everything odd about how slots behave follows from that.
 
@@ -1212,24 +1214,43 @@ This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ c9076285237e -->
+<!-- covers: app/main.js index.html @ 13725f009938 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
 
+Nothing moves between those two any more, which is the whole of the layout work
+— the pad and the screen are furniture, and a job changes what is *drawn* rather
+than where anything is:
+
 ```mermaid
 stateDiagram-v2
+    direction LR
     [*] --> Playing
-    Playing --> Piloting: a job starts
-    Piloting --> Playing: it finishes, fails, or you Stop
+    Playing --> Piloting: runTask, setMode(true)
+    Piloting --> Playing: finally — done, thrown, or Stop
     note right of Playing
-        the pad sits under the screen
-        jobs and party below it
+        the pad takes input
+        the offers list is live
     end note
     note right of Piloting
-        the run state and Stop take that band
-        the pad drops below, dimmed
+        hold() refuses; the pad dims to say so
+        Stop on the bar; the newest log line beside it
+        showPanel(null) closes the menu
     end note
+```
+
+The furniture is a grid, and every layout is the same four areas rearranged.
+`main` names them, and each one is a single child of `main` except the sheet,
+which shares the stage's area on purpose:
+
+```mermaid
+flowchart TD
+    M["main — display:grid"] --> ST["<b>stage</b><br/>.shot → #screenwrap → canvas<br/>#taphint"]
+    M --> SH["<b>stage</b>, again<br/>.sheet — the menu<br/>.setsheet — settings"]
+    M --> BA["<b>bar</b><br/>.barline: #dot #status #steps #chev, #stopRun<br/>#battlebar · #handoffrow"]
+    M --> PA["<b>pad</b><br/>.gamepad → .dpad .face · .menus"]
+    ST -. "same area, higher z-index" .- SH
 ```
 
 **The machine is furniture; only the middle moves.** `main` is a three-row grid
@@ -1294,6 +1315,48 @@ A tablet and a phone in landscape have room for the game and the menu at once,
 so in both of those layouts the sheet is a column that is always open and the
 chevron is hidden: an affordance for a door that is not there is worse than no
 affordance. `showSheet` still runs, and simply has nothing to move.
+
+<details>
+<summary><b>Advanced detail:</b> the two rules that size the screen, and why the
+third one does not work</summary>
+
+The wrap has to be *exactly* the canvas's box, because `#tapmark` is positioned
+in percentages of it — one tile is 10% across and 11.111% down. Cap the canvas
+inside a full-width wrap and the marker drifts by half the difference the moment
+the picture letterboxes: measured, a 230-wide canvas in a 351-wide wrap put the
+ring a tile and a half from the tap.
+
+So the wrap is sized and the canvas fills it:
+
+```css
+.shot       { flex:1 1 auto; min-height:0; container-type:size }
+#screenwrap { width:min(100%, calc(100cqh * 160 / 144)); aspect-ratio:160/144 }
+canvas      { width:100%; height:100% }
+```
+
+`100cqh` is `.shot`'s own height, which is why there is no constant: `.shot`
+holds nothing but the picture, so the tap hint below it is outside the sum.
+Two cases, both correct without a special case — if the height binds, the `160
+/ 144` gives the width; if the width binds, `min()` clamps it and
+`aspect-ratio` gives the height back, letterboxing inside the stage.
+
+The two approaches that do not work, both tried:
+
+**Shrink-wrapping the wrap** — `align-items:center` on the stage, `width:auto`
+on the wrap — collapses it to 162px. Shrink-to-fit asks the canvas for its
+max-content width, and a canvas answers with its `width` attribute, which is
+160 plus a border.
+
+**Overriding the canvas in landscape** — `height:100%` with `width:auto` —
+gave a 220 × 267 box on a 160 × 144 picture, squashing it, because a column
+narrower than the ratio wants clips the width and leaves the height alone.
+
+The tablet is the one layout still handed a number, `width:min(100%,480px)`,
+because there the goal is an integer scale rather than filling the room. A grid
+row sized `auto` also has no definite height for `cqh` to measure, so
+`container-type` is turned back to `normal` there and the width comes first.
+
+</details>
 
 **Two actions are not offers, and they left the list.** Fight and Throw answer
 the battle in front of you rather than being sent off to do something, and a
@@ -1398,7 +1461,33 @@ Every rule in the ranking is a fact about the state rather than a preference:
 
 Ranking is a `style.order` and a `hide`, not generated markup: every row keeps
 its id, its handler and its line in `check-app`'s wiring check, and what changed
-is which are drawn and in what order. Three consequences fell out of that and
+is which are drawn and in what order.
+
+<details>
+<summary><b>Advanced detail:</b> reordering a list that four other things
+assumed was fixed</summary>
+
+`describeOffers` returns `{offered, rank, hint}`, and `rank` becomes
+`style.order` directly. It is 1-based for legibility rather than necessity:
+`rank === 1` reads as "this one leads", and no rank is ever the falsy `0` that
+`order` also defaults to. Rows that are not offered get `order:''` *and* `.hide`,
+so they leave the flow entirely rather than sorting to the front.
+
+Four consequences, each of which was a bug for one run:
+
+| assumed | broke | now |
+| --- | --- | --- |
+| `.job:first-of-type` wears no top rule | the row *written* first is not the row *shown* first, and may not be drawn at all | a `lead` class on rank 1 |
+| `#go` carries `primary` in the markup | true of six fixed rows, a lie once anything else can lead | `classList.toggle('primary', rank === 1)` |
+| a row's button is the row's button | Catch has two, and only one is on screen | the accent goes to whichever is not `.hide` |
+| `enabled` means "this row is live" | Catch with no balls cannot catch, but its errand is the thing to press | a `lit` flag, separate from `enabled` |
+
+The six rows also had to move into a `.jobs` flex column of their own. `order`
+sorts *every* flex child, and the species picker, the level presets and the
+`seen` line are not offers — left in the same container they sorted to the top,
+above the offers they belong to.
+
+</details> Three consequences fell out of that and
 each needed its own fix. `.job:first-of-type` was the row written first, not the
 row now shown first, so the top rule is drawn by a `lead` class instead. The
 accent was nailed to Grind in the markup, which was true of a fixed list and a
@@ -1738,6 +1827,43 @@ only copy of a game — no slot taken, no `.sav` downloaded. The slots are in th
 other database and are untouched, which the question says: "forget my files"
 must not read as "wipe everything".
 
+<details>
+<summary><b>Advanced detail:</b> where all of this actually lives, and the
+read-modify-write that had to become one transaction</summary>
+
+Four places, and knowing which is which is most of understanding *Forget*:
+
+| where | holds | written by |
+| --- | --- | --- |
+| `localStorage` — `crystal-pilot-opts` | speed, grind preset, hunted species, and a stamp | `remember.js` |
+| `localStorage` — the theme key, older | light / dark / auto | the theme button |
+| IndexedDB `crystal-pilot-files`, store `kept` | `rom`, `sym`, `battery`, `meta` | `remember.js` |
+| IndexedDB `crystal-pilot`, store `slots` | five records and five `:about` summaries | `saves.js` |
+| IndexedDB `wasmboy`, store `keyval` | the library's own per-cartridge record | WasmBoy, and `saves.install` |
+
+*Forget* clears the first and third. The slots are a different database and
+survive, which is what the confirmation says.
+
+`patchMeta` merges fields into the `meta` record, and it used to do that as a
+read *then* a write — two transactions with an `await` between them. Two
+callers a moment apart therefore both read the old record and the second write
+lost the first's fields, which is reachable on the very first run: picking the
+ROM and then the `.sym` writes a name each, and one of them disappeared. It is
+one `readwrite` transaction now, `store.get` and `store.put` inside the same
+one, so the browser serialises them.
+
+The connection is cached too, with `onversionchange` and `onclose` clearing the
+cache. A fresh `indexedDB.open` per call is not wrong, only wasteful — but a
+*held* connection that is not released blocks another tab's upgrade for ever,
+which is why the two handlers matter more than the caching does.
+
+Each slot also keeps a small `:about` summary beside its 32KB record. `list()`
+draws five rows on every repaint, and reading five 32KB batteries to print
+"Route 29 · TOTODILE Lv5" was 160KB of decoding per paint — measured at 1ms for
+five slots once the summaries existed.
+
+</details>
+
 ### Sharing between your own devices
 
 <!-- covers: app/room.js sync/kidsync.js @ 1820c8c3a96e -->
@@ -1749,9 +1875,13 @@ holding the code reads and writes it, and the code is the password. That shape
 is right for your own devices and wrong for anyone else's, so the code lives in
 your pocket and never in this repo.
 
-What travels today is the three remembered options, and that is on purpose:
-this is the small half, standing up the whole path — config, rules, anonymous
-sign-in, merge, debounce — with a slider position at stake rather than a save.
+The options went through this room first on purpose: the small half, standing up
+the whole path — config, rules, anonymous sign-in, merge, debounce — with a
+slider position at stake rather than a save. Three things travel this way, and
+all three merge: the remembered options, the 45 addresses out of the symbol
+file, and the notes two devices use to introduce their screens to each other.
+The save goes over the same room and does *not* merge, which is the next
+section.
 
 **Nothing here may be able to break the app.** kidsync imports the Firebase SDK
 from `gstatic` at the top of its module, so importing it statically would put a
@@ -1781,6 +1911,31 @@ dropped, while a remote one is a preset another build still offers. And it is
 never applied while a job is running — a target moving under a thumb mid-grind
 is alarming, and the task is holding the old value anyway, so it waits for the
 next quiet refresh.
+
+<details>
+<summary><b>Advanced detail:</b> what a merge has to promise, and the three
+groups that promise it differently</summary>
+
+kidsync calls `merge(mine, theirs)` on every device that sees a change and
+writes the result back, so a merge that is not **idempotent and commutative**
+does not settle: two devices keep answering each other for as long as they are
+both awake. Each group here reaches that differently.
+
+| field | rule | why not the obvious one |
+| --- | --- | --- |
+| `opts` | the newer `optsAt` wins, and the group moves whole | `Math.max` per field would leave the fastest speed either device ever chose as the one neither can leave; and half of one sitting with half of another is a state neither device ever had |
+| `optsBy` | on an equal stamp, the higher device id wins | two devices can stamp the same millisecond, and `String(a) >= String(b)` is a total order, so both sides pick the same winner without another round |
+| `sym` | the newer `sym.at` wins | a digest only changes when the ROM does, and whoever takes one checks the fingerprint against their own cartridge before believing a single address — so the worst a wrong winner can do is be ignored |
+| `rtc` | newest **per field**, with tombstones | the three fields of an introduction are written by two devices — a watcher asks, the host offers, the watcher answers — so a whole-object rule would have each write erase the other's half and the handshake would never complete |
+
+Tombstones are the one that had to be found by running it. Clearing a note by
+removing the key means the next merge sees "I have it, you do not" and puts it
+back — so *Show* could not be switched off while the other device was watching:
+the note came back within a second, every second. Written as a tombstone with a
+timestamp, "withdrawn" is a value rather than an absence, and it wins the same
+way any newer value does.
+
+</details>
 
 ### Handing the save over
 
@@ -1833,6 +1988,39 @@ about 1,200. Compression is what makes it possible and is not a guarantee, so
 `publish` refuses with the numbers and writes nothing — the save is still kept
 on the device, and the other one must not be left showing an older game with no
 explanation.
+
+<details>
+<summary><b>Advanced detail:</b> the arithmetic that decides whether a battery
+can be published at all, and the revision rule above it</summary>
+
+A Game Boy battery is 32,768 **bytes** and the room holds 32,768 **characters**
+of JSON, so every encoding except one is over the cap before it starts:
+
+| as | characters | verdict |
+| --- | --- | --- |
+| raw base64 | 43,692 | over, always |
+| a JSON array of numbers | 67,088 | far worse |
+| gzip, then base64 | ~1,200 | fits, measured on a real early save |
+
+Compression is therefore not an optimisation, it is the only reason this works
+— and it is not a guarantee, because the ratio comes from the save's own long
+runs of zeroes. `fits(packed, maxBytes, spare = 2048)` keeps two kilobytes back
+for the rest of the room's JSON: the cap is on the whole string, not on the
+payload, so a payload that exactly fills it is one that cannot be published.
+
+`toBinaryString` chunks at `0x2000` bytes rather than spreading the array into
+`String.fromCharCode(...bytes)`, which overflows the call stack — an argument
+list is not a place to put a megabyte.
+
+Above the codec, the revision is Lamport-style: `max(mine, theirs) + 1`, taken
+at publish time. Two devices that publish while out of contact therefore land
+on the same number, and the tie is broken by device id the same way `optsBy`
+breaks a stamp tie — so both sides agree on who holds the baton without another
+round trip. `take()` and `claim()` are deliberately separate calls for the
+same reason the takeover order matters: reading the bytes must not tell the room
+they have been installed.
+
+</details>
 
 ### Watching the other device's screen
 
@@ -1934,8 +2122,38 @@ handoff displaced, and only a handoff ever writes it. The row offering it back
 appears only when it holds something, because a row reading "nothing was
 replaced" explains a mechanism nobody has met.
 
-**The settings card stopped hiding behind a loaded game**, and that is the
-same bug the version display had at v71, one level down. The card holds the
+<details>
+<summary><b>Advanced detail:</b> the order the five steps of a takeover have to
+happen in</summary>
+
+Every one of these was in the wrong place once, and each wrong order loses
+something different:
+
+```
+room.takeSave(romTag)     read the bytes and the rev, and check the fingerprint
+keepReplaced()            put THIS device's game in the replaced slot
+saves.install(bytes)      write the library's record, re-load the ROM
+continueFromTitle()       drive START-then-A to get back into the world
+room.baton.claim()        only now: tell the room this device holds it
+keepBattery(bytes, rev)   and remember the rev the local battery corresponds to
+```
+
+`claim` last is the important one. It used to run straight after `takeSave`,
+which is a claim on a save this device might still fail to install — the room
+then believed a handoff that had not happened, and the device that *did* hold
+the game was told it was behind.
+
+`keepReplaced` before `install` is the same argument one step earlier: after
+`install` there is nothing left to keep.
+
+And `keepBattery` after `claim` rather than before, because the handoff row
+compares the room's rev with the local one — painted in the other order it read
+"the other device is ahead" about a save this device had just taken.
+
+</details>
+
+**Settings stopped hiding behind a loaded game**, and that is the
+same bug the version display had at v71, one level down. It holds the
 theme, this device's name, which room it is in and which files it keeps —
 none of which need a cartridge — and the device that most needs the room is
 precisely the one with no game yet. Joining a room from a fresh phone was
@@ -1962,6 +2180,17 @@ carries those 45 lines — about a kilobyte, `{name: [bank, addr]}` — and a
 second device needs the ROM and nothing else. `Symbols.fromDigest` builds a
 table that behaves like the parsed file; `size` is the only honest difference,
 and it reports 45 because that is how many symbols it has.
+
+```mermaid
+flowchart LR
+    F["the .sym file<br/>1.8MB, 58,456 symbols"] --> S["Symbols<br/>the parsed table"]
+    S -->|"digest(SHARED_SYMBOLS)"| D["{name: [bank, addr]}<br/>45 entries, ~1KB"]
+    D --> R[["the room"]]
+    R --> D2["the same 45 entries"]
+    D2 -->|"Symbols.fromDigest"| T["a table that behaves<br/>like the parsed file"]
+    T --> APP["the second device,<br/>with the ROM and no .sym"]
+    C{{"check-app: is SHARED_SYMBOLS<br/>every name the app looks up?"}} -.-> D
+```
 
 The list lives in `app/symbols.js` as `SHARED_SYMBOLS`, written by hand,
 because nothing at run time can know which names the code is *going* to ask
@@ -2234,6 +2463,13 @@ clone:
 git config core.hooksPath .githooks
 ```
 
+The check scans every `docs/*.md`, not just this file, and two documents carry
+markers now: this one, and [The interface](INTERFACE.md). That second one is
+there because it is the page that actually went stale — it described a layout
+that had been replaced twice, for five versions, and nothing in the repository
+could notice. A checker can see that code changed; it cannot see that prose
+about that code did not.
+
 ### The other checks
 
 <!-- covers: tools/check-app @ 37d3edb8d72c -->
@@ -2345,3 +2581,6 @@ here so the next person does not spend the same afternoon.
 | A service worker registration error in the console | The in-app browser pane blocks service-worker registration on its embedded origin. `sw.js` parses and serves correctly. |
 | The same leg of a journey failed once and worked next time | Was genuinely nondeterministic; the cause was calibration on a doorway. See section 5. |
 | `menuIsLive` returns false at a menu that is plainly up | Check `menuItems` and `menuTop` — you are probably looking at the pack, not the battle menu. |
+| The pilot's list is empty during a battle | By design: Fight and Throw are on the bar, and nothing that walks can start. The hint says where they went. |
+| The level presets vanish | They are drawn only when Grind is on the list. With no party there is nothing to level, so they are four buttons that change a number nobody reads. |
+| `element.hidden = true` does nothing | The attribute only carries the UA sheet's `display:none`, which any class in the page outranks. `[hidden]{display:none!important}` is in the sheet for that reason — if you add a `display` rule to a class, it will win over `hidden` without it. |
