@@ -1047,12 +1047,27 @@ Tackle and Leer. Two emulators, two implementations, one save file.
 
 ## 7c. Slots, undo, and bringing a save in
 
-<!-- covers: app/saves.js @ 4d332255b465 -->
+<!-- covers: app/saves.js @ ae994d95ab85 -->
 
 Three slots a person picks, plus an undo point the pilot writes before every
 job and the game a handoff replaced, if there is one — five records. A slot
 holds a **battery save** — the 32KB the cartridge writes — and not a machine
 state, and everything odd about how slots behave follows from that.
+
+**Each record carries the cartridge it came from**, and loading refuses across
+it. A save is written in the layout of the build that wrote it, so bytes from
+another one load and are then confidently wrong — worse than not loading, which
+is why the handoff row has always named a mismatch instead of offering it. Slots
+are the same bytes from the same person's other cartridge, and they outlive a
+ROM switch in a way an in-session undo point cannot. The row says *from a
+different ROM* before anything is pressed, and `loadSlot` refuses if it is
+pressed anyway.
+
+`Saves` holds the tag as a field that `main.js` sets once, rather than each of
+`capture`'s four callers passing it: four call sites that must all remember the
+same field is the shape of the bug this exists to prevent. A record kept before
+slots recorded a tag, or a session that has not fingerprinted its ROM yet, is
+believed as it always was — the check needs two answers to compare.
 
 ```mermaid
 flowchart TD
@@ -1239,7 +1254,7 @@ This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ f75ceab8e673 -->
+<!-- covers: app/main.js index.html @ 1b9b31a0e590 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.

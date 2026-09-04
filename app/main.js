@@ -347,6 +347,10 @@ async function reallyStart() {
   // that has the .sym file and everything on the device that does not, so this
   // is the backstop for a mistake that would otherwise be invisible here.
   if (romBytes && !romTag) romTag = fingerprintRom(romBytes);
+  // Slots belong to a cartridge. Set after the backstop above rather than at
+  // construction, because that is the first line where the fingerprint is
+  // certain to exist.
+  saves.tag = romTag;
   shareSymbols();
 
   // A battery that came back with the files, put in through the same path a
@@ -615,7 +619,7 @@ async function paintReplaced() {
   const row = $('#job-replaced');
   if (!row || !saves) return;
   const all = await saves.list();
-  const said = describeReplaced(all[REPLACED_SLOT]);
+  const said = describeReplaced(all[REPLACED_SLOT], romTag);
   row.classList.toggle('hide', !said.show);
   if (said.show) $('#replacedstate').textContent = said.text;
 }
@@ -2381,6 +2385,14 @@ async function loadSlot(slot, what) {
   return runTask('#undo', `loading ${what}`, async () => {
     const rec = await saves.read(slot);
     if (!rec || !rec.bytes) return { ok: false, message: `${what} is empty` };
+    // The same refusal the handoff has always made, for the same reason: a save
+    // written by another build loads and is then confidently wrong. Only when
+    // both sides know their cartridge -- a slot kept before slots recorded one
+    // is loaded as it always was.
+    if (romTag && rec.tag && rec.tag !== romTag) {
+      return { ok: false,
+               message: `${what} was made with a different ROM` };
+    }
     await saves.install(rec.bytes);
     if (!await tasks.continueFromTitle()) {
       return { ok: false, message: 'loaded the save but could not reach the world' };
@@ -2407,7 +2419,7 @@ async function paintSlots() {
     name.textContent = `Slot ${id}`;
     const stateEl = document.createElement('span');
     stateEl.className = 'sstate';
-    stateEl.textContent = describeSlot(meta);
+    stateEl.textContent = describeSlot(meta, romTag);
     const keep = document.createElement('button');
     keep.textContent = meta ? 'Replace' : 'Keep';
     keep.onclick = () => runTask('#savegame', `keeping slot ${id}`, async () => {

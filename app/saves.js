@@ -77,6 +77,11 @@ export class Saves {
     this.state = state;
     this.rom = romdata;
     this.log = log;
+    // Which cartridge these slots belong to, set once the ROM's fingerprint is
+    // known. Held here rather than passed to `capture` by each of its four
+    // callers, because four call sites that must all remember the same field is
+    // the shape of the bug this is meant to prevent.
+    this.tag = null;
   }
 
   /** WasmBoy's own database, opened once rather than per call. */
@@ -113,6 +118,7 @@ export class Saves {
     const record = {
       bytes: Uint8Array.from(bytes),
       when: Date.now(),
+      tag: this.tag,
       ...extra,
     };
     const db = await this.db();
@@ -155,7 +161,7 @@ export class Saves {
       if (out[slot]) continue;
       const rec = await tx(db, STORE, 'readonly', (os) => wrap(os.get(slot)));
       out[slot] = rec ? { when: rec.when, where: rec.where, lead: rec.lead,
-                          party: rec.party } : null;
+                          party: rec.party, tag: rec.tag } : null;
     }
     return out;
   }

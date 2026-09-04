@@ -198,8 +198,15 @@ export function describeParty(s, ctx = {}) {
 }
 
 /** One slot's line: where it was, who was leading, and when. */
-export function describeSlot(meta) {
+export function describeSlot(meta, tag = null) {
   if (!meta) return 'empty';
+  // A save is written in the layout of the build that wrote it, so bytes from
+  // another cartridge load and are then confidently wrong -- which is worse
+  // than not loading. The handoff row has always said this about a save from
+  // the room; a slot is the same bytes from the same person's other cartridge.
+  // `tag` unknown on either side means an older slot, from before slots
+  // recorded one, and those are believed as they always were.
+  if (tag && meta.tag && meta.tag !== tag) return 'from a different ROM';
   const bits = [];
   if (meta.where) bits.push(meta.where);
   if (meta.lead) bits.push(meta.lead);
@@ -324,9 +331,13 @@ export function describeHandoff({ seen = null, rev = 0, tag = null } = {}) {
  * met yet. When it does exist it has to say enough to be worth pressing:
  * whose game went away, and where it was.
  */
-export function describeReplaced(meta) {
+export function describeReplaced(meta, tag = null) {
   if (!meta) return { text: '', enabled: false, show: false };
-  return { text: describeSlot(meta), enabled: true, show: true };
+  // Shown but not offered when it belongs to another cartridge. Hiding it would
+  // be worse: the row is the only record that a handoff took a game away, and
+  // "your game is still here, on the other cartridge" is the useful sentence.
+  const mine = !(tag && meta.tag && meta.tag !== tag);
+  return { text: describeSlot(meta, tag), enabled: mine, show: true };
 }
 
 /**

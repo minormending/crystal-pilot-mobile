@@ -318,6 +318,14 @@ every job it runs, and — only ever if a handoff has replaced your game — the
 game it displaced. Five records in all, and `ALL_SLOTS` in `app/saves.js` is the
 list.
 
+**Each one remembers which ROM it came from.** A save is written in the layout
+of the build that wrote it, so bytes from another one load and are then
+confidently wrong — worse than not loading at all. Point the app at a different
+cartridge and a slot kept under the old one reads *from a different ROM* rather
+than a place and a time, and Load refuses. Handing a save between your devices
+has always worked this way; slots do now too, because they are the records that
+outlive a ROM switch.
+
 **A slot holds a battery save, not a machine state, and that decides what it
 can do.** Keeping one saves the game first; loading one puts you back at that
 save point. So a slot is a place, not a moment — and a job that runs *inside* a

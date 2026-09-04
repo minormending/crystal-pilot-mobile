@@ -415,3 +415,26 @@ test('a room code is read the way it was probably meant', async (t) => {
   t.eq(readCode(''), null, 'and nothing is nothing');
   t.eq(readCode(null), null, 'including the wrong type entirely');
 });
+
+test('a slot from another cartridge is named rather than offered', async (t) => {
+  const kept = { where: 'Route 29', lead: 'TOTODILE Lv5', when: Date.now(),
+                 tag: 'aaaaaaaaaaaaaaaa' };
+
+  t.contains(describeSlot(kept, 'aaaaaaaaaaaaaaaa'), 'Route 29',
+             'the same ROM reads as it always did');
+  t.eq(describeSlot(kept, 'bbbbbbbbbbbbbbbb'), 'from a different ROM',
+       'another ROM is said instead of a place and a time');
+
+  // A slot kept before slots recorded a tag, and a session that has not worked
+  // one out yet, are both believed -- the check needs two answers to compare.
+  t.contains(describeSlot({ ...kept, tag: undefined }, 'bbbbbbbbbbbbbbbb'), 'Route 29',
+             'an untagged slot is loaded the way it always was');
+  t.contains(describeSlot(kept, null), 'Route 29',
+             'and so is any slot before this device knows its own ROM');
+
+  const mine = describeReplaced(kept, 'aaaaaaaaaaaaaaaa');
+  t.true(mine.enabled && mine.show, 'a replaced game from this ROM is offered back');
+  const theirs = describeReplaced(kept, 'bbbbbbbbbbbbbbbb');
+  t.true(theirs.show, 'one from another ROM is still shown, because it is a record');
+  t.false(theirs.enabled, 'but putting it back is not offered');
+});
