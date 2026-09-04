@@ -631,6 +631,31 @@ $('#restorereplaced').onclick = () => loadSlot(REPLACED_SLOT, 'the replaced game
 // exists.
 
 /** Who is showing a screen right now, as far as the room knows. */
+// What the host last said about this device's pad, while watching. Starts as
+// "yes" so a connection that is working needs no message to look right, and the
+// host sends one the moment the channel opens anyway.
+let remoteInput = { ok: true, why: null };
+// Whether a watching device may press the pad. The host's decision, kept here
+// rather than asked of the watcher: a watcher that chose not to send would be
+// honour-system, and the thing that has to be able to say no is the end that
+// owns the joypad.
+let letsPlay = true;
+
+/**
+ * Tell the watching device whether its pad is doing anything right now.
+ *
+ * Two reasons it might not be, and the watcher cannot work out either on its
+ * own: view-only is a decision on this device, and a pilot job holds the
+ * joypad for as long as it runs. Sent on the data channel rather than through
+ * the room because it changes while someone is looking at it -- a debounced
+ * room write would dim their pad a second late, or a second after it came back.
+ */
+function tellInput() {
+  if (!host) return;
+  const ok = letsPlay && !running;
+  host.tell({ t: 'input', v: ok, why: ok ? null : (letsPlay ? 'busy' : 'view') });
+}
+
 function screenState() {
   const fresh = signal.showing
     && Date.now() - (signal.showing.at || 0) < SHOWING_GOOD_FOR;
@@ -642,6 +667,11 @@ function screenState() {
     host: showing && !mine ? showing.by : null,
     viewer: host && signal.watching ? signal.watching.by : null,
     asleep: hostAsleep,
+    // This device's own decision while hosting; the other device's
+    // advertisement while watching. The note carries it so a watcher knows
+    // before it has a connection to be told over.
+    play: host ? letsPlay : !(showing && showing.play === false),
+    input: watcher ? remoteInput : null,
   };
 }
 
@@ -656,6 +686,10 @@ function paintScreen() {
   const said = describeScreen(screenState());
   $('#screenstate').textContent = said.text;
   btn.textContent = said.button;
+  // Only where there is a choice to make. Watching is somebody else's decision
+  // to change, so the second control is not drawn there at all.
+  $('#screenmode').classList.toggle('hide', !said.second);
+  if (said.second) $('#screenmode').textContent = said.second;
 }
 
 /**
@@ -665,11 +699,15 @@ function paintScreen() {
  * offer is made when a device asks, because an offer is only good for the one
  * device it was made for.
  */
-function showScreen() {
+function showScreen({ play = true } = {}) {
   if (!room) return;
+  letsPlay = play;
   host = createHost({
     canvas: $('#screen'),
     onInput: applyRemoteInput,
+    // The first moment there is anyone to tell. A view-only session that says
+    // nothing looks like a playable one until something changes.
+    onReady: tellInput,
     onStatus: (st) => {
       if (st === 'failed' || st === 'closed') progress('the watching device dropped');
       paintScreen();
@@ -681,9 +719,10 @@ function showScreen() {
   offeredTo = null;
   answeredAt = 0;
   acceptedAt = 0;
-  const announce = () => room.signal({ showing: { id: room.id, by: room.device } });
-  room.signal({ showing: { id: room.id, by: room.device }, offer: null, answer: null,
-                watching: null });
+  const announce = () => room.signal(
+    { showing: { id: room.id, by: room.device, play: letsPlay } });
+  room.signal({ showing: { id: room.id, by: room.device, play: letsPlay },
+                offer: null, answer: null, watching: null });
   // Repeated, because a note in a room outlives the tab that wrote it. A host
   // that is closed, reloaded or discarded by the phone leaves "iPhone is
   // showing its screen" standing for ever, and pressing Watch then waits
@@ -789,6 +828,11 @@ function applyRemoteInput(msg) {
   if (!host || !msg) return;
   if (msg.t === 'gone') { gb.releaseAll(); syncHeld(); return; }
   if (!PAD_BUTTONS.has(msg.b)) return;
+  // The whole of view-only, and it belongs here: a press that arrives is a
+  // press that was sent, so the only place the answer can be enforced is the
+  // end holding the joypad. Anything already down is let go, because a button
+  // held at the moment the pad is taken away stays held for ever otherwise.
+  if (!letsPlay) { gb.releaseAll(); syncHeld(); return; }
   if (running) return;
   if (msg.t === 'hold') gb.hold(msg.b);
   else if (msg.t === 'release') gb.release(msg.b);
@@ -846,6 +890,24 @@ $('#screenshare').onclick = () => {
   if (said.button === 'Show') showScreen();
   else if (said.button === 'Watch') watchScreen();
   else stopScreen();      // nothing waits on it here; the room is staying open
+};
+
+/**
+ * Hand the pad over, or take it back.
+ *
+ * Two jobs in one button, because they are the same decision made at different
+ * times: before showing it chooses how to start, and while showing it changes
+ * this device's mind. The watching device is told twice over -- the room note
+ * for the row it draws, and the channel for the pad it is holding.
+ */
+$('#screenmode').onclick = () => {
+  if (!host) { showScreen({ play: false }); return; }
+  letsPlay = !letsPlay;
+  // Anything held when the pad is taken away would stay held for ever.
+  if (!letsPlay) { gb.releaseAll(); syncHeld(); }
+  if (room) room.signal({ showing: { id: room.id, by: room.device, play: letsPlay } });
+  tellInput();
+  paintScreen();
 };
 
 // A hidden page runs about one frame a second, so a host that goes away says
@@ -1059,6 +1121,9 @@ function setMode(piloting) {
   // Asking for a job is asking to watch it. Only one way: a job that ends does
   // not re-open the menu, because the person may well be reading the screen.
   if (piloting) showPanel(null);
+  // A watching device's pad stops working for as long as this runs, and it has
+  // no way to know that unless it is told.
+  tellInput();
 }
 
 async function runTask(id, busy, work,

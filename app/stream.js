@@ -53,12 +53,15 @@ const send = (channel, msg) => {
  * The device with the game.
  *
  * `onInput` receives whatever the watcher's joypad sends, plus one message the
- * watcher never sends: `{t:'gone'}` when the channel closes. That is the
+ * watcher never sends: `{t:'gone'}` when the channel closes. `onReady` fires
+ * when the channel opens, which is the first moment `tell` reaches anyone. That
+ * is the
  * safety release -- a held direction with nobody left to release it would walk
  * into a wall forever, which is the same reason the app releases everything on
  * window blur.
  */
-export function createHost({ canvas, fps = 30, onInput = () => {}, onStatus = () => {} }) {
+export function createHost({ canvas, fps = 30, onInput = () => {},
+                             onStatus = () => {}, onReady = () => {} }) {
   let pc = null, channel = null, stream = null;
 
   function stop() {
@@ -81,6 +84,10 @@ export function createHost({ canvas, fps = 30, onInput = () => {}, onStatus = ()
       channel.onmessage = (e) => {
         try { onInput(JSON.parse(e.data)); } catch (err) { /* not ours */ }
       };
+      // `send` drops anything written before the channel opens, so a host with
+      // something to say up front -- whether the pad is live, say -- has to be
+      // told when there is somebody to hear it.
+      channel.onopen = () => onReady();
       channel.onclose = () => onInput({ t: 'gone' });
       pc.onconnectionstatechange = () => onStatus(pc.connectionState);
       await pc.setLocalDescription(await pc.createOffer());

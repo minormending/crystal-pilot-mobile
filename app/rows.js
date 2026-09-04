@@ -375,6 +375,12 @@ export function describeScreen({ hosting = false, watching = false, host = null,
     }
     return { text: `watching ${who}`, button: 'Leave' };
   }
-  if (host) return { text: `${host} is showing its screen`, button: 'Watch' };
+  // Whether pressing Watch gets a pad is worth knowing *before* pressing it,
+  // and the note carries the answer, so there is no reason to make someone find
+  // out by trying.
+  if (host) {
+    return { text: `${host} is showing its screen${play ? '' : ' · view only'}`,
+             button: 'Watch' };
+  }
   return { text: 'not showing this screen', button: 'Show', second: 'View only' };
 }

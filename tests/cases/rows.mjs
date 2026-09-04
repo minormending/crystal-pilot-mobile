@@ -369,6 +369,10 @@ test('showing a screen says whether the watcher may play, and offers the other w
 
   t.eq(describeScreen({}).second, 'View only',
        'the choice is offered before anyone is watching, not after');
+  t.contains(describeScreen({ host: 'iPhone', play: false }).text, 'view only',
+             'and the other device is told before it presses Watch');
+  t.false(describeScreen({ host: 'iPhone' }).text.includes('view only'),
+          'but not when there is nothing to warn about');
   t.eq(describeScreen({ hosting: true, play: false }).second, 'Hand over',
        'including with nobody watching yet');
 });
