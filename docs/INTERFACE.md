@@ -41,6 +41,27 @@ places, one opens over them, and the page itself never scrolls at all:
 | the sheet | the offers, the save, the party, settings | yes, and only this |
 | the pad | the eight buttons | never |
 
+```
+ ┌───────────────────────┐   ┌───────────────────────┐
+ │ crystal-pilot  v··  ⚙ │   │ crystal-pilot  v··  ⚙ │  ← header, always
+ ├───────────────────────┤   ├───────────────────────┤
+ │                       │   │ ┌───────────────────┐ │
+ │                       │   │ │ Send the pilot    │ │
+ │        screen         │   │ │  Catch  ▸ Start   │ │  the sheet, over
+ │                       │   │ │  Hunt   ▸ Start   │ │  the same area
+ │                       │   │ └───────────────────┘ │
+ │  Tap to walk there.   │   │ ┌───────────────────┐ │
+ ├───────────────────────┤   │ │ Your save         │ │
+ │ ● ready       Menu ▴  │   ├───────────────────────┤
+ ├───────────────────────┤   │ ● ready      Close ▾  │  ← the bar, always
+ │   ▲                   │   ├───────────────────────┤
+ │ ◀ ● ▶       B     A   │   │   ▲                   │
+ │   ▼                   │   │ ◀ ● ▶       B     A   │  ← the pad, always
+ │   Select    Start     │   │   ▼   Select   Start  │
+ └───────────────────────┘   └───────────────────────┘
+        menu closed                 menu open
+```
+
 The sheet shares the stage's grid area — two grid items in one area overlap,
 which is the whole trick — so opening the menu costs the screen nothing and
 moves neither the bar nor the pad. It is open until a game is running, because
@@ -219,10 +240,32 @@ is a preference: set once and then read never, which is what a door is for.
 
 Both doors are reachable with no game loaded — the device that most needs the
 room code is the one with no ROM on it yet, which is also why the version
-display lives in the header. `check-app` asserts both.
+display lives in the header. `check-app`'s `version` group asserts the two that
+can regress silently: that the version display is inside `<header>`, and that
+the settings card does not carry `hide`.
 
 One panel value rather than two open flags, because "both open" is a state with
-no meaning that two booleans would let happen. Opening either closes the other.
+no meaning that two booleans would let happen. Opening either closes the other:
+
+```mermaid
+stateDiagram-v2
+    [*] --> Menu: no game yet
+    Menu --> Nothing: a game loads
+    Nothing --> Menu: tap the status line
+    Menu --> Nothing: tap it again, or start a job
+    Nothing --> Settings: tap ⚙
+    Settings --> Nothing: tap ⚙ again
+    Menu --> Settings: tap ⚙
+    Settings --> Menu: tap the status line
+    note right of Nothing
+        the screen, the bar and the pad
+        the only state a job runs in
+    end note
+    note right of Menu
+        pinned open on a tablet
+        and in landscape
+    end note
+```
 
 The one sharing state that ever interrupts gets a line on the bar rather than a
 place behind a door: **your other device has the newer save**, with Take over
@@ -241,6 +284,22 @@ The furniture is the same in all three; what changes is how it is arranged.
 | **Portrait phone** | full width, letterboxed on short phones | bar and pad below, the menu opens over the screen |
 | **Landscape phone** | between your thumbs | D-pad left, A/B right, the menu a column beside |
 | **Tablet** | an integer 3× — 480 × 432 | the menu alongside, permanently |
+
+```
+ landscape phone, 844 x 390          tablet, 820 x 1180
+ ┌────────────────────────────┐      ┌──────────────────────────┐
+ │  ▲    ┌────────┐    B  A   │      │ ┌────────────┐  ┌───────┐│
+ │◀ ● ▶  │ screen │           │      │ │            │  │ Send  ││
+ │  ▼    └────────┘           │      │ │   screen   │  │  the  ││
+ │       ● ready              │      │ │    3x      │  │ pilot ││
+ │       Select  Start        │      │ └────────────┘  │       ││
+ │                    the     │      │ ● ready         │ Your  ││
+ │                    menu ── │      │ ┌────────────┐  │ save  ││
+ │                    beside  │      │ │  the pad   │  │       ││
+ └────────────────────────────┘      │ └────────────┘  └───────┘│
+   thumbs at the edges,              └──────────────────────────┘
+   picture between them                the menu is just there
+```
 
 A door exists because a phone has no room for both the game and the menu. A
 tablet has, and so does a phone held sideways, so in both of those the sheet is
@@ -351,4 +410,4 @@ So this page carries a marker naming the files it describes and the hash they
 had when it was last read against them. `tools/docs-check` reports it when they
 move, and the pre-commit hook blocks on that report.
 
-<!-- covers: index.html app/main.js app/rows.js @ a771d9d10cbf -->
+<!-- covers: index.html app/main.js app/rows.js @ 2a67c5fa2756 -->

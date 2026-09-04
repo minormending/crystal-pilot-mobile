@@ -958,7 +958,6 @@ async function awaitWorld() {
     }
     await new Promise((r) => setTimeout(r, 700));
   }
-  $('#panel').classList.remove('hide');
   // Not while the pilot is mid-hand-off. This loop's job is to notice that a
   // world exists, and one does the moment the bootstrap reaches Elm's lab --
   // so without this it tidied away the very button offering to finish the

@@ -7,6 +7,30 @@ deliberately need no emulator.
 
 ---
 
+## What runs, and where
+
+Three things can run on a clean checkout with no ROM, and between them they are
+what CI checks and what the pre-commit hook blocks on.
+
+```mermaid
+flowchart LR
+    E[an edit] --> H{{".githooks/pre-commit"}}
+    H --> T["./run-tests<br/>76 behaviour tests"]
+    H --> C["tools/check-app<br/>12 groups"]
+    H --> D["tools/docs-check<br/>23 tracked sections"]
+    T --> OK[commit]
+    C --> OK
+    D --> OK
+    OK --> P[push] --> CI[["CI: the same three"]]
+    CI --> PG[[GitHub Pages]]
+```
+
+The hook is not installed by cloning. Enable it once per clone:
+
+```bash
+git config core.hooksPath .githooks
+```
+
 ## Tests
 
 ```bash
@@ -14,6 +38,20 @@ deliberately need no emulator.
 ./run-tests -k catch   # only names that match
 ./run-tests -v         # notes and stack lines
 ```
+
+76 tests in nine files, and what each file is about says more than the count:
+
+| file | tests | what it pins down |
+| --- | --- | --- |
+| `rows.mjs` | 25 | what every row and offer says, and when its button works |
+| `remember.mjs` | 10 | which remembered choices are believed, and which dropped |
+| `capture.mjs` | 8 | weakening, ball choice, and counting throws out of the bag |
+| `control.mjs` | 8 | the task lifecycle: stopping, failing, and undo points |
+| `battle.mjs` | 7 | whose turn it is, and telling a win from a whiteout |
+| `state.mjs` | 6 | reading the party, the map and the battery out of work RAM |
+| `room.mjs` | 5 | the merge rules, so two devices settle rather than fight |
+| `symbols.mjs` | 4 | the 45-address digest a second device boots from |
+| `input.mjs` | 3 | held buttons, and releasing them |
 
 No ROM, no browser, no emulator — which is the point rather than a compromise.
 The ROM is not in this repository and never will be, so a test that needs one
@@ -42,6 +80,65 @@ handoff and the picture are all verified by hand, between two browser origins
 standing in for two devices. The one part not verified even that way is the
 video itself, for a reason the [remote play](DEVICES.md#watching-it-on-the-other-device)
 section gives. Everything by hand runs against a local build.
+
+## The checks that need no ROM
+
+`tools/check-app` is twelve groups, each one a class of mistake that parses
+fine and is wrong at run time:
+
+| group | asserts |
+| --- | --- |
+| `syntax` | all 20 modules and `sw.js` parse — copied to `.mjs` first, because `node --check` on a `.js` file with a syntax error exits 0 |
+| `shell` | the service worker's shell lists every file it needs, and each exists |
+| `markup` | `index.html`'s tags and its CSS braces balance |
+| `contrast` | 22 colour pairs meet WCAG in **both** themes |
+| `gamefiles` | no ROM, save or symbol file is tracked |
+| `moves` | the lethal moves excluded from weakening are the ones that lie about their power |
+| `buttons` | every button name handed to `press`/`hold` is one the core knows |
+| `wiring` | every `$('#id')` exists in the markup, and every import is really exported |
+| `symbols` | the shared digest is every symbol the app looks up |
+| `version` | `app/version.js` and `sw.js` agree, and both doors are reachable with no ROM |
+| `docshape` | the architecture diagram draws, counts and tables all 20 modules |
+| `names` | every capitalised name a module uses is one it can see |
+
+`tools/docs-check` is the other half, and it checks the prose rather than the
+code: a documentation section opts in with a marker naming the files it covers
+and the hash those files had when it was last read against them.
+
+```
+<!-- covers: app/nav.js app/collision.js @ a1b2c3d4e5f6 -->
+```
+
+The guarantee is deliberately modest — that prose was *looked at* since the code
+moved, not that it is right. Nothing short of a person reading both can do the
+second, and the failure worth catching is "someone changed the code and nobody
+remembered this file existed". When a section is right again:
+
+```bash
+tools/docs-check --update
+```
+
+Which is also why [The interface](INTERFACE.md) carries a marker: it is the page
+that went stale, for exactly five versions, and nothing could notice.
+
+## Driving it without picking files every time
+
+Two query parameters, both for development, both off by default:
+
+| | does |
+| --- | --- |
+| `?dev=1` | fetches the ROM and `.sym` from `./dev/`, which is gitignored, instead of asking you to pick them |
+| `?autostart=1` | lets the pilot play the intro itself, taking one of the game's own names — see [Using it](USING.md#starting-a-game-is-yours-not-the-pilots) |
+
+`window.PILOT` exposes the live objects — `gb`, `tasks`, `state`, `collision`,
+`world`, `nav`, `romdata`, `boot`, `walkToTap`, `showVersion`, and the two
+WebRTC ends as `host` and `watcher` — so anything can be driven and watched from
+a console rather than reasoned about.
+
+Sharing is tested by serving the same tree on **two ports** and treating them as
+two devices: separate origins mean separate IndexedDB and localStorage, which is
+exactly what two phones have. A fresh port also sidesteps an HTTP-cached module
+from the last run.
 
 ## Running it
 

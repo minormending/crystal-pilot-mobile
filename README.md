@@ -43,6 +43,19 @@ Everything else has a page of its own.
 | **[Developing it](docs/DEVELOPING.md)** | the tests, the checks that run without a ROM, and serving it locally |
 | **[The code](docs/CODE.md)** | a walkthrough of every module, written for someone who has not seen it before, with mermaid diagrams for the decision trees — how a step is taken, how a walk is planned, how a map crossing works, how a battle and a catch play out |
 
+```mermaid
+flowchart LR
+    R["README<br/>you are here"] --> U["Using it<br/>the buttons and the jobs"]
+    R --> I["The interface<br/>why it looks like a Game Boy"]
+    R --> D["Two devices<br/>rooms, handoff, privacy"]
+    R --> P["What is proven<br/>the engineering log"]
+    R --> V["Developing it<br/>tests and checks"]
+    R --> C["The code<br/>every module, with diagrams"]
+    I -.->|"the same screen, from the inside"| C
+    U -.-> I
+    D -.-> C
+```
+
 ## Why a browser at all
 
 Measured rather than guessed, on an M-series Mac:

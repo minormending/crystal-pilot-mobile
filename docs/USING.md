@@ -109,10 +109,34 @@ the tile it left from. A tap is still a tile on the map in front of you — it
 will not route you through a door to somewhere on another map.
 
 It also distinguishes the ways a walk can end, because they mean different
-things: a wild battle, a tile with no route to it, a doorway that changed the
-map underneath, and *the game refusing input at all* — walk downstairs into
-Mom's script and every direction is blocked, which is not the map's fault and
-should not be reported as one.
+things — and it says which one, rather than "gave up":
+
+```mermaid
+flowchart TD
+    T["tap a tile"] --> G{"is a walk even possible?"}
+    G -->|"in a battle"| B["that is a battle, not the map"]
+    G -->|"no world yet"| N["no map on screen to walk on"]
+    G -->|"a menu is open"| M["close the menu first"]
+    G -->|"off the map, or the decode will not calibrate"| O["says which"]
+    G -->|yes| P["plan a route from where the player is now"]
+    P --> S["take one step, and wait for the player to come to rest"]
+    S --> R{"arrived?"}
+    R -->|no| P
+    R -->|yes| DONE["walked to Route 29"]
+    S -->|"a wild Pokémon jumped out"| WB["a wild battle interrupted the walk"]
+    S -->|"three refusals at the same tile"| U["could not get past here"]
+    S -->|"every direction blocked"| RF["the game would not let me move"]
+    S -->|"a door fired underfoot"| W["came out on the next map"]
+    S -->|"the collision decode stopped agreeing"| D["lost track of the map"]
+    S -->|"Stop"| C["stopped at Route 29"]
+```
+
+The one worth singling out is *the game refusing input at all* — walk downstairs
+into Mom's script and every direction is blocked, which is not the map's fault
+and should not be reported as one. Re-planning every step is what makes the
+loop in that diagram safe: a plan is a plan, and a single missed step would
+otherwise put every later step in the wrong place while the walk still reported
+success.
 
 ## Starting a game is yours, not the pilot's
 
@@ -120,15 +144,25 @@ If the ROM has no save, the app boots it, hands you the buttons, and waits. It
 does not play the intro for you.
 
 That is deliberate. An auto-pilot can only answer a prompt by pressing A, and
-the intro's NAME menu defaults to NEW NAME -- which opens the letter grid, where
-pressing A repeatedly spells `AAAAA`. Your character, your name. The pilot's
-panel stays hidden until `wMapStatus` says the world is live, and then it
-appears on its own.
+the intro's NAME menu defaults to NEW NAME — which opens the letter grid, where
+pressing A repeatedly spells `AAAAA`. Your character, your name. Until the world
+is live the pilot has nothing to offer, and the offers list says so: the bar
+reads *Press Start, then play until you are out in the world*, and the list fills
+itself in the moment `wMapStatus` says there is a world to walk in.
 
 Automated runs have nobody to press A, so they opt in with `?autostart=1`, and
-even then they take one of the game's own names (CHRIS/MAT/ALLAN/JON, or
-KRIS/AMANDA/JUANA/JODI) rather than typing one. `NamePlayer` stores those
-directly, with no naming screen involved.
+even then they take one of the game's own names rather than typing one —
+CHRIS/MAT/ALLAN/JON, or KRIS/AMANDA/JUANA/JODI, the four presets below NEW NAME,
+which the game stores with no letter grid at all. The pilot steps the cursor down
+to the first of them and confirms.
+
+That menu is recognised by its **shape** rather than by its cursor: five items,
+ten columns wide, drawn at the top of the screen. The cursor still holds
+whatever the gender prompt left in it until the menu is actually drawn, so
+reading the cursor picks a name before the menu exists. And the pick is latched
+once, because nothing clears `wMenuData` when a menu closes — without the latch
+the intro loop sits there re-choosing a name that has already been chosen,
+forever.
 
 The same reasoning applies one step further in, which is why **Start a new game
 for me** is two presses rather than one. The first plays the intro, walks
@@ -148,18 +182,22 @@ one.
 `boot.run(name)` still plays straight through when a starter is named, which is
 what the automated runs use; `boot.run()` with nothing named is the hand-over.
 
-## Starting from nothing
-
-There is a **Start a new game for me** button on a fresh ROM. It plays the
-intro, walks downstairs, out of the house and into Elm's lab, and stops at the
-table so you can choose your own starter; a second press carries on out to the
-grass on Route 29. About a minute in total, and the point of it is that
-everything else needs a party to be worth running. Why it stops there rather
-than picking for you is under *Starting a game is yours, not the pilot's*.
+```mermaid
+flowchart LR
+    F["a ROM with no save"] --> T["the title screen<br/>Start is yours to press"]
+    T -->|"Start a new game for me"| I["intro · downstairs · out of the house<br/>· into Elm's lab · hear Elm out"]
+    I --> C["stops in front of the middle ball<br/>“your turn — pick a starter”"]
+    C -->|"you choose one"| A["press it again"]
+    A --> R["out to the grass on Route 29"]
+    C -->|"press it again with no starter"| X["“pick a starter first”"]
+    T -->|"?autostart=1"| AU["plays all of it, taking one<br/>of the game's own names"]
+    AU --> R
+```
 
 The route is the desktop pilot's, and each leg says which map it expects to land
 on rather than assuming, because a bootstrap that drifts off course ends up
-mashing A at a wall.
+mashing A at a wall. About a minute for the two presses together, and the point
+of it is that everything else needs a party to be worth running.
 
 ## Hunting
 
@@ -273,7 +311,10 @@ a game in both directions.
 
 ## Slots, and undoing a job
 
-Three slots, plus one the pilot writes for itself before every job it runs.
+Three slots you pick, plus two the app writes for itself: an undo point before
+every job it runs, and — only ever if a handoff has replaced your game — the
+game it displaced. Five records in all, and `ALL_SLOTS` in `app/saves.js` is the
+list.
 
 **A slot holds a battery save, not a machine state, and that decides what it
 can do.** Keeping one saves the game first; loading one puts you back at that
@@ -297,9 +338,9 @@ for you.
 
 ## A note on updates
 
-**The header shows which build you are running**, next to the app's name:
-`v95`, and when the server has a newer one `v94 → v95` with an Update button
-beside it. That button is deliberately heavy-handed — it unregisters the service
+**The header shows which build you are running**, next to the app's name: the
+version number on its own, and when the server has a newer one both numbers as
+`v96 → v97` with an Update button beside them. That button is deliberately heavy-handed — it unregisters the service
 worker, deletes every cache, and only then reloads — because a plain reload is
 exactly what does not always work, and it is the sequence I ended up typing by
 hand over and over while building this.

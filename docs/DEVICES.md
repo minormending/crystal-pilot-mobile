@@ -105,9 +105,12 @@ the password. Press **Share** on one device, type the code on the other, and
 what they remember stays in step. Because the code *is* the password, it lives
 in your pocket and never in this repo.
 
-What travels today is the three options above, which is the point: it stands up
-the whole path — config, rules, anonymous sign-in, merge, debounce — with a
-slider position at stake rather than a save. The save is the next piece.
+The options went first on purpose: they stood the whole path up — config, rules,
+anonymous sign-in, merge, debounce — with a slider position at stake rather than
+a save. Three things travel through the room that way, because all three merge:
+the options, the 45 addresses out of the symbol file, and the offer to show a
+screen. The save does **not** merge, and goes over the same room by a different
+mechanism — the next section.
 
 Two rules make it unable to hurt the app. Opening the room is the only thing
 that touches the network, and that happens on a press or because this device
@@ -136,6 +139,25 @@ that line — the other device is ahead, and the room holds a save from a
 different build. *Nothing shared yet*, *this device is ahead* and *in step* do
 not: they are either nothing having happened or everything being fine, and the
 status line is the one thing always on screen.
+
+```mermaid
+sequenceDiagram
+    participant P as phone
+    participant R as the room
+    participant T as tablet
+    Note over P,T: both hold the same code, and nothing else in common
+    P->>P: the game saves (by you, or by the pilot)
+    P->>P: read 32KB of cartridge RAM, gzip, base64
+    P->>R: publish {rev: 4, by: "iPhone", says: "Route 29", tag: rom fingerprint}
+    R-->>T: rev 4 arrives, and the tablet's own battery is rev 2
+    T->>T: status line: "iPhone has the newer save · Route 29"
+    Note over T: nothing has changed yet — taking it is a press
+    T->>T: Take over → undo point, then keep the game being replaced
+    T->>T: write the library's IndexedDB record, re-load the ROM
+    T->>T: drive CONTINUE from the title screen
+    T->>R: claim rev 4
+    R-->>P: both at rev 4, so neither line says anything
+```
 
 - **It publishes where the app already knows the bytes moved** — after a save it
   drove, a `.sav` it installed, a slot it loaded, and before the Update button
@@ -199,6 +221,32 @@ not even the Firebase SDK, which is fetched only when a room is opened.
 | where you are, as a sentence | yes | with the save |
 | speed, grind preset, hunted species | yes | while sharing |
 | the picture, while *Show* is on | device to device, **not** to a server | while showing |
+
+```mermaid
+flowchart LR
+    subgraph D["on your device"]
+        ROM["the ROM<br/>2MB"]
+        SYM["the .sym<br/>1.8MB"]
+        SAVE["the battery<br/>32KB"]
+        OPT["speed, preset, species"]
+    end
+    STOP(("never<br/>leaves"))
+    subgraph R["the room, one Firebase key"]
+        A["45 addresses<br/>~1KB"]
+        S["the save<br/>gzipped, ~1.2KB"]
+        O["the three options"]
+    end
+    OTHER["your other device"]
+    ROM --> STOP
+    SYM --> STOP
+    SYM -->|"only the 45 it reads"| A
+    SAVE -->|"on every in-game save"| S
+    OPT --> O
+    A --> OTHER
+    S --> OTHER
+    O --> OTHER
+    D -->|"the picture: WebRTC, peer to peer, no server"| OTHER
+```
 
 A room is one key in a Firebase Realtime Database, named by its code. **The code
 is the password**: anyone holding it can read and write that room, and the save
