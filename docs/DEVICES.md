@@ -100,10 +100,40 @@ than reasoning about it:
 
 One person, a phone and a tablet, no accounts: `sync/` is
 [kidsync](https://github.com/minormending/kidsync) vendored, a room is one key
-in a Firebase Realtime Database, and the code — `TIGER-COMET-BANJO-472` — is
-the password. Press **Share** on one device, type the code on the other, and
-what they remember stays in step. Because the code *is* the password, it lives
-in your pocket and never in this repo.
+in a Firebase Realtime Database, and the code — `K7M2P` — is the password.
+Press **Share** on one device, type the code on the other, and what they
+remember stays in step. Because the code *is* the password, it lives in your
+pocket and never in this repo.
+
+**Five characters, and the alphabet is chosen for typing.** kidsync's own codes
+are three words and three digits, `BANJO-COMET-OTTER-472`, and that is right for
+the apps it was written for: a child reads the code aloud and somebody else
+types it, so the 128 words are picked for having no homophones. Here one person
+holds both devices. There is nobody to read it to, and a code you glance at and
+type once should be short enough to hold in your head while you look away from
+the screen — so this app passes kidsync its own format.
+
+The alphabet is [Crockford's base32](https://www.crockford.com/base32.html): the
+digits and the letters except **I, L, O and U**. One reason each — I and L are
+1, O is 0, and U is left out of hand-typed alphabets so an accidental word
+cannot appear. A code therefore cannot contain a character you might mistake for
+its neighbour, and typing it is forgiven the three ways people get it wrong
+anyway: `sf-817` and ` SF8I7 ` both read as `SF817`.
+
+| | codes | |
+| --- | --- | --- |
+| three words and three digits | 2,048,256,000 | 128 × 127 × 126 × 1000 |
+| five Crockford characters | 33,554,432 | 32⁵ |
+
+**That is about sixty times fewer, and it is a real cost rather than a rounding
+error.** The code is still the only thing between a room and a stranger, and a
+room still holds a gzipped save and a sentence saying where you are. What it
+buys is a code that fits in a glance; what it costs is that someone guessing
+would need tens of millions of tries — each an authenticated network round trip,
+against a room they would also have to know exists — rather than tens of
+billions. For one person's two devices passing a Pokémon save between them that
+is the trade this app wants. It is the wrong trade for anything you would mind a
+stranger reading, which was already true and is now more true.
 
 The options went first on purpose: they stood the whole path up — config, rules,
 anonymous sign-in, merge, debounce — with a slider position at stake rather than

@@ -6,6 +6,7 @@
 // out of the DOM.
 import { fakeRom, symbols, test, worldRam } from '../harness.mjs';
 import { GameState } from '../../app/state.js';
+import { readCode } from '../../app/room.js';
 import { describeHandoff, describeOffers, describeParty, describeReplaced,
          describeRoom, describeScreen, joinFailure, describeRows, describeSlot,
          describeUndo } from '../../app/rows.js';
@@ -166,7 +167,8 @@ test('the sharing row says which of the four states it is in', async (t) => {
 });
 
 test('a code that does not join says why, and never says nothing', async (t) => {
-  t.contains(joinFailure('malformed'), 'three words', 'a half-typed code');
+  t.contains(joinFailure('malformed'), 'five letters and numbers',
+             'a half-typed code says what a whole one looks like');
   t.contains(joinFailure('not-found'), 'typo', 'the room is not there');
   t.contains(joinFailure('network'), 'try again', 'the network, not the code');
   // A reason from a newer kidsync than this build knows about.
@@ -395,4 +397,21 @@ test('a watcher is told which of the two reasons its pad is doing nothing',
   t.contains(describeScreen({ watching: true, host: 'iPhone', asleep: true,
                               input: { ok: false, why: 'view' } }).text,
              'screen off', 'and a dark screen is the bigger news');
+});
+
+test('a room code is read the way it was probably meant', async (t) => {
+  t.eq(readCode('K7M2P'), 'K7M2P', 'a clean code comes back unchanged');
+  t.eq(readCode(' k7m2p '), 'K7M2P', 'case and stray space are noise');
+  t.eq(readCode('K7-M2P'), 'K7M2P', 'so are dashes someone added for rhythm');
+
+  // The alphabet exists so that these three can only have meant the digit.
+  t.eq(readCode('KIM2P'), 'K1M2P', 'a typed I can only have meant 1');
+  t.eq(readCode('KLM2P'), 'K1M2P', 'and so can an L');
+  t.eq(readCode('K7M2O'), 'K7M20', 'a typed O can only have meant 0');
+
+  t.eq(readCode('K7M2'), null, 'four characters is not a code');
+  t.eq(readCode('K7M2PQ'), null, 'nor is six');
+  t.eq(readCode('K7M2U'), null, 'U is not in the alphabet, so it is a mistake');
+  t.eq(readCode(''), null, 'and nothing is nothing');
+  t.eq(readCode(null), null, 'including the wrong type entirely');
 });

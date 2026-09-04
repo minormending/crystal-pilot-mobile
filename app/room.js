@@ -2,8 +2,7 @@
 //
 // A thin seam over kidsync (vendored in sync/), which does the real work: a
 // room is one key in a Firebase Realtime Database, named after a code like
-// TIGER-COMET-BANJO-472, and every device holding that code reads and writes
-// it. There are no accounts. The code is the password, which is the right
+// K7M2P, and every device holding that code reads and writes it. There are no accounts. The code is the password, which is the right
 // shape for one person with three devices and the wrong shape for sharing with
 // anyone else -- so the code belongs in your pocket, never in this repo.
 //
@@ -32,6 +31,67 @@ import { createBaton } from '../baton/baton.js';
 // Namespaces rooms, so a code here can never collide with one from the games
 // that share this Firebase project.
 const GAME = 'crystal-pilot';
+
+// Five characters, not three words.
+//
+// kidsync's own codes are BANJO-COMET-OTTER-472, and that format is right for
+// the apps it was written for: a child reads the code aloud and somebody else
+// types it, so the words are chosen for having no homophones. Here one person
+// holds both devices. There is nobody to read it to, and a code you glance at
+// and type once should be short enough to hold in your head while you look
+// away from the screen.
+//
+// The alphabet is Crockford's base32 -- the digits and the letters except
+// I, L, O and U. The four are left out for one reason each: I and L are 1, O is
+// 0, and U is left out of every hand-typed alphabet to keep an accidental word
+// from appearing. So a code cannot contain a character whose neighbour it might
+// be mistaken for, and `readCode` folds the three substitutions people make
+// anyway.
+//
+// What this costs, stated rather than buried: 32^5 is 33,554,432 codes against
+// the words' 2,048,256,000, so about sixty times fewer. The code is still the
+// only thing between a room and a stranger, and a room still holds a gzipped
+// save and a sentence about where you are. That is a smaller number to guess,
+// and it is a number worth writing down: someone would have to try tens of
+// millions of codes, each a network round trip, to land on a room that exists.
+const ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+const CODE_LENGTH = 5;
+
+/**
+ * A fresh code, from the platform's own randomness.
+ *
+ * `% ALPHABET.length` is unbiased here and only here: 256 divides by 32
+ * exactly, so every byte maps to eight of the 32 characters and none is
+ * favoured. At any other alphabet size this would need rejection sampling --
+ * kidsync's own `randomInt` does exactly that, and this is the one case that
+ * does not need it.
+ */
+function makeCode() {
+  const bytes = new Uint8Array(CODE_LENGTH);
+  crypto.getRandomValues(bytes);
+  let out = '';
+  for (const b of bytes) out += ALPHABET[b % ALPHABET.length];
+  return out;
+}
+
+/**
+ * Read a code the way it was probably meant.
+ *
+ * Case, spaces and dashes are noise -- someone typing a code they can see is
+ * not thinking about either. The three letter-for-digit swaps are the ones the
+ * alphabet is designed around: a code never contains I, L or O, so a typed one
+ * can only have meant the digit it looks like.
+ */
+export function readCode(input) {
+  if (typeof input !== 'string') return null;
+  const cleaned = input.trim().toUpperCase()
+    .replace(/[\s\-_]+/g, '')
+    .replace(/[IL]/g, '1')
+    .replace(/O/g, '0');
+  const ok = cleaned.length === CODE_LENGTH
+    && [...cleaned].every((c) => ALPHABET.includes(c));
+  return ok ? cleaned : null;
+}
 
 const NAME_KEY = 'crystal-pilot-device-name';
 
@@ -208,6 +268,10 @@ export async function openRoom({ options, onOptions, onSave, onSignal,
   sync = await createSync({
     firebaseConfig,
     game: GAME,
+    // `crystal-pilot-` plus five is 19 characters, and the deployed rules want
+    // at least 16 -- which kidsync now checks rather than letting Firebase
+    // answer with a permission denial that reads as a network fault.
+    codes: { generate: makeCode, normalize: readCode },
     // Seeded with what this device already remembers, not with an empty group.
     // kidsync keeps its own copy of the synced state, so a device joining with
     // `{}` would hand the room an empty group -- and on the way back through

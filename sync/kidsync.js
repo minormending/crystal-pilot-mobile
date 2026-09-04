@@ -78,6 +78,13 @@ function normalizeCode(input) {
   return /^[A-Z]+-[A-Z]+-[A-Z]+-\d{3}$/.test(cleaned) ? cleaned : null;
 }
 
+// A room key must be at least this long, because the deployed rules say so:
+//   ".read": "auth != null && $roomId.length >= 16"
+// The key is `${game}-${code}`, so a short game name with a short code is a
+// permission-denied that looks like a network fault. Checked here instead, where
+// the message can say what is actually wrong.
+const MIN_ROOM_ID = 16;
+
 const MAX_STATE_BYTES = 32 * 1024; // must match the .validate rule in firebase-rules.json
 
 /** Sign in anonymously, so every write carries a verifiable identity.
@@ -136,8 +143,21 @@ export async function createSync({
   onStatus = () => {},
   merge = null,
   debounceMs = 400,
+  codes = null,
 } = {}) {
   if (!game) throw new Error("[kidsync] createSync needs a `game` name (e.g. 'phoneme-sounds').");
+
+  /* `codes` lets an app bring its own room-code format: `{ generate, normalize }`,
+     with the same contract as the two functions above — generate returns a
+     canonical code, normalize returns one or null. The default is words, and
+     words are right for the apps this was written for: a five-year-old reads
+     BANJO-COMET-OTTER-472 aloud and somebody else types it. An app where one
+     person holds both devices is a different problem, and five characters they
+     can glance at beats three words they have to say. What a replacement must
+     keep is the entropy argument -- anyone holding a code can read and write
+     that room -- and MIN_ROOM_ID below. */
+  const makeCode = (codes && codes.generate) || generateCode;
+  const readCode = (codes && codes.normalize) || normalizeCode;
 
   const stateKey = `${LS_PREFIX}:${game}:state`;
   const roomKey  = `${LS_PREFIX}:${game}:room`;
@@ -216,6 +236,14 @@ export async function createSync({
   }
 
   const roomPath = (code) => `rooms/${game}-${code}`;
+  function requireLongEnough(code) {
+    const id = `${game}-${code}`;
+    if (id.length < MIN_ROOM_ID) {
+      throw new Error(
+        `[kidsync] room key "${id}" is ${id.length} characters; the rules require ` +
+        `${MIN_ROOM_ID}. Use a longer game name or a longer code.`);
+    }
+  }
 
   async function pushNow() {
     if (!roomRef) { pendingWrite = false; return; }
@@ -395,7 +423,8 @@ export async function createSync({
     /** Start a new room. Returns the code to show the user. */
     async createRoom() {
       if (!db) throw new Error("[kidsync] Sync is not configured — see kidsync/README.md.");
-      const code = generateCode();
+      const code = makeCode();
+      requireLongEnough(code);
       await attach(code);
       await pushNow();          // seed the room with this device's state
       return code;
@@ -405,8 +434,9 @@ export async function createSync({
      *  because "wrong code" is a normal thing a child does, not an exception. */
     async joinRoom(input) {
       if (!db) return { ok: false, reason: "not-configured" };
-      const code = normalizeCode(input);
+      const code = readCode(input);
       if (!code) return { ok: false, reason: "malformed" };
+      requireLongEnough(code);
       let snap;
       try { snap = await dbGet(ref(db, roomPath(code))); }
       catch (e) { return { ok: false, reason: "network", detail: e.message }; }

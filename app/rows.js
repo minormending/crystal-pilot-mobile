@@ -267,7 +267,7 @@ export function describeRoom({ status = 'local', code = null } = {}) {
  * silent: a reason this build has never heard of should still say something.
  */
 export function joinFailure(reason) {
-  if (reason === 'malformed') return 'that is not a full code — three words and three numbers';
+  if (reason === 'malformed') return 'a code is five letters and numbers, like K7M2P';
   if (reason === 'not-found') return 'no room with that code — check for a typo, or press Share on the other device';
   if (reason === 'not-configured') return 'this build has no Firebase config, so it cannot share';
   if (reason === 'network') return 'could not reach the room — try again in a moment';

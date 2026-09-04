@@ -1214,7 +1214,7 @@ This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ 79a12cb18baa -->
+<!-- covers: app/main.js index.html @ 0406e84d2d2f -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -1866,7 +1866,7 @@ five slots once the summaries existed.
 
 ### Sharing between your own devices
 
-<!-- covers: app/room.js sync/kidsync.js @ 1820c8c3a96e -->
+<!-- covers: app/room.js sync/kidsync.js @ 71b1159181f1 -->
 
 One person with a phone and a tablet, no accounts: a room code is the whole
 mechanism. `sync/` is [kidsync](https://github.com/minormending/kidsync)
@@ -1874,6 +1874,50 @@ vendored — a room is one key in a Firebase Realtime Database, every device
 holding the code reads and writes it, and the code is the password. That shape
 is right for your own devices and wrong for anyone else's, so the code lives in
 your pocket and never in this repo.
+
+**The code format is this app's, not kidsync's.** kidsync generates three words
+and three digits, which is right for a child reading a code aloud to someone
+else; here one person holds both devices, so `room.js` passes
+`codes: {generate, normalize}` and the codes are five characters.
+
+<details>
+<summary><b>Advanced detail:</b> the alphabet, the arithmetic, and the room-key
+length that constrains both</summary>
+
+The alphabet is Crockford's base32 — `0123456789ABCDEFGHJKMNPQRSTVWXYZ`, the
+digits and the letters except I, L, O and U. I and L are 1, O is 0, and U is
+left out of hand-typed alphabets to stop an accidental word appearing. So no
+code contains a character you might mistake for its neighbour, and `readCode`
+folds the three substitutions in the other direction: a typed I or L can only
+have meant 1, a typed O can only have meant 0, and a typed U is a mistake rather
+than a guess, so it is rejected.
+
+`makeCode` reads five bytes and takes each modulo 32. That is unbiased **here
+and only here**: 256 divides by 32 exactly, so every byte maps to eight of the
+32 characters and none is favoured. At any other alphabet size it would need
+rejection sampling, which is what kidsync's own `randomInt` does — this is the
+one case that does not need it.
+
+The entropy is 32⁵ = 33,554,432 against the words' 128 × 127 × 126 × 1000 =
+2,048,256,000, about sixty times fewer, and that is the cost of the change
+rather than a detail of it. The threat model has not moved: anyone holding a code
+can read and write that room, and the room holds a gzipped save.
+
+One constraint ties the two ends together. The room key is `${game}-${code}`,
+and the deployed rules require `$roomId.length >= 16`:
+
+```
+"$roomId": { ".read": "auth != null && $roomId.length >= 16" }
+```
+
+`crystal-pilot-` is fourteen characters, so five more is nineteen and the rules
+are satisfied with three to spare. A shorter code, or a shorter `game`, would be
+answered by Firebase with a permission denial — which surfaces as a network
+fault and points nowhere near the cause. kidsync now checks that itself and
+throws with the key, its length, and what the rules want, which is the change
+this needed upstream rather than in the vendored copy.
+
+</details>
 
 The options went through this room first on purpose: the small half, standing up
 the whole path — config, rules, anonymous sign-in, merge, debounce — with a
@@ -1939,7 +1983,7 @@ way any newer value does.
 
 ### Handing the save over
 
-<!-- covers: app/room.js baton/baton.js baton/codec.js @ 5af834628fb5 -->
+<!-- covers: app/room.js baton/baton.js baton/codec.js @ 3b54d1386bc6 -->
 
 The same room carries the save, through
 [baton](https://github.com/minormending/baton) vendored in `baton/`. kidsync
