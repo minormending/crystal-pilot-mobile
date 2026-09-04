@@ -1,9 +1,15 @@
 // Everything that is Pokemon Crystal rather than Pokemon Gen 2.
 //
-// Eleven map ids and a name for each, the tiles of a dozen doors and people, the
+// Ten map ids and a name for each, the tiles of a dozen doors and people, the
 // x positions of three balls on Elm's table, and the scripted errands built out
 // of them: the intro, the trip to Mr. Pokemon's for the egg, and the two places
 // that will heal a party.
+//
+// The file has two halves and they are different in kind. `crystal` below is
+// *data* -- the shape the engine reads, and the whole of what a second title
+// would have to declare. The class is *procedure*: knowing that Elm's healing
+// machine is read by facing it, or that the nurse's question defaults to yes,
+// is not something a table can hold.
 //
 // It extends Journey rather than composing one, for now, because that is the
 // change that moves nothing: every `this.travelTo(...)` inside these methods
@@ -84,26 +90,37 @@ const ELM_HEAL_FROM = [2, 2];      // stand here, face up, and the machine is ab
 const LEG_COST = 25;
 
 
+/**
+ * Everything about this cartridge that the engine has to be told.
+ *
+ * The shape `Journey` reads, and the whole of what a second title would have to
+ * write: names for the maps it works in, the places that heal and the method
+ * that reaches each, the maps it knows have grass, and what a leg is worth when
+ * two routes are being priced against each other.
+ *
+ * The values come from the constants above rather than being repeated here,
+ * because the scripts below use the same ones -- the object is the engine's
+ * interface to this file, not a second copy of it.
+ */
+export const crystal = {
+  id: 'crystal',
+  names: MAP_NAMES,
+  // Most general last: nearestHeal falls back to the final entry when there is
+  // no map graph to price them with, and the Center is the answer that works
+  // from anywhere the Pokedex has been earned.
+  healers: [
+    { map: ELMS_LAB, reach: 'healAtElm' },
+    { map: CHERRYGROVE_CITY, reach: 'heal' },
+  ],
+  grassyMaps: [ROUTE_29, ROUTE_30],
+  legCost: LEG_COST,
+};
+
 export class Crystal extends Journey {
-  /** The eleven maps this pilot works in, by the names people use for them. */
-  where(k) { return MAP_NAMES[k] || super.where(k); }
+  constructor(gb, state, tasks, collision, nav, say, world) {
+    super(gb, state, tasks, collision, nav, say, world, crystal);
+  }
 
-
-  /**
-   * Heal at Cherrygrove's Pokémon Center.
-   *
-   * The nurse stands behind a counter, so the approach is from two tiles below
-   * and then one -- the same way the desktop pilot does it, and the same way a
-   * person would. Her question defaults to yes, which is the answer we want.
-   */
-  /**
-   * Heal wherever we happen to be standing, by walking to the nearest Center we
-   * know about.
-   *
-   * This is the shape a grind wants: it notices the party is low and needs
-   * somebody who knows where a Pokemon Center *is*, which is map knowledge
-   * tasks.js deliberately does not carry.
-   */
   /**
    * Heal at the computer in Elm's lab.
    *
@@ -132,69 +149,15 @@ export class Crystal extends Journey {
     return healed;
   }
 
-  /**
-   * The nearer of the two places that will heal.
-   *
-   * Elm's lab is in New Bark, the Pokemon Center is in Cherrygrove, and Route
-   * 29 runs between them -- so the answer flips depending on which end of that
-   * route you are standing on, which is exactly the route the pilot spends its
-   * time on.
-   *
-   * Counting legs alone gets this wrong, and wrong in the common case. By legs
-   * the Center is one hop from Route 29 and the lab is two, so the Center wins
-   * everywhere -- but a "hop" west means walking the whole sixty-tile width of
-   * the route through grass, while the lab, from the eastern end where the
-   * bootstrap leaves you, is six tiles and a door. So the cost is the tiles to
-   * the edge we would actually leave by, plus a flat charge per further leg.
-   */
-  async nearestHeal(from) {
-    const options = [
-      { map: ELMS_LAB, heal: () => this.healAtElm() },
-      { map: CHERRYGROVE_CITY, heal: () => this.heal() },
-    ];
-    const fallback = options[1];
-    if (!this.world) return fallback;
 
-    const wram = await this.settled();
-    let best = null;
-    for (const option of options) {
-      if (from === option.map) return { ...option, cost: 0 };
-      const route = this.world.route(from, option.map);
-      if (route === null) continue;
-      let cost = (route.length - 1) * LEG_COST;
-      // How far to the edge this route leaves by. Only the first leg is
-      // measurable from here -- the rest are charged flat.
-      const first = route[0];
-      if (wram && first && first.kind === 'edge') {
-        const [w, h] = this.collision.mapSize();
-        const at = this.collision.playerPos(wram);
-        cost += { LEFT: at[0], RIGHT: w - 1 - at[0],
-                  UP: at[1], DOWN: h - 1 - at[1] }[first.dir] ?? LEG_COST;
-      }
-      if (!best || cost < best.cost) best = { ...option, cost };
-    }
-    return best || fallback;
-  }
 
   /**
-   * Get back to somewhere encounters actually happen.
+   * Heal at Cherrygrove's Pokémon Center.
    *
-   * Pacing for a battle wanders, and on Route 29 it wanders far enough to cross
-   * into Cherrygrove -- so "look for grass here" is not enough on its own, since
-   * here may be a town. Falls back to the route the pilot knows is grass.
+   * The nurse stands behind a counter, so the approach is from two tiles below
+   * and then one -- the same way the desktop pilot does it, and the same way a
+   * person would. Her question defaults to yes, which is the answer we want.
    */
-  async backToGrass() {
-    if (await this.onGrass()) return true;
-    if (await this.findGrass()) return true;
-    const here = await this.mapKey();
-    for (const map of [ROUTE_29, ROUTE_30]) {
-      if (map === here) continue;
-      const there = await this.travelTo(map);
-      if (there.ok && await this.findGrass()) return true;
-    }
-    return false;
-  }
-
   async heal() {
     if (await this.mapKey() !== CHERRYGROVE_CITY) return false;
     if (!await this.through(POKECENTER_DOOR, CHERRYGROVE_POKECENTER)) return false;

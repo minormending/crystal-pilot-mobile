@@ -15,7 +15,7 @@ what CI checks and what the pre-commit hook blocks on.
 ```mermaid
 flowchart LR
     E[an edit] --> H{{".githooks/pre-commit"}}
-    H --> T["./run-tests<br/>76 behaviour tests"]
+    H --> T["./run-tests<br/>86 behaviour tests"]
     H --> C["tools/check-app<br/>13 groups"]
     H --> D["tools/docs-check<br/>23 tracked sections"]
     T --> OK[commit]
@@ -39,11 +39,12 @@ git config core.hooksPath .githooks
 ./run-tests -v         # notes and stack lines
 ```
 
-76 tests in nine files, and what each file is about says more than the count:
+86 tests in ten files, and what each file is about says more than the count:
 
 | file | tests | what it pins down |
 | --- | --- | --- |
-| `rows.mjs` | 25 | what every row and offer says, and when its button works |
+| `rows.mjs` | 29 | what every row and offer says, and when its button works |
+| `journey.mjs` | 6 | choosing where to heal: the cost model, and a map with no name |
 | `remember.mjs` | 10 | which remembered choices are believed, and which dropped |
 | `capture.mjs` | 8 | weakening, ball choice, and counting throws out of the bag |
 | `control.mjs` | 8 | the task lifecycle: stopping, failing, and undo points |

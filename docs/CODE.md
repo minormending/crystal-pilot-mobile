@@ -103,7 +103,7 @@ of the subtleties in sections 6 and 7.
 
 ## 2. The shape of it
 
-<!-- covers-api: app/main.js gen2/journey.js titles/crystal.js gen2/tasks.js gen2/nav.js gen2/world.js gen2/collision.js gen2/state.js gen2/romdata.js gen2/symbols.js gbcore/gb.js @ 340d55eb2962 -->
+<!-- covers-api: app/main.js gen2/journey.js titles/crystal.js gen2/tasks.js gen2/nav.js gen2/world.js gen2/collision.js gen2/state.js gen2/romdata.js gen2/symbols.js gbcore/gb.js @ d3ddc6d38c00 -->
 
 Twenty-one modules, in four directories, and the directories are the design:
 **an import may point down this list and never up.**
@@ -634,7 +634,7 @@ point those coordinates mean somewhere else entirely.
 
 ## 5. Crossing to the next map
 
-<!-- covers: gen2/journey.js gen2/world.js @ 632f6a46291d -->
+<!-- covers: gen2/journey.js gen2/world.js @ 2848e5b49a21 -->
 
 A connection spans only part of a shared edge, so "walk west until something
 happens" does not work. `crossEdge()` closes the distance in stages, then tries
@@ -976,7 +976,7 @@ precedes it defaults to yes, which is what we want; the nickname box does not.
 
 ## 7a. Three that act on where you already are
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ b5cbb42dfdec -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ 0463763ee6a6 -->
 
 Grind, hunt and catch all go *looking* for something. These three do the obvious
 thing with the situation you are already in, and take no parameters:
@@ -1208,13 +1208,49 @@ because that failure is only otherwise discovered by reaching for the undo.
 
 ## 8. The errands
 
-<!-- covers: titles/crystal.js gen2/journey.js @ 95005674e6c0 -->
+<!-- covers: titles/crystal.js gen2/journey.js @ 4cde3c181c9c -->
 
 Everything in this section is `crystal.js` — the only file in the app that names
 a Crystal map, a Crystal door or a Crystal NPC. What it stands on is
 `journey.js`, section 5's routing and crossing, which knows none of them. That
 division is what a ROM hack of the same base game would exploit: an errand is
 a title's, and getting there is the engine's.
+
+**The file has two halves, and they differ in kind.** `crystal` is *data* — the
+shape the engine reads, and the whole of what a second title would have to
+declare:
+
+```js
+export const crystal = {
+  id: 'crystal',
+  names: MAP_NAMES,                              // what to call a map
+  healers: [{ map: ELMS_LAB, reach: 'healAtElm' },
+            { map: CHERRYGROVE_CITY, reach: 'heal' }],
+  grassyMaps: [ROUTE_29, ROUTE_30],              // where encounters are, if not here
+  legCost: LEG_COST,                             // what a further leg is worth, in tiles
+};
+```
+
+The class is *procedure*. Knowing that Elm's machine is read by facing it, or
+that the nurse's question defaults to yes, is not something a table can hold —
+so `reach` names a method rather than describing one, and `Journey.nearestHeal`
+calls `this[h.reach]()`. Coordinates are data; presses are code.
+
+Three methods left this file when that object arrived, and none of them was ever
+really Crystal's: `where` is a lookup in `names`, `backToGrass` is a walk over
+`grassyMaps`, and `nearestHeal` is arithmetic over `healers`. They are in
+`journey.js` now, which is what made the third one testable for the first time —
+see the `journey` tests, where a stubbed map graph proves that two legs beat one
+when the first edge is three tiles away and the alternative is fifty-five.
+
+**What `Crystal` has left is nine methods that only add.** It overrides nothing:
+the two hooks the split invented — `where` and `nearestHeal` — were replaced by
+data, and a title now extends the engine without being able to disagree with it.
+That is the property composition would have bought, and it is checked rather
+than hoped for. Composition itself is still deferred: those nine methods make 72
+calls into `Journey`, and rewriting all of them to go through a held reference
+would be a large diff across the errand — the one path that is hardest to
+exercise — in exchange for a guarantee already enforced.
 
 ### Starting a new game
 

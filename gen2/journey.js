@@ -18,7 +18,26 @@ import { CollisionMap } from './collision.js';
 import { GRASS_TILES, TRAINER_BATTLE } from './state.js';
 
 export class Journey {
-  constructor(gb, state, tasks, collision, nav, say = () => {}, world = null) {
+  /**
+   * `title` is everything about one cartridge that this layer cannot work out.
+   *
+   * Four fields, and each exists because a method below asked a question only
+   * the cartridge can answer:
+   *
+   *   names       { mapKey: 'Route 29' }        what to call a map
+   *   healers     [{ map, reach }]              somewhere a party can be healed
+   *   grassyMaps  [mapKey]                      where encounters are, if not here
+   *   legCost     tiles                         what a leg beyond the first is worth
+   *
+   * `reach` names a method on the instance, because *how* to be healed is a
+   * procedure -- face a machine, or drive a nurse's menu -- and procedures
+   * belong with the title that knows them, while the coordinates they use are
+   * data. A title that declares none of this still walks; it just says
+   * "map 26.1" and cannot heal, which is the truth about a cartridge nobody has
+   * described.
+   */
+  constructor(gb, state, tasks, collision, nav, say = () => {}, world = null,
+              title = {}) {
     this.gb = gb;
     this.state = state;
     this.tasks = tasks;
@@ -26,6 +45,7 @@ export class Journey {
     this.nav = nav;
     this.world = world;
     this.say = say;
+    this.title = title;
     this.scriptModeAt = state.a.scriptMode;
   }
 
@@ -54,7 +74,10 @@ export class Journey {
    * that knows its own maps overrides this, and one that does not still gets
    * sentences that name a place rather than saying "there".
    */
-  where(k) { return `map ${k >> 8}.${k & 0xff}`; }
+  where(k) {
+    return (this.title.names && this.title.names[k])
+           || `map ${k >> 8}.${k & 0xff}`;
+  }
 
   /**
    * A work-RAM snapshot the map can actually be planned against.
@@ -518,12 +541,68 @@ export class Journey {
   }
 
   /**
-   * Somewhere that will heal the party, and how to ask it to.
+   * The cheapest place that will heal the party, and how to ask it to.
    *
-   * `{ map, heal }` or null. Nothing in this layer can know: a Pokemon Center
-   * is a building at coordinates a title has to supply. A cartridge with no
-   * healer the pilot has been told about is a cartridge where healing is not
-   * offered, which healNow says out loud rather than walking hopefully.
+   * `{ map, heal, cost }` or null. Which places exist is the title's; which is
+   * nearest is arithmetic, and the arithmetic is the interesting part.
+   *
+   * Counting legs of the map graph gets it wrong, and wrong in the common case.
+   * By legs, a Center one hop west beats a lab two hops east everywhere -- but a
+   * hop west can mean walking the whole sixty-tile width of a route through
+   * grass, while the lab is six tiles and a door. So the cost is the tiles to
+   * the edge this route would actually leave by, plus a flat charge for each
+   * further leg. Only the first leg is measurable from here; the rest are
+   * charged at `legCost` because their entry points are not known until the
+   * player is standing on them.
    */
-  async nearestHeal() { return null; }
+  async nearestHeal(from) {
+    const healers = this.title.healers || [];
+    if (!healers.length) return null;
+    const reach = (h) => ({ map: h.map, heal: () => this[h.reach]() });
+    // The last one is the fallback, deliberately: a title lists its healers
+    // most-general last, and with no map graph to price the alternatives the
+    // general answer is the safe one.
+    const fallback = reach(healers[healers.length - 1]);
+    if (!this.world) return fallback;
+
+    const legCost = this.title.legCost || 25;
+    const wram = await this.settled();
+    let best = null;
+    for (const h of healers) {
+      if (from === h.map) return { ...reach(h), cost: 0 };
+      const route = this.world.route(from, h.map);
+      if (route === null) continue;
+      let cost = (route.length - 1) * legCost;
+      const first = route[0];
+      if (wram && first && first.kind === 'edge') {
+        const [w, hh] = this.collision.mapSize();
+        const at = this.collision.playerPos(wram);
+        cost += { LEFT: at[0], RIGHT: w - 1 - at[0],
+                  UP: at[1], DOWN: hh - 1 - at[1] }[first.dir] ?? legCost;
+      }
+      if (!best || cost < best.cost) best = { ...reach(h), cost };
+    }
+    return best || fallback;
+  }
+
+  /**
+   * Get back to somewhere encounters actually happen.
+   *
+   * Pacing for a battle wanders, and it can wander off the route entirely --
+   * so "look for grass here" is not enough on its own, since here may be a
+   * town. The maps to fall back to are the title's, because which ones have
+   * grass in them is not something this layer can see from where it is
+   * standing.
+   */
+  async backToGrass() {
+    if (await this.onGrass()) return true;
+    if (await this.findGrass()) return true;
+    const here = await this.mapKey();
+    for (const map of this.title.grassyMaps || []) {
+      if (map === here) continue;
+      const there = await this.travelTo(map);
+      if (there.ok && await this.findGrass()) return true;
+    }
+    return false;
+  }
 }
