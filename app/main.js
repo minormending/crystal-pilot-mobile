@@ -1,4 +1,5 @@
 // Wiring: file pickers, the render loop, and dispatching a task.
+import { readHeader } from '../gbcore/cartridge.js';
 import { GameBoy } from '../gbcore/gb.js';
 import { SHARED_SYMBOLS, Symbols } from '../gen2/symbols.js';
 import { describeHandoff, describeOffers, describeParty, describeReplaced,
@@ -1352,11 +1353,6 @@ async function refresh() {
   paintJobs(s);
 }
 
-// Every Game Boy cartridge starts its header logo with these bytes at 0x104.
-// Checking them turns "picked the wrong file" into a sentence instead of a
-// mysterious failure to boot.
-const NINTENDO_LOGO = [0xce, 0xed, 0x66, 0x66, 0xcc, 0x0d];
-
 // What a .sym has to contain to be this game's. Hoisted out of the picker
 // because a kept file comes back a different way and has to meet the same bar:
 // a record written by an older build, or one truncated by a phone that ran out
@@ -1373,17 +1369,11 @@ const NEEDED_SYMBOLS = [
   'PokemonNames', 'JohtoGrassWildMons', 'wTimeOfDay',
 ];
 
-function looksLikeGameBoyRom(buf) {
-  if (buf.byteLength < 0x8000) return false;
-  const head = new Uint8Array(buf, 0x104, NINTENDO_LOGO.length);
-  return NINTENDO_LOGO.every((b, i) => head[i] === b);
-}
-
 $('#romFile').addEventListener('change', async (e) => {
   const f = e.target.files[0];
   if (!f) return;
   const buf = await f.arrayBuffer();
-  if (!looksLikeGameBoyRom(buf)) {
+  if (!readHeader(buf).ok) {
     romBytes = null;
     setStatus(`${f.name} is not a Game Boy ROM — expected a .gbc built from ` +
               `the disassembly`, 'bad');
@@ -2556,7 +2546,7 @@ $('#exportsav').onclick = async () => {
   if (!kept) return;
   setStatus(`opening ${kept.rom.name}\u2026`, 'busy');
   try {
-    if (!looksLikeGameBoyRom(kept.rom.buffer)) {
+    if (!readHeader(kept.rom.buffer).ok) {
       throw new Error(`${kept.rom.name} is not a Game Boy ROM`);
     }
     symbols = new Symbols(kept.sym.text);
