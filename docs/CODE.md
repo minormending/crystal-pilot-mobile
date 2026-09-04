@@ -1204,7 +1204,7 @@ the bag" rather than "did we gain any".
 
 ## 9. The interface
 
-<!-- covers: app/main.js index.html @ dd49cff9ec15 -->
+<!-- covers: app/main.js index.html @ 8d32514c0fb1 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -1280,6 +1280,48 @@ to lose and the prompt would only be in the way.
 An earlier version of this said the battery survives a reload by itself. It
 does not — see *What it remembers* below, which is also why it does now.
 
+**Landscape takes the pad apart.** At 844 × 390 the old page ran to six screens
+and the pad started at 575px, so the game and the buttons that drive it could
+not both be seen at any scroll position — and stacking them the way portrait
+does does not fit either: a 236px pad and a 43px header leave the screen 81px.
+So under `max-height: 520px` the pad's own parts are lifted into the page grid
+with `display: contents` and placed the way a handheld is held — D-pad left, A
+and B right, screen between them, Select and Start beneath it, and the cards
+in the width that is left.
+
+```
+"dpad screen face flow"   144px  332px  120px  208px
+"dpad menus  face flow"
+```
+
+Keyed on height rather than `orientation`, because what breaks is a short
+viewport: a tablet held sideways is landscape and has room to spare.
+
+<details>
+<summary><b>Advanced detail:</b> three cascade traps in one media query</summary>
+
+Every one of these looked right in the file and was wrong in the browser, and
+all three have the same shape: a media query does not add specificity, so a
+later rule wins.
+
+**The block sat above the `canvas` rules**, so the portrait `width: 100%` undid
+the landscape override and the screen drew 2px wide. Moving it below fixed the
+canvas and broke nothing — until the next one.
+
+**`.gamepad { display: flex }` is defined at line 402**, forty lines below where
+the block then sat, so `display: contents` never applied: the D-pad and the
+face stayed inside a flex row and shared one column, while the column reserved
+for the face sized itself to zero. The fix is not specificity but position —
+override queries belong at the end of the sheet, which is where this one is
+now.
+
+**`display: contents` promotes every child**, heading included, and an unplaced
+grid item auto-fills the first free cell. The word "Play" took the D-pad's cell
+and pushed the screen into the wrong column. A card that is no longer a card
+has no use for its label.
+
+</details>
+
 <details>
 <summary><b>Advanced detail:</b> how the screen gives way, and two false starts</summary>
 
@@ -1299,9 +1341,20 @@ not: a 375 × 667 phone was left with **36px** of scroller, too little to show
 the status line, and the status line is where Stop lives. At 460 that phone
 letterboxes the screen to 230 × 207 and keeps 76px of flow, which shows it.
 
-Measured after the change, with a game running: a 375 × 667 phone does not
-scroll at all and the pad's bottom edge sits at 657 of 667; a 390 × 844 phone
-gets a full-width 366 × 329 screen, 131px of flow, and the pad at 834 of 844.
+The cap lives on `#screenwrap`, not on the canvas, and the canvas fills the
+wrap. The tap marker is positioned in percentages of the wrap — a tile is 10%
+across and 11.111% down — so the wrap has to *be* the canvas's box or the
+marker lands where the tap did not, which is what letterboxing a canvas inside
+a full-width wrap did. Shrink-wrapping the wrap instead collapses it to 162px,
+because shrink-to-fit asks the canvas for its max-content width and a canvas
+answers with its own `width` attribute. Taps were never affected: they measure
+the canvas's own rect.
+
+Measured after the change, with a game running: 375 × 667 does not scroll, the
+screen letterboxes to 230 × 207 at ratio 1.111, the flow keeps 76px and the pad
+ends at 657 of 667. 390 × 844 gets a full-width 366 × 329 screen and 131px of
+flow. 844 × 390 gets a 317 × 285 screen between the thumbs, and nothing
+scrolls where six screens used to.
 
 </details>
 
