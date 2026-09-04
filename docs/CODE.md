@@ -2607,7 +2607,7 @@ about that code did not.
 
 ### The other checks
 
-<!-- covers: tools/check-app @ c2ec179abad8 -->
+<!-- covers: tools/check-app @ 5b97a4501364 -->
 
 `tools/check-app` runs everything that can be verified without a ROM:
 
@@ -2624,7 +2624,7 @@ tools/check-app contrast     # or one group
 | `contrast` | the palette still meets contrast, in both themes |
 | `gamefiles` | no ROM, save or symbol file has been committed |
 | `buttons` | every button name handed to `press`/`hold`/`release` is one the core knows |
-| `wiring` | every `$('#id')` is in the markup, and every import is really exported |
+| `wiring` | every `$('#id')` is in the markup, and every named import resolves to a module that exports it |
 | `version` | `version.js` and the worker's cache name agree, and the display is in the header |
 | `docshape` | the architecture diagram names and counts every module |
 | `names` | every capitalised name a module uses is imported or declared there |

@@ -17,7 +17,13 @@ import sys
 import tempfile
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-APP = sorted((ROOT / "app").glob("*.js"))
+# The app's own source, in dependency order: each directory may import from the
+# ones before it and from none after. Stated here as a list rather than found by
+# globbing, because the order is the design and a checker that discovers it
+# cannot enforce it.
+LAYERS = ["gbcore", "gen2", "titles", "app"]
+APP = sorted((f for d in LAYERS for f in (ROOT / d).glob("*.js")),
+             key=lambda p: (p.parent.name, p.name))
 # Code copied in from another repo of ours (kidsync's canonical copy lives in
 # ../kidsync, and its own tools/check is what catches edits in place). What this
 # repo has to enforce is narrower and its own business: that the copies are in
@@ -25,6 +31,24 @@ APP = sorted((ROOT / "app").glob("*.js"))
 VENDORED = sorted(f for d in ("sync", "baton") for f in (ROOT / d).glob("*.js"))
 INDEX = ROOT / "index.html"
 SW = ROOT / "sw.js"
+
+def module(name):
+    """One module by file name, wherever it lives now.
+
+    The checks that read a specific module by hand said `app/romdata.js`, which
+    was true while there was one source directory and is a silent skip once
+    there are four -- a missing file read as empty text finds nothing wrong.
+    """
+    for path in APP:
+        if path.name == name:
+            return path
+    raise SystemExit(f"check-app: {name} is not in any of {', '.join(LAYERS)}")
+
+
+def rel(path):
+    """A module's path as the page asks for it: `gen2/state.js`."""
+    return f"{path.parent.name}/{path.name}"
+
 
 GAME_FILES = re.compile(r"\.(gbc|gb|sav|sym|state|bk2)$", re.I)
 
@@ -85,21 +109,19 @@ def check_shell():
         return fail("could not find SHELL in sw.js")
     listed = set(re.findall(r"'\./([^']*)'", m.group(1)))
     problems = []
-    for rel in sorted(listed):
-        if rel and not (ROOT / rel).exists():
-            problems.append(f"listed in SHELL but missing on disk: {rel}")
+    for path in sorted(listed):
+        if path and not (ROOT / path).exists():
+            problems.append(f"listed in SHELL but missing on disk: {path}")
     for src in APP:
-        rel = f"app/{src.name}"
-        if rel not in listed:
-            problems.append(f"on disk but not in SHELL: {rel}")
+        if rel(src) not in listed:
+            problems.append(f"on disk but not in SHELL: {rel(src)}")
     # Vendored modules too. They are ordinary same-origin files the app imports,
     # so an unlisted one is served from the network and breaks offline use in
     # exactly the way app/world.js nearly did -- and being someone else's code
     # makes it *more* likely to be forgotten, not less.
     for src in VENDORED:
-        rel = f"{src.parent.name}/{src.name}"
-        if rel not in listed:
-            problems.append(f"vendored but not in SHELL: {rel}")
+        if rel(src) not in listed:
+            problems.append(f"vendored but not in SHELL: {rel(src)}")
     for p in problems:
         print(f"        {p}")
     return fail(f"{len(problems)} shell mismatch(es)") if problems \
@@ -257,7 +279,7 @@ def check_moves():
              if ln.strip().startswith("move ")]
 
     # Whatever the app decided, read from the app rather than restated here.
-    text = (ROOT / "app" / "romdata.js").read_text()
+    text = module("romdata.js").read_text()
     m = re.search(r"UNGENTLE_EFFECTS = new Set\(\[([0-9,\s]*)\]\)", text)
     if not m:
         return fail("could not find UNGENTLE_EFFECTS in app/romdata.js")
@@ -326,7 +348,12 @@ def check_buttons():
 
 
 SELECTOR = re.compile(r"\$\('#([\w-]+)'\)")
-IMPORT_NAMED = re.compile(r"import\s*\{([^}]*)\}\s*from\s*'\./([\w.]+)'")
+# `from './state.js'` and `from '../gen2/state.js'` both, because the second
+# shape appears the moment there is more than one source directory -- and a
+# pattern that only matches the first does not fail, it stops checking. The
+# resolved file name is what the export table is keyed on.
+IMPORT_NAMED = re.compile(
+    r"import\s*\{([^}]*)\}\s*from\s*'((?:\.\./[\w-]+/|\./)[\w.]+)'")
 EXPORT_DECL = re.compile(r"^export\s+(?:async\s+)?(?:class|function|const|let)\s+([A-Za-z_$][\w$]*)", re.M)
 EXPORT_LIST = re.compile(r"^export\s*\{([^}]*)\}", re.M)
 
@@ -347,10 +374,14 @@ def check_wiring():
         for n, line in enumerate(text.splitlines(), 1):
             for sel in SELECTOR.findall(line):
                 if sel not in ids:
-                    problems.append(f"{path.name}:{n}  $('#{sel}') is not in index.html")
+                    problems.append(f"{rel(path)}:{n}  $('#{sel}') is not in index.html")
 
+    # Keyed on the resolved path, not the file name: two source directories may
+    # one day hold the same name, and vendored modules belong in here too --
+    # `room.js` imports createBaton from ../baton/baton.js, and that is exactly
+    # the kind of name this check exists to confirm.
     exports = {}
-    for path in APP:
+    for path in APP + VENDORED:
         text = path.read_text()
         names = set(EXPORT_DECL.findall(text))
         for block in EXPORT_LIST.findall(text):
@@ -358,17 +389,21 @@ def check_wiring():
                 name = part.strip().split(" as ")[-1].strip()
                 if name:
                     names.add(name)
-        exports[path.name] = names
+        exports[path.resolve()] = names
     for path in APP:
-        for block, src in IMPORT_NAMED.findall(path.read_text()):
+        for block, spec in IMPORT_NAMED.findall(path.read_text()):
+            target = (path.parent / spec).resolve()
             for part in block.split(","):
                 want = part.strip().split(" as ")[0].strip()
                 if not want:
                     continue
-                if src not in exports:
-                    problems.append(f"{path.name}  imports from {src}, which is not a module here")
-                elif want not in exports[src]:
-                    problems.append(f"{path.name}  imports {want!r} from {src}, which does not export it")
+                if not target.exists():
+                    problems.append(f"{rel(path)}  imports {spec}, which is not a file")
+                elif target not in exports:
+                    problems.append(f"{rel(path)}  imports from {spec}, which is not a module here")
+                elif want not in exports[target]:
+                    problems.append(f"{rel(path)}  imports {want!r} from {spec}, "
+                                    f"which does not export it")
     for p in problems:
         print(f"        {p}")
     return fail(f"{len(problems)} wiring problem(s)") if problems \
@@ -401,7 +436,7 @@ def check_symbols():
     reaches a person on their second phone, hours later, having passed every
     check on the machine it was written on.
     """
-    src = (ROOT / "app" / "symbols.js").read_text()
+    src = module("symbols.js").read_text()
     m = re.search(r"SHARED_SYMBOLS = \[(.*?)\];", src, re.S)
     if not m:
         return fail("app/symbols.js has no SHARED_SYMBOLS list")
@@ -437,7 +472,7 @@ def check_version():
     that lies is worse than none, because it turns "am I out of date?" from an
     open question into a wrong answer.
     """
-    mod = (ROOT / "app" / "version.js").read_text()
+    mod = module("version.js").read_text()
     m = re.search(r"VERSION\s*=\s*'(v\d+)'", mod)
     if not m:
         return fail("app/version.js has no VERSION = 'vNN'")

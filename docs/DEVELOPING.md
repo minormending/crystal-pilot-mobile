@@ -95,7 +95,7 @@ fine and is wrong at run time:
 | `gamefiles` | no ROM, save or symbol file is tracked |
 | `moves` | the lethal moves excluded from weakening are the ones that lie about their power |
 | `buttons` | every button name handed to `press`/`hold` is one the core knows |
-| `wiring` | every `$('#id')` exists in the markup, and every import is really exported |
+| `wiring` | every `$('#id')` exists in the markup, and every named import — same directory, another one, or a vendored module — resolves to something that exports it |
 | `symbols` | the shared digest is every symbol the app looks up |
 | `version` | `app/version.js` and `sw.js` agree, and both doors are reachable with no ROM |
 | `docshape` | the architecture diagram draws, counts and tables all 20 modules |
