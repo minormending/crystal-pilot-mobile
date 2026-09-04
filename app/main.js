@@ -16,7 +16,7 @@ import { Tasks } from './tasks.js';
 import { CollisionMap } from './collision.js';
 import { Nav } from './nav.js';
 import { RomData, normalise } from './romdata.js';
-import { Bootstrap } from './bootstrap.js';
+import { Crystal } from './crystal.js';
 import { World } from './world.js';
 
 const $ = (s) => document.querySelector(s);
@@ -318,7 +318,7 @@ async function reallyStart() {
   collision = new CollisionMap(symbols, gb);
   nav = new Nav(gb, symbols);
   world = new World(symbols, gb);
-  boot = new Bootstrap(gb, state, tasks, collision, nav, progress, world);
+  boot = new Crystal(gb, state, tasks, collision, nav, progress, world);
   A_MARK = {
     x: symbols.addr('wXCoord'), y: symbols.addr('wYCoord'),
     offX: symbols.addr('wPlayerBGMapOffsetX'),

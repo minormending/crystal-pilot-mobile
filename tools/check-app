@@ -506,14 +506,27 @@ def check_docs_shape():
             problems.append(f"the diagram names {ghost}, which does not exist")
 
     # The prose count, spelled out in words as the document does.
+    #
+    # The table used to stop at twenty and the mismatch was reported only
+    # `if want` -- so the twenty-first module turned this check off instead of
+    # failing it, which is the one moment it was needed. A count this cannot
+    # name is now a problem in its own right, and the hyphen in "Twenty-one" is
+    # why the pattern is [\w-] rather than \w.
     WORDS = {10: "Ten", 11: "Eleven", 12: "Twelve", 13: "Thirteen",
              14: "Fourteen", 15: "Fifteen", 16: "Sixteen", 17: "Seventeen",
-             18: "Eighteen", 19: "Nineteen", 20: "Twenty"}
+             18: "Eighteen", 19: "Nineteen", 20: "Twenty",
+             21: "Twenty-one", 22: "Twenty-two", 23: "Twenty-three",
+             24: "Twenty-four", 25: "Twenty-five", 26: "Twenty-six",
+             27: "Twenty-seven", 28: "Twenty-eight", 29: "Twenty-nine",
+             30: "Thirty"}
     want = WORDS.get(len(modules))
-    said = re.search(r"^(\w+) modules\. Arrows", text, re.M)
+    said = re.search(r"^([\w-]+) modules\. Arrows", text, re.M)
     if said is None:
         problems.append("the module count sentence is gone")
-    elif want and said.group(1) != want:
+    elif want is None:
+        problems.append(f"there are {len(modules)} modules and this check has no "
+                        f"word for that -- add it to WORDS in tools/check-app")
+    elif said.group(1) != want:
         problems.append(f"the prose says {said.group(1)} modules, "
                         f"there are {len(modules)} ({want})")
 

@@ -103,14 +103,15 @@ of the subtleties in sections 6 and 7.
 
 ## 2. The shape of it
 
-<!-- covers-api: app/main.js app/bootstrap.js app/tasks.js app/nav.js app/world.js app/collision.js app/state.js app/romdata.js app/symbols.js app/gb.js @ 463b0ec9c5f4 -->
+<!-- covers-api: app/main.js app/journey.js app/crystal.js app/tasks.js app/nav.js app/world.js app/collision.js app/state.js app/romdata.js app/symbols.js app/gb.js @ 76cd3bf3f7da -->
 
-Twenty modules. Arrows point from a module to the ones it imports.
+Twenty-one modules. Arrows point from a module to the ones it imports.
 
 ```mermaid
 flowchart TD
     main["main.js<br/>the page and its controls"]
-    boot["bootstrap.js<br/>plays the story"]
+    title["crystal.js<br/>the story this cartridge has"]
+    jour["journey.js<br/>getting somewhere"]
     tasks["tasks.js<br/>composes the four below"]
     jobs["jobs.js<br/>grind · hunt · catch"]
     btl["battle.js<br/>one turn"]
@@ -130,7 +131,7 @@ flowchart TD
     saves["saves.js<br/>slots and .sav files"]
     gb["gb.js<br/>emulator wrapper"]
 
-    main --> boot
+    main --> title
     main --> tasks
     main --> rows
     main --> ver
@@ -147,7 +148,9 @@ flowchart TD
     main --> saves
     saves --> gb
     saves --> state
-    boot --> coll
+    title --> jour
+    jour --> coll
+    jour --> state
     tasks --> jobs
     tasks --> btl
     tasks --> menus
@@ -175,7 +178,8 @@ flowchart TD
 | `menus.js` | "open START and save", "answer the intro" |
 | `battle.js` | "choose a move", "throw a ball", "what happened?" |
 | `jobs.js` | "grind to level 12", "catch a Sentret" |
-| `bootstrap.js` | "start a new game", "fetch Poké Balls" |
+| `journey.js` | "get me to Route 30", "find grass", "go and heal" |
+| `crystal.js` | "start a new game", "fetch Poké Balls", "what is map 26.1 called?" |
 | `saves.js` | "keep this in slot 2", "put that .sav into the cartridge" |
 | `rows.js` | "why is that button greyed out?" |
 | `version.js` | "which build am I running?" |
@@ -185,14 +189,23 @@ flowchart TD
 | `main.js` | everything the person holding the phone touches |
 
 The dependency direction is the design: **nothing below `tasks.js` knows what a
-task is, and nothing below `bootstrap.js` knows the name of a single map.**
+task is, and only `crystal.js` knows the name of a single map.**
+
+That last one used to say "nothing below `bootstrap.js`", which was true and hid
+something: `bootstrap.js` was two files sharing a name. Getting somewhere on a
+Gen 2 map — routing, crossing, waiting for a script, finding grass, walking to a
+healer and back — knows no Crystal fact at all, and it was sitting in the same
+class as Elm's table and the egg errand. It is `journey.js` now, and `crystal.js`
+extends it: a title may know about the engine, and the engine may not know about
+a title. Measured after the split, the way the claim should be: no constant
+declared in `crystal.js` is named anywhere in `journey.js`.
 
 <details>
 <summary><b>Advanced detail:</b> the one boundary worth defending</summary>
 
 `tasks.js` deliberately does **not** know where a Pokémon Center is, where grass
-is, or how to get anywhere. That knowledge lives in `bootstrap.js`, which owns
-the map constants.
+is, or how to get anywhere. Getting anywhere lives in `journey.js`; *where* is
+worth going lives in `crystal.js`, which owns the map constants.
 
 The seam is a set of callbacks passed into the task options:
 
@@ -553,7 +566,7 @@ point those coordinates mean somewhere else entirely.
 
 ## 5. Crossing to the next map
 
-<!-- covers: app/bootstrap.js app/world.js @ 190422640d87 -->
+<!-- covers: app/journey.js app/world.js @ 518c5519a4cc -->
 
 A connection spans only part of a shared edge, so "walk west until something
 happens" does not work. `crossEdge()` closes the distance in stages, then tries
@@ -895,7 +908,7 @@ precedes it defaults to yes, which is what we want; the nickname box does not.
 
 ## 7a. Three that act on where you already are
 
-<!-- covers: app/tasks.js app/jobs.js app/menus.js app/bootstrap.js @ c6136e64584b -->
+<!-- covers: app/tasks.js app/jobs.js app/menus.js app/journey.js @ 2dee848429f0 -->
 
 Grind, hunt and catch all go *looking* for something. These three do the obvious
 thing with the situation you are already in, and take no parameters:
@@ -1112,7 +1125,13 @@ because that failure is only otherwise discovered by reaching for the undo.
 
 ## 8. The errands
 
-<!-- covers: app/bootstrap.js @ 731fc7e86c9f -->
+<!-- covers: app/crystal.js app/journey.js @ a513dc1a7217 -->
+
+Everything in this section is `crystal.js` — the only file in the app that names
+a Crystal map, a Crystal door or a Crystal NPC. What it stands on is
+`journey.js`, section 5's routing and crossing, which knows none of them. That
+division is what a ROM hack of the same base game would exploit: an errand is
+a title's, and getting there is the engine's.
 
 ### Starting a new game
 
@@ -1220,7 +1239,7 @@ This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ 0406e84d2d2f -->
+<!-- covers: app/main.js index.html @ f75ceab8e673 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -2573,7 +2592,7 @@ about that code did not.
 
 ### The other checks
 
-<!-- covers: tools/check-app @ 37d3edb8d72c -->
+<!-- covers: tools/check-app @ c2ec179abad8 -->
 
 `tools/check-app` runs everything that can be verified without a ROM:
 
