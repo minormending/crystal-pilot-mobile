@@ -678,6 +678,9 @@ function screenState() {
 function paintScreen() {
   const row = $('#screenrow'), btn = $('#screenshare');
   if (!row) return;
+  // A pad that cannot act should not look like it can -- the same rule the
+  // pilot's list is built on, and the same dimming a running job uses.
+  document.body.classList.toggle('noinput', !!watcher && !remoteInput.ok);
   // Keyed on being *in* a room, not on having opened one. leaveRoom() detaches
   // kidsync but leaves the handle in hand, so `room` stays truthy after Stop --
   // and this row went on offering to show a screen into a room this device had
@@ -783,6 +786,9 @@ function watchScreen() {
         + 'across networks it often will not');
     }
   }, 15000);
+  // Every watch starts from a clean answer. A previous session's "view only"
+  // left over would grey the pad of a host that is handing it over.
+  remoteInput = { ok: true, why: null };
   watcher = createWatcher({
     onTrack: (stream) => {
       const v = $('#remote');
@@ -794,7 +800,17 @@ function watchScreen() {
       paintScreen();
     },
     onTell: (msg) => {
-      if (msg && msg.t === 'asleep') { hostAsleep = !!msg.v; paintScreen(); }
+      if (!msg) return;
+      if (msg.t === 'asleep') { hostAsleep = !!msg.v; paintScreen(); }
+      // Whether this device's pad reaches the game, and which of the two
+      // reasons it does not. Anything held when the answer turns to no is let
+      // go here as well as there: the host has already dropped it, and a
+      // button left lit says a game is being played that cannot be reached.
+      if (msg.t === 'input') {
+        remoteInput = { ok: !!msg.v, why: msg.why || null };
+        if (!remoteInput.ok) { remoteHeld.clear(); syncHeld(); }
+        paintScreen();
+      }
     },
     onStatus: (st) => {
       if (st === 'failed') {
@@ -1464,6 +1480,10 @@ function hold(button) {
   // does. The same two functions every pad and key already go through, so
   // nothing else in the app has to know which machine it is talking to.
   if (watcher) {
+    // The host refuses these anyway; not sending them is what keeps the pad
+    // from lighting up as though they had landed. The guarantee is still the
+    // host's -- this is only the same answer, given a frame earlier.
+    if (!remoteInput.ok) return;
     watcher.press({ t: 'hold', b: button });
     remoteHeld.add(button);
     syncHeld();

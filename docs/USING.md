@@ -40,7 +40,9 @@ the only surface there is the emulator window; here the pilot's controls are
 behind the status line, one tap away, so the game never has to be interrupted to
 reach them. While a job is running the pad dims and stops taking input — it
 would be fighting the pilot for the same joypad — and Stop sits on the status
-line for as long as there is something to stop.
+line for as long as there is something to stop. The same dimming means "this pad
+is not yours" when you are watching another device's screen in view-only mode;
+see [Two devices](DEVICES.md#watching-it-on-the-other-device).
 
 A keyboard works on the same page, which is what makes it testable on a desktop:
 

@@ -218,7 +218,10 @@ line above. Without it a ninety-second job would show one busy dot and no sign
 of life.
 
 While a job runs the pad stops taking input and dims to say so; pressing it
-would be fighting the pilot for the same joypad. Writing that sentence is what
+would be fighting the pilot for the same joypad. One other thing dims it the
+same way: watching another device's screen without being allowed to play it, or
+while that device is running a job of its own — two states, one look, because
+what they have in common is the only thing the pad needs to communicate. Writing that sentence is what
 found the bug in it: `hold` has always opened with `if (running) return` in
 every layout, and the dimming was written for the landscape rule -- where the
 pad is taken apart into two grid areas -- and stayed there. So on a phone held
@@ -410,4 +413,4 @@ So this page carries a marker naming the files it describes and the hash they
 had when it was last read against them. `tools/docs-check` reports it when they
 move, and the pre-commit hook blocks on that report.
 
-<!-- covers: index.html app/main.js app/rows.js @ 0f80f463803b -->
+<!-- covers: index.html app/main.js app/rows.js @ cb1129333837 -->

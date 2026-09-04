@@ -189,6 +189,31 @@ the second device gets the screen and a working pad — no ROM, no symbol file,
 nothing but the room code. The picture goes straight between the two devices
 over WebRTC; the room only introduces them.
 
+**Or press *View only* instead, and they get the screen without the pad.** The
+Screen row carries both: the button that starts or stops it, and one that names
+the mode you are *not* in, so it reads *View only* while you are handing the pad
+over and *Hand over* while you are not. It works before anyone is watching and
+while someone is, so you can change your mind mid-session.
+
+The guarantee is the host's, not the watcher's. A press that arrives over the
+data channel is a press that was already sent, so a watcher that politely
+declined to send would be honour-system; the check is three lines in the device
+that owns the joypad, and anything held at the moment the pad is taken away is
+released at both ends.
+
+Both devices say which mode they are in, and the watching one is told **before**
+it presses anything — the `showing` note in the room carries the answer, so that
+row reads *iPhone is showing its screen · view only* rather than letting someone
+find out by trying. Once connected the pad dims, the same way it dims while a
+pilot job is running.
+
+Which is the other reason a watched pad can go quiet, and it used to do so in
+silence: a pilot job holds the joypad, so the host refuses remote presses for as
+long as one runs. The watching device had no way to know that — its pad looked
+live and every press went nowhere. The host now says which of the two it is:
+*watching iPhone · view only* is a decision, *watching iPhone · the pilot is
+driving* ends by itself.
+
 It needs the showing device to be **awake and in the foreground**, and that is
 a browser fact rather than a choice: measured, a hidden page is throttled to
 about one turn a second — timers clamped, animation frames gone — so a
@@ -205,6 +230,14 @@ video for canvas are all tested between two origins; the media path stalls in
 the test browser because a background tab never sends its ICE checks, and a
 standalone probe in the same browser passes video fine. On two real devices it
 should simply work — and if it does not, the row will tell you.
+
+The same limit applies to the two things sent *over* that channel — "my screen
+is off" and "your pad is live" — because the channel opens with the connection.
+What can be checked without it has been: the mode is enforced where the presses
+land, it survives a reload in the room note, both rows say which state they are
+in, and a watching pad dims and stops sending. What two real devices on one wifi
+would add is watching the dimming happen the instant the other device presses
+*View only*.
 
 ## What leaves the device, and when
 

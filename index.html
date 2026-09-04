@@ -513,7 +513,11 @@
      phone held upright the pad looked exactly as available as ever and quietly
      did nothing, which is the same rule the offers list is built on read
      backwards: a control that cannot act should not look like it can. */
-  body.piloting .dpad,body.piloting .face,body.piloting .menus{
+  /* Two ways the pad is inert, one look. `piloting` is a job holding the
+     joypad; `noinput` is watching a screen this device is not allowed to play
+     -- or one whose owner is running a job. */
+  body.piloting .dpad,body.piloting .face,body.piloting .menus,
+  body.noinput .dpad,body.noinput .face,body.noinput .menus{
     opacity:.4;pointer-events:none;filter:saturate(.4)}
   .hide{display:none!important}
   /* The `hidden` attribute only carries `display:none` from the UA sheet, which

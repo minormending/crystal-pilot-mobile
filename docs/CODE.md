@@ -1214,7 +1214,7 @@ This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ 57195ebce8df -->
+<!-- covers: app/main.js index.html @ 79a12cb18baa -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -2026,27 +2026,78 @@ they have been installed.
 
 <!-- covers: app/stream.js @ 453d378a47cf -->
 
-One device shows its screen; the other watches it and can play. The picture
-goes straight between them over WebRTC and never touches a server — the room
-only introduces them, three notes of a few kilobytes each, and `stream.js`
-never touches the room. The caller passes the two descriptions back and forth,
-the same way `baton` knows nothing about Firebase.
+One device shows its screen; the other watches it, and plays it if the first
+one says so. The picture goes straight between them over WebRTC and never
+touches a server — the room only introduces them, three notes of a few kilobytes
+each, and `stream.js` never touches the room. The caller passes the two
+descriptions back and forth, the same way `baton` knows nothing about Firebase.
 
 ```mermaid
 sequenceDiagram
     participant W as watcher
     participant R as room
     participant H as host
-    H->>R: showing · {id, by}
-    Note over W: the row offers Watch
+    H->>R: showing · {id, by, play}
+    Note over W: the row offers Watch,<br/>and says "view only" if play is false
     W->>R: watching · {id, by}
     H->>H: captureStream(30), data channel, offer
     H->>R: offer · {to: watcher, sdp}
     W->>R: answer · {from: watcher, sdp}
     H->>H: accept — the picture flows, direct
     H->>R: offer/answer cleared
+    H-->>W: channel open → {t:'input', v, why}
     W-->>H: joypad, over the data channel
+    Note over H: applyRemoteInput refuses<br/>unless letsPlay and not running
 ```
+
+**Whether the watcher may play is the host's answer, and only the host's.** A
+press that arrives is a press that was already sent, so a watcher that chose not
+to send would be honour-system: the check is in `applyRemoteInput`, at the end
+that owns the joypad, and it is three lines. Everything else about view-only is
+making the two devices agree about which mode they are in.
+
+It is said in two places on purpose. The `showing` note carries `play`, which
+survives a reload and is how the other device knows *before* it presses Watch.
+The data channel carries `{t:'input', v, why}`, which is the live answer — a
+debounced room write would dim someone's pad a second late, or a second after it
+came back.
+
+<details>
+<summary><b>Advanced detail:</b> the two reasons a watched pad goes quiet, and
+the three moments the host has to say so</summary>
+
+`applyRemoteInput` has always refused presses while a pilot job runs, and said
+nothing about it — so a watching device's pad looked live and every press went
+nowhere. That is the same defect view-only would have shipped with, so both go
+through one message:
+
+```js
+const ok = letsPlay && !running;
+host.tell({ t: 'input', v: ok, why: ok ? null : (letsPlay ? 'busy' : 'view') });
+```
+
+`why` matters because the two are not the same news. *View only* is a decision
+on the other device and will not change on its own; *the pilot is driving* ends
+by itself in ninety seconds.
+
+Three moments send it, and the first is the one that is easy to miss: `send`
+drops anything written before the channel opens, so a host that announced its
+mode at `offer()` time would have said nothing at all. `createHost` therefore
+takes an `onReady` and fires it from `channel.onopen`. The other two are the
+mode being flipped and `setMode` — a job starting or ending.
+
+Anything held when the answer turns to no is released at **both** ends: the host
+drops it because it holds the joypad, and the watcher drops it because its own
+pad is what is lit. Either one alone leaves a button that looks pressed and is
+not.
+
+The watcher also stops sending, which is not the guarantee — the host's refusal
+is — but it is what keeps the pad from lighting up as though a press had landed.
+And `remoteInput` is reset to yes when a watch begins, because a previous
+session's "view only" left over would grey the pad of a host that is handing it
+over.
+
+</details>
 
 **A room is a mailbox, not a stream.** Notes stay where they are left, so both
 devices see every note again on every change — and a note from a session that
