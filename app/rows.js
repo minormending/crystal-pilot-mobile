@@ -335,20 +335,46 @@ export function describeReplaced(meta) {
  * Five states, and the two that matter most are the ones that are not about
  * this device: someone else is showing, and you are watching them. The others
  * only have to stay out of the way.
+ *
+ * `play` is whether a watching device may press the pad. It is this device's
+ * own decision while hosting and the host's advertisement while watching, and
+ * it is a *host*-side guarantee: a watcher that chose not to send would be
+ * honour-system, and the joypad channel is the thing that has to say no.
+ *
+ * `input` is the live answer instead of the advertised one, `{ok, why}`, and it
+ * exists because there are two ways a press goes nowhere: view-only, which is a
+ * decision, and a pilot job holding the joypad, which ends by itself.
  */
 export function describeScreen({ hosting = false, watching = false, host = null,
-                                 viewer = null, asleep = false } = {}) {
+                                 viewer = null, asleep = false, play = true,
+                                 input = null } = {}) {
   if (hosting) {
+    const how = play ? 'they can play' : 'view only';
+    // The second control is what the *other* mode would be, because a button
+    // saying the state you are already in is a button that appears to do
+    // nothing. Showing with nobody watching still offers it: the choice is
+    // worth making before someone joins rather than after.
+    const second = play ? 'View only' : 'Hand over';
     return viewer
-      ? { text: `showing this screen to ${viewer}`, button: 'Stop' }
-      : { text: 'showing this screen — press Watch on the other device',
-          button: 'Stop' };
+      ? { text: `showing this screen to ${viewer} · ${how}`,
+          button: 'Stop', second }
+      : { text: `showing this screen${play ? '' : ', view only'}`
+               + ' — press Watch on the other device',
+          button: 'Stop', second };
   }
   if (watching) {
-    return asleep
-      ? { text: `${host || 'the other device'} has its screen off`, button: 'Leave' }
-      : { text: `watching ${host || 'the other device'}`, button: 'Leave' };
+    const who = host || 'the other device';
+    if (asleep) return { text: `${who} has its screen off`, button: 'Leave' };
+    // Two different reasons the pad does nothing, and they are not the same
+    // news: one is a decision on the other device, the other is temporary and
+    // ends by itself. Silence was the third option and the worst -- the pad
+    // looked live and every press went nowhere.
+    if (input && !input.ok) {
+      const why = input.why === 'busy' ? 'the pilot is driving' : 'view only';
+      return { text: `watching ${who} · ${why}`, button: 'Leave' };
+    }
+    return { text: `watching ${who}`, button: 'Leave' };
   }
   if (host) return { text: `${host} is showing its screen`, button: 'Watch' };
-  return { text: 'not showing this screen', button: 'Show' };
+  return { text: 'not showing this screen', button: 'Show', second: 'View only' };
 }

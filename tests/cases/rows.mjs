@@ -355,3 +355,40 @@ test('the party reads as one line, and says fainted rather than hurt',
   t.contains(down, '1 fainted', 'fainted is said instead of hurt');
   t.false(down.includes('hurt'), 'because it is the half that stops a job');
 });
+
+test('showing a screen says whether the watcher may play, and offers the other way',
+     async (t) => {
+  const open = describeScreen({ hosting: true, viewer: 'iPad' });
+  t.contains(open.text, 'they can play', 'handing the pad over is said out loud');
+  t.eq(open.second, 'View only', 'and the second control is the other mode');
+
+  const shut = describeScreen({ hosting: true, viewer: 'iPad', play: false });
+  t.contains(shut.text, 'view only', 'so is keeping it');
+  t.eq(shut.second, 'Hand over', 'and the offer flips with it');
+  t.eq(shut.button, 'Stop', 'while Stop stays where it is');
+
+  t.eq(describeScreen({}).second, 'View only',
+       'the choice is offered before anyone is watching, not after');
+  t.eq(describeScreen({ hosting: true, play: false }).second, 'Hand over',
+       'including with nobody watching yet');
+});
+
+test('a watcher is told which of the two reasons its pad is doing nothing',
+     async (t) => {
+  const at = (input) => describeScreen({ watching: true, host: 'iPhone', input });
+
+  t.eq(at({ ok: true }).text, 'watching iPhone',
+       'when it works there is nothing to explain');
+  t.contains(at({ ok: false, why: 'view' }).text, 'view only',
+             'a decision on the other device');
+  t.contains(at({ ok: false, why: 'busy' }).text, 'the pilot is driving',
+             'and a job holding the joypad, which ends by itself');
+  t.eq(at({ ok: false, why: 'busy' }).button, 'Leave',
+       'neither changes what the button does');
+
+  // A screen that is off outranks both: there is nothing to look at, never
+  // mind press.
+  t.contains(describeScreen({ watching: true, host: 'iPhone', asleep: true,
+                              input: { ok: false, why: 'view' } }).text,
+             'screen off', 'and a dark screen is the bigger news');
+});
