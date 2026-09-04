@@ -120,6 +120,39 @@ Nothing in `gbcore/` knows this is a Pokémon game. Nothing in `gen2/` knows
 arrows — see [section 10](#10-keeping-this-honest) — because a layering nothing
 checks is a layering that lasts until the next hurry.
 
+<details>
+<summary><b>Advanced detail:</b> what the arrow check actually reads, and the
+one exception it is told about</summary>
+
+`check_layers` scans every module for a specifier that leaves its own directory
+— `from '../gen2/state.js'`, and the `import('...')` form too, since `room.js`
+loads kidsync that way — and compares the directory it reaches into against the
+ones its own layer is allowed. No build step means every import is a path, so
+there is nothing else to resolve.
+
+```
+gbcore/   may reach  gbcore + vendored sync/ and baton/
+gen2/     may reach  gbcore, gen2
+titles/   may reach  gbcore, gen2, titles
+app/      may reach  all four
+```
+
+Vendored directories are **named rather than inferred**: `sync/` and `baton/`
+are somebody else's code, they sit outside the layer list because they have no
+place in it, and only `gbcore/` should be reaching them — which the check also
+says, because a title importing Firebase directly would be a layering violation
+that happens to resolve.
+
+It was proved by breaking it three ways: `gen2/` importing a title, `gbcore/`
+importing the engine, and an import into a directory that is not a layer at all.
+Each fails with the file, the specifier and what that layer may reach; all three
+pass again when reverted. That mattered more than usual here, because the thing
+this check defends was *already true* when it was written — the layering was
+measured before a single file moved — so a check that silently passed would have
+been indistinguishable from one that worked.
+
+</details>
+
 Arrows below point from a module to the ones it imports. Drawn left to right,
 which is not a preference: `main.js` imports sixteen modules, and top to bottom
 that fan-out lays them in one row 3,214px wide, which shrinks to an unreadable
@@ -2642,7 +2675,7 @@ about that code did not.
 
 ### The other checks
 
-<!-- covers: tools/check-app @ 4497411d7e68 -->
+<!-- covers: tools/check-app @ 0d94d7e4260e -->
 
 `tools/check-app` runs everything that can be verified without a ROM:
 
@@ -2659,6 +2692,7 @@ tools/check-app contrast     # or one group
 | `contrast` | the palette still meets contrast, in both themes |
 | `gamefiles` | no ROM, save or symbol file has been committed |
 | `buttons` | every button name handed to `press`/`hold`/`release` is one the core knows |
+| `layers` | every import points down `gbcore → gen2 → titles → app`, never up |
 | `wiring` | every `$('#id')` is in the markup, and every named import resolves to a module that exports it |
 | `version` | `version.js` and the worker's cache name agree, and the display is in the header |
 | `docshape` | the architecture diagram names and counts every module |

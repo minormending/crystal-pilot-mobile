@@ -704,8 +704,53 @@ def check_names():
         else ok(f"every capitalised name in {len(APP)} modules resolves")
 
 
+# Imports that leave the module's own directory, in both shapes ES modules
+# allow. Bare specifiers are not a thing here: this app has no build step, so
+# every import is a path.
+CROSSING = re.compile(r"(?:from|import)\s*\(?\s*'(\.\./([\w-]+)/[\w.]+)'")
+
+
+def check_layers():
+    """An import may point down LAYERS and never up.
+
+    The layering was already true when the directories were made -- checked by
+    measuring every import before moving a file -- and that is exactly why this
+    exists. A structure that is correct today and unenforced is correct until
+    the next hurry: one `../titles/crystal.js` inside gen2/ and the engine knows
+    about a cartridge again, which is the whole thing the split was for. Nothing
+    else in here would notice, because such an import resolves, parses, and
+    works.
+
+    Vendored directories are the exception and are named rather than inferred.
+    `sync/` and `baton/` are somebody else's code that gbcore/ is allowed to
+    reach, and they sit outside this list because they have no place in it.
+    """
+    allowed = {name: set(LAYERS[:i]) | {name} for i, name in enumerate(LAYERS)}
+    outside = {"sync", "baton", "vendor"}
+    problems = []
+    for path in APP:
+        layer = path.parent.name
+        for spec, target in CROSSING.findall(path.read_text()):
+            if target in outside:
+                if layer != "gbcore" and target != "vendor":
+                    problems.append(f"{rel(path)}  reaches vendored {target}/ -- "
+                                    f"only gbcore/ should")
+                continue
+            if target not in allowed:
+                problems.append(f"{rel(path)}  imports {spec}, and {target}/ is "
+                                f"not one of {', '.join(LAYERS)}")
+            elif target not in allowed[layer]:
+                problems.append(f"{rel(path)}  imports {spec} -- {layer}/ may only "
+                                f"reach {', '.join(sorted(allowed[layer]))}")
+    for p in problems:
+        print(f"        {p}")
+    return fail(f"{len(problems)} import(s) pointing the wrong way") if problems \
+        else ok(f"every import points down {' → '.join(LAYERS)}")
+
+
 CHECKS = {
     "syntax": check_syntax,
+    "layers": check_layers,
     "shell": check_shell,
     "markup": check_markup,
     "contrast": check_contrast,

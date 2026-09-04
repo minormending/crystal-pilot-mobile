@@ -16,7 +16,7 @@ what CI checks and what the pre-commit hook blocks on.
 flowchart LR
     E[an edit] --> H{{".githooks/pre-commit"}}
     H --> T["./run-tests<br/>76 behaviour tests"]
-    H --> C["tools/check-app<br/>12 groups"]
+    H --> C["tools/check-app<br/>13 groups"]
     H --> D["tools/docs-check<br/>23 tracked sections"]
     T --> OK[commit]
     C --> OK
@@ -83,12 +83,13 @@ section gives. Everything by hand runs against a local build.
 
 ## The checks that need no ROM
 
-`tools/check-app` is twelve groups, each one a class of mistake that parses
+`tools/check-app` is thirteen groups, each one a class of mistake that parses
 fine and is wrong at run time:
 
 | group | asserts |
 | --- | --- |
-| `syntax` | all 20 modules and `sw.js` parse — copied to `.mjs` first, because `node --check` on a `.js` file with a syntax error exits 0 |
+| `layers` | every import points down `gbcore → gen2 → titles → app`, never up |
+| `syntax` | all 21 modules and `sw.js` parse — copied to `.mjs` first, because `node --check` on a `.js` file with a syntax error exits 0 |
 | `shell` | the service worker's shell lists every file it needs, and each exists |
 | `markup` | `index.html`'s tags and its CSS braces balance |
 | `contrast` | 22 colour pairs meet WCAG in **both** themes |
@@ -98,7 +99,7 @@ fine and is wrong at run time:
 | `wiring` | every `$('#id')` exists in the markup, and every named import — same directory, another one, or a vendored module — resolves to something that exports it |
 | `symbols` | the shared digest is every symbol the app looks up |
 | `version` | `gbcore/version.js` and `sw.js` agree, and both doors are reachable with no ROM |
-| `docshape` | the architecture diagram draws, counts and tables all 20 modules |
+| `docshape` | section 2's architecture diagram draws, counts and tables all 21 modules |
 | `names` | every capitalised name a module uses is one it can see |
 
 `tools/docs-check` is the other half, and it checks the prose rather than the
