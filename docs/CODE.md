@@ -1,7 +1,11 @@
 # How crystal-pilot mobile works
 
+[← crystal-pilot mobile](../README.md) · [Using it](USING.md) · [The interface](INTERFACE.md) · [Two devices](DEVICES.md) · [What is proven](PROVEN.md) · [Developing](DEVELOPING.md) · [The code](CODE.md)
+
 An auto-pilot for Pokémon Crystal that runs in a phone browser. This document
-explains the code and the decisions inside it.
+explains the code and the decisions inside it. It is the deepest of the six
+pages: [The interface](INTERFACE.md) describes the same screen from the outside,
+and [What is proven](PROVEN.md) is the log of what has been run and measured.
 
 ## How to read this
 
@@ -1203,6 +1207,10 @@ the bag" rather than "did we gain any".
 ---
 
 ## 9. The interface
+
+This section is the code behind the screen. For the same screen described from
+the outside — what it offers, what is behind which door, and how the three
+layouts differ — see [The interface](INTERFACE.md).
 
 <!-- covers: app/main.js index.html @ 30700f981ef3 -->
 
