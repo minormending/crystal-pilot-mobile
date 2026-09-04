@@ -10,7 +10,7 @@
 // lands somewhere else, because a bootstrap that quietly drifts off course ends
 // up mashing A at a wall.
 import { CollisionMap } from './collision.js';
-import { TRAINER_BATTLE } from './state.js';
+import { GRASS_TILES, TRAINER_BATTLE } from './state.js';
 
 const key = (group, number) => group * 256 + number;
 
@@ -73,8 +73,6 @@ const ELM_TALK_FROM = [5, 3];      // stand here, face up, and Elm is above
 // take a starter -- no Pokedex, and no walking to a Pokemon Center.
 const ELM_HEAL_FROM = [2, 2];      // stand here, face up, and the machine is above
 
-// Encounter tiles, the same values CheckGrassCollision uses.
-const GRASS = new Set([0x10, 0x14, 0x18, 0x1c]);
 
 
 // What a leg beyond the first is worth in tiles, when weighing up two routes.
@@ -403,7 +401,7 @@ export class Bootstrap {
     const patches = [];
     for (let y = 0; y < h; y++) {
       for (let x = 0; x < w; x++) {
-        if (GRASS.has(this.collision.collisionAt(x, y))) patches.push([x, y]);
+        if (GRASS_TILES.has(this.collision.collisionAt(x, y))) patches.push([x, y]);
       }
     }
     if (!patches.length) return false;
@@ -433,7 +431,7 @@ export class Bootstrap {
     const wram = await this.settled();
     if (!wram) return false;
     const at = this.collision.playerPos(wram);
-    return GRASS.has(this.collision.collisionAt(at[0], at[1]));
+    return GRASS_TILES.has(this.collision.collisionAt(at[0], at[1]));
   }
 
   /** Find a way off this map and take it. */

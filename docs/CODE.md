@@ -103,7 +103,7 @@ of the subtleties in sections 6 and 7.
 
 ## 2. The shape of it
 
-<!-- covers-api: app/main.js app/bootstrap.js app/tasks.js app/nav.js app/world.js app/collision.js app/state.js app/romdata.js app/symbols.js app/gb.js @ 6978b1bbc23b -->
+<!-- covers-api: app/main.js app/bootstrap.js app/tasks.js app/nav.js app/world.js app/collision.js app/state.js app/romdata.js app/symbols.js app/gb.js @ 463b0ec9c5f4 -->
 
 Twenty modules. Arrows point from a module to the ones it imports.
 
@@ -310,10 +310,16 @@ later duplicates are aliases and locals.
 
 ### `state.js` — what the game is doing right now
 
-<!-- covers: app/state.js @ 07c21b8020de -->
+<!-- covers: app/state.js @ cbb3860281e9 -->
 
 One snapshot, many answers: `inBattle`, `party`, `pos`, `onGrass`,
 `worldLoaded`, `menu`, `balls`, and the enemy's HP.
+
+It also exports the four collision values that roll for a wild encounter, as
+`GRASS_TILES`, because the pilot needs that fact from both sides: this module
+asks *is the player standing on grass* of a snapshot, and a walk asks *is that
+tile grass* of the collision map. They were two copies of one engine fact, here
+and in `bootstrap.js`, with nothing able to notice if they drifted.
 
 <details>
 <summary><b>Advanced detail:</b> the signals that are not what they look like</summary>
@@ -547,7 +553,7 @@ point those coordinates mean somewhere else entirely.
 
 ## 5. Crossing to the next map
 
-<!-- covers: app/bootstrap.js app/world.js @ 2ecf6f282297 -->
+<!-- covers: app/bootstrap.js app/world.js @ 190422640d87 -->
 
 A connection spans only part of a shared edge, so "walk west until something
 happens" does not work. `crossEdge()` closes the distance in stages, then tries
@@ -679,7 +685,7 @@ eight kilobytes a full snapshot copies, which is worth keeping distinct.
 
 ## 6. Battles
 
-<!-- covers: app/tasks.js app/taskbase.js app/battle.js app/jobs.js app/state.js @ 62990af890a8 -->
+<!-- covers: app/tasks.js app/taskbase.js app/battle.js app/jobs.js app/state.js @ 309a1a8c286f -->
 
 ### Is it our turn?
 
@@ -889,7 +895,7 @@ precedes it defaults to yes, which is what we want; the nickname box does not.
 
 ## 7a. Three that act on where you already are
 
-<!-- covers: app/tasks.js app/jobs.js app/menus.js app/bootstrap.js @ 70fdc2a5193d -->
+<!-- covers: app/tasks.js app/jobs.js app/menus.js app/bootstrap.js @ c6136e64584b -->
 
 Grind, hunt and catch all go *looking* for something. These three do the obvious
 thing with the situation you are already in, and take no parameters:
@@ -951,7 +957,7 @@ running the thing.
 
 ## 7b. Saving, and getting the save out
 
-<!-- covers: app/tasks.js app/taskbase.js app/battle.js app/jobs.js app/state.js @ 62990af890a8 -->
+<!-- covers: app/tasks.js app/taskbase.js app/battle.js app/jobs.js app/state.js @ 309a1a8c286f -->
 
 ```mermaid
 flowchart TD
@@ -1106,7 +1112,7 @@ because that failure is only otherwise discovered by reaching for the undo.
 
 ## 8. The errands
 
-<!-- covers: app/bootstrap.js @ 7ea837455a0e -->
+<!-- covers: app/bootstrap.js @ 731fc7e86c9f -->
 
 ### Starting a new game
 

@@ -7,7 +7,12 @@ const b = GameBoy.byteAt, w = GameBoy.wordAt;
 // Collision values that roll for a wild encounter (COLL_LONG_GRASS $14,
 // COLL_TALL_GRASS $18, and the two unused mirrors the engine still treats
 // as grass).
-const GRASS = new Set([0x10, 0x14, 0x18, 0x1c]);
+// Exported because the pilot needs the same answer from the other side: this
+// module asks "is the player standing on grass" of a snapshot, and a walk asks
+// "is that tile grass" of the collision map. Those are one engine fact, and it
+// was written down twice -- here and in bootstrap.js -- with nothing to notice
+// if the two copies ever disagreed.
+export const GRASS_TILES = new Set([0x10, 0x14, 0x18, 0x1c]);
 
 // The intro's NAME menu, from ChrisNameMenuHeader in data/player_names.asm:
 // five items (NEW NAME plus four presets) drawn in the top-left ten columns.
@@ -137,7 +142,7 @@ export class GameState {
       worldLoaded: b(wram, a.mapStatus) === 2 && b(wram, a.mapGroup) !== 0,
       scriptRunning: b(wram, a.scriptMode) !== 0,
       pos: [b(wram, a.x), b(wram, a.y)],
-      onGrass: GRASS.has(b(wram, a.tile)),
+      onGrass: GRASS_TILES.has(b(wram, a.tile)),
       menu: [b(wram, a.menuX), b(wram, a.menuY)],
       battleCursor: b(wram, a.battleCursor),
       enemy: {
