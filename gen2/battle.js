@@ -2,11 +2,15 @@
 //
 // Everything here works on the situation in front of it and reports what
 // happened. Deciding whether a battle was worth having is jobs.js's problem.
+import { gen2 } from './engine.js';
 import { SETTLE_FRAMES } from '../gbcore/taskbase.js';
-const FIGHT = 1;   // wBattleMenuCursorPosition: 1 FIGHT 2 PKMN 3 PACK 4 RUN
-const PACK = 3;
-const RUN = 4;
-const BALL_POCKET = 1;   // wCurPocket: 0 ITEM, 1 BALL, 2 KEY ITEM, 3 TM/HM
+// wBattleMenuCursorPosition: 1 FIGHT 2 PKMN 3 PACK 4 RUN, and wCurPocket:
+// 0 ITEM, 1 BALL, 2 KEY ITEM, 3 TM/HM. From the engine profile, which is where
+// the machine's own numbers live.
+const FIGHT = gen2.battleAction.fight;
+const PACK = gen2.battleAction.pack;
+const RUN = gen2.battleAction.run;
+const BALL_POCKET = gen2.ballPocket;
 // wCurItem while the cursor sits on CANCEL.
 const CANCEL_ITEM = 0xff;
 // Party slots to try when sending out a replacement.
@@ -15,7 +19,8 @@ const MAX_SEND_TRIES = 6;
 const PARTY_HOLD = 12, PARTY_GAP = 24, PARTY_SETTLE = 40;
 // What the drawn battle menu measures, telling it from the pack over the top of
 // it: wMenuDataItems and wMenuBorderTopCoord.
-const BATTLE_MENU_ITEMS = 34, BATTLE_MENU_TOP = 12;
+const BATTLE_MENU_ITEMS = gen2.battleMenu.items,
+      BATTLE_MENU_TOP = gen2.battleMenu.top;
 
 /**
  * Is the battle menu up and waiting for a choice?

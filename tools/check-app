@@ -279,10 +279,14 @@ def check_moves():
              if ln.strip().startswith("move ")]
 
     # Whatever the app decided, read from the app rather than restated here.
-    text = module("romdata.js").read_text()
-    m = re.search(r"UNGENTLE_EFFECTS = new Set\(\[([0-9,\s]*)\]\)", text)
+    # The list moved from romdata.js to the engine profile when the machine's
+    # numbers were gathered in one place; reading it from the wrong file would
+    # not fail, it would stop checking, so the name is matched rather than the
+    # location.
+    text = module("engine.js").read_text()
+    m = re.search(r"lethalEffects: \[([0-9,\s]*)\]", text)
     if not m:
-        return fail("could not find UNGENTLE_EFFECTS in app/romdata.js")
+        return fail("could not find lethalEffects in gen2/engine.js")
     declared = {int(x) for x in m.group(1).replace(" ", "").split(",") if x}
 
     problems = []

@@ -93,7 +93,7 @@ fine and is wrong at run time:
 | --- | --- |
 | `layers` | every import points down `gbcore → gen2 → titles → app`, never up |
 | `titles` | a title adds methods to the engine and never overrides one |
-| `syntax` | all 24 modules and `sw.js` parse — copied to `.mjs` first, because `node --check` on a `.js` file with a syntax error exits 0 |
+| `syntax` | all 25 modules and `sw.js` parse — copied to `.mjs` first, because `node --check` on a `.js` file with a syntax error exits 0 |
 | `shell` | the service worker's shell lists every file it needs, and each exists |
 | `markup` | `index.html`'s tags and its CSS braces balance |
 | `contrast` | 22 colour pairs meet WCAG in **both** themes |
@@ -103,7 +103,7 @@ fine and is wrong at run time:
 | `wiring` | every `$('#id')` exists in the markup, and every named import — same directory, another one, or a vendored module — resolves to something that exports it |
 | `symbols` | the shared digest is every symbol the app looks up |
 | `version` | `gbcore/version.js` and `sw.js` agree, and both doors are reachable with no ROM |
-| `docshape` | section 2's architecture diagram draws, counts and tables all 24 modules |
+| `docshape` | section 2's architecture diagram draws, counts and tables all 25 modules |
 | `names` | every capitalised name a module uses is one it can see |
 
 `tools/docs-check` is the other half, and it checks the prose rather than the

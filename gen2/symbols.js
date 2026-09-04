@@ -110,11 +110,3 @@ export const SHARED_SYMBOLS = [
   'wTilesetCollisionAddress', 'wTilesetCollisionBank', 'wTimeOfDay',
   'wWindowStackSize', 'wXCoord', 'wYCoord',
 ];
-
-// Party struct layout, verified against the disassembly:
-// wPartyMon2 - wPartyMon1 == 0x30.
-export const PARTY_STRUCT = 0x30;
-export const MON = {
-  species: 0x00, moves: 0x02, pp: 0x17, level: 0x1f,
-  status: 0x20, hp: 0x22, maxHp: 0x24,
-};

@@ -103,9 +103,9 @@ of the subtleties in sections 6 and 7.
 
 ## 2. The shape of it
 
-<!-- covers-api: app/main.js gen2/journey.js titles/crystal.js gen2/tasks.js gen2/nav.js gen2/world.js gen2/collision.js gen2/state.js gen2/romdata.js gen2/symbols.js gbcore/gb.js @ 0a5643a04d9f -->
+<!-- covers-api: app/main.js gen2/journey.js titles/crystal.js gen2/tasks.js gen2/nav.js gen2/world.js gen2/collision.js gen2/state.js gen2/romdata.js gen2/symbols.js gbcore/gb.js @ 0d7efcfe43a8 -->
 
-Twenty-four modules, in four directories, and the directories are the design:
+Twenty-five modules, in four directories, and the directories are the design:
 **an import may point down this list and never up.**
 
 | | holds | may import from |
@@ -182,6 +182,7 @@ flowchart LR
         state["state.js<br/>live game state"]
         rom["romdata.js<br/>cartridge tables"]
         sym["symbols.js<br/>the .sym file"]
+        eng["engine.js<br/>the machine's own numbers"]
     end
     subgraph gbcore["gbcore/ — any Game Boy"]
         tbase["taskbase.js<br/>machine and snapshot"]
@@ -231,12 +232,14 @@ flowchart LR
     coll --> gb
     state --> gb
     state --> sym
+    state --> eng
 ```
 
 | Module | Answers |
 | --- | --- |
 | `cartridge.js` | "is this a Game Boy ROM, and which game?" |
 | `gb.js` | "run some frames", "read memory", "hold this button" |
+| `engine.js` | "how wide is a party entry, and which byte is a move's power?" |
 | `symbols.js` | "where does `wPartyCount` live?" |
 | `state.js` | "what is happening right now?" |
 | `romdata.js` | "what is species 155 called?" |
@@ -394,14 +397,14 @@ watching.
 
 ### `symbols.js` — where things live
 
-<!-- covers: gen2/symbols.js @ c00068f7470d -->
+<!-- covers: gen2/symbols.js @ d69385aa06cb -->
 
 Parses the `.sym` file into `name → { bank, addr }`. First definition wins;
 later duplicates are aliases and locals.
 
 ### `state.js` — what the game is doing right now
 
-<!-- covers: gen2/state.js @ 64525387718d -->
+<!-- covers: gen2/state.js @ 6d040dab5d1d -->
 
 One snapshot, many answers: `inBattle`, `party`, `pos`, `onGrass`,
 `worldLoaded`, `menu`, `balls`, and the enemy's HP.
@@ -430,7 +433,7 @@ and in `bootstrap.js`, with nothing able to notice if they drifted.
 
 ### `romdata.js` — what the cartridge knows
 
-<!-- covers: gen2/romdata.js @ b00b2bc76e0d -->
+<!-- covers: gen2/romdata.js @ 5da2a0a160ed -->
 
 Species names, item names, wild-encounter tables, move power. All read out of
 the ROM, not shipped as a copy, so they cannot drift from the build being driven.
@@ -776,7 +779,7 @@ eight kilobytes a full snapshot copies, which is worth keeping distinct.
 
 ## 6. Battles
 
-<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 574d4e20e31d -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 63262dec1561 -->
 
 ### Is it our turn?
 
@@ -900,7 +903,7 @@ fainted.
 
 ## 7. Catching something
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ 66dde06b0fb2 -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ 6c198e8fe0a0 -->
 
 Catching is the most involved loop, because a Poké Ball's odds turn on how much
 HP is left. Throwing at a full-health target is mostly throwing balls away.
@@ -1048,7 +1051,7 @@ running the thing.
 
 ## 7b. Saving, and getting the save out
 
-<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 574d4e20e31d -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 63262dec1561 -->
 
 ```mermaid
 flowchart TD
@@ -2785,7 +2788,7 @@ about that code did not.
 
 ### The other checks
 
-<!-- covers: tools/check-app @ ced4f618063d -->
+<!-- covers: tools/check-app @ 06ef268875e4 -->
 
 `tools/check-app` runs everything that can be verified without a ROM:
 

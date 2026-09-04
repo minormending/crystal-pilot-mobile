@@ -13,31 +13,13 @@
 // one after another, each ended by "@" -- and reading them at a fixed stride
 // drifts a character further out with every entry: ULTRA BALL came back as
 // "LTRA BALL", GREAT BALL as "AT BALL".
-const PKMN_NAME_LENGTH = 10;
 const NAME_TERMINATOR = 0x50;
 // The charmap's one ligature that shows up in item names.
 const POKE_LIGATURE = 0x54;
-// A grass table is: map group, map number, three encounter rates, then three
-// blocks of seven (level, species) -- morning, day, night. The list ends at $FF.
-const GRASS_SLOTS_PER_TIME = 7;
-const GRASS_BLOCKS = 3;
-const GRASS_ENTRY_BYTES = 5 + GRASS_SLOTS_PER_TIME * GRASS_BLOCKS * 2;
+// The list ends at $FF. Not an engine field: a terminator is the shape of the
+// table rather than a size in it, and a cartridge that used a different one
+// would need a different scan, not a different number.
 const TABLE_END = 0xff;
-// data/moves/moves.asm: animation, effect, power, type, accuracy, pp, chance.
-const MOVE_BYTES = 7;
-// Move effects whose damage has nothing to do with the power byte, so ranking
-// by power to find something gentle picks exactly the moves that end a battle.
-// Values read out of the ROM's move table (see docs/CODE.md):
-//   38 OHKO         GUILLOTINE, HORN DRILL, FISSURE -- the whole bar
-//   40 SUPER_FANG   half of current HP, whatever that is
-//   87 LEVEL_DAMAGE SEISMIC TOSS, NIGHT SHADE -- your level, in HP
-//   88 PSYWAVE      up to 1.5x your level, unpredictably
-//   89 COUNTER      twice what you just took
-//  144 MIRROR_COAT  the same, for special moves
-const UNGENTLE_EFFECTS = new Set([38, 40, 87, 88, 89, 144]);
-
-const MOVE_EFFECT = 1, MOVE_POWER = 2, MOVE_TYPE = 3, MOVE_PP = 5;
-const MOVE_COUNT = 251;
 
 /** The game's own character encoding, as far as names use it. */
 export function decodeText(bytes) {
@@ -59,6 +41,8 @@ export function normalise(name) {
   return name.toLowerCase().replace(/é/g, 'e').replace(/\s+/g, ' ').trim();
 }
 
+import { gen2 } from './engine.js';
+
 export class RomData {
   /**
    * `encounters` is the wild tables to read, named by the title.
@@ -69,8 +53,9 @@ export class RomData {
    * symbol file actually has is used, so a cartridge with one region loses
    * nothing by saying it has two.
    */
-  constructor(symbols, gb, encounters = []) {
+  constructor(symbols, gb, encounters = [], engine = gen2) {
     this.gb = gb;
+    this.e = engine;
     this.at = (name) => ({ bank: symbols.bank(name), addr: symbols.addr(name) });
     this.names = this.at('PokemonNames');
     this.items = this.at('ItemNames');
@@ -94,7 +79,7 @@ export class RomData {
     if (this._species.has(id)) return this._species.get(id);
     const { bank, addr } = this.names;
     const name = decodeText(
-      this._read(bank, addr + (id - 1) * PKMN_NAME_LENGTH, PKMN_NAME_LENGTH));
+      this._read(bank, addr + (id - 1) * this.e.nameLength, this.e.nameLength));
     this._species.set(id, name);
     return name;
   }
@@ -146,16 +131,16 @@ export class RomData {
    * knocking out the Pokemon it was trying to catch.
    */
   move(id) {
-    if (!id || !this.moves || id > MOVE_COUNT) return null;
+    if (!id || !this.moves || id > this.e.moveCount) return null;
     if (this._moves.has(id)) return this._moves.get(id);
     const { bank, addr } = this.moves;
-    const at = addr + (id - 1) * MOVE_BYTES;
+    const at = addr + (id - 1) * this.e.moveBytes;
     const info = {
       id,
-      effect: this.gb.romByte(bank, at + MOVE_EFFECT),
-      power: this.gb.romByte(bank, at + MOVE_POWER),
-      type: this.gb.romByte(bank, at + MOVE_TYPE),
-      pp: this.gb.romByte(bank, at + MOVE_PP),
+      effect: this.gb.romByte(bank, at + this.e.moveField.effect),
+      power: this.gb.romByte(bank, at + this.e.moveField.power),
+      type: this.gb.romByte(bank, at + this.e.moveField.type),
+      pp: this.gb.romByte(bank, at + this.e.moveField.pp),
     };
     this._moves.set(id, info);
     return info;
@@ -182,7 +167,7 @@ export class RomData {
   isChipMove(id) {
     const m = this.move(id);
     if (!m || m.power <= 0) return false;
-    return !UNGENTLE_EFFECTS.has(m.effect);
+    return !this.e.lethalEffects.includes(m.effect);
   }
 
   /** Normalised name -> id, so a ball can be found by what it is called. */
@@ -205,6 +190,8 @@ export class RomData {
    * never there.
    */
   wildOn(group, number, timeOfDay = null) {
+    const { blocks: blockCount, slotsPerBlock, headerBytes } = this.e.encounter;
+    const entryBytes = headerBytes + slotsPerBlock * blockCount * 2;
     for (const table of this.grass) {
       let addr = table.addr;
       // Scan the table; each map's block is a fixed size, ending at $FF.
@@ -214,12 +201,14 @@ export class RomData {
         const n = this.gb.romByte(table.bank, addr + 1);
         if (g === group && n === number) {
           const counts = new Map();
+          const all = [...Array(blockCount).keys()];
           const blocks = timeOfDay === null
-            ? [0, 1, 2] : [Math.max(0, Math.min(2, timeOfDay))];
+            ? all : [Math.max(0, Math.min(blockCount - 1, timeOfDay))];
           for (const block of blocks) {
-            for (let s = 0; s < GRASS_SLOTS_PER_TIME; s++) {
-              const slot = block * GRASS_SLOTS_PER_TIME + s;
-              const id = this.gb.romByte(table.bank, addr + 5 + slot * 2 + 1);
+            for (let s = 0; s < slotsPerBlock; s++) {
+              const slot = block * slotsPerBlock + s;
+              const id = this.gb.romByte(table.bank,
+                                         addr + headerBytes + slot * 2 + 1);
               const name = this.speciesName(id);
               counts.set(name, (counts.get(name) || 0) + 1);
             }
@@ -228,7 +217,7 @@ export class RomData {
             .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
             .map(([name]) => name);
         }
-        addr += GRASS_ENTRY_BYTES;
+        addr += entryBytes;
       }
     }
     return [];

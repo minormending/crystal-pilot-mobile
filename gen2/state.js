@@ -1,6 +1,6 @@
 // Typed reads of the game, from one work-RAM snapshot per poll.
 import { GameBoy } from '../gbcore/gb.js';
-import { MON, PARTY_STRUCT } from './symbols.js';
+import { gen2 } from './engine.js';
 
 const b = GameBoy.byteAt, w = GameBoy.wordAt;
 
@@ -12,28 +12,28 @@ const b = GameBoy.byteAt, w = GameBoy.wordAt;
 // "is that tile grass" of the collision map. Those are one engine fact, and it
 // was written down twice -- here and in bootstrap.js -- with nothing to notice
 // if the two copies ever disagreed.
-export const GRASS_TILES = new Set([0x10, 0x14, 0x18, 0x1c]);
+export const GRASS_TILES = new Set(gen2.grassTiles);
 
 // The intro's NAME menu, from ChrisNameMenuHeader in data/player_names.asm:
 // five items (NEW NAME plus four presets) drawn in the top-left ten columns.
 // Matched on the menu's own shape rather than on the cursor, because the
 // cursor still holds whatever the gender prompt left there until this menu is
 // actually drawn.
-const NAME_MENU_ITEMS = 5;
-const NAME_MENU_RIGHT = 10;
+const NAME_MENU_ITEMS = gen2.nameMenu.items;
+const NAME_MENU_RIGHT = gen2.nameMenu.right;
 // Cursor 1 is NEW NAME, which opens the letter grid. 2 and below are the names
 // the game ships: CHRIS/MAT/ALLAN/JON, or KRIS/AMANDA/JUANA/JODI.
-export const NAME_MENU_FIRST_PRESET = 2;
+export const NAME_MENU_FIRST_PRESET = gen2.nameMenu.firstPreset;
 
 // wBattleMode: 0 none, 1 a wild Pokemon, 2 a trainer. Exported because both
 // tasks.js and bootstrap.js need it -- you cannot run from a trainer, and a
 // trainer's Pokemon cannot be caught -- and a magic 2 stated in two places is
 // exactly the kind of thing that drifts.
-export const TRAINER_BATTLE = 2;
+export const TRAINER_BATTLE = gen2.trainerBattle;
 
 // Six. The cap the game enforces, and the reason a catch refuses a full party
 // rather than sending it to a box this does not handle.
-export const MAX_PARTY = 6;
+export const MAX_PARTY = gen2.maxParty;
 
 // Where the cartridge's save data lives, and how the game knows it is real.
 //
@@ -47,14 +47,20 @@ export const MAX_PARTY = 6;
 // the obvious thing to reach for and it is wrong: a battery that has never
 // been saved to still reads five non-zero bytes here, so "any non-zero byte
 // means there is a save" calls a blank cartridge saved.
-const SRAM_START = 0xa000;
-const SRAM_BANK_BYTES = 0x2000;
-const SAVE_CHECK_VALUE_1 = 99;
-const SAVE_CHECK_VALUE_2 = 127;
+const SRAM_START = gen2.sram.start;
+const SRAM_BANK_BYTES = gen2.sram.bankBytes;
+const SAVE_CHECK_VALUE_1 = gen2.saveCheck[0];
+const SAVE_CHECK_VALUE_2 = gen2.saveCheck[1];
 
 export class GameState {
-  constructor(symbols) {
+  /**
+   * `engine` is the machine's own numbers -- see engine.js. The stock Gen 2
+   * profile by default; a title supplies its own only if its cartridge changed
+   * one of them, which a hack that moved the maps has not.
+   */
+  constructor(symbols, engine = gen2) {
     this.s = symbols;
+    this.e = engine;
     // Resolved once. Reading the map every poll is what keeps this cheap.
     this.a = {
       partyCount: symbols.addr('wPartyCount'),
@@ -188,19 +194,20 @@ export class GameState {
   }
 
   party(wram) {
-    const n = Math.min(b(wram, this.a.partyCount), 6);
+    const { partyStride, mon, maxParty } = this.e;
+    const n = Math.min(b(wram, this.a.partyCount), maxParty);
     const out = [];
     for (let i = 0; i < n; i++) {
-      const base = this.a.partyMon1 + i * PARTY_STRUCT;
+      const base = this.a.partyMon1 + i * partyStride;
       out.push({
         slot: i,
-        species: b(wram, base + MON.species),
-        level: b(wram, base + MON.level),
-        hp: w(wram, base + MON.hp),
-        maxHp: w(wram, base + MON.maxHp),
-        moves: [0, 1, 2, 3].map((k) => b(wram, base + MON.moves + k)),
+        species: b(wram, base + mon.species),
+        level: b(wram, base + mon.level),
+        hp: w(wram, base + mon.hp),
+        maxHp: w(wram, base + mon.maxHp),
+        moves: [0, 1, 2, 3].map((k) => b(wram, base + mon.moves + k)),
         // Low 6 bits are current PP; the top two are PP Up count.
-        pp: [0, 1, 2, 3].map((k) => b(wram, base + MON.pp + k) & 0x3f),
+        pp: [0, 1, 2, 3].map((k) => b(wram, base + mon.pp + k) & 0x3f),
       });
     }
     return out;
