@@ -5,7 +5,7 @@
 // in IndexedDB on the device by app/remember.js, so a reload does not send you
 // looking for them -- which is a different thing from being cached, and is
 // thrown away by Forget in the settings card.
-const CACHE = 'crystal-pilot-v89';
+const CACHE = 'crystal-pilot-v90';
 const SHELL = [
   './', './index.html', './manifest.webmanifest', './icon.svg',
   './vendor/wasmboy.umd.js',

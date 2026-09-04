@@ -99,7 +99,7 @@ of the subtleties in sections 6 and 7.
 
 ## 2. The shape of it
 
-<!-- covers-api: app/main.js app/bootstrap.js app/tasks.js app/nav.js app/world.js app/collision.js app/state.js app/romdata.js app/symbols.js app/gb.js @ 409418ac980b -->
+<!-- covers-api: app/main.js app/bootstrap.js app/tasks.js app/nav.js app/world.js app/collision.js app/state.js app/romdata.js app/symbols.js app/gb.js @ 03a0143e20b1 -->
 
 Twenty modules. Arrows point from a module to the ones it imports.
 
@@ -1204,7 +1204,7 @@ the bag" rather than "did we gain any".
 
 ## 9. The interface
 
-<!-- covers: app/main.js index.html @ 1048ca1ffa17 -->
+<!-- covers: app/main.js index.html @ 0ddedc12b0ea -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -1244,6 +1244,51 @@ flow is still worth switching, and still is.
 The pilot's jobs are a **list, not a toolbar**, because `runTask` opens with
 `if (running) return null` — only one job can ever be underway, so they are one
 mutually exclusive choice.
+
+**And the list holds offers, not an inventory.** Six rows were always drawn, and
+four of them were usually greyed out with a line each explaining why: *not in a
+battle*, *not in a battle*, *no party yet*, *pick something below*. That is the
+app scanning the game's memory on your behalf and then making you scan the
+result anyway. `describeOffers` inverts the same answers `describeRows` already
+computes — a row that cannot start is not drawn, and the rest are sorted by how
+likely you are to want them.
+
+Every rule in the ranking is a fact about the state rather than a preference:
+
+| when | first | why |
+| --- | --- | --- |
+| a battle is on the screen | Battle, Catch this one | it is modal — nothing else could start anyway |
+| someone has fainted | Heal | it is what blocks every other job from finishing |
+| a species is picked | Catch, Hunt | the specific intent beats the general one |
+| otherwise | Grind | the job that needs nothing but a party |
+
+Ranking is a `style.order` and a `hide`, not generated markup: every row keeps
+its id, its handler and its line in `check-app`'s wiring check, and what changed
+is which are drawn and in what order. Three consequences fell out of that and
+each needed its own fix. `.job:first-of-type` was the row written first, not the
+row now shown first, so the top rule is drawn by a `lead` class instead. The
+accent was nailed to Grind in the markup, which was true of a fixed list and a
+lie the moment something else could lead, so it follows rank 1. And `enabled`
+turned out to carry two meanings: Catch with no balls cannot catch, but the
+errand that fetches them lives in that row and is the thing to press — so a
+`lit` flag keeps the row's name from greying out under an accented button.
+
+The six rows moved into a `.jobs` flex column of their own, because `order`
+sorts *all* the flex children and the picker and the level presets are not
+offers. Those two are now shown only when a job that reads them is on the list;
+in a battle neither has anything to change. Making that work needed
+`[hidden]{display:none!important}` in the sheet: the attribute carries only the
+UA rule, which any class in the page outranks, so `.param` and `.levels` at
+`display:flex` had been ignoring `hidden` since they were written — the level
+presets showed with nothing to level.
+
+One quiet line survives the cull. `hint` names what would add to the list, and
+only when there is something to do about it: *most jobs need a Pokémon with
+you*, *pick something below to hunt or catch*. Two clauses at most, and silence
+when the reason a job is missing is that nothing is wrong — "everyone is at full
+health" is the good state, and a line explaining the absence of an offer nobody
+wanted is exactly the noise this replaces. Measured in the bedroom of a new
+game, where one job of six can run: the card went from 603px to 260px.
 
 **What a row says is decided somewhere it can be tested.** `rows.js` takes the
 game state and the handful of choices the person has made, and returns text and

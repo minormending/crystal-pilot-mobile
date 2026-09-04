@@ -1,8 +1,9 @@
 // Wiring: file pickers, the render loop, and dispatching a task.
 import { GameBoy } from './gb.js';
 import { SHARED_SYMBOLS, Symbols } from './symbols.js';
-import { describeHandoff, describeReplaced, describeRoom, describeRows,
-         describeScreen, describeSlot, describeUndo, joinFailure } from './rows.js';
+import { describeHandoff, describeOffers, describeReplaced, describeRoom,
+         describeRows, describeScreen, describeSlot, describeUndo,
+         joinFailure } from './rows.js';
 import { VERSION } from './version.js';
 import { forgetKept, keepBattery, keepRom, keepSym, keptMeta, readOpts, recall,
          sanitise, writeOpts } from './remember.js';
@@ -1074,31 +1075,72 @@ async function runTask(id, busy, work,
  * from the same flag, which they did not always -- one row read its own
  * button's disabled property back out of the DOM to decide.
  */
+/**
+ * One row: what it says, whether its button works, and whether it reads as live.
+ *
+ * `lit` separates the two meanings that `enabled` used to carry. A row can be
+ * unable to start its own job and still be the thing to press -- Catch with no
+ * balls offers the errand -- and greying that row's name out while accenting
+ * the button next to it says two opposite things at once.
+ */
 function paintRow(row, stateSel, buttonSel, rowSel) {
   $(stateSel).textContent = row.text;
   if (buttonSel) $(buttonSel).disabled = !row.enabled;
-  if (rowSel) $(rowSel).classList.toggle('blocked', !row.enabled);
+  if (rowSel) $(rowSel).classList.toggle('blocked', !(row.enabled || row.lit));
 }
 
+const JOB_ROWS = {
+  grind: ['#grindstate', '#go', '#job-grind'],
+  hunt: ['#huntstate', '#hunt', '#job-hunt'],
+  catch: ['#catchstate', '#catch', '#job-catch'],
+  battle: ['#battlestate', '#battle', '#job-battle'],
+  here: ['#herestate', '#catchhere', '#job-here'],
+  heal: ['#healstate', '#heal', '#job-heal'],
+};
+
 function paintJobs(s) {
-  const rows = describeRows(s, {
-    rom: romdata, target, huntWanted, ballId, savedThisSession, healPlace,
-  });
+  const ctx = { rom: romdata, target, huntWanted, ballId, savedThisSession,
+                healPlace };
+  const rows = describeRows(s, ctx);
+  const offers = describeOffers(s, ctx);
 
-  paintRow(rows.grind, '#grindstate', '#go', '#job-grind');
-  $('#levels').hidden = !rows.grind.levels;
+  // The pilot's rows are reordered and hidden rather than rebuilt. Every one of
+  // them keeps its id, its handler and its place in check-app's wiring check;
+  // what changes is which are drawn and in what order, which is the whole of
+  // the difference between presenting six things and offering three.
+  for (const [key, [state, button, row]] of Object.entries(JOB_ROWS)) {
+    const rank = offers.rank[key];
+    $(row).classList.toggle('hide', rank === undefined);
+    $(row).classList.toggle('lead', rank === 1);
+    $(row).style.order = rank === undefined ? '' : rank;
+    // The accent follows the ranking rather than sitting on Grind forever.
+    // Grind wore it in the markup, which was true of a fixed list and became a
+    // lie the moment the list could put something else first.
+    $(button).classList.toggle('primary', rank === 1);
+    if (rank !== undefined) {
+      paintRow(key === 'catch' && rows.catch.needsBalls
+                 ? { ...rows.catch, lit: true } : rows[key],
+               state, button, row);
+    }
+  }
+  $('#offerhint').textContent = offers.hint;
 
-  paintRow(rows.hunt, '#huntstate', '#hunt', '#job-hunt');
-
-  paintRow(rows.catch, '#catchstate', '#catch', '#job-catch');
+  // The picker and the presets belong to the jobs that read them. In a battle
+  // neither job is on the list, so neither control has anything to change.
+  const picking = offers.rank.hunt !== undefined || offers.rank.catch !== undefined;
+  $('#pick').hidden = !picking;
+  $('#seen').hidden = !picking;
+  $('#levels').hidden = !rows.grind.levels || offers.rank.grind === undefined;
+  // Catch shows one of two buttons, so the accent has to go to whichever one
+  // is actually on the screen.
+  const leadsWithCatch = offers.rank.catch === 1;
   $('#errand').classList.toggle('hide', !rows.catch.needsBalls);
+  $('#errand').classList.toggle('primary', leadsWithCatch && rows.catch.needsBalls);
   $('#catch').classList.toggle('hide', rows.catch.needsBalls);
+  $('#catch').classList.toggle('primary', leadsWithCatch && !rows.catch.needsBalls);
 
   paintRow(rows.save, '#savestate', '#savegame', '#job-save');
   paintRow(rows.export, '#exportstate');
-  paintRow(rows.battle, '#battlestate', '#battle', '#job-battle');
-  paintRow(rows.here, '#herestate', '#catchhere', '#job-here');
-  paintRow(rows.heal, '#healstate', '#heal', '#job-heal');
 }
 
 /** One party member: who it is, and how close it is to fainting. */
