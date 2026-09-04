@@ -1142,8 +1142,6 @@ const JOB_ROWS = {
   grind: ['#grindstate', '#go', '#job-grind'],
   hunt: ['#huntstate', '#hunt', '#job-hunt'],
   catch: ['#catchstate', '#catch', '#job-catch'],
-  battle: ['#battlestate', '#battle', '#job-battle'],
-  here: ['#herestate', '#catchhere', '#job-here'],
   heal: ['#healstate', '#heal', '#job-heal'],
 };
 
@@ -1180,6 +1178,15 @@ function paintJobs(s) {
   $('#pick').hidden = !picking;
   $('#seen').hidden = !picking;
   $('#levels').hidden = !rows.grind.levels || offers.rank.grind === undefined;
+
+  // The battle's own two actions, beside the pad rather than behind the door.
+  // Throw explains itself only when it cannot be pressed: its own line reads
+  // "PIDGEY Lv3 - POKE BALL" when it works, which is the foe said twice.
+  $('#battlebar').classList.toggle('hide', !s.inBattle);
+  const why = rows.here.enabled ? '' : rows.here.text;
+  paintRow({ ...rows.battle, text: why ? '' : rows.battle.text },
+           '#battlestate', '#battle');
+  paintRow({ ...rows.here, text: why }, '#herestate', '#catchhere');
   // Catch shows one of two buttons, so the accent has to go to whichever one
   // is actually on the screen.
   const leadsWithCatch = offers.rank.catch === 1;

@@ -222,9 +222,29 @@
      anything. It is a row of two buttons rather than one tappable card: Stop
      has to be reachable without the door opening under the thumb that meant to
      press it. */
-  .bar{grid-area:bar;display:flex;align-items:center;gap:6px;
-       background:var(--panel);border:1px solid var(--line);border-radius:12px;
-       padding:4px 8px 4px 10px}
+  .bar{grid-area:bar;display:flex;flex-direction:column;align-items:stretch;
+       gap:6px;background:var(--panel);border:1px solid var(--line);
+       border-radius:12px;padding:4px 8px 4px 10px}
+  .barline{display:flex;align-items:center;gap:6px}
+  /* One line, because it appears between the screen and the pad and everything
+     it takes there comes off the picture. The foe truncates before the buttons
+     do: you can see the battle, and the buttons are the point. */
+  .battlebar{display:flex;align-items:center;gap:6px;padding:2px 0 4px;
+             border-top:1px solid var(--line)}
+  /* Spelled out because `.jstate` is styled inside `.job`, and these two are
+     not rows any more. Same face and size as every other state line. */
+  .battlebar .jstate{flex:0 1 auto;min-width:0;overflow:hidden;
+                     text-overflow:ellipsis;white-space:nowrap;
+                     font-family:ui-monospace,Menlo,monospace;font-size:12px;
+                     color:var(--dim)}
+  .battlebar .jgo{flex:0 0 auto;min-height:38px;padding:8px 16px}
+  .battlebar #battle{margin-left:auto}
+  /* One caption at a time. Both of them at 375px gave "wild PIDGE... no Poke
+     Bal...", two truncations where one sentence would do -- and when Throw is
+     refusing, the reason is the half worth reading: the foe is on the screen
+     above it either way. */
+  .battlebar .why{color:var(--bad)}
+  .battlebar .jstate:empty{display:none}
   button.door{flex:1 1 auto;min-width:0;display:flex;align-items:center;gap:2px;
               min-height:40px;padding:6px 2px;background:none;border:0;
               box-shadow:none;text-align:left;color:var(--ink)}
@@ -597,15 +617,27 @@
        scroll to read is fine and a page you must scroll to stop the pilot is
        not, and Stop lived in a card that scrolled. -->
   <div class="bar" id="bar">
-    <button class="door" id="door" aria-expanded="true" aria-controls="sheet">
-      <span class="dot" id="dot"></span>
-      <span class="lines">
-        <span id="status">waiting for a ROM and a .sym</span>
-        <span id="steps"></span>
-      </span>
-      <span class="chev" id="chev" aria-hidden="true">Menu ▴</span>
-    </button>
-    <button id="stopRun" class="stopnow hide">Stop</button>
+    <div class="barline">
+      <button class="door" id="door" aria-expanded="true" aria-controls="sheet">
+        <span class="dot" id="dot"></span>
+        <span class="lines">
+          <span id="status">waiting for a ROM and a .sym</span>
+          <span id="steps"></span>
+        </span>
+        <span class="chev" id="chev" aria-hidden="true">Menu ▴</span>
+      </button>
+      <button id="stopRun" class="stopnow hide">Stop</button>
+    </div>
+    <!-- A battle is modal, and its two actions are the only ones there are
+         while it lasts. They lived in the menu, which meant opening a door over
+         the battle to answer it. Here they are one line above the pad, drawn
+         only while there is a battle to answer. -->
+    <div class="battlebar hide" id="battlebar">
+      <span class="jstate" id="battlestate">—</span>
+      <span class="jstate why" id="herestate"></span>
+      <button class="jgo primary" id="battle">Fight</button>
+      <button class="jgo" id="catchhere">Throw</button>
+    </div>
   </div>
 
   <div class="sheet open" id="sheet">
@@ -696,22 +728,6 @@
       </div>
       <button class="jgo" id="catch" disabled>Start</button>
       <button class="jgo hide" id="errand">Get</button>
-    </div>
-
-    <div class="job" id="job-battle">
-      <div class="what">
-        <span class="jname">Battle</span>
-        <span class="jstate" id="battlestate">not in a battle</span>
-      </div>
-      <button class="jgo" id="battle" disabled>Fight</button>
-    </div>
-
-    <div class="job" id="job-here">
-      <div class="what">
-        <span class="jname">Catch this one</span>
-        <span class="jstate" id="herestate">not in a battle</span>
-      </div>
-      <button class="jgo" id="catchhere" disabled>Throw</button>
     </div>
 
     <div class="job" id="job-heal">

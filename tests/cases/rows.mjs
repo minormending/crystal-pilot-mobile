@@ -247,17 +247,17 @@ test('the pilot offers nothing before there is a world to act in', async (t) => 
   t.eq(o.hint, '', 'and no advice about unlocking them either');
 });
 
-test('a battle puts its own two actions first and drops the walking jobs',
+test('a battle empties the list, and says where its own actions went',
      async (t) => {
+  // Fight and Throw are not offers -- they answer what is in front of you, and
+  // they live beside the pad. Nothing that walks can start, so nothing does.
   const o = offers({
     battleMode: 1, party: [{ species: CYNDAQUIL, level: 5, hp: 4, maxHp: 20 }],
     enemy: { species: PIDGEY, level: 3, hp: 15, maxHp: 15 },
   }, { huntWanted: 'PIDGEY', ballId: POKE_BALL });
-  t.eq(o.offered[0], 'battle', 'fighting leads');
-  t.eq(o.offered[1], 'here', 'then catching the one in front of you');
-  t.false(o.offered.includes('grind'), 'nothing that walks is offered');
-  t.false(o.offered.includes('heal'), 'and healing waits for the battle to end');
-  t.eq(o.rank.battle, 1, 'the rank is 1-based, for CSS order');
+  t.eq(o.offered.length, 0, 'the pilot has nothing to propose mid-battle');
+  t.false('battle' in o.rank, 'and does not rank the battle actions itself');
+  t.contains(o.hint, 'by the pad', 'an empty list explains itself');
 });
 
 test('a fainted party lifts healing above the jobs it would block', async (t) => {
@@ -279,6 +279,7 @@ test('only jobs that would start are offered, and the rest go unmentioned',
                    { huntWanted: 'SENTRET', ballId: POKE_BALL });
   t.eq(o.offered.join(','), 'catch,hunt,grind',
           'three jobs, in the order you would want them');
+  t.eq(o.rank.catch, 1, 'ranks are 1-based, because they become CSS order');
   t.eq(o.hint, '', 'and nothing is missing, so nothing is explained');
 });
 
@@ -310,6 +311,7 @@ test('the hint only names things there is something to do about', async (t) => {
     battleMode: 1, party: [{ hp: 20, maxHp: 20 }],
     enemy: { species: PIDGEY, level: 3, hp: 15, maxHp: 15 },
   });
-  t.eq(battling.hint, '',
-          'and nothing about picking targets while a battle is on the screen');
+  t.false(battling.hint.includes('pick something'),
+          'nothing about picking targets while a battle is on the screen');
+  t.contains(battling.hint, 'Fight and Throw', 'only where the actions are');
 });

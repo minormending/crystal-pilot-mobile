@@ -131,8 +131,11 @@ export function describeOffers(s, ctx = {}) {
 
   const afoot = !s.inBattle;
   const fainted = s.party.some((m) => m.hp === 0);
+  // Fight and Throw are not on this list. They answer the battle in front of
+  // you rather than being sent off to do something, and they live beside the
+  // pad while one is on -- opening a door over a battle to answer it was the
+  // wrong shape for the only two actions that are ever modal.
   const order = [];
-  if (s.inBattle) order.push('battle', 'here');
   if (fainted) order.push('heal');
   order.push('catch', 'hunt', 'grind', 'heal');
 
@@ -152,6 +155,9 @@ export function describeOffers(s, ctx = {}) {
   // state, and explaining the absence of an offer nobody wanted is the noise
   // this whole list replaces.
   const hint = [];
+  // In a battle the list is empty by design, and an empty list with no
+  // explanation reads as broken rather than as modal.
+  if (s.inBattle) hint.push('Fight and Throw are by the pad while a battle is on');
   if (afoot && !s.party.length) hint.push('most jobs need a Pokémon with you');
   if (afoot && !ctx.huntWanted) hint.push('pick something below to hunt or catch');
   return {

@@ -1204,7 +1204,7 @@ the bag" rather than "did we gain any".
 
 ## 9. The interface
 
-<!-- covers: app/main.js index.html @ 26ec6835f00a -->
+<!-- covers: app/main.js index.html @ ae7c7f35929e -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -1286,6 +1286,27 @@ A tablet and a phone in landscape have room for the game and the menu at once,
 so in both of those layouts the sheet is a column that is always open and the
 chevron is hidden: an affordance for a door that is not there is worse than no
 affordance. `showSheet` still runs, and simply has nothing to move.
+
+**Two actions are not offers, and they left the list.** Fight and Throw answer
+the battle in front of you rather than being sent off to do something, and a
+battle is the one state in this app that is modal — while it is on, nothing that
+walks can start. Behind a door that meant opening the menu *over* the battle in
+order to answer it. They now live on a second line inside the bar, drawn only
+while `s.inBattle`, which puts them directly above the pad in every layout
+without adding a grid track that would leave a gap when empty.
+
+That line has room for one caption, not two. Both at 375px gave *"wild
+PIDGE… no Poké Bal…"* — two truncations where one sentence would do — so the
+foe's name shows while Throw works, and gives way to Throw's reason when it
+does not: *the party is full*, *a trainer's Pokémon cannot be caught*, *no Poké
+Balls yet*. The foe is on the screen directly above either way, and Throw's own
+line reads "PIDGEY Lv3 · POKE BALL" when it works, which is the foe said twice.
+
+`describeOffers` therefore ranks four jobs rather than six, and a battle empties
+the list by design — which is why the hint says where the two actions went. An
+empty list with no explanation reads as broken rather than as modal. The screen
+pays for the line: measured 259×233 out in the world and 203×182 with a battle
+on, at 375×667, which is the `cqh` sizing above doing exactly what it was for.
 
 The pilot's jobs are a **list, not a toolbar**, because `runTask` opens with
 `if (running) return null` — only one job can ever be underway, so they are one
