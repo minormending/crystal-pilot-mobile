@@ -239,16 +239,16 @@
   /* One line, because it appears between the screen and the pad and everything
      it takes there comes off the picture. The foe truncates before the buttons
      do: you can see the battle, and the buttons are the point. */
-  .battlebar{display:flex;align-items:center;gap:6px;padding:2px 0 4px;
-             border-top:1px solid var(--line)}
+  .battlebar,.barextra{display:flex;align-items:center;gap:6px;padding:2px 0 4px;
+                       border-top:1px solid var(--line)}
   /* Spelled out because `.jstate` is styled inside `.job`, and these two are
      not rows any more. Same face and size as every other state line. */
-  .battlebar .jstate{flex:0 1 auto;min-width:0;overflow:hidden;
+  .battlebar .jstate,.barextra .jstate{flex:0 1 auto;min-width:0;overflow:hidden;
                      text-overflow:ellipsis;white-space:nowrap;
                      font-family:ui-monospace,Menlo,monospace;font-size:12px;
                      color:var(--dim)}
-  .battlebar .jgo{flex:0 0 auto;min-height:38px;padding:8px 16px}
-  .battlebar #battle{margin-left:auto}
+  .battlebar .jgo,.barextra .jgo{flex:0 0 auto;min-height:38px;padding:8px 16px}
+  .battlebar #battle,.barextra #takeover{margin-left:auto}
   /* One caption at a time. Both of them at 375px gave "wild PIDGE... no Poke
      Bal...", two truncations where one sentence would do -- and when Throw is
      refusing, the reason is the half worth reading: the foe is on the screen
@@ -668,6 +668,14 @@
       <button class="jgo primary" id="battle">Fight</button>
       <button class="jgo" id="catchhere">Throw</button>
     </div>
+    <!-- The handoff, which is the one sharing state that is ever urgent: your
+         other device has the newer save, and this one is about to be played
+         from an older one. It lived in the settings card, which is now behind a
+         door -- and a message you have to go looking for is no message. -->
+    <div class="barextra hide" id="handoffrow">
+      <span class="jstate" id="handoffstate">&mdash;</span>
+      <button class="jgo primary hide" id="takeover">Take over</button>
+    </div>
   </div>
 
   <div class="sheet open" id="sheet">
@@ -884,10 +892,6 @@
       <span class="lvlabel">Screen</span>
       <span class="val" id="screenstate">not showing this screen</span>
       <button class="themebtn" id="screenshare">Show</button>
-    </div>
-    <div class="themerow hide" id="handoffrow">
-      <span class="val" id="handoffstate">&mdash;</span>
-      <button class="themebtn hide" id="takeover">Take over</button>
     </div>
     <div class="themerow hide" id="joinrow">
       <input class="code" id="joincode" spellcheck="false" autocomplete="off"

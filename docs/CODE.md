@@ -1204,7 +1204,7 @@ the bag" rather than "did we gain any".
 
 ## 9. The interface
 
-<!-- covers: app/main.js index.html @ 5e91d28cb6e1 -->
+<!-- covers: app/main.js index.html @ 30700f981ef3 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -1341,6 +1341,31 @@ takes a new line rather than squeezing the ones beside it. The gap went 8→6, t
 speed slider 74→56, and the row measures 50px tall at both 375 and 390 with
 everything on one line. The wrap is still there for the case it was built for — a
 game running with a newer build to announce.
+
+**The handoff is the one sharing state that interrupts.** *Your other device has
+the newer save* is the only thing the room can say that changes what you should
+do next, and it was a row in the settings card — which is now behind a door, and
+a message you have to go looking for is no message. It moves to a third line in
+the bar, the same shape as the battle line, with the accent on Take over.
+
+`describeHandoff` gained an `urgent` flag rather than that decision living in
+`main.js`, because it is a statement about the five states and belongs where the
+five states are written. Two earn the line: the other device is ahead, and the
+room is holding a save from a different build. The other three are nothing having
+happened yet, this device being ahead, or the two being in step — and *in step*
+sitting on the always-visible line for a whole session is precisely the noise
+this revamp exists to remove.
+
+**Measured at the end of the four steps**, at 375×812 with a game running on
+Route 29 and the menu closed — the same reading the diagnosis was taken from:
+
+| | before | now |
+| --- | --- | --- |
+| page height | 2,311px | 812px, equal to the viewport |
+| words on screen | ~300 | 24 |
+| controls drawn that do nothing | 6 | 0 |
+| taps to start the likeliest job | scroll + 1 | 2 |
+| screen and pad | 92px apart, scrolling | both fixed, always visible |
 
 The pilot's jobs are a **list, not a toolbar**, because `runTask` opens with
 `if (running) return null` — only one job can ever be underway, so they are one

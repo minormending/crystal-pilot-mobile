@@ -174,6 +174,19 @@ test('a code that does not join says why, and never says nothing', async (t) => 
              'an unknown reason still reaches the person');
 });
 
+test('only two handoff states earn the status line', async (t) => {
+  const u = (arg) => describeHandoff(arg).urgent;
+  t.false(u({ seen: { empty: true } }), 'nothing shared is not news');
+  t.true(u({ seen: { by: 'iPad', rev: 4, says: 'Route 29' }, rev: 2 }),
+         'the other device being ahead is the whole point of the row');
+  t.true(u({ seen: { by: 'iPad', rev: 4, tag: 'aaaa' }, rev: 2, tag: 'bbbb' }),
+         'and a save from another build is a problem, not a state');
+  t.false(u({ seen: { by: 'iPad', rev: 1 }, rev: 3 }),
+          'this device being ahead is for the save row to mention');
+  t.false(u({ seen: { by: 'iPad', rev: 3, says: 'Route 29' }, rev: 3 }),
+          'and "in step" is the good state, which needs no line');
+});
+
 test('the handoff row tells the two devices apart, and only offers when it should', async (t) => {
   const there = { empty: false, rev: 5, by: 'iPhone', says: 'Route 29 · TOTODILE Lv5', tag: 'abc123' };
 

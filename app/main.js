@@ -865,7 +865,10 @@ async function paintHandoff() {
     rev: (meta && meta.rev) || 0,
     tag: romTag,
   });
-  row.classList.remove('hide');
+  // Only the two states worth interrupting for. This row is on the status line
+  // now, which is the one thing always on screen -- "in step" sitting there all
+  // session is the noise the rest of this interface just stopped making.
+  row.classList.toggle('hide', !said.urgent);
   $('#handoffstate').textContent = said.text;
   btn.textContent = said.button || 'Take over';
   btn.classList.toggle('hide', !said.button);
