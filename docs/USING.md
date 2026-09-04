@@ -19,27 +19,28 @@ and each tap after that moves a single tile. Holding walks.
 That is the app mid-hand-off: a ROM booted, the intro left alone for the player,
 and LEFT held down — which is what the lit key means.
 
-**These three screenshots predate the layout and colour work below**, so they
-show the older arrangement: the pad beneath a speed slider rather than beneath
-the screen, four action buttons where there is now a list of jobs, and the old
-palette. The controls themselves are unchanged. They want retaking on a real
-device, which is also the only place the emulator picture can be captured — a
-backgrounded tab does not paint the canvas, so a screenshot taken from a test
-harness has a black rectangle where the game should be. The held state is read
-back from the emulator's own set of held buttons, so pressing `Z` on a keyboard
-lights up the same A button a thumb would.
+**The screenshots in this repository predate two rounds of layout work**, so
+they show an older arrangement: the pad beneath a speed slider rather than at
+the bottom of the page, four action buttons where there is now a ranked list of
+offers, no status bar between the screen and the pad, and the old palette. The
+controls themselves are unchanged. They want retaking on a real device, which is
+also the only place the emulator picture can be captured — a backgrounded tab
+does not paint the canvas, so a screenshot taken from a test harness has a black
+rectangle where the game should be. The held state is read back from the
+emulator's own set of held buttons, so pressing `Z` on a keyboard lights up the
+same A button a thumb would.
 
-The pad sits directly under the screen, which is what the hardware does and
-what anyone opening this expects. Header, screen, hint and the whole pad measure
-596px against an 812px viewport, so both halves of the console fit above the
-fold with room over.
+The pad is at the bottom of the page and stays there. It and the screen are the
+machine; everything else opens over them and closes again, which is why the
+whole app now fits one viewport with nothing to scroll — see
+[The interface](INTERFACE.md).
 
 There is no TAB button. On the desktop pilot, TAB opens an in-game menu because
-the only surface there is the emulator window; here the pilot's controls are the
-page itself, in a list below the pad, so the game never has to be interrupted to
+the only surface there is the emulator window; here the pilot's controls are
+behind the status line, one tap away, so the game never has to be interrupted to
 reach them. While a job is running the pad dims and stops taking input — it
-would be fighting the pilot for the same joypad — and one Stop appears under the
-screen for as long as there is something to stop. See [The interface](INTERFACE.md).
+would be fighting the pilot for the same joypad — and Stop sits on the status
+line for as long as there is something to stop.
 
 A keyboard works on the same page, which is what makes it testable on a desktop:
 
@@ -297,7 +298,7 @@ for you.
 ## A note on updates
 
 **The header shows which build you are running**, next to the app's name:
-`v71`, and when the server has a newer one `v70 → v71` with an Update button
+`v95`, and when the server has a newer one `v94 → v95` with an Update button
 beside it. That button is deliberately heavy-handed — it unregisters the service
 worker, deletes every cache, and only then reloads — because a plain reload is
 exactly what does not always work, and it is the sequence I ended up typing by
@@ -319,10 +320,11 @@ byte. Saving then reloading lost the game. The save survives now because the
 app keeps a copy itself — see below.
 
 It is in the header because that is the one part of the app that is always
-there. For three versions it lived in the settings card, which does not exist
-until a ROM and a symbol file are loaded — so answering "am I running what I
-just deployed?" meant picking two files first, to read a number the page knew on
-its first frame. `tools/check-app` now asserts the display is in the header,
+there. For three versions it lived in the settings card, which at the time did
+not exist until a ROM and a symbol file were loaded — so answering "am I running
+what I just deployed?" meant picking two files first, to read a number the page
+knew on its first frame. Settings is reachable with no game now, for the same
+reason one level down, and `check-app` asserts that too. `tools/check-app` now asserts the display is in the header,
 because a version you cannot reach when you want it is much the same as not
 having one.
 

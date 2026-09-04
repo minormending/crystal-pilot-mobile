@@ -49,8 +49,8 @@ lines and a `try`.
 Those three are far too big for localStorage — 2MB of ROM against a budget of
 about five, in strings — so they live in IndexedDB, and the app opens straight
 into the game rather than onto a card asking for two files you have to go and
-find. *Forget*, in the settings card, throws all three away; the row above it
-names what is being kept. None of it is uploaded: the files are on your phone,
+find. *Forget*, in settings behind the ⚙, throws all three away; the row it
+sits in names what is being kept. None of it is uploaded: the files are on your phone,
 in this browser's storage, and no game data is ever served. Sharing is the one
 exception, and it is off until you press Share — see
 [What leaves the device](#what-leaves-the-device-and-when) below.
@@ -125,9 +125,17 @@ vendored in `baton/`, is the other shape of sync: kidsync moves state that
 merges, and a battery does not merge — two devices that both played can only be
 chosen between. So one device holds it, publishes it, and the other takes it.
 
-Save on the phone and the tablet's settings card says **iPhone has the newer
-save · Route 29 · TOTODILE Lv5**, with **Take over**. That takes an undo point,
-installs the save and drives CONTINUE, and both rows then read *in step*.
+Save on the phone and the tablet's status line says **iPhone has the newer
+save · Route 29 · TOTODILE Lv5**, with **Take over** beside it. That takes an
+undo point, installs the save and drives CONTINUE, and the line then goes away.
+
+It is on the status line rather than behind a door because it is the one thing
+the room can say that changes what you should do next, and a message you have to
+go looking for is no message. Of the five states the room can be in, two earn
+that line — the other device is ahead, and the room holds a save from a
+different build. *Nothing shared yet*, *this device is ahead* and *in step* do
+not: they are either nothing having happened or everything being fine, and the
+status line is the one thing always on screen.
 
 - **It publishes where the app already knows the bytes moved** — after a save it
   drove, a `.sav` it installed, a slot it loaded, and before the Update button
