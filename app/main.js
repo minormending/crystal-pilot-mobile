@@ -316,11 +316,13 @@ async function reallyStart() {
           || pickTitle({ header: readHeader(romBytes), symbols, tag: romTag });
   await gb.start($('#screen'));
   await gb.loadRom(romBytes);
-  state = new GameState(symbols);
+  // A title's own engine profile if it declares one, and the stock Gen 2
+  // numbers if it does not -- which is every title that only moved the maps.
+  state = new GameState(symbols, title.engine);
   // romdata first: the tasks are handed it at construction, and built
   // in the other order they were handed null -- which a hunt only finds
   // out about when it tries to name the first Pokemon it meets.
-  romdata = new RomData(symbols, gb, title.encounters);
+  romdata = new RomData(symbols, gb, title.encounters, title.engine);
   // Said rather than left to be discovered by an empty species list: without a
   // wild table there is nothing to hunt or catch, and every other job is fine.
   if (!romdata.grass.length) {

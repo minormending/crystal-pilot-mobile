@@ -10,4 +10,4 @@
 // It has to match the service worker's cache name, because that is what a
 // deploy bumps. Two places to change is one too many, so tools/check-app
 // asserts they agree rather than trusting anyone to remember.
-export const VERSION = 'v110';
+export const VERSION = 'v111';

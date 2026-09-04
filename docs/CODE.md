@@ -404,7 +404,7 @@ later duplicates are aliases and locals.
 
 ### `state.js` — what the game is doing right now
 
-<!-- covers: gen2/state.js @ 6d040dab5d1d -->
+<!-- covers: gen2/state.js @ cd762db74898 -->
 
 One snapshot, many answers: `inBattle`, `party`, `pos`, `onGrass`,
 `worldLoaded`, `menu`, `balls`, and the enemy's HP.
@@ -433,7 +433,7 @@ and in `bootstrap.js`, with nothing able to notice if they drifted.
 
 ### `romdata.js` — what the cartridge knows
 
-<!-- covers: gen2/romdata.js @ 5da2a0a160ed -->
+<!-- covers: gen2/romdata.js @ 399458f9d1f3 -->
 
 Species names, item names, wild-encounter tables, move power. All read out of
 the ROM, not shipped as a copy, so they cannot drift from the build being driven.
@@ -779,7 +779,7 @@ eight kilobytes a full snapshot copies, which is worth keeping distinct.
 
 ## 6. Battles
 
-<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 63262dec1561 -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 4b753b271156 -->
 
 ### Is it our turn?
 
@@ -903,7 +903,7 @@ fainted.
 
 ## 7. Catching something
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ 6c198e8fe0a0 -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ 533dfe01fea0 -->
 
 Catching is the most involved loop, because a Poké Ball's odds turn on how much
 HP is left. Throwing at a full-health target is mostly throwing balls away.
@@ -1051,7 +1051,7 @@ running the thing.
 
 ## 7b. Saving, and getting the save out
 
-<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 63262dec1561 -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 4b753b271156 -->
 
 ```mermaid
 flowchart TD
@@ -1256,6 +1256,45 @@ really Crystal's: `where` is a lookup in `names`, `backToGrass` is a walk over
 see the `journey` tests, where a stubbed map graph proves that two legs beat one
 when the first edge is three tiles away and the alternative is fifty-five.
 
+**A cartridge's own numbers are a second profile, and it changes at a different
+rate from the first.** `gen2/engine.js` holds the party stride and the struct
+offsets, the species and move counts, the name width, the encounter block shape,
+the grass tiles, the battle menu's signature, the NAME menu's shape and the
+battery's check bytes — every number that describes the machine, with its source
+in the disassembly beside it. A title declares `engine` only if its cartridge
+changed one, which a hack that moved the maps has not; `GameState` and `RomData`
+take it and fall back to the stock profile.
+
+The useful half of that file is what it refuses to hold:
+
+| not in it | because |
+| --- | --- |
+| `MAX_SEND_TRIES`, `SAVE_ATTEMPTS`, `MENU_OPEN_TRIES`, `PARTY_HOLD` | this app's patience, not the cartridge's shape — and a profile field invites a title to tune a stall into a config option instead of fixing it |
+| the collision value ranges, `world.js`'s header strides, the character encoding | a cartridge that changed those changed the *shape* of its data rather than a size in it, and the answer is a decoder that knows the new shape, not a field set to 11 |
+
+<details>
+<summary><b>Advanced detail:</b> what writing the tests for this found</summary>
+
+`speciesCount` was not in the first version of the profile. `moveCount` was —
+and `speciesName` had `if (!id || id > 251)` written as a literal, in two
+places, which is the field a hack with new Pokémon needs most and the one it
+would have been silently cut off by. It surfaced because a test that only meant
+to prove an eleven-character name came back read a species id the profile had no
+say over.
+
+The tests are worth reading as the argument that any of this works: a party laid
+out at `0x40` and read with the stock `0x30` produces a second entry read out of
+the middle of the first, and reading it with a profile that says `0x40` does not.
+Same for an eleven-wide name table read at ten, which drifts exactly the way
+`ItemNames` drifted when it was read at a stride.
+
+One trap in writing them, and it is the harness's shape rather than the code's:
+`romByte(bank, addr)` takes an *absolute* address, so a fake ROM indexed from
+zero answers every read with a terminator and every name with `?`. The fake
+addresses itself from where the synthetic symbol table puts `PokemonNames`.
+
+</details>
+
 **Which title drives a cartridge is decided once, before anything is built out
 of it.** `titles/pick.js` holds a registry, every profile says how to recognise
 itself, and the first that agrees wins — with `generic` last, matching anything,
@@ -1435,7 +1474,7 @@ This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ 3e07dfa5078d -->
+<!-- covers: app/main.js index.html @ 43432f623323 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.

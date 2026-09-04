@@ -53,9 +53,9 @@ export class RomData {
    * symbol file actually has is used, so a cartridge with one region loses
    * nothing by saying it has two.
    */
-  constructor(symbols, gb, encounters = [], engine = gen2) {
+  constructor(symbols, gb, encounters = [], engine = null) {
     this.gb = gb;
-    this.e = engine;
+    this.e = engine || gen2;
     this.at = (name) => ({ bank: symbols.bank(name), addr: symbols.addr(name) });
     this.names = this.at('PokemonNames');
     this.items = this.at('ItemNames');
@@ -75,7 +75,7 @@ export class RomData {
 
   /** Species name for a Pokedex-order id (1-based), or "#id" if out of range. */
   speciesName(id) {
-    if (!id || id > 251) return `#${id}`;
+    if (!id || id > this.e.speciesCount) return `#${id}`;
     if (this._species.has(id)) return this._species.get(id);
     const { bank, addr } = this.names;
     const name = decodeText(
@@ -88,7 +88,9 @@ export class RomData {
   speciesIndex() {
     if (!this._index) {
       this._index = new Map();
-      for (let id = 1; id <= 251; id++) this._index.set(this.speciesName(id), id);
+      for (let id = 1; id <= this.e.speciesCount; id++) {
+        this._index.set(this.speciesName(id), id);
+      }
     }
     return this._index;
   }

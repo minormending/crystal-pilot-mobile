@@ -58,9 +58,9 @@ export class GameState {
    * profile by default; a title supplies its own only if its cartridge changed
    * one of them, which a hack that moved the maps has not.
    */
-  constructor(symbols, engine = gen2) {
+  constructor(symbols, engine = null) {
     this.s = symbols;
-    this.e = engine;
+    this.e = engine || gen2;
     // Resolved once. Reading the map every poll is what keeps this cheap.
     this.a = {
       partyCount: symbols.addr('wPartyCount'),

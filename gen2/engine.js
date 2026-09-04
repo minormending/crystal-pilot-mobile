@@ -45,6 +45,12 @@ export const gen2 = {
   // rather than sending it to a box this does not handle.
   maxParty: 6,
 
+  // --- species -------------------------------------------------------------
+  // The highest id PokemonNames has an entry for. Reading past it reads
+  // whatever table follows, so a hack that added species has to say so -- and
+  // this is the field it is most likely to need.
+  speciesCount: 251,
+
   // --- names ---------------------------------------------------------------
   // PokemonNames is fixed-width; ItemNames is packed with a terminator between
   // entries, which is why one is read at a stride and the other is scanned.
