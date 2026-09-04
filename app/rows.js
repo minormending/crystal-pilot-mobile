@@ -144,9 +144,12 @@ export function describeOffers(s, ctx = {}) {
     if (offered.includes(key) || !rows[key]) continue;
     // Catch keeps its place when the only thing missing is the balls, because
     // the errand that fetches them lives in that row: hiding it would hide the
-    // way out of the very state it describes.
+    // way out of the very state it describes. On a cartridge with no errand
+    // there is no way out, so the row goes -- an offer whose only action does
+    // not exist is worse than an absence, and the hint says what is missing.
     const usable = rows[key].enabled
-                   || (key === 'catch' && rows.catch.needsBalls && afoot);
+                   || (key === 'catch' && rows.catch.needsBalls && afoot
+                       && ctx.canFetch !== false);
     if (usable) offered.push(key);
   }
 
@@ -159,6 +162,12 @@ export function describeOffers(s, ctx = {}) {
   // explanation reads as broken rather than as modal.
   if (s.inBattle) hint.push('Fight and Throw are by the pad while a battle is on');
   if (afoot && !s.party.length) hint.push('most jobs need a Pokémon with you');
+  // Only worth saying where it is the thing standing in the way: with a target
+  // picked, no balls, and no errand to fetch any, Catch has quietly left the
+  // list and this is the sentence that explains it.
+  if (afoot && ctx.huntWanted && ctx.canFetch === false && rows.catch.needsBalls) {
+    hint.push('catching needs Poké Balls, and this build cannot fetch them');
+  }
   if (afoot && !ctx.huntWanted) hint.push('pick something below to hunt or catch');
   return {
     offered,

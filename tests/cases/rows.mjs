@@ -438,3 +438,26 @@ test('a slot from another cartridge is named rather than offered', async (t) => 
   t.true(theirs.show, 'one from another ROM is still shown, because it is a record');
   t.false(theirs.enabled, 'but putting it back is not offered');
 });
+
+test('a cartridge that cannot fetch balls does not offer a catch it cannot run',
+     async (t) => {
+  const world = { party: [{ species: CYNDAQUIL, level: 5, hp: 20, maxHp: 20 }] };
+
+  // With an errand, Catch stays on the list holding the way out of its own
+  // empty state -- which is the rule the errand button was built on.
+  const can = offers(world, { huntWanted: 'SENTRET' });
+  t.true(can.offered.includes('catch'), 'the errand is reachable, so the row is');
+
+  const cannot = offers(world, { huntWanted: 'SENTRET', canFetch: false });
+  t.false(cannot.offered.includes('catch'),
+          'no errand means no way out, so the row is not drawn');
+  t.contains(cannot.hint, 'needs Poké Balls',
+             'and the hint is what explains the absence');
+
+  // Not said when it is not the thing in the way: with balls in hand, a title
+  // without an errand has nothing to explain.
+  const armed = offers(world, { huntWanted: 'SENTRET', ballId: POKE_BALL,
+                                canFetch: false });
+  t.true(armed.offered.includes('catch'), 'balls in the bag need no errand');
+  t.eq(armed.hint, '', 'and nothing is missing, so nothing is said');
+});

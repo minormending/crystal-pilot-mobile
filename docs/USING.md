@@ -225,6 +225,11 @@ the sixth catch would go to the PC. The nickname prompt is answered *no*: it
 defaults to yes, and yes opens the letter grid, where anything that can only
 press A spells AAAAA.
 
+The species list is empty on a cartridge whose symbol file has no wild table at
+all — a hack that renamed or dropped `JohtoGrassWildMons`, say. Hunting and
+catching are the only two jobs that need it, so they are not offered and the log
+says why; everything else works, because everything else reads the cartridge.
+
 Item names come out of the ROM too, and they are not laid out like the species
 names: `PokemonNames` is a fixed-width table, `ItemNames` is packed with `@`
 between entries. Reading it at a stride drifts a character further out every

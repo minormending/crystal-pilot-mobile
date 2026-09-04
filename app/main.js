@@ -321,6 +321,12 @@ async function reallyStart() {
   // in the other order they were handed null -- which a hunt only finds
   // out about when it tries to name the first Pokemon it meets.
   romdata = new RomData(symbols, gb, title.encounters);
+  // Said rather than left to be discovered by an empty species list: without a
+  // wild table there is nothing to hunt or catch, and every other job is fine.
+  if (!romdata.grass.length) {
+    progress(`no wild tables in this .sym (${title.id}) — hunting and catching `
+             + 'are unavailable, everything else works');
+  }
   tasks = new Tasks(gb, state, progress, romdata);
   saves = new Saves(gb, state, romdata, progress);
   collision = new CollisionMap(symbols, gb);
@@ -1254,8 +1260,11 @@ const JOB_ROWS = {
 };
 
 function paintJobs(s) {
+  // `canFetch` is a title question, not a game one: the errand that gets the
+  // first Poké Balls is a scripted walk to particular places, and a cartridge
+  // nobody has described has no such walk.
   const ctx = { rom: romdata, target, huntWanted, ballId, savedThisSession,
-                healPlace };
+                healPlace, canFetch: typeof boot.eggErrand === 'function' };
   const rows = describeRows(s, ctx);
   const offers = describeOffers(s, ctx);
 
@@ -1298,7 +1307,7 @@ function paintJobs(s) {
   // Catch shows one of two buttons, so the accent has to go to whichever one
   // is actually on the screen.
   const leadsWithCatch = offers.rank.catch === 1;
-  $('#errand').classList.toggle('hide', !rows.catch.needsBalls);
+  $('#errand').classList.toggle('hide', !rows.catch.needsBalls || !ctx.canFetch);
   $('#errand').classList.toggle('primary', leadsWithCatch && rows.catch.needsBalls);
   $('#catch').classList.toggle('hide', rows.catch.needsBalls);
   $('#catch').classList.toggle('primary', leadsWithCatch && !rows.catch.needsBalls);
@@ -1376,8 +1385,13 @@ const NEEDED_SYMBOLS = [
   'wTilesetCollisionBank', 'wTilesetCollisionAddress',
   'wWindowStackSize', 'CollisionPermissionTable',
   'wPlayerBGMapOffsetX', 'wPlayerBGMapOffsetY',
-  // hunting: names and wild tables come out of the ROM
-  'PokemonNames', 'JohtoGrassWildMons', 'wTimeOfDay',
+  // hunting: the names come out of the ROM. The wild tables do too, and are
+  // deliberately *not* here -- which table holds them is a fact about a
+  // cartridge's regions, so it is the title's to name and this gate would
+  // otherwise refuse a hack for the crime of not being Johto. A cartridge with
+  // none of its title's tables loses the species picker and keeps everything
+  // else, which reallyStart says out loud.
+  'PokemonNames', 'wTimeOfDay',
 ];
 
 $('#romFile').addEventListener('change', async (e) => {

@@ -1290,6 +1290,15 @@ build knows about*. No `run` and *Start a new game for me* is not drawn —
 is worse than a button that is not there, which is the offers list's own rule one
 step further out.
 
+No `eggErrand` is the one that needed a rule rather than a hidden button. Catch
+earns its place on the list while the only thing missing is the balls, *because*
+the errand that fetches them lives in that row — and with no errand there is no
+way out, so the row would be an offer whose only action does not exist.
+`describeOffers` takes `canFetch` and drops it, and the hint says *catching
+needs Poké Balls, and this build cannot fetch them*. Measured on the generic
+profile: the list is empty rather than holding a Catch row with both its buttons
+hidden, which is what it did before the rule.
+
 `encounters` moved into the title in the same commit, out of `romdata.js`, which
 had the pair pokecrystal ships written into it — a fact about a cartridge's
 regions sitting in the module that decodes them. Whichever of the named tables
@@ -1423,7 +1432,7 @@ This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ 13ebe16fe2d9 -->
+<!-- covers: app/main.js index.html @ 3e07dfa5078d -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
