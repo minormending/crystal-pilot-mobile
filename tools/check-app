@@ -748,9 +748,59 @@ def check_layers():
         else ok(f"every import points down {' → '.join(LAYERS)}")
 
 
+# `class Crystal extends Journey`, and the members of a class body.
+SUBCLASS = re.compile(r"^export class (\w+) extends (\w+)", re.M)
+MEMBER = re.compile(r"^  (?:async |get |set |static )*([a-zA-Z_]\w*)\s*[(=]", re.M)
+
+
+def check_title_adds():
+    """A title may add to the engine. It may not disagree with it.
+
+    Every title extends `Journey`, which is what lets a scripted errand call
+    `this.travelTo(...)` without holding a reference. The cost of that
+    convenience is that a subclass can also *replace* any engine method, and
+    silently: the override resolves, parses and runs, and the next title copies
+    it because the first one did.
+
+    Two hooks existed on purpose for one commit -- `where` and `nearestHeal` --
+    and both were replaced by fields on the title object, which is the better
+    answer: a question the engine has for a cartridge should be data the
+    cartridge declares, not a method it is trusted to write. So the rule is now
+    that there are no overrides at all, and this is what keeps it true.
+
+    `constructor` is the exception, because a title supplies its own profile to
+    `super` and there is nowhere else to do that.
+    """
+    engine = {}
+    for path in APP:
+        if path.parent.name == "gen2":
+            engine[path.stem] = set(MEMBER.findall(path.read_text()))
+    problems = []
+    for path in APP:
+        if path.parent.name != "titles":
+            continue
+        text = path.read_text()
+        for cls, base in SUBCLASS.findall(text):
+            if base.lower() not in engine:
+                problems.append(f"{rel(path)}  {cls} extends {base}, which is "
+                                f"not a gen2/ class")
+                continue
+            shadowed = (set(MEMBER.findall(text)) & engine[base.lower()]
+                        - {"constructor"})
+            for name in sorted(shadowed):
+                problems.append(f"{rel(path)}  {cls}.{name}() overrides "
+                                f"{base}.{name}() -- a title adds, and declares; "
+                                f"it does not replace engine behaviour")
+    for p in problems:
+        print(f"        {p}")
+    return fail(f"{len(problems)} override(s) in titles/") if problems \
+        else ok(f"every title only adds to the engine")
+
+
 CHECKS = {
     "syntax": check_syntax,
     "layers": check_layers,
+    "titles": check_title_adds,
     "shell": check_shell,
     "markup": check_markup,
     "contrast": check_contrast,

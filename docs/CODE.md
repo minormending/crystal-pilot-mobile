@@ -1246,8 +1246,14 @@ when the first edge is three tiles away and the alternative is fifty-five.
 **What `Crystal` has left is nine methods that only add.** It overrides nothing:
 the two hooks the split invented — `where` and `nearestHeal` — were replaced by
 data, and a title now extends the engine without being able to disagree with it.
-That is the property composition would have bought, and it is checked rather
-than hoped for. Composition itself is still deferred: those nine methods make 72
+
+That is the property composition would have bought, and `check-app`'s `titles`
+group enforces it: every `export class X extends Y` in `titles/` must name a
+`gen2/` class, and no member of the subclass may share a name with a member of
+the base. `constructor` is the one exception, because supplying a profile to
+`super` has nowhere else to happen. The reason to check rather than trust is
+that an override is the most comfortable mistake available here — it resolves,
+it parses, it runs, and the next title copies it because the first one did. Composition itself is still deferred: those nine methods make 72
 calls into `Journey`, and rewriting all of them to go through a held reference
 would be a large diff across the errand — the one path that is hardest to
 exercise — in exchange for a guarantee already enforced.
@@ -2711,7 +2717,7 @@ about that code did not.
 
 ### The other checks
 
-<!-- covers: tools/check-app @ 0d94d7e4260e -->
+<!-- covers: tools/check-app @ ced4f618063d -->
 
 `tools/check-app` runs everything that can be verified without a ROM:
 
@@ -2729,6 +2735,7 @@ tools/check-app contrast     # or one group
 | `gamefiles` | no ROM, save or symbol file has been committed |
 | `buttons` | every button name handed to `press`/`hold`/`release` is one the core knows |
 | `layers` | every import points down `gbcore → gen2 → titles → app`, never up |
+| `titles` | a title adds to the engine and never overrides it |
 | `wiring` | every `$('#id')` is in the markup, and every named import resolves to a module that exports it |
 | `version` | `version.js` and the worker's cache name agree, and the display is in the header |
 | `docshape` | the architecture diagram names and counts every module |

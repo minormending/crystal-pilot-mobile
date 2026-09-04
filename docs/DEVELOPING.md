@@ -16,7 +16,7 @@ what CI checks and what the pre-commit hook blocks on.
 flowchart LR
     E[an edit] --> H{{".githooks/pre-commit"}}
     H --> T["./run-tests<br/>86 behaviour tests"]
-    H --> C["tools/check-app<br/>13 groups"]
+    H --> C["tools/check-app<br/>14 groups"]
     H --> D["tools/docs-check<br/>23 tracked sections"]
     T --> OK[commit]
     C --> OK
@@ -84,12 +84,13 @@ section gives. Everything by hand runs against a local build.
 
 ## The checks that need no ROM
 
-`tools/check-app` is thirteen groups, each one a class of mistake that parses
+`tools/check-app` is fourteen groups, each one a class of mistake that parses
 fine and is wrong at run time:
 
 | group | asserts |
 | --- | --- |
 | `layers` | every import points down `gbcore → gen2 → titles → app`, never up |
+| `titles` | a title adds methods to the engine and never overrides one |
 | `syntax` | all 21 modules and `sw.js` parse — copied to `.mjs` first, because `node --check` on a `.js` file with a syntax error exits 0 |
 | `shell` | the service worker's shell lists every file it needs, and each exists |
 | `markup` | `index.html`'s tags and its CSS braces balance |
