@@ -1204,7 +1204,7 @@ the bag" rather than "did we gain any".
 
 ## 9. The interface
 
-<!-- covers: app/main.js index.html @ 1f3021a49a26 -->
+<!-- covers: app/main.js index.html @ dd49cff9ec15 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -1224,13 +1224,22 @@ stateDiagram-v2
     end note
 ```
 
-`main` is a column flex and the order is a decision, switched by one class on
-`<body>` set where `running` was already set.
+**The machine is furniture; only the middle moves.** `main` is a three-row grid
+— the screen, a scrolling flow, the pad — sized in `dvh`, and the page itself
+does not scroll at all. Before this the pad was a card among cards, so on a
+short phone the buttons scrolled away from the screen they drive, and in
+landscape the two could not both be on screen at any scroll position.
 
-| | directly under the screen | then |
+| | holds | scrolls |
 | --- | --- | --- |
-| **Playing** | the pad | status, the jobs, the party |
-| **Piloting** | the run state and Stop | the jobs, then the pad, dimmed |
+| `.stage` | the screen and the tap hint | never |
+| `.flow` | status, the jobs, the save, the party, settings | yes, and only this |
+| `.padwrap` | the eight buttons | never |
+
+The switch that used to reorder the pad is gone with it: a task dims the pad
+rather than moving it, because it no longer has anywhere to move and a thumb
+should find it in the same place either way. Which card sits at the top of the
+flow is still worth switching, and still is.
 
 The pilot's jobs are a **list, not a toolbar**, because `runTask` opens with
 `if (running) return null` — only one job can ever be underway, so they are one
@@ -1270,6 +1279,31 @@ to lose and the prompt would only be in the way.
 
 An earlier version of this said the battery survives a reload by itself. It
 does not — see *What it remembers* below, which is also why it does now.
+
+<details>
+<summary><b>Advanced detail:</b> how the screen gives way, and two false starts</summary>
+
+The screen is width-driven where there is room and capped where there is not —
+and the cap is on its **width**, worked back through the aspect ratio from the
+height going spare: `max-width: calc((100dvh - var(--reserve)) * 160 / 144)`.
+
+Two other spellings were tried first and both are wrong in instructive ways.
+Capping the *height* squashes the picture, because a canvas stretches its
+contents to whatever box it is given rather than letterboxing inside it. And
+`width: auto` with `max-width: 100%` is worse: a canvas's auto width is its own
+`width` attribute, so a 375px phone got a 162px screen.
+
+`--reserve` is what the screen must leave behind — header, pad, gaps, and about
+95px of flow. It started at 420, where the arithmetic worked and the result did
+not: a 375 × 667 phone was left with **36px** of scroller, too little to show
+the status line, and the status line is where Stop lives. At 460 that phone
+letterboxes the screen to 230 × 207 and keeps 76px of flow, which shows it.
+
+Measured after the change, with a game running: a 375 × 667 phone does not
+scroll at all and the pad's bottom edge sits at 657 of 667; a 390 × 844 phone
+gets a full-width 366 × 329 screen, 131px of flow, and the pad at 834 of 844.
+
+</details>
 
 <details>
 <summary><b>Advanced detail:</b> the measurements, and one lifecycle rule</summary>
