@@ -71,6 +71,26 @@ export function validateTitle(title) {
       && !(Number.isFinite(title.legCost) && title.legCost > 0)) {
     say('`legCost` must be a positive number of tiles');
   }
+  // A profile that inherits scripts must describe the places they walk to. It
+  // cannot be checked *against* a script -- what a procedure needs is inside
+  // it -- but a profile whose drive class has procedures and whose places are
+  // missing is the shape of the trap, so the fields are at least checked to be
+  // the kind of thing a walk can use.
+  if (title.places !== undefined) {
+    if (typeof title.places !== 'object' || !title.places) {
+      say('`places` must be an object of map keys and tiles');
+    } else {
+      for (const [k, v] of Object.entries(title.places)) {
+        const tile = Array.isArray(v) && v.length === 2 && v.every(Number.isInteger);
+        const map = isKey(v);
+        const bag = v && typeof v === 'object' && !Array.isArray(v);
+        if (!(tile || map || bag)) {
+          say(`\`places.${k}\` must be a map key, an [x, y] tile, or a group `
+              + 'of them');
+        }
+      }
+    }
+  }
   if (title.engine !== undefined) {
     if (typeof title.engine !== 'object' || !title.engine) {
       say('`engine` must be an object of overrides');

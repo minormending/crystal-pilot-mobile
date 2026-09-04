@@ -113,6 +113,40 @@ export const crystal = {
     { map: CHERRYGROVE_CITY, reach: 'heal' },
   ],
   grassyMaps: [ROUTE_29, ROUTE_30],
+  // Every map, tile and door the scripts below walk to.
+  //
+  // They read these from the profile rather than closing over the constants,
+  // and the reason is a second profile: a title that extends this one inherits
+  // its procedures, and a script that reads a module constant ignores the
+  // subclass's data entirely. The scripts looked partial and were secretly
+  // total -- crystal-early declares two map names and `run()` still walked to
+  // Crystal's New Bark, because that name was in the function rather than in
+  // the description.
+  places: {
+    aideTile: AIDE_TILE,
+    cherrygroveCity: CHERRYGROVE_CITY,
+    cherrygrovePokecenter: CHERRYGROVE_POKECENTER,
+    elmsLab: ELMS_LAB,
+    elmHealFrom: ELM_HEAL_FROM,
+    elmTalkFrom: ELM_TALK_FROM,
+    frontDoor: FRONT_DOOR,
+    labDoor: LAB_DOOR,
+    labExit: LAB_EXIT,
+    mrPokemon: MR_POKEMON,
+    mrPokemonsHouse: MR_POKEMONS_HOUSE,
+    mrPokemonDoor: MR_POKEMON_DOOR,
+    mrPokemonExit: MR_POKEMON_EXIT,
+    newBarkTown: NEW_BARK_TOWN,
+    nurse: NURSE,
+    playersHouse1f: PLAYERS_HOUSE_1F,
+    pokecenterDoor: POKECENTER_DOOR,
+    route29: ROUTE_29,
+    route30: ROUTE_30,
+    route31: ROUTE_31,
+    route31Ball: ROUTE_31_BALL,
+    stairsDown: STAIRS_DOWN,
+    starterBallX: STARTER_BALL_X,
+  },
   // Which regions this cartridge has. romdata reads whichever of these the
   // symbol file knows about, so this is the one place a hack with different
   // regions has to say so.
@@ -134,12 +168,13 @@ export class Crystal extends Journey {
    * a yes/no, the same as the nurse, so the presses are the same shape.
    */
   async healAtElm() {
-    if (await this.mapKey() !== ELMS_LAB) {
-      if (!await this.through(LAB_DOOR, ELMS_LAB)) return false;
+    const p = this.title.places;
+    if (await this.mapKey() !== p.elmsLab) {
+      if (!await this.through(p.labDoor, p.elmsLab)) return false;
     }
     await this.runScripts();
     for (let attempt = 0; attempt < 3; attempt++) {
-      await this.nav.walkTo(this.collision, ELM_HEAL_FROM, this.walkOpts);
+      await this.nav.walkTo(this.collision, p.elmHealFrom, this.walkOpts);
       await this.nav.step('UP');
       await this.gb.press('A', 6, 12);
       await this.runScripts();          // "shall I heal them?" defaults to yes
@@ -149,7 +184,7 @@ export class Crystal extends Journey {
     const s = await this.snap();
     const healed = s.party.length > 0 && s.party.every((m) => m.hp === m.maxHp);
     if (healed) this.say("healed at Elm's computer");
-    await this.through(LAB_EXIT, NEW_BARK_TOWN);
+    await this.through(p.labExit, p.newBarkTown);
     return healed;
   }
 
@@ -163,12 +198,13 @@ export class Crystal extends Journey {
    * person would. Her question defaults to yes, which is the answer we want.
    */
   async heal() {
-    if (await this.mapKey() !== CHERRYGROVE_CITY) return false;
-    if (!await this.through(POKECENTER_DOOR, CHERRYGROVE_POKECENTER)) return false;
+    const p = this.title.places;
+    if (await this.mapKey() !== p.cherrygroveCity) return false;
+    if (!await this.through(p.pokecenterDoor, p.cherrygrovePokecenter)) return false;
     await this.runScripts();
     for (let attempt = 0; attempt < 3; attempt++) {
-      await this.nav.walkTo(this.collision, [NURSE[0], NURSE[1] + 2], this.walkOpts);
-      await this.nav.walkTo(this.collision, [NURSE[0], NURSE[1] + 1], this.walkOpts);
+      await this.nav.walkTo(this.collision, [p.nurse[0], p.nurse[1] + 2], this.walkOpts);
+      await this.nav.walkTo(this.collision, [p.nurse[0], p.nurse[1] + 1], this.walkOpts);
       await this.nav.step('UP');
       await this.gb.press('A', 6, 12);
       await this.runScripts();
@@ -176,7 +212,7 @@ export class Crystal extends Journey {
       if (s.party.every((m) => m.hp === m.maxHp)) break;
     }
     const healed = (await this.snap()).party.every((m) => m.hp === m.maxHp);
-    await this.leaveVia(CHERRYGROVE_CITY);
+    await this.leaveVia(p.cherrygroveCity);
     return healed;
   }
 
@@ -188,15 +224,16 @@ export class Crystal extends Journey {
    * fleeing is not free -- it can fail, and a fainted party ends the trip.
    */
   async fetchBall() {
+    const p = this.title.places;
     const legs = [
       ['west to Cherrygrove', async () =>
-        await this.crossEdge('LEFT', CHERRYGROVE_CITY) ? null : 'could not leave Route 29'],
+        await this.crossEdge('LEFT', p.cherrygroveCity) ? null : 'could not leave Route 29'],
       ['healing up', async () => { await this.heal(); return null; }],
       ['north to Route 30', async () =>
-        await this.crossEdge('UP', ROUTE_30) ? null : 'could not reach Route 30'],
+        await this.crossEdge('UP', p.route30) ? null : 'could not reach Route 30'],
       ['north to Route 31', async () =>
-        await this.crossEdge('UP', ROUTE_31) ? null : 'could not reach Route 31'],
-      ['picking the ball up', async () => this.pickUp(ROUTE_31_BALL)],
+        await this.crossEdge('UP', p.route31) ? null : 'could not reach Route 31'],
+      ['picking the ball up', async () => this.pickUp(p.route31Ball)],
     ];
     for (const [what, leg] of legs) {
       this.say(what);
@@ -238,6 +275,7 @@ export class Crystal extends Journey {
    * says trainer.
    */
   async eggErrand() {
+    const p = this.title.places;
     const trail = [];
     // Every way this can end early routes through here, so a stop is reported as
     // a stop wherever it happened rather than as whichever leg it interrupted.
@@ -265,12 +303,12 @@ export class Crystal extends Journey {
 
     if (this.stopped) return fail('stopped');
     this.say('out to Route 30');
-    const north = await this.travelTo(ROUTE_30);
+    const north = await this.travelTo(p.route30);
     if (!north.ok) return fail(`could not reach Route 30 (${north.message})`);
     trail.push('Route 30');
 
     this.say("to Mr. Pokémon's house");
-    if (!await this.through(MR_POKEMON_DOOR, MR_POKEMONS_HOUSE)) {
+    if (!await this.through(p.mrPokemonDoor, p.mrPokemonsHouse)) {
       return fail(`could not get in the door (in ${this.where(await this.mapKey())})`);
     }
     trail.push("Mr. Pokémon's house");
@@ -279,19 +317,19 @@ export class Crystal extends Journey {
     // so the text runs well past the point where the egg is already ours.
     this.say('collecting the egg');
     for (let attempt = 0; attempt < 3; attempt++) {
-      await this.nav.walkTo(this.collision, [MR_POKEMON[0], MR_POKEMON[1] + 1], this.walkOpts);
+      await this.nav.walkTo(this.collision, [p.mrPokemon[0], p.mrPokemon[1] + 1], this.walkOpts);
       await this.nav.step('UP');
       await this.gb.press('A', 6, 12);
       await this.runScripts();
-      if (await this.mapKey() !== MR_POKEMONS_HOUSE) break;   // shoved outside
+      if (await this.mapKey() !== p.mrPokemonsHouse) break;   // shoved outside
       if (attempt === 0) continue;                            // Oak talks too
       break;
     }
     trail.push('egg');
 
-    if (await this.mapKey() === MR_POKEMONS_HOUSE) {
+    if (await this.mapKey() === p.mrPokemonsHouse) {
       this.say('back outside');
-      if (!await this.through(MR_POKEMON_EXIT, ROUTE_30)) {
+      if (!await this.through(p.mrPokemonExit, p.route30)) {
         return fail('could not leave the house');
       }
     }
@@ -302,12 +340,12 @@ export class Crystal extends Journey {
     if (await this.healUp()) trail.push('healed');
 
     this.say('home to New Bark');
-    const home = await this.travelTo(NEW_BARK_TOWN);
+    const home = await this.travelTo(p.newBarkTown);
     if (!home.ok) return fail(`could not get home (${home.message})`);
     trail.push('New Bark Town');
 
     this.say("into Elm's lab");
-    if (!await this.through(LAB_DOOR, ELMS_LAB)) {
+    if (!await this.through(p.labDoor, p.elmsLab)) {
       return fail(`could not get into the lab (in ${this.where(await this.mapKey())})`);
     }
     trail.push("Elm's lab");
@@ -317,7 +355,7 @@ export class Crystal extends Journey {
     await this.runScripts();
     this.say('handing the egg over');
     for (let attempt = 0; attempt < 3; attempt++) {
-      await this.nav.walkTo(this.collision, ELM_TALK_FROM, this.walkOpts);
+      await this.nav.walkTo(this.collision, p.elmTalkFrom, this.walkOpts);
       await this.nav.step('UP');
       await this.gb.press('A', 6, 12);
       await this.runScripts();
@@ -326,7 +364,7 @@ export class Crystal extends Journey {
     // Nothing to talk to here: the aide comes over when you stand on his tile.
     this.say('collecting the balls');
     for (let attempt = 0; attempt < 4; attempt++) {
-      await this.nav.walkTo(this.collision, AIDE_TILE, this.walkOpts);
+      await this.nav.walkTo(this.collision, p.aideTile, this.walkOpts);
       await this.runScripts();
       const s = await this.snap();
       const balls = s.balls.filter(([, n]) => n > 0);
@@ -353,8 +391,9 @@ export class Crystal extends Journey {
    * rather than answer it on your behalf.
    */
   async askElm() {
+    const p = this.title.places;
     await this.runScripts();                      // Elm greets you on the way in
-    await this.nav.walkTo(this.collision, ELM_TALK_FROM, this.walkOpts);
+    await this.nav.walkTo(this.collision, p.elmTalkFrom, this.walkOpts);
     await this.nav.step('UP');
     await this.gb.press('A', 6, 12);
     await this.runScripts();
@@ -362,13 +401,15 @@ export class Crystal extends Journey {
 
   /** Stand in front of the balls, so the choice is one step away. */
   async waitAtTheTable() {
-    await this.nav.walkTo(this.collision, [STARTER_BALL_X.totodile, 4],
+    const p = this.title.places;
+    await this.nav.walkTo(this.collision, [p.starterBallX.totodile, 4],
                           this.walkOpts);
     await this.nav.step('UP');
   }
 
   async takeStarter(which) {
-    const ballX = STARTER_BALL_X[which];
+    const p = this.title.places;
+    const ballX = p.starterBallX[which];
     if (ballX === undefined) {
       return `unknown starter ${which}`;
     }
@@ -402,16 +443,17 @@ export class Crystal extends Journey {
    * over at the table, and this is what finishes the job afterwards.
    */
   async toGrass() {
+    const p = this.title.places;
     const s = await this.snap();
     if (!s.party.length) {
       return { ok: false, party: [], message: 'pick a starter first' };
     }
     const legs = [
       ['back outside', async () =>
-        await this.through(LAB_EXIT, NEW_BARK_TOWN)
+        await this.through(p.labExit, p.newBarkTown)
           ? null : 'could not get out of the lab'],
       ['out to Route 29', async () =>
-        await this.crossEdge('LEFT', ROUTE_29) ? null : 'could not reach Route 29'],
+        await this.crossEdge('LEFT', p.route29) ? null : 'could not reach Route 29'],
       ['finding grass', async () =>
         await this.findGrass() ? null : 'could not find a patch of grass'],
     ];
@@ -434,19 +476,20 @@ export class Crystal extends Journey {
    * which is what the tests do.
    */
   async run(starter = null) {
+    const p = this.title.places;
     const legs = [
       ['starting a new game', async () => {
         if (await this.tasks.continueGame()) return null;
         return 'never reached the overworld — is this a Crystal ROM?';
       }],
       ['going downstairs', async () =>
-        await this.through(STAIRS_DOWN, PLAYERS_HOUSE_1F)
+        await this.through(p.stairsDown, p.playersHouse1f)
           ? null : 'could not find the stairs'],
       ['out of the house', async () =>
-        await this.through(FRONT_DOOR, NEW_BARK_TOWN)
+        await this.through(p.frontDoor, p.newBarkTown)
           ? null : 'could not get out of the house'],
       ["into Elm's lab", async () =>
-        await this.through(LAB_DOOR, ELMS_LAB) ? null : 'could not get into the lab'],
+        await this.through(p.labDoor, p.elmsLab) ? null : 'could not get into the lab'],
     ];
 
     if (!starter) {
@@ -464,10 +507,10 @@ export class Crystal extends Journey {
     legs.push(
       [`taking ${starter}`, async () => this.takeStarter(starter)],
       ['back outside', async () =>
-        await this.through(LAB_EXIT, NEW_BARK_TOWN)
+        await this.through(p.labExit, p.newBarkTown)
           ? null : 'could not get out of the lab'],
       ['out to Route 29', async () =>
-        await this.crossEdge('LEFT', ROUTE_29) ? null : 'could not reach Route 29'],
+        await this.crossEdge('LEFT', p.route29) ? null : 'could not reach Route 29'],
       ['finding grass', async () =>
         await this.findGrass() ? null : 'could not find a patch of grass'],
     );

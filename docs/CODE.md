@@ -105,7 +105,7 @@ of the subtleties in sections 6 and 7.
 
 <!-- covers-api: app/main.js gen2/journey.js titles/crystal.js gen2/tasks.js gen2/nav.js gen2/world.js gen2/collision.js gen2/state.js gen2/romdata.js gen2/symbols.js gbcore/gb.js @ e5bd200beec4 -->
 
-Twenty-six modules, in four directories, and the directories are the design:
+Twenty-seven modules, in four directories, and the directories are the design:
 **an import may point down this list and never up.**
 
 | | holds | may import from |
@@ -169,6 +169,7 @@ flowchart LR
         pick["pick.js<br/>which cartridge is this?"]
         contract["contract.js<br/>what a profile has to be"]
         title["crystal.js<br/>Crystal's maps and errands"]
+        early["crystal-early.js<br/>one half described"]
         gener["generic.js<br/>one nobody has described"]
     end
     subgraph gen2["gen2/ — any Gen 2 cartridge"]
@@ -199,6 +200,7 @@ flowchart LR
     main --> pick
     pick --> contract
     pick --> title
+    pick --> early
     pick --> gener
     main --> rows
     main --> tasks
@@ -218,6 +220,7 @@ flowchart LR
     main --> tbase
     rows --> state
     title --> jour
+    early --> title
     gener --> jour
     jour --> coll
     jour --> state
@@ -257,6 +260,7 @@ flowchart LR
 | `pick.js` | "which cartridge is this, and what drives it?" |
 | `contract.js` | "is this profile usable, and what are its engine numbers?" |
 | `crystal.js` | "start a new game", "fetch Poké Balls", "what is map 26.1 called?" |
+| `crystal-early.js` | the same questions, answered for two maps out of ten |
 | `generic.js` | the same questions, answered "I was not told" |
 | `saves.js` | "keep this in slot 2", "put that .sav into the cartridge" |
 | `rows.js` | "why is that button greyed out?" |
@@ -1224,7 +1228,7 @@ because that failure is only otherwise discovered by reaching for the undo.
 
 ## 8. The errands
 
-<!-- covers: titles/crystal.js gen2/journey.js @ 224b27779b94 -->
+<!-- covers: titles/crystal.js gen2/journey.js @ 514ff6b4b54d -->
 
 Everything in this section is `crystal.js` — the only file in the app that names
 a Crystal map, a Crystal door or a Crystal NPC. What it stands on is
@@ -1251,6 +1255,16 @@ The class is *procedure*. Knowing that Elm's machine is read by facing it, or
 that the nurse's question defaults to yes, is not something a table can hold —
 so `reach` names a method rather than describing one, and `Journey.nearestHeal`
 calls `this[h.reach]()`. Coordinates are data; presses are code.
+
+**And the procedures read the coordinates from the profile**, which they did not
+at first. When the object was introduced the scripts went on closing over the
+module constants, on the reasoning that the object was the engine's interface to
+this file rather than a second copy of it. That was true of one title and wrong
+the moment a second extended it: `crystal-early` declares two map names, and
+`run()` still walked to Crystal's New Bark, because that place was in the
+function rather than in the description. The scripts looked partial and were
+secretly total. Every place they walk to is a field of `places` now, so a hack
+that moved New Bark changes one field and the inherited script follows it.
 
 Three methods left this file when that object arrived, and none of them was ever
 really Crystal's: `where` is a lookup in `names`, `backToGrass` is a walk over
@@ -1353,6 +1367,27 @@ nothing by naming two.
 `?title=<id>` forces a profile by hand. It exists because the interesting
 profile is the one for a cartridge nobody has described, and there is no ROM hack
 in this repository to point at.
+
+`titles/crystal-early.js` is the other end of that. The generic profile is the
+floor and Crystal is the ceiling; this is the middle, where somebody writing a
+profile for a hack actually stands — two named maps out of ten, one healer out of
+two, driven by Crystal's own procedures because a hack of the same base game
+keeps them. It never wins a selection (`matches: () => false`) and exists to be
+driven with `?title=crystal-early`.
+
+It is an instrument, and it earned its keep twice in the hour it was written.
+The `titles` check forbade a title extending another title, which is the natural
+shape for a hack that keeps the procedures and changes the places — the check
+walks the chain to whatever engine class it reaches now, and protects only the
+engine's own members. And the places themselves were being read from module
+constants, described above. Neither would have been found by reasoning about it.
+
+Measured against the real cartridge, the same errand under both profiles: under
+Crystal the log reads *through to Elm's lab · out to Route 30*, and under
+crystal-early *through to map 24.6 · through to map 24.4* — the same walk,
+naming only what its description names. `nearestHeal` picks Elm's lab at 50 for
+Crystal and Cherrygrove at 75 for the profile that has only heard of
+Cherrygrove.
 
 </details>
 
@@ -2830,7 +2865,7 @@ about that code did not.
 
 ### The other checks
 
-<!-- covers: tools/check-app @ 06ef268875e4 -->
+<!-- covers: tools/check-app @ e06ff3eef994 -->
 
 `tools/check-app` runs everything that can be verified without a ROM:
 

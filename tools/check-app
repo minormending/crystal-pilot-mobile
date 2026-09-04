@@ -758,47 +758,61 @@ MEMBER = re.compile(r"^  (?:async |get |set |static )*([a-zA-Z_]\w*)\s*[(=]", re
 
 
 def check_title_adds():
-    """A title may add to the engine. It may not disagree with it.
+    """A title may not replace engine behaviour. Anything else it may do.
 
-    Every title extends `Journey`, which is what lets a scripted errand call
-    `this.travelTo(...)` without holding a reference. The cost of that
-    convenience is that a subclass can also *replace* any engine method, and
+    Every title reaches `Journey` eventually, which is what lets a scripted
+    errand call `this.travelTo(...)` without holding a reference. The cost of
+    that convenience is that a subclass can also *replace* an engine method,
     silently: the override resolves, parses and runs, and the next title copies
     it because the first one did.
 
-    Two hooks existed on purpose for one commit -- `where` and `nearestHeal` --
-    and both were replaced by fields on the title object, which is the better
-    answer: a question the engine has for a cartridge should be data the
-    cartridge declares, not a method it is trusted to write. So the rule is now
-    that there are no overrides at all, and this is what keeps it true.
+    Two such hooks existed on purpose for one commit -- `where` and
+    `nearestHeal` -- and both turned out to be better as fields on the title
+    object: a question the engine has for a cartridge should be data the
+    cartridge declares, not a method it is trusted to write.
 
-    `constructor` is the exception, because a title supplies its own profile to
-    `super` and there is nowhere else to do that.
+    A title extending *another title* is fine, and this check used to forbid it.
+    That was found by writing one: a hack of the same base game keeps the
+    engine and most of the procedures -- the nurse still stands behind a
+    counter -- and changes where things are, which is data. So the chain is
+    walked to whatever engine class it reaches, and only the engine's own
+    members are protected. A title overriding the title it extends is that
+    title's business; a hack that moved Elm's lab needs a different healAtElm.
+
+    `constructor` is the exception everywhere, because supplying a profile to
+    `super` has nowhere else to happen.
     """
-    engine = {}
+    engine, titles = {}, {}
     for path in APP:
         if path.parent.name == "gen2":
             engine[path.stem] = set(MEMBER.findall(path.read_text()))
-    problems = []
     for path in APP:
-        if path.parent.name != "titles":
+        if path.parent.name == "titles":
+            text = path.read_text()
+            for cls, base in SUBCLASS.findall(text):
+                titles[cls] = (path, base, set(MEMBER.findall(text)))
+
+    def engine_base(cls, seen=()):
+        """The engine class a title's chain reaches, or None."""
+        if cls not in titles or cls in seen:
+            return cls.lower() if cls.lower() in engine else None
+        return engine_base(titles[cls][1], (*seen, cls))
+
+    problems = []
+    for cls, (path, base, members) in sorted(titles.items()):
+        root = engine_base(cls)
+        if root is None:
+            problems.append(f"{rel(path)}  {cls} extends {base}, and that chain "
+                            f"never reaches a gen2/ class")
             continue
-        text = path.read_text()
-        for cls, base in SUBCLASS.findall(text):
-            if base.lower() not in engine:
-                problems.append(f"{rel(path)}  {cls} extends {base}, which is "
-                                f"not a gen2/ class")
-                continue
-            shadowed = (set(MEMBER.findall(text)) & engine[base.lower()]
-                        - {"constructor"})
-            for name in sorted(shadowed):
-                problems.append(f"{rel(path)}  {cls}.{name}() overrides "
-                                f"{base}.{name}() -- a title adds, and declares; "
-                                f"it does not replace engine behaviour")
+        for name in sorted(members & engine[root] - {"constructor"}):
+            problems.append(f"{rel(path)}  {cls}.{name}() overrides the engine's "
+                            f"{name}() -- a title adds, and declares; it does "
+                            f"not replace engine behaviour")
     for p in problems:
         print(f"        {p}")
     return fail(f"{len(problems)} override(s) in titles/") if problems \
-        else ok(f"every title only adds to the engine")
+        else ok(f"no title replaces engine behaviour")
 
 
 CHECKS = {

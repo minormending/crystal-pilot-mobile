@@ -136,6 +136,7 @@ Two query parameters, both for development, both off by default:
 | `?dev=1` | fetches the ROM and `.sym` from `./dev/`, which is gitignored, instead of asking you to pick them |
 | `?autostart=1` | lets the pilot play the intro itself, taking one of the game's own names — see [Using it](USING.md#starting-a-game-is-yours-not-the-pilots) |
 | `?title=generic` | forces a title profile by id instead of recognising the cartridge. The reason it exists is that the interesting profile is the one for a cartridge nobody has described, and testing it otherwise means going and finding a ROM hack |
+| `?title=crystal-early` | the same, for a *partly* described cartridge: two named maps, one healer, no engine changes, driven by Crystal's procedures. What a hack profile looks like in its first hour |
 
 `window.PILOT` exposes the live objects — `gb`, `tasks`, `state`, `collision`,
 `world`, `nav`, `romdata`, `boot`, `walkToTap`, `showVersion`, and the two

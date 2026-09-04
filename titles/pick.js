@@ -18,6 +18,7 @@
 // which a profile can declare and this will honour.
 import { validateTitle } from './contract.js';
 import { Crystal, crystal } from './crystal.js';
+import { CrystalEarly, crystalEarly } from './crystal-early.js';
 import { Generic, generic } from './generic.js';
 
 /**
@@ -27,6 +28,9 @@ export const TITLES = [
   { ...crystal, drive: Crystal,
     matches: ({ header, symbols }) =>
       header.title === 'PM_CRYSTAL' && symbols.has('JohtoGrassWildMons') },
+  // Never wins a selection; reached with ?title=crystal-early. An instrument
+  // for seeing what a partly described cartridge looks like.
+  { ...crystalEarly, drive: CrystalEarly, matches: () => false },
   { ...generic, drive: Generic, matches: () => true },
 ];
 
