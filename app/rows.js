@@ -36,19 +36,25 @@ export function describeRows(s, ctx = {}) {
   // Saving drives the START menu, and that menu does not open in a battle or
   // mid-script.
   const canSave = s.worldLoaded && !s.inBattle && !s.scriptRunning;
+  // Anything that walks needs a world to walk in and no battle in the way.
+  // These used to be looser -- grind was enabled on `lead` alone -- which was
+  // survivable while every row was drawn and greyed out, and is not now that
+  // the list only holds things that can run: an offer that refuses itself is
+  // worse than no offer.
+  const afoot = s.worldLoaded && !s.inBattle;
   const canCatchHere = s.inBattle && !trainer && !!ballId
                        && s.party.length < MAX_PARTY;
 
   return {
     grind: {
       text: lead ? `${leadName} → Lv${target}` : 'no party yet',
-      enabled: !!lead,
+      enabled: !!lead && afoot,
       // The level presets are meaningless with nothing to level.
       levels: !!lead,
     },
     hunt: {
       text: huntWanted ? `${huntWanted} · here now` : 'pick something below',
-      enabled: !!huntWanted,
+      enabled: !!huntWanted && afoot,
     },
     // Catch owns its own prerequisite. The errand is a one-time thing -- run it
     // twice and it reports "already carrying 5 ball(s)" without moving -- so it
@@ -57,7 +63,7 @@ export function describeRows(s, ctx = {}) {
       text: needsBalls
         ? 'no Poké Balls yet — fetch them first'
         : huntWanted ? `${huntWanted} · ${ballName}` : 'pick something below',
-      enabled: !!(ballId && huntWanted),
+      enabled: !!(ballId && huntWanted) && afoot,
       needsBalls,
     },
     save: {
@@ -94,8 +100,65 @@ export function describeRows(s, ctx = {}) {
         : hurt.length
           ? `${hurt.length} hurt · nearest is ${healPlace || 'a Center'}`
           : 'everyone is at full health',
-      enabled: !s.inBattle && hurt.length > 0,
+      enabled: afoot && hurt.length > 0,
     },
+  };
+}
+
+/**
+ * What the pilot can do here, in the order you are most likely to want it.
+ *
+ * The same answers `describeRows` computes, inverted. Six rows that explain why
+ * four of them are greyed out is the app scanning on your behalf and then
+ * making you scan anyway -- and this app *reads the game's memory*, which is
+ * the whole project, so it knows perfectly well that there is no battle, that
+ * nobody is hurt and that there are no balls. It should offer what it can do,
+ * and stay quiet about the rest.
+ *
+ * Every rule in the ranking is about the state rather than a preference. A
+ * battle is modal, so its two actions come first and nothing else is startable
+ * anyway. A fainted party is the thing that must be dealt with before any job
+ * will finish, so healing rises above the jobs. Then the specific intent
+ * already expressed by picking a species, then the general one, then healing
+ * when it is merely tidy.
+ */
+export function describeOffers(s, ctx = {}) {
+  const rows = describeRows(s, ctx);
+  // Nothing is offered before there is a world: on the title screen every job
+  // would refuse, and a hint about how to unlock them would be a hint about
+  // pressing the button the loader is already showing.
+  if (!s.worldLoaded) return { offered: [], rank: {}, hint: '' };
+
+  const afoot = !s.inBattle;
+  const fainted = s.party.some((m) => m.hp === 0);
+  const order = [];
+  if (s.inBattle) order.push('battle', 'here');
+  if (fainted) order.push('heal');
+  order.push('catch', 'hunt', 'grind', 'heal');
+
+  const offered = [];
+  for (const key of order) {
+    if (offered.includes(key) || !rows[key]) continue;
+    // Catch keeps its place when the only thing missing is the balls, because
+    // the errand that fetches them lives in that row: hiding it would hide the
+    // way out of the very state it describes.
+    const usable = rows[key].enabled
+                   || (key === 'catch' && rows.catch.needsBalls && afoot);
+    if (usable) offered.push(key);
+  }
+
+  // The hint says what would add to the list, and only when there is something
+  // to do about it. "Nobody is hurt" is not worth a line -- it is the good
+  // state, and explaining the absence of an offer nobody wanted is the noise
+  // this whole list replaces.
+  const hint = [];
+  if (afoot && !s.party.length) hint.push('most jobs need a Pokémon with you');
+  if (afoot && !ctx.huntWanted) hint.push('pick something below to hunt or catch');
+  return {
+    offered,
+    rank: Object.fromEntries(offered.map((key, i) => [key, i + 1])),
+    // Two clauses at most. A third is a paragraph, and this is a line.
+    hint: hint.slice(0, 2).join(' · '),
   };
 }
 

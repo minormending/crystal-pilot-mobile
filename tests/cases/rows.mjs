@@ -6,8 +6,9 @@
 // out of the DOM.
 import { fakeRom, symbols, test, worldRam } from '../harness.mjs';
 import { GameState } from '../../app/state.js';
-import { describeHandoff, describeReplaced, describeRoom, describeScreen,
-         joinFailure, describeRows, describeSlot, describeUndo } from '../../app/rows.js';
+import { describeHandoff, describeOffers, describeReplaced, describeRoom,
+         describeScreen, joinFailure, describeRows, describeSlot,
+         describeUndo } from '../../app/rows.js';
 
 const sym = symbols();
 const state = new GameState(sym);
@@ -16,6 +17,8 @@ const CYNDAQUIL = 155, PIDGEY = 16, POKE_BALL = 5;
 
 const look = (world, ctx = {}) =>
   describeRows(state.read(worldRam(sym, world)), { rom, ...ctx });
+const offers = (world, ctx = {}) =>
+  describeOffers(state.read(worldRam(sym, world)), { rom, ...ctx });
 
 test('with no party, only the rows that need none are offered', async (t) => {
   const r = look({});
@@ -236,4 +239,77 @@ test('a host with its screen off says so rather than showing a still picture', a
   const said = describeScreen({ watching: true, host: 'iPhone', asleep: true });
   t.contains(said.text, 'screen off', 'the row explains the frozen picture');
   t.eq(said.button, 'Leave', 'and leaving is still on offer');
+});
+
+test('the pilot offers nothing before there is a world to act in', async (t) => {
+  const o = offers({ mapStatus: 0 });
+  t.eq(o.offered.length, 0, 'no jobs on the title screen');
+  t.eq(o.hint, '', 'and no advice about unlocking them either');
+});
+
+test('a battle puts its own two actions first and drops the walking jobs',
+     async (t) => {
+  const o = offers({
+    battleMode: 1, party: [{ species: CYNDAQUIL, level: 5, hp: 4, maxHp: 20 }],
+    enemy: { species: PIDGEY, level: 3, hp: 15, maxHp: 15 },
+  }, { huntWanted: 'PIDGEY', ballId: POKE_BALL });
+  t.eq(o.offered[0], 'battle', 'fighting leads');
+  t.eq(o.offered[1], 'here', 'then catching the one in front of you');
+  t.false(o.offered.includes('grind'), 'nothing that walks is offered');
+  t.false(o.offered.includes('heal'), 'and healing waits for the battle to end');
+  t.eq(o.rank.battle, 1, 'the rank is 1-based, for CSS order');
+});
+
+test('a fainted party lifts healing above the jobs it would block', async (t) => {
+  const world = (hp) => ({
+    party: [{ species: CYNDAQUIL, level: 5, hp, maxHp: 20 }],
+  });
+  const down = offers(world(0), { huntWanted: 'SENTRET', ballId: POKE_BALL });
+  t.true(down.offered.indexOf('heal') < down.offered.indexOf('grind'),
+         'a trip to the Center comes before another fight');
+
+  const hurt = offers(world(4), { huntWanted: 'SENTRET', ballId: POKE_BALL });
+  t.true(hurt.offered.indexOf('heal') > hurt.offered.indexOf('grind'),
+         'merely scratched, and healing drops to the bottom');
+});
+
+test('only jobs that would start are offered, and the rest go unmentioned',
+     async (t) => {
+  const o = offers({ party: [{ species: CYNDAQUIL, level: 5, hp: 20, maxHp: 20 }] },
+                   { huntWanted: 'SENTRET', ballId: POKE_BALL });
+  t.eq(o.offered.join(','), 'catch,hunt,grind',
+          'three jobs, in the order you would want them');
+  t.eq(o.hint, '', 'and nothing is missing, so nothing is explained');
+});
+
+test('the catch row survives having no balls, because it holds the errand',
+     async (t) => {
+  const world = { party: [{ species: CYNDAQUIL, level: 5, hp: 20, maxHp: 20 }] };
+  const o = offers(world, { huntWanted: 'SENTRET' });
+  t.true(o.offered.includes('catch'), 'the way to get balls stays reachable');
+  t.false(look(world, { huntWanted: 'SENTRET' }).catch.enabled,
+          'even though catching itself would refuse');
+
+  const fighting = offers({ ...world, battleMode: 1,
+                            enemy: { species: PIDGEY, level: 3, hp: 15, maxHp: 15 } },
+                          { huntWanted: 'SENTRET' });
+  t.false(fighting.offered.includes('catch'),
+          'but an errand that walks to a mart is not offered mid-battle');
+});
+
+test('the hint only names things there is something to do about', async (t) => {
+  const empty = offers({});
+  t.contains(empty.hint, 'need a Pokémon', 'no party is worth saying');
+  t.contains(empty.hint, 'pick something', 'so is the picker below');
+
+  const chosen = offers({ party: [{ species: CYNDAQUIL, level: 5, hp: 20, maxHp: 20 }] },
+                        { huntWanted: 'SENTRET' });
+  t.eq(chosen.hint, '', 'a target is picked and a party is out, so silence');
+
+  const battling = offers({
+    battleMode: 1, party: [{ hp: 20, maxHp: 20 }],
+    enemy: { species: PIDGEY, level: 3, hp: 15, maxHp: 15 },
+  });
+  t.eq(battling.hint, '',
+          'and nothing about picking targets while a battle is on the screen');
 });
