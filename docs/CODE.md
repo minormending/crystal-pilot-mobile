@@ -99,7 +99,7 @@ of the subtleties in sections 6 and 7.
 
 ## 2. The shape of it
 
-<!-- covers-api: app/main.js app/bootstrap.js app/tasks.js app/nav.js app/world.js app/collision.js app/state.js app/romdata.js app/symbols.js app/gb.js @ 03a0143e20b1 -->
+<!-- covers-api: app/main.js app/bootstrap.js app/tasks.js app/nav.js app/world.js app/collision.js app/state.js app/romdata.js app/symbols.js app/gb.js @ 6978b1bbc23b -->
 
 Twenty modules. Arrows point from a module to the ones it imports.
 
@@ -1204,7 +1204,7 @@ the bag" rather than "did we gain any".
 
 ## 9. The interface
 
-<!-- covers: app/main.js index.html @ ae7c7f35929e -->
+<!-- covers: app/main.js index.html @ 03f2f0756b14 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -1307,6 +1307,19 @@ the list by design — which is why the hint says where the two actions went. An
 empty list with no explanation reads as broken rather than as modal. The screen
 pays for the line: measured 259×233 out in the world and 203×182 with a battle
 on, at 375×667, which is the `cqh` sizing above doing exactly what it was for.
+
+**The party is one line, above the two jobs it decides.** It had a card of its
+own with a row and an HP bar per member — six rows for the two facts a pilot
+acts on. Which Pokémon leads decides what a grind levels, and whether anyone is
+hurt decides whether Heal is on the list, so `describeParty` puts both at the
+top of the list that uses them: *TOTODILE Lv5 · 14/20 · +2 more · 1 fainted*.
+Fainted is said **instead of** hurt, because a fainted party is the state that
+stops a job finishing and "3 hurt" said of a party with one out cold buries the
+half that matters.
+
+Nothing is deleted: the line is a `<summary>` and the bars are one tap below it.
+With no party the whole box is hidden rather than summarising nothing — the hint
+under the offers already says that most jobs want a Pokémon along.
 
 The pilot's jobs are a **list, not a toolbar**, because `runTask` opens with
 `if (running) return null` — only one job can ever be underway, so they are one

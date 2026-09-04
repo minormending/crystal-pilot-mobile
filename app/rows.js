@@ -168,6 +168,35 @@ export function describeOffers(s, ctx = {}) {
   };
 }
 
+/**
+ * The party in one line: who leads, and whether anyone needs a Center.
+ *
+ * The party had a card of its own with a row and an HP bar per member -- six
+ * rows for two facts a pilot acts on. Which one leads decides what a grind
+ * levels, and whether anyone is hurt decides whether Heal is on the list, so
+ * both belong at the top of the list that uses them rather than in a panel
+ * below it. The bars are still there, one tap down, for when the summary is not
+ * the answer.
+ *
+ * Fainted outranks hurt and is said instead of it: a fainted party is the state
+ * that stops a job finishing, and "3 hurt" said of a party with one out cold
+ * buries the part that matters.
+ */
+export function describeParty(s, ctx = {}) {
+  const { rom = null } = ctx;
+  const lead = s.party[0];
+  if (!lead) return 'no party yet';
+  const name = rom ? rom.speciesName(lead.species) : `#${lead.species}`;
+  const bits = [`${name} Lv${lead.level}`, `${lead.hp}/${lead.maxHp}`];
+  const rest = s.party.length - 1;
+  if (rest > 0) bits.push(`+${rest} more`);
+  const out = s.party.filter((m) => m.hp === 0).length;
+  const hurt = s.party.filter((m) => m.hp > 0 && m.hp < m.maxHp).length;
+  if (out) bits.push(`${out} fainted`);
+  else if (hurt) bits.push(`${hurt} hurt`);
+  return bits.join(' · ');
+}
+
 /** One slot's line: where it was, who was leading, and when. */
 export function describeSlot(meta) {
   if (!meta) return 'empty';

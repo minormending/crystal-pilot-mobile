@@ -363,6 +363,20 @@
      Rows with state, not a stack of filled buttons: a name, what it will
      actually do, and one small affordance. Only the ready job takes the
      accent, because a list where everything shouts is worse than the grid. */
+  /* A summary line that reads as a line, not as a control: the disclosure is
+     worth one small marker and no border of its own, because the six offers
+     below it are the things meant to be pressed. */
+  .partybox{margin:0 0 2px}
+  .partybox>summary{list-style:none;cursor:pointer;padding:2px 0 8px;
+                    font-family:ui-monospace,Menlo,monospace;font-size:12px;
+                    color:var(--dim);display:flex;align-items:center;gap:6px}
+  .partybox>summary::-webkit-details-marker{display:none}
+  .partybox>summary::after{content:'▾';font-size:9px;color:var(--dim)}
+  .partybox[open]>summary::after{content:'▴'}
+  .partybox #party{padding-bottom:6px}
+  /* Open, it needs an edge: the first offer below it wears no top rule, being
+     the one that ranks first, so three HP bars ran straight into "Catch". */
+  .partybox[open]{border-bottom:1px solid var(--line);margin-bottom:8px}
   .jobs{display:flex;flex-direction:column}
   .job{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;
        padding:11px 0;border-top:1px solid var(--line)}
@@ -701,6 +715,14 @@
   <div class="card hide" id="huntcard">
     <h2>Send the pilot</h2>
 
+    <!-- Who leads and who is hurt, above the two jobs those facts decide. Open
+         it and the per-member bars are still there: this replaces a card of six
+         rows with the two lines of it a pilot acts on, and hides nothing. -->
+    <details class="partybox hide" id="panel">
+      <summary id="leadline">no party yet</summary>
+      <div id="party"></div>
+    </details>
+
     <!-- The six rows sit in their own flex column so the pilot can rank them
          with `order` without dragging the picker and the presets below into the
          same sort. -->
@@ -812,11 +834,6 @@
       saves the game first &mdash; and loading one puts you back at that save
       point rather than at an exact moment. Nothing here leaves this tab until
       you download it.</footer>
-  </div>
-
-  <div class="card hide" id="panel">
-    <h2>Party</h2>
-    <div id="party"></div>
   </div>
 
   <!-- Not hidden until a game loads, unlike everything below it. Nothing in

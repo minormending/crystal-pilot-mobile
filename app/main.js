@@ -1,9 +1,9 @@
 // Wiring: file pickers, the render loop, and dispatching a task.
 import { GameBoy } from './gb.js';
 import { SHARED_SYMBOLS, Symbols } from './symbols.js';
-import { describeHandoff, describeOffers, describeReplaced, describeRoom,
-         describeRows, describeScreen, describeSlot, describeUndo,
-         joinFailure } from './rows.js';
+import { describeHandoff, describeOffers, describeParty, describeReplaced,
+         describeRoom, describeRows, describeScreen, describeSlot,
+         describeUndo, joinFailure } from './rows.js';
 import { VERSION } from './version.js';
 import { forgetKept, keepBattery, keepRom, keepSym, keptMeta, readOpts, recall,
          sanitise, writeOpts } from './remember.js';
@@ -1222,6 +1222,10 @@ async function refresh() {
   $('#where').textContent = s.inBattle
     ? `battle · ${romdata ? romdata.speciesName(s.enemy.species) : 'wild'} Lv${s.enemy.level}`
     : `${place}${s.onGrass ? ' · grass' : ''}`;
+  // Nothing to summarise and nothing to expand: the hint under the offers
+  // already says that most jobs want a Pokemon along.
+  $('#panel').classList.toggle('hide', !s.party.length);
+  $('#leadline').textContent = describeParty(s, { rom: romdata });
   $('#party').innerHTML = s.party.length
     ? s.party.map(monRow).join('')
     : '<span class="seen">no party yet</span>';

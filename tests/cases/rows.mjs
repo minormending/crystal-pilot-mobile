@@ -6,8 +6,8 @@
 // out of the DOM.
 import { fakeRom, symbols, test, worldRam } from '../harness.mjs';
 import { GameState } from '../../app/state.js';
-import { describeHandoff, describeOffers, describeReplaced, describeRoom,
-         describeScreen, joinFailure, describeRows, describeSlot,
+import { describeHandoff, describeOffers, describeParty, describeReplaced,
+         describeRoom, describeScreen, joinFailure, describeRows, describeSlot,
          describeUndo } from '../../app/rows.js';
 
 const sym = symbols();
@@ -314,4 +314,31 @@ test('the hint only names things there is something to do about', async (t) => {
   t.false(battling.hint.includes('pick something'),
           'nothing about picking targets while a battle is on the screen');
   t.contains(battling.hint, 'Fight and Throw', 'only where the actions are');
+});
+
+test('the party reads as one line, and says fainted rather than hurt',
+     async (t) => {
+  const party = (world) => describeParty(state.read(worldRam(sym, world)), { rom });
+
+  t.eq(party({}), 'no party yet', 'with nobody, it says so and stops');
+
+  const alone = party({ party: [{ species: CYNDAQUIL, level: 5, hp: 20, maxHp: 20 }] });
+  t.contains(alone, 'Lv5', 'the lead carries its level');
+  t.contains(alone, '20/20', 'and its health');
+  t.false(alone.includes('more'), 'and says nothing about a party of one');
+
+  const three = party({ party: [
+    { species: CYNDAQUIL, level: 5, hp: 20, maxHp: 20 },
+    { species: PIDGEY, level: 4, hp: 9, maxHp: 15 },
+    { species: PIDGEY, level: 3, hp: 12, maxHp: 12 },
+  ] });
+  t.contains(three, '+2 more', 'the rest are counted, not listed');
+  t.contains(three, '1 hurt', 'and the one that is hurt is the reason to care');
+
+  const down = party({ party: [
+    { species: CYNDAQUIL, level: 5, hp: 0, maxHp: 20 },
+    { species: PIDGEY, level: 4, hp: 9, maxHp: 15 },
+  ] });
+  t.contains(down, '1 fainted', 'fainted is said instead of hurt');
+  t.false(down.includes('hurt'), 'because it is the half that stops a job');
 });
