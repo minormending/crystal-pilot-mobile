@@ -334,5 +334,5 @@ export function romReading(moveTable) {
       return 0;
     },
   };
-  return new RomData(sym, gb);
+  return new RomData(sym, gb, ['JohtoGrassWildMons', 'KantoGrassWildMons']);
 }

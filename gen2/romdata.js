@@ -60,12 +60,21 @@ export function normalise(name) {
 }
 
 export class RomData {
-  constructor(symbols, gb) {
+  /**
+   * `encounters` is the wild tables to read, named by the title.
+   *
+   * It used to be the pair pokecrystal ships, written here -- which is a fact
+   * about a cartridge's regions sitting in the module that decodes them, and
+   * exactly the kind of thing a hack changes. Whichever of the named tables the
+   * symbol file actually has is used, so a cartridge with one region loses
+   * nothing by saying it has two.
+   */
+  constructor(symbols, gb, encounters = []) {
     this.gb = gb;
     this.at = (name) => ({ bank: symbols.bank(name), addr: symbols.addr(name) });
     this.names = this.at('PokemonNames');
     this.items = this.at('ItemNames');
-    this.grass = ['JohtoGrassWildMons', 'KantoGrassWildMons']
+    this.grass = encounters
       .filter((n) => symbols.has(n))
       .map((n) => this.at(n));
     this._species = new Map();

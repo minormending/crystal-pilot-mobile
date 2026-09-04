@@ -17,7 +17,7 @@ import { Tasks } from '../gen2/tasks.js';
 import { CollisionMap } from '../gen2/collision.js';
 import { Nav } from '../gen2/nav.js';
 import { RomData, normalise } from '../gen2/romdata.js';
-import { Crystal } from '../titles/crystal.js';
+import { TITLES, pickTitle } from '../titles/pick.js';
 import { World } from '../gen2/world.js';
 
 const $ = (s) => document.querySelector(s);
@@ -31,7 +31,7 @@ const DEV = PARAMS.has('dev');
 const AUTOSTART = PARAMS.has('autostart');
 const gb = new GameBoy();
 let symbols = null, state = null, tasks = null, romBytes = null;
-let collision = null, nav = null, romdata = null, boot = null;
+let collision = null, nav = null, romdata = null, boot = null, title = null;
 let world;
 let huntWanted = null;
 let ballId = null;
@@ -307,19 +307,26 @@ function maybeStart() {
 
 async function reallyStart() {
   setStatus('booting…', 'busy');
+  // Which cartridge this is, before anything is built out of it: romdata wants
+  // the wild tables this title declares, and the pilot itself is the title's
+  // class. `?title=` names one by hand, for pointing the app at the generic
+  // profile without going and finding a hack to test with.
+  const wanted = PARAMS.get('title');
+  title = (wanted && TITLES.find((x) => x.id === wanted))
+          || pickTitle({ header: readHeader(romBytes), symbols, tag: romTag });
   await gb.start($('#screen'));
   await gb.loadRom(romBytes);
   state = new GameState(symbols);
   // romdata first: the tasks are handed it at construction, and built
   // in the other order they were handed null -- which a hunt only finds
   // out about when it tries to name the first Pokemon it meets.
-  romdata = new RomData(symbols, gb);
+  romdata = new RomData(symbols, gb, title.encounters);
   tasks = new Tasks(gb, state, progress, romdata);
   saves = new Saves(gb, state, romdata, progress);
   collision = new CollisionMap(symbols, gb);
   nav = new Nav(gb, symbols);
   world = new World(symbols, gb);
-  boot = new Crystal(gb, state, tasks, collision, nav, progress, world);
+  boot = new title.drive(gb, state, tasks, collision, nav, progress, world);
   A_MARK = {
     x: symbols.addr('wXCoord'), y: symbols.addr('wYCoord'),
     offX: symbols.addr('wPlayerBGMapOffsetX'),
@@ -1027,8 +1034,12 @@ $('#takeover').onclick = () => runTask('#takeover', 'taking the shared save',
 async function awaitWorld() {
   setStatus('Press Start, then play until you are out in the world', '');
   progress('the pilot waits here — a new game is yours to start');
-  $('#bootrow').classList.remove('hide');
-  $('#bootnote').classList.remove('hide');
+  // Only a title that has a scripted intro offers to play one. A cartridge
+  // nobody has described has no `run`, and a button that throws is worse than a
+  // button that is not there -- the same rule the offers list is built on.
+  const scripted = typeof boot.run === 'function';
+  $('#bootrow').classList.toggle('hide', !scripted);
+  $('#bootnote').classList.toggle('hide', !scripted);
   paintStatusCard();
   // The header tracks where you are, and it is filled in by refresh() once
   // there is a game to describe. Until then it still read "no ROM loaded",

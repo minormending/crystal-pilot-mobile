@@ -113,6 +113,10 @@ export const crystal = {
     { map: CHERRYGROVE_CITY, reach: 'heal' },
   ],
   grassyMaps: [ROUTE_29, ROUTE_30],
+  // Which regions this cartridge has. romdata reads whichever of these the
+  // symbol file knows about, so this is the one place a hack with different
+  // regions has to say so.
+  encounters: ['JohtoGrassWildMons', 'KantoGrassWildMons'],
   legCost: LEG_COST,
 };
 

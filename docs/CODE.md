@@ -103,9 +103,9 @@ of the subtleties in sections 6 and 7.
 
 ## 2. The shape of it
 
-<!-- covers-api: app/main.js gen2/journey.js titles/crystal.js gen2/tasks.js gen2/nav.js gen2/world.js gen2/collision.js gen2/state.js gen2/romdata.js gen2/symbols.js gbcore/gb.js @ ab6000245f4b -->
+<!-- covers-api: app/main.js gen2/journey.js titles/crystal.js gen2/tasks.js gen2/nav.js gen2/world.js gen2/collision.js gen2/state.js gen2/romdata.js gen2/symbols.js gbcore/gb.js @ 0a5643a04d9f -->
 
-Twenty-two modules, in four directories, and the directories are the design:
+Twenty-four modules, in four directories, and the directories are the design:
 **an import may point down this list and never up.**
 
 | | holds | may import from |
@@ -166,7 +166,9 @@ flowchart LR
         rows["rows.js<br/>what each row says"]
     end
     subgraph titles["titles/ — one cartridge"]
+        pick["pick.js<br/>which cartridge is this?"]
         title["crystal.js<br/>Crystal's maps and errands"]
+        gener["generic.js<br/>one nobody has described"]
     end
     subgraph gen2["gen2/ — any Gen 2 cartridge"]
         tasks["tasks.js<br/>composes the four below"]
@@ -192,7 +194,9 @@ flowchart LR
         gb["gb.js<br/>emulator wrapper"]
     end
 
-    main --> title
+    main --> pick
+    pick --> title
+    pick --> gener
     main --> rows
     main --> tasks
     main --> nav
@@ -211,6 +215,7 @@ flowchart LR
     main --> tbase
     rows --> state
     title --> jour
+    gener --> jour
     jour --> coll
     jour --> state
     tasks --> jobs
@@ -244,7 +249,9 @@ flowchart LR
 | `battle.js` | "choose a move", "throw a ball", "what happened?" |
 | `jobs.js` | "grind to level 12", "catch a Sentret" |
 | `journey.js` | "get me to Route 30", "find grass", "go and heal" |
+| `pick.js` | "which cartridge is this, and what drives it?" |
 | `crystal.js` | "start a new game", "fetch Poké Balls", "what is map 26.1 called?" |
+| `generic.js` | the same questions, answered "I was not told" |
 | `saves.js` | "keep this in slot 2", "put that .sav into the cartridge" |
 | `rows.js` | "why is that button greyed out?" |
 | `version.js` | "which build am I running?" |
@@ -423,7 +430,7 @@ and in `bootstrap.js`, with nothing able to notice if they drifted.
 
 ### `romdata.js` — what the cartridge knows
 
-<!-- covers: gen2/romdata.js @ b3dc96d461e4 -->
+<!-- covers: gen2/romdata.js @ b00b2bc76e0d -->
 
 Species names, item names, wild-encounter tables, move power. All read out of
 the ROM, not shipped as a copy, so they cannot drift from the build being driven.
@@ -893,7 +900,7 @@ fainted.
 
 ## 7. Catching something
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ 3a5452c052a8 -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ 66dde06b0fb2 -->
 
 Catching is the most involved loop, because a Poké Ball's odds turn on how much
 HP is left. Throwing at a full-health target is mostly throwing balls away.
@@ -1211,7 +1218,7 @@ because that failure is only otherwise discovered by reaching for the undo.
 
 ## 8. The errands
 
-<!-- covers: titles/crystal.js gen2/journey.js @ 4cde3c181c9c -->
+<!-- covers: titles/crystal.js gen2/journey.js @ 224b27779b94 -->
 
 Everything in this section is `crystal.js` — the only file in the app that names
 a Crystal map, a Crystal door or a Crystal NPC. What it stands on is
@@ -1245,6 +1252,55 @@ really Crystal's: `where` is a lookup in `names`, `backToGrass` is a walk over
 `journey.js` now, which is what made the third one testable for the first time —
 see the `journey` tests, where a stubbed map graph proves that two legs beat one
 when the first edge is three tiles away and the alternative is fifty-five.
+
+**Which title drives a cartridge is decided once, before anything is built out
+of it.** `titles/pick.js` holds a registry, every profile says how to recognise
+itself, and the first that agrees wins — with `generic` last, matching anything,
+so an unknown cartridge is *supported on arrival* rather than refused until
+somebody writes a file for it.
+
+The header alone is never enough, and that is the whole difficulty of
+recognising a hack: a pokecrystal hack routinely keeps `PM_CRYSTAL` in its
+header, so matching on the name would claim every hack as Crystal and then walk
+confidently into a lab that has been moved. Crystal's rule asks for the name
+**and** a symbol only Johto has. A profile may also pin an exact ROM
+fingerprint, which is the honest answer for telling two hacks of one base apart.
+
+<details>
+<summary><b>Advanced detail:</b> what the generic profile does not declare, and
+why that is the interesting part</summary>
+
+```js
+export const generic = {
+  id: 'generic',
+  encounters: ['JohtoGrassWildMons', 'KantoGrassWildMons'],
+};
+```
+
+That is the whole file's data. No names, no healers, no grassy maps, no scripts,
+and `Generic extends Journey` adds no methods at all — so hunting, grinding,
+catching, fighting, tap-to-walk, saving and slots work on it unchanged, because
+every one of those reads the cartridge rather than a table in this repository.
+
+Each absence is a capability the interface declines to offer rather than a thing
+that fails. No `names` and a walk says *map 26.1*. No `healers` and
+`nearestHeal` returns null, which `healNow` reports as *nowhere to heal that this
+build knows about*. No `run` and *Start a new game for me* is not drawn —
+`awaitWorld` asks `typeof boot.run === 'function'`, because a button that throws
+is worse than a button that is not there, which is the offers list's own rule one
+step further out.
+
+`encounters` moved into the title in the same commit, out of `romdata.js`, which
+had the pair pokecrystal ships written into it — a fact about a cartridge's
+regions sitting in the module that decodes them. Whichever of the named tables
+the symbol file actually has is used, so a cartridge with one region loses
+nothing by naming two.
+
+`?title=<id>` forces a profile by hand. It exists because the interesting
+profile is the one for a cartridge nobody has described, and there is no ROM hack
+in this repository to point at.
+
+</details>
 
 **What `Crystal` has left is nine methods that only add.** It overrides nothing:
 the two hooks the split invented — `where` and `nearestHeal` — were replaced by
@@ -1367,7 +1423,7 @@ This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ 048e672a6b60 -->
+<!-- covers: app/main.js index.html @ 13ebe16fe2d9 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
