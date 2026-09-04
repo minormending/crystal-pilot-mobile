@@ -2,6 +2,13 @@
 // right before a ROM hack can be pointed at this app at all.
 import { test } from '../harness.mjs';
 import { TITLES, pickTitle } from '../../titles/pick.js';
+import { engineFor, validateTitle } from '../../titles/contract.js';
+import { gen2 } from '../../gen2/engine.js';
+
+// The smallest thing that passes the contract, for tests about picking rather
+// than about shape.
+class Drive {}
+const ok = (extra) => ({ id: 'x', drive: Drive, matches: () => true, ...extra });
 
 const syms = (...names) => ({ has: (n) => names.includes(n) });
 const CRYSTAL = { header: { title: 'PM_CRYSTAL', ok: true },
@@ -49,8 +56,7 @@ test('a profile that throws while deciding is a no, not a crash', async (t) => {
 
 test('a profile may pin an exact build, and is skipped when it does not match',
      async (t) => {
-  const pinned = { id: 'pinned', fingerprint: 'aaaaaaaaaaaaaaaa',
-                   matches: () => true };
+  const pinned = ok({ id: 'pinned', fingerprint: 'aaaaaaaaaaaaaaaa' });
   TITLES.unshift(pinned);
   try {
     t.eq(pickTitle({ ...CRYSTAL, tag: 'aaaaaaaaaaaaaaaa' }).id, 'pinned',
@@ -60,4 +66,57 @@ test('a profile may pin an exact build, and is skipped when it does not match',
   } finally {
     TITLES.shift();
   }
+});
+
+test('every profile this app ships satisfies its own contract', async (t) => {
+  for (const title of TITLES) {
+    t.eq(validateTitle(title).join(' | '), '',
+         `${title.id} is a usable profile`);
+  }
+});
+
+test('a profile whose shape is wrong is skipped, not driven', async (t) => {
+  // The failure this prevents: a hand-written profile that is recognised, then
+  // half-trusted, and walks to the wrong places.
+  const broken = { id: 'broken', matches: () => true };   // no drive
+  TITLES.unshift(broken);
+  try {
+    t.eq(pickTitle({ header: { title: 'ANYTHING' } }).id, 'generic',
+         'a recognised profile that cannot be used falls through');
+  } finally {
+    TITLES.shift();
+  }
+});
+
+test('the contract catches the mistakes a profile is written by hand',
+     async (t) => {
+  const bad = (extra) => validateTitle(ok(extra)).join(' | ');
+
+  t.contains(bad({ names: { 'not a key': 'Somewhere' } }), 'not a map key',
+             'a map key written as a string never matches anything');
+  t.contains(bad({ names: { 6151: '' } }), 'non-empty string',
+             'and a name nobody can read is not a name');
+
+  class WithHeal { atCentre() {} }
+  t.eq(validateTitle(ok({ drive: WithHeal,
+                          healers: [{ map: 6151, reach: 'atCentre' }] })).length, 0,
+       'a healer whose method exists is fine');
+  t.contains(validateTitle(ok({ drive: WithHeal,
+                                healers: [{ map: 6151, reach: 'atCenter' }] })).join(),
+             'does not have',
+             'and one letter out is caught here rather than at healing time');
+
+  t.contains(bad({ grassyMaps: [1, 'two'] }), 'map keys', 'grass maps are keys');
+  t.contains(bad({ encounters: [1] }), 'symbol names', 'tables are named');
+  t.contains(bad({ legCost: -3 }), 'positive number', 'a leg costs tiles');
+  t.contains(bad({ engine: { nameLenght: 11 } }), 'not a field the engine reads',
+             'a typo in an engine override would otherwise be ignored');
+});
+
+test('an engine override is a patch, not a replacement', async (t) => {
+  const e = engineFor(ok({ engine: { nameLength: 11 } }));
+  t.eq(e.nameLength, 11, 'the field the cartridge changed is changed');
+  t.eq(e.partyStride, gen2.partyStride, 'and everything it did not is intact');
+  t.eq(e.speciesCount, gen2.speciesCount, 'including the ones it never mentioned');
+  t.eq(engineFor(ok({})), gen2, 'a title with no overrides gets the stock profile');
 });

@@ -103,9 +103,9 @@ of the subtleties in sections 6 and 7.
 
 ## 2. The shape of it
 
-<!-- covers-api: app/main.js gen2/journey.js titles/crystal.js gen2/tasks.js gen2/nav.js gen2/world.js gen2/collision.js gen2/state.js gen2/romdata.js gen2/symbols.js gbcore/gb.js @ 0d7efcfe43a8 -->
+<!-- covers-api: app/main.js gen2/journey.js titles/crystal.js gen2/tasks.js gen2/nav.js gen2/world.js gen2/collision.js gen2/state.js gen2/romdata.js gen2/symbols.js gbcore/gb.js @ e5bd200beec4 -->
 
-Twenty-five modules, in four directories, and the directories are the design:
+Twenty-six modules, in four directories, and the directories are the design:
 **an import may point down this list and never up.**
 
 | | holds | may import from |
@@ -167,6 +167,7 @@ flowchart LR
     end
     subgraph titles["titles/ — one cartridge"]
         pick["pick.js<br/>which cartridge is this?"]
+        contract["contract.js<br/>what a profile has to be"]
         title["crystal.js<br/>Crystal's maps and errands"]
         gener["generic.js<br/>one nobody has described"]
     end
@@ -196,6 +197,7 @@ flowchart LR
     end
 
     main --> pick
+    pick --> contract
     pick --> title
     pick --> gener
     main --> rows
@@ -253,6 +255,7 @@ flowchart LR
 | `jobs.js` | "grind to level 12", "catch a Sentret" |
 | `journey.js` | "get me to Route 30", "find grass", "go and heal" |
 | `pick.js` | "which cartridge is this, and what drives it?" |
+| `contract.js` | "is this profile usable, and what are its engine numbers?" |
 | `crystal.js` | "start a new game", "fetch Poké Balls", "what is map 26.1 called?" |
 | `generic.js` | the same questions, answered "I was not told" |
 | `saves.js` | "keep this in slot 2", "put that .sav into the cartridge" |
@@ -1474,7 +1477,7 @@ This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ 43432f623323 -->
+<!-- covers: app/main.js index.html @ 72e1e47415c5 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.

@@ -17,6 +17,7 @@ import { Tasks } from '../gen2/tasks.js';
 import { CollisionMap } from '../gen2/collision.js';
 import { Nav } from '../gen2/nav.js';
 import { RomData, normalise } from '../gen2/romdata.js';
+import { engineFor } from '../titles/contract.js';
 import { TITLES, pickTitle } from '../titles/pick.js';
 import { World } from '../gen2/world.js';
 
@@ -318,11 +319,13 @@ async function reallyStart() {
   await gb.loadRom(romBytes);
   // A title's own engine profile if it declares one, and the stock Gen 2
   // numbers if it does not -- which is every title that only moved the maps.
-  state = new GameState(symbols, title.engine);
+  // A patch on the stock numbers, not a replacement -- see engineFor.
+  const engine = engineFor(title);
+  state = new GameState(symbols, engine);
   // romdata first: the tasks are handed it at construction, and built
   // in the other order they were handed null -- which a hunt only finds
   // out about when it tries to name the first Pokemon it meets.
-  romdata = new RomData(symbols, gb, title.encounters, title.engine);
+  romdata = new RomData(symbols, gb, title.encounters, engine);
   // Said rather than left to be discovered by an empty species list: without a
   // wild table there is nothing to hunt or catch, and every other job is fine.
   if (!romdata.grass.length) {

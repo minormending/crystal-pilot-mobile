@@ -15,7 +15,7 @@ what CI checks and what the pre-commit hook blocks on.
 ```mermaid
 flowchart LR
     E[an edit] --> H{{".githooks/pre-commit"}}
-    H --> T["./run-tests<br/>102 behaviour tests"]
+    H --> T["./run-tests<br/>106 behaviour tests"]
     H --> C["tools/check-app<br/>14 groups"]
     H --> D["tools/docs-check<br/>23 tracked sections"]
     T --> OK[commit]
@@ -39,13 +39,13 @@ git config core.hooksPath .githooks
 ./run-tests -v         # notes and stack lines
 ```
 
-102 tests in thirteen files, and what each file is about says more than the count:
+106 tests in thirteen files, and what each file is about says more than the count:
 
 | file | tests | what it pins down |
 | --- | --- | --- |
 | `rows.mjs` | 30 | what every row and offer says, and when its button works |
 | `engine.mjs` | 6 | that a changed engine number is actually followed |
-| `titles.mjs` | 5 | choosing a profile for a cartridge, and falling back to generic |
+| `titles.mjs` | 9 | choosing a profile for a cartridge, and falling back to generic |
 | `cartridge.mjs` | 4 | reading a ROM's own header: the logo, the title, Color-only |
 | `journey.mjs` | 6 | choosing where to heal: the cost model, and a map with no name |
 | `remember.mjs` | 10 | which remembered choices are believed, and which dropped |
@@ -94,7 +94,7 @@ fine and is wrong at run time:
 | --- | --- |
 | `layers` | every import points down `gbcore → gen2 → titles → app`, never up |
 | `titles` | a title adds methods to the engine and never overrides one |
-| `syntax` | all 25 modules and `sw.js` parse — copied to `.mjs` first, because `node --check` on a `.js` file with a syntax error exits 0 |
+| `syntax` | all 26 modules and `sw.js` parse — copied to `.mjs` first, because `node --check` on a `.js` file with a syntax error exits 0 |
 | `shell` | the service worker's shell lists every file it needs, and each exists |
 | `markup` | `index.html`'s tags and its CSS braces balance |
 | `contrast` | 22 colour pairs meet WCAG in **both** themes |
@@ -104,7 +104,7 @@ fine and is wrong at run time:
 | `wiring` | every `$('#id')` exists in the markup, and every named import — same directory, another one, or a vendored module — resolves to something that exports it |
 | `symbols` | the shared digest is every symbol the app looks up |
 | `version` | `gbcore/version.js` and `sw.js` agree, and both doors are reachable with no ROM |
-| `docshape` | section 2's architecture diagram draws, counts and tables all 25 modules |
+| `docshape` | section 2's architecture diagram draws, counts and tables all 26 modules |
 | `names` | every capitalised name a module uses is one it can see |
 
 `tools/docs-check` is the other half, and it checks the prose rather than the

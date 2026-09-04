@@ -16,6 +16,7 @@
 // What this cannot do is tell two hacks of the same base apart when neither
 // changed its header or its symbols. The honest answer there is the fingerprint,
 // which a profile can declare and this will honour.
+import { validateTitle } from './contract.js';
 import { Crystal, crystal } from './crystal.js';
 import { Generic, generic } from './generic.js';
 
@@ -43,10 +44,19 @@ export function pickTitle({ header = {}, symbols = null, tag = null } = {}) {
   for (const title of TITLES) {
     if (title.fingerprint && title.fingerprint !== tag) continue;
     try {
-      if (title.matches({ header, symbols: has, tag })) return title;
+      if (!title.matches({ header, symbols: has, tag })) continue;
     } catch (e) {
       // Keep going. A profile is a file somebody wrote by hand.
+      continue;
     }
+    // Recognised, and now checked. A profile whose shape is wrong is skipped
+    // rather than driven: falling through to generic keeps a working app,
+    // where a half-trusted description walks to the wrong places. Said out
+    // loud, because the alternative is a hack author whose file silently did
+    // nothing.
+    const wrong = validateTitle(title);
+    if (!wrong.length) return title;
+    for (const line of wrong) console.warn(`[title] ${line}`);
   }
   return TITLES[TITLES.length - 1];
 }
