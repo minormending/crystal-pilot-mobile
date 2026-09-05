@@ -312,16 +312,18 @@ second, which is there so the core's own waits finish, not to run a game.
   candidates and returned true standing three tiles clear of any. It checks the
   tile underfoot now.
 
-## Eight audits, and how each defect was actually found
+## Nine audits, and how each defect was actually found
 
 Everything above was watched happening. This section is the exception, and the
-exception is the point of it: after the ROM-hack work shipped, eight passes went
-looking for defects in code that already worked, and found twenty-two — plus
+exception is the point of it: after the ROM-hack work shipped, nine passes went
+looking for defects in code that already worked, and found twenty-six — plus
 one a fix created on the way, which is in the table in italics because it is a
 different kind of thing. None of them announced itself.
 
-Six of those passes worked by **reading**. The seventh and eighth measured
-instead, and that turned out to matter — see the last two notes below.
+Six of those passes worked by **reading**, two by **measuring**, and the ninth
+by **checking the claims the comments make**. Each change of method found what
+the one before it was structurally bad at, which is the thread worth pulling
+below.
 
 The recurring shape is the same in all five:
 
@@ -364,6 +366,10 @@ exactly why nothing failed.
 | 8 | a wrong START row was never closed before the next was tried | a wrong first guess | reading |
 | 8 | the worker cached every same-origin GET, the ROM included | `?dev=1` and a worker | reading |
 | 8 | and believed a captive portal's 200 | hotel wifi | reading |
+| 9 | Stop was ignored for the length of a cutscene | pressing Stop | **checking a claim** |
+| 9 | a thrown frame left a button held down for ever | a core that throws | reading |
+| 9 | `saves.js` reached past the emulator wrapper | one browser | checking a claim |
+| 9 | and a docstring said the app could not save | one browser | checking a claim |
 
 Five things in that table are worth more than the individual rows.
 
@@ -444,6 +450,22 @@ are also the first defects in eight passes that no test here can reach — a
 service worker wants a browser and a secure context — so what is checked is the
 path arithmetic and the behaviour is reasoned about, which the code walkthrough
 says rather than implies.
+
+**The ninth pass made the eighth's finding into a method, and then into a
+check.** If a comment says *never*, *always* or *every*, it is a claim, and a
+claim can be tested — so the pass was a grep for those words across every module
+and then an afternoon of asking. Two claims held: `remember.js` really does put
+every storage access through one accessor, and `taskbase.js`'s cancellation
+really does reach every loop in *its own* family. Two did not, and the second is
+the one worth remembering: `gb.js` opens with *the emulator, wrapped so the rest
+of the app never touches WasmBoy directly*, and `saves.js` was calling
+`gb.core._getCartridgeInfo()` and `gb.core.loadROM(...)`.
+
+That sentence is now `check-app`'s fifteenth group. **A promise that can become a
+check should; the ones that cannot — a service worker's behaviour, a cutscene's
+length — should say so out loud instead.** Nine passes in, the remaining defects
+are less in the code than in the distance between what it says about itself and
+what it does, and that distance is measurable in one place now.
 
 **The seventh found the one that was hurting people now.** The two NIDORAN
 decoded to the same string, so the species picker drew two identical chips and

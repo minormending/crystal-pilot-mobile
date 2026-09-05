@@ -407,6 +407,12 @@ Three things the pilot can run into that end a job, and it now says which:
 | **could not run from a PIDGEY** | the escape was refused, and the party is fine | try again, or Fight it |
 | **N battles in a row went nowhere** | the pilot has lost the thread of the fight — something is on screen it does not understand | look at the screen; press through whatever is there |
 
+**Stop works during a cutscene too.** It always claimed to, and until v134 it
+did not: the loop that taps through the game's own scenes — Mom's downstairs is
+about 190 taps — checked whether you had pressed Stop once, when it started, and
+then not again. Pressing Stop in the middle of a scene now stops it in the
+middle of that scene.
+
 They used to be one message. A whiteout came back as *stopped at Lv13* from a
 grind, as *could not run from a PIDGEY* from a hunt, and as *your lead fainted*
 from a catch — three descriptions of the most consequential thing that can

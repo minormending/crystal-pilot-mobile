@@ -930,6 +930,20 @@ answer coming. And `chooseMove` took its list from `party[0]` rather than from
 `onField`, so once the first diamond *had* been answered the moves belonged to
 the Pokémon that had just fainted.
 
+```mermaid
+flowchart TD
+    B(["Stop"]) --> F["tasks.cancelled = true"]
+    F --> T["TaskBase.push / step"]
+    F --> J["Journey.stopped<br/><i>a getter over the same flag</i>"]
+    T -->|"throws Cancelled"| M["menus.js"]
+    T -->|"throws Cancelled"| BA["battle.js"]
+    T -->|"throws Cancelled"| JO["jobs.js"]
+    J -->|"returns a value"| CE["crossEdge, through, travelTo"]
+    J -->|"walkOpts"| NV["nav.walkTo — between steps"]
+    J -->|"was checked once, on the way in"| RS["runScripts"]
+    RS -.->|"now: every tap"| RS
+```
+
 **Stop reaches every pressing loop, and there are two mechanisms for it.**
 `TaskBase.push` and `step` throw `Cancelled` on every press, which covers
 `menus.js`, `battle.js` and `jobs.js` without any of them knowing. `Journey` is
@@ -2385,7 +2399,7 @@ recorded at all, so the kept battery was restored into whatever ROM was picked
 next; and `pickKey` was *the only record, if there is exactly one*, which wrote
 this cartridge's save into the previous cartridge's record. Both failed
 silently, and both were on the paths nobody presses — see
-[Eight audits](PROVEN.md#eight-audits-and-how-each-defect-was-actually-found)
+[Nine audits](PROVEN.md#nine-audits-and-how-each-defect-was-actually-found)
 for why that is not a coincidence.
 
 `patchMeta` merges fields into the `meta` record, and it used to do that as a
