@@ -11,6 +11,7 @@
 // leaving the interface stuck after a throw. None of those need a real
 // cartridge. They need a plausible work-RAM snapshot and a way to watch what
 // the code does with it, which is what the fakes below provide.
+import { writeFileSync } from 'node:fs';
 import { RomData } from '../gen2/romdata.js';
 import { Symbols } from '../gen2/symbols.js';
 
@@ -88,16 +89,50 @@ function show(v) {
   return String(v);
 }
 
+/**
+ * How long one test gets before the runner calls it a failure.
+ *
+ * A test that never returns cannot fail -- it hangs, and a hung suite reports
+ * nothing at all. Not hypothetical: the bound on grind's heal loop was covered
+ * by a test that, with the bound removed, span for ever instead of failing, so
+ * the check meant to protect the bound would have wedged CI rather than naming
+ * the bug.
+ *
+ * This catches the settling kind of hang -- an await on a promise nobody ever
+ * resolves -- and names the test. It cannot catch a loop that awaits only
+ * already-resolved promises: that starves the timer queue and this callback
+ * never runs, which is why run-tests also watches from outside the process.
+ * Every test here finishes in milliseconds; five seconds is a ceiling.
+ */
+const TIMEOUT_MS = Number(process.env.TEST_TIMEOUT_MS) || 5000;
+const INFLIGHT = process.env.TEST_INFLIGHT || null;
+
+function withTimeout(work, ms) {
+  let timer;
+  const bell = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Failure(
+      `did not finish within ${ms}ms -- a test that cannot finish cannot fail, `
+      + 'so this would have hung the suite instead of reporting')), ms);
+  });
+  return Promise.race([work, bell]).finally(() => clearTimeout(timer));
+}
+
 export async function run(pattern = null, verbose = false) {
   let passed = 0, failed = 0, skipped = 0;
   const t0 = Date.now();
   for (const c of cases) {
     if (pattern && !c.name.toLowerCase().includes(pattern.toLowerCase())) continue;
     const t = new Check();
+    // Written before the test starts, so a suite killed from outside can say
+    // which test it died in. Synchronous on purpose: buffered, the name of the
+    // one test that mattered is the one that never reaches the disk.
+    if (INFLIGHT) {
+      try { writeFileSync(INFLIGHT, c.name); } catch { /* only a lost name */ }
+    }
     const started = Date.now();
     const secs = () => `(${((Date.now() - started) / 1000).toFixed(1)}s)`;
     try {
-      await c.fn(t);
+      await withTimeout(Promise.resolve(c.fn(t)), TIMEOUT_MS);
       passed++;
       console.log(`   ok   ${c.name}  ${secs()}`);
     } catch (e) {

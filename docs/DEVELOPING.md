@@ -78,6 +78,30 @@ and one asserted against a stub of the logic instead of the logic. Both are
 rewritten. A test that has not been watched failing is a test you do not know
 you have.
 
+A third did something worse than pass: it hung. The check on the bound in
+grind's heal loop drives a snapshot that never improves, so with the bound
+taken out the loop never returns — measured, the run span for sixty seconds and
+had to be killed from outside. A test that cannot finish cannot fail, and a
+hung suite reports nothing at all, so the check written to protect that bound
+would have wedged CI rather than naming the bug. It bounds its own fake now,
+and fails in milliseconds.
+
+Two nets underneath it, because one of them cannot be enough:
+
+- **`tests/harness.mjs` times out a single test** — five seconds, or
+  `TEST_TIMEOUT_MS` — names it, and carries on with the rest of the suite.
+- **`run-tests` watches from a second process** — 120 seconds, or
+  `TEST_LIMIT_SECONDS` — kills a suite that hangs and says which test was in
+  flight when it stopped.
+
+The second is not belt and braces. The first is a `setTimeout`, and a loop that
+only ever awaits already-resolved promises starves the timer queue outright:
+measured, a one-second microtask loop kept a 50 ms timer from firing until the
+loop ended. That is the exact shape of a runaway `while (…) await this.snap()`,
+which is how this suite hung for real — so the in-process timer cannot catch
+the case that motivated it. A separate process cannot be starved by the one it
+is watching.
+
 What the tests do **not** cover is anything that needs the emulator running —
 walking, the intro, the collision decode against a real map, and loading a save
 back into the cartridge. Nor anything that needs a network: the room, the

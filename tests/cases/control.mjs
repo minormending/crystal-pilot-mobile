@@ -107,8 +107,19 @@ test('a grind that keeps needing a Center gives up rather than pacing', async (t
   const mon = { species: 155, level: 5, hp: 44, maxHp: 44,
                 moves: [33, 0, 0, 0], pp: [0, 0, 0, 0] };   // full HP, no PP
   tasks.snap = async () => ({ party: [mon], inBattle: false, worldLoaded: true });
+  // The fake is bounded too, and deliberately: without the bound in jobs.js
+  // this loop never returns, and a test that cannot return cannot fail -- it
+  // hangs, and a hung suite reports nothing. Measured: with the bound removed
+  // and no cap here, the run span for 60s and had to be killed. The cap is far
+  // past MAX_HEALS, so only an unbounded loop ever reaches it.
+  const RUNAWAY = 60;
   let trips = 0;
-  const r = await tasks.grind(0, 20, { heal: async () => { trips++; return true; } });
+  const r = await tasks.grind(0, 20, { heal: async () => {
+    if (++trips > RUNAWAY) {
+      throw new Error(`heal called ${trips} times: the loop is not bounded`);
+    }
+    return true;
+  } });
   t.false(r.ok, 'it stops');
   t.contains(r.message, 'kept needing it', 'and says why rather than sitting there');
   t.true(trips <= 13, `bounded at ${trips} trips`);

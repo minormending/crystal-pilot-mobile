@@ -3,5 +3,39 @@
 #   ./run-tests            run everything
 #   ./run-tests -k catch   only tests whose name matches
 #   ./run-tests -v         show notes and stack lines
+#
+# The suite runs under a watchdog in a second process, and that is not belt and
+# braces. harness.mjs times out a single test that never settles, but it does
+# that with setTimeout -- and a loop that only ever awaits already-resolved
+# promises starves the timer queue outright. Measured: a 1s microtask loop kept
+# a 50ms timer from firing until the loop ended. That is the exact shape of a
+# runaway `while (...) await this.snap()`, which is how this suite hung for
+# real, so an in-process timer cannot be the only net. A separate process
+# cannot be starved by the one it is watching.
 here=$(cd "$(dirname "$0")" && pwd)
-exec node "$here/tests/index.mjs" "$@"
+limit=${TEST_LIMIT_SECONDS:-120}
+inflight=$(mktemp -t crystal-pilot-tests) || exit 1
+trap 'rm -f "$inflight"' EXIT
+
+TEST_INFLIGHT="$inflight" node "$here/tests/index.mjs" "$@" &
+node_pid=$!
+( sleep "$limit"; kill -9 "$node_pid" 2>/dev/null ) &
+dog_pid=$!
+
+wait "$node_pid"
+rc=$?
+kill "$dog_pid" 2>/dev/null
+wait "$dog_pid" 2>/dev/null
+
+# Killed rather than returned: over 128 is a signal, and the watchdog is the
+# only thing here that sends one.
+if [ "$rc" -gt 128 ]; then
+  echo
+  echo "the suite hung and was killed after ${limit}s."
+  if [ -s "$inflight" ]; then
+    echo "in flight when it stopped: $(cat "$inflight")"
+  fi
+  echo "a test that cannot finish cannot fail -- it reports nothing at all."
+  rc=1
+fi
+exit "$rc"
