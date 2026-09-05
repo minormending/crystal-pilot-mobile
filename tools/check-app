@@ -815,9 +815,51 @@ def check_title_adds():
         else ok(f"no title replaces engine behaviour")
 
 
+# `this.gb.core._getCartridgeInfo()`, `gb.core.loadROM(...)`, `window.WasmBoy`.
+# Not the bare word: saves.js and remember.js both discuss the library's own
+# IndexedDB store by name, which is a different thing from holding its core.
+CORE_REACH = re.compile(r"\.core\b|window\.WasmBoy\b")
+
+
+def check_emulator_seam():
+    """Only gb.js touches the emulator core.
+
+    The first line of gb.js is "the emulator, wrapped so the rest of the app
+    never touches WasmBoy directly", and that had stopped being true: saves.js
+    called `gb.core._getCartridgeInfo()` and `gb.core.loadROM(...)`. Reaching
+    past a wrapper for a *private* core method is the ordinary cost, and there
+    was a second one here -- `loadRom` re-reads WORK_RAM_LOCATION after the ROM
+    is in, because the constant reads back undefined before that and silently
+    makes every later read empty, so a re-load that skipped it kept the previous
+    cartridge's offset.
+
+    Prose cannot hold a seam shut. Nothing else in this file would have noticed:
+    the reach resolves, parses, and works, which is what every defect these
+    checks exist for has in common.
+
+    Matched on `.core` and on grabbing the global, rather than on the library's
+    name: saves.js and remember.js both discuss its IndexedDB store by name, and
+    talking about somebody else's database is not the same as holding their
+    emulator. Comments are searched along with code, because a line that says
+    `.core` is describing a reach whether or not it performs one.
+    """
+    problems = []
+    for path in APP:
+        if path.name == "gb.js":
+            continue
+        for i, line in enumerate(path.read_text().split("\n"), 1):
+            if CORE_REACH.search(line):
+                problems.append(f"{rel(path)}:{i}  {line.strip()[:70]}")
+    for p in problems:
+        print(f"        {p}")
+    return fail(f"{len(problems)} reach(es) past gb.js to the core") if problems \
+        else ok(f"only gb.js touches the emulator core")
+
+
 CHECKS = {
     "syntax": check_syntax,
     "layers": check_layers,
+    "seam": check_emulator_seam,
     "titles": check_title_adds,
     "shell": check_shell,
     "markup": check_markup,

@@ -379,7 +379,7 @@ had decided what to look for: the wiring group named the four modules still
 importing constants that had just been deleted. One more was caught by a *test*,
 and only because the test hung — the obvious `continue` for the party prompt
 advanced nothing in a loop bounded by balls thrown. That is the honest weight to
-give this repository's fourteen check groups and 139 tests: they hold a fix
+give this repository's fifteen check groups and 145 tests: they hold a fix
 down, and they catch the fix that is itself wrong. They do not find the fault.
 
 **Measuring also rules things out, which is half of what it is for.** The

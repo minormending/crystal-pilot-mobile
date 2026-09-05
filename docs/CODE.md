@@ -318,7 +318,7 @@ was cheaper than moving the boundary.
 
 ### `gb.js` — the emulator
 
-<!-- covers: gbcore/gb.js @ 801cf958c309 -->
+<!-- covers: gbcore/gb.js @ a0749d16505b -->
 
 Wraps WasmBoy. Runs frames, reads work RAM, holds and releases buttons.
 
@@ -1264,7 +1264,7 @@ Tackle and Leer. Two emulators, two implementations, one save file.
 
 ## 7c. Slots, undo, and bringing a save in
 
-<!-- covers: gbcore/saves.js @ 126fca77510a -->
+<!-- covers: gbcore/saves.js @ def66f02d439 -->
 
 Three slots a person picks, plus an undo point the pilot writes before every
 job and the game a handoff replaced, if there is one — five records. A slot
@@ -3202,7 +3202,7 @@ about that code did not.
 
 ### The other checks
 
-<!-- covers: tools/check-app @ e06ff3eef994 -->
+<!-- covers: tools/check-app @ 4ae1f72cb633 -->
 
 `tools/check-app` runs everything that can be verified without a ROM:
 
@@ -3220,6 +3220,7 @@ tools/check-app contrast     # or one group
 | `gamefiles` | no ROM, save or symbol file has been committed |
 | `buttons` | every button name handed to `press`/`hold`/`release` is one the core knows |
 | `layers` | every import points down `gbcore → gen2 → titles → app`, never up |
+| `seam` | only `gb.js` touches the emulator core |
 | `titles` | a title adds to the engine and never overrides it |
 | `wiring` | every `$('#id')` is in the markup, and every named import resolves to a module that exports it |
 | `version` | `version.js` and the worker's cache name agree, and the display is in the header |
@@ -3282,6 +3283,18 @@ secure context, and the in-app pane refuses to register one. What *is* checked
 is the path arithmetic, against both the deployed base path and a localhost
 root: 37 entries, 37 distinct paths, the root and `index.html` both matching and
 `./dev/` bypassing.
+
+**`seam` is a comment that became a check.** The first line of `gb.js` is *the
+emulator, wrapped so the rest of the app never touches WasmBoy directly*, and
+that had quietly stopped being true: `saves.js` called
+`gb.core._getCartridgeInfo()` and `gb.core.loadROM(...)`. Reaching past a
+wrapper for a private core method is the ordinary cost; the specific one here is
+that `loadRom` re-reads `WORK_RAM_LOCATION` *after* the ROM is in — the constant
+reads back `undefined` before that and silently makes every later read empty —
+so a re-load that skipped it kept the previous cartridge's offset. `reloadRom`
+and `cartridgeHeader` are the two methods that were missing, and the check is
+what keeps them being used. Prose cannot hold a seam shut: nothing else in
+`check-app` would have noticed, because the reach resolves, parses and works.
 
 **`shell` checks both directions.** A file listed in the service worker but
 absent on disk makes the install reject, which takes the whole offline story

@@ -76,6 +76,36 @@ export class GameBoy {
   }
 
   /**
+   * Put the same cartridge back in, after its battery has been rewritten.
+   *
+   * saves.install used to call `gb.core.loadROM` itself, which is the one thing
+   * the first line of this file says nothing outside it does -- and it is not
+   * only tidiness. loadRom re-reads WORK_RAM_LOCATION *after* the ROM is in,
+   * because the constant reads back undefined before that and silently makes
+   * every later read empty; a re-load that skipped it kept whatever offset the
+   * previous cartridge had. Reloading the ROM already in hand is the same job
+   * with the same postcondition, so it is the same code.
+   */
+  async reloadRom() {
+    if (!this.rom) throw new Error('no ROM is loaded');
+    await this.loadRom(this.rom);
+  }
+
+  /**
+   * The cartridge's own 27-byte header, which is how the library keys its
+   * per-cartridge record. `cartridgeHeader` is private on the core, so asking
+   * for it belongs here rather than in whoever wants it.
+   */
+  async cartridgeHeader() {
+    const info = await this.core._getCartridgeInfo();
+    const header = info && info.header;
+    if (!header || !header.length) {
+      throw new Error('the emulator has no cartridge loaded');
+    }
+    return header;
+  }
+
+  /**
    * Run frames until the machine is demonstrably executing.
    *
    * The core will not take a *second* ROM while it is still coming up.

@@ -247,12 +247,7 @@ export class Saves {
    * hangs. Which it did, the first time this was written.
    */
   async _cartridgeKey() {
-    const info = await this.gb.core._getCartridgeInfo();
-    const header = info && info.header;
-    if (!header || !header.length) {
-      throw new Error('the emulator has no cartridge loaded');
-    }
-    return header;
+    return this.gb.cartridgeHeader();
   }
 
   /**
@@ -312,7 +307,7 @@ export class Saves {
     const next = Object.assign({}, rec || {}, { cartridgeRam: Uint8Array.from(bytes) });
     await tx(wdb, WASMBOY_STORE, 'readwrite', (os) => os.put(next, key));
 
-    await this.gb.core.loadROM(this.gb.rom);
+    await this.gb.reloadRom();
     await this.gb.run(120);
   }
 
