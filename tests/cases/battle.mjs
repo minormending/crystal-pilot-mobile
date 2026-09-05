@@ -1,6 +1,7 @@
 // Battle decisions. Every test here corresponds to something that was once
 // wrong in a way no static check could see.
 import { FakeGameBoy, fakeRom, romReading, symbols, test, worldRam } from '../harness.mjs';
+import { onField } from '../../gen2/battle.js';
 import { GameState } from '../../gen2/state.js';
 import { Tasks } from '../../gen2/tasks.js';
 
@@ -147,4 +148,37 @@ test('awaitBattleMenu gives up rather than throwing when no menu appears', async
   });
   const tasks = new Tasks(gb, state, () => {}, fakeRom());
   t.eq(await tasks.awaitBattleMenu(8), null, 'it returns null, not an exception');
+});
+
+test('the moves come from the Pokemon on the field, not from slot one', async (t) => {
+  // sendOut arrived for the party of more than one, and the two places that
+  // read a move list were never told. After a switch, `party[0]` is the
+  // *fainted* lead, so an index chosen from its four moves means a different
+  // entry on the two the game has actually drawn.
+  const lead = { hp: 0, maxHp: 30, moves: [1, 2, 3, 4], pp: [5, 5, 5, 5] };
+  const second = { hp: 22, maxHp: 41, moves: [7, 8, 0, 0], pp: [9, 9, 0, 0] };
+  const out = onField({ party: [lead, second], active: { hp: 22, maxHp: 41 } });
+  t.eq(out.moves, [7, 8, 0, 0], 'the replacement, not the corpse in slot one');
+
+  const standing = onField({ party: [lead, second], active: { hp: 30, maxHp: 30 } });
+  t.eq(standing.hp, 22, 'no party entry matches, so the first one standing');
+});
+
+test('a healthy lead is still the one on the field', async (t) => {
+  const lead = { hp: 30, maxHp: 30, moves: [1, 2, 0, 0], pp: [5, 5, 0, 0] };
+  const second = { hp: 41, maxHp: 41, moves: [7, 0, 0, 0], pp: [9, 0, 0, 0] };
+  t.eq(onField({ party: [lead, second], active: { hp: 30, maxHp: 30 } }).moves,
+       [1, 2, 0, 0], 'the ordinary case is unchanged');
+});
+
+test('two Pokemon that read alike fall back to the one sendOut would pick', async (t) => {
+  // Same species, same level, both untouched: the HP pair cannot tell them
+  // apart, so guessing between them would be worse than the rule sendOut
+  // already follows.
+  const a = { hp: 0, maxHp: 25, moves: [1, 0, 0, 0], pp: [5, 0, 0, 0] };
+  const b = { hp: 25, maxHp: 25, moves: [2, 0, 0, 0], pp: [5, 0, 0, 0] };
+  const c = { hp: 25, maxHp: 25, moves: [3, 0, 0, 0], pp: [5, 0, 0, 0] };
+  t.eq(onField({ party: [a, b, c], active: { hp: 25, maxHp: 25 } }).moves,
+       [2, 0, 0, 0], 'the first one standing');
+  t.eq(onField({ party: [], active: { hp: 0, maxHp: 0 } }), null, 'no party, nobody out');
 });

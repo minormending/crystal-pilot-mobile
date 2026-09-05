@@ -786,7 +786,7 @@ eight kilobytes a full snapshot copies, which is worth keeping distinct.
 
 ## 6. Battles
 
-<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 893c79b6a3f8 -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ d6ed8384fcff -->
 
 ### Is it our turn?
 
@@ -898,6 +898,16 @@ right:
   direction was swallowed, so every confirm landed on the fainted lead. It wants
   about twelve frames **and** a pause between presses — the prompt arrives with
   "CYNDAQUIL fainted!" still running and a direction sent into that is dropped.
+- *And once a replacement is out, the move list belongs to it.* This was the
+  fourth thing, and it was missed for two years of versions because `sendOut`
+  arrived after the code that reads moves. `active` carries `hp` and `maxHp` and
+  no move list, so the moves come from a party entry — and that entry was
+  `party[0]`, which is the lead, which after a switch is the corpse. `onField`
+  matches the party against the battle mon's HP pair instead, uniquely or not at
+  all, falling back to the first Pokémon standing: the slot `sendOut` would have
+  chosen. It is matched on HP rather than read from `wCurBattleMon` because that
+  would be another name on `SHARED_SYMBOLS`, and every device taking a digest
+  would then need it.
 
 **You cannot run from a trainer.** `wBattleMode` is 1 for wild and 2 for
 trainer. `escapeBattle()` fights trainers and flees wild ones — a pilot that
@@ -910,7 +920,7 @@ fainted.
 
 ## 7. Catching something
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ a85ccf19a820 -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ e6cbd3d99278 -->
 
 Catching is the most involved loop, because a Poké Ball's odds turn on how much
 HP is left. Throwing at a full-health target is mostly throwing balls away.
@@ -1058,7 +1068,7 @@ running the thing.
 
 ## 7b. Saving, and getting the save out
 
-<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 893c79b6a3f8 -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ d6ed8384fcff -->
 
 ```mermaid
 flowchart TD

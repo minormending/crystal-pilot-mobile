@@ -41,6 +41,43 @@ export function menuIsLive(s) {
   return x >= 1 && x <= 2 && y >= 1 && y <= 2;
 }
 
+/**
+ * Which party member is actually standing on the field.
+ *
+ * `active` carries hp and maxHp and nothing else -- there is no move list on it
+ * -- so the moves have to come from the party entry for the same Pokemon. That
+ * was `party[0]`, which is right exactly while the lead is the one standing,
+ * and wrong from the moment sendOut puts a replacement in. sendOut was added
+ * later, for the party of more than one that first met the "Which POKeMON?"
+ * prompt, and the two places that read a move list were never told.
+ *
+ * What goes wrong is not a wrong-looking row, it is a wrong move: an index
+ * chosen from the fainted lead's list means a different entry on the list the
+ * game has actually drawn. In a fight the cursor cannot reach a fourth move on
+ * a two-move replacement, so chooseMove backs out and the turn is retried until
+ * the ceiling -- forty turns of nothing, reported as stuck. In a catch it is
+ * worse: chip ranks the *gentlest* move by that same wrong list, so the
+ * replacement can be handed a knockout, and a fainted target cannot be caught,
+ * which is the single thing chip exists to prevent.
+ *
+ * Matched on HP rather than by slot index, because there is no "which slot is
+ * out" in the snapshot -- wCurBattleMon would mean another name on the shared
+ * symbol list, and every device taking a digest would need it. Gen 2 keeps the
+ * battle mon's HP and its party entry's in step, so the pair identifies it.
+ * Only when it identifies it *uniquely*: two full-health slots of the same
+ * species read alike, and then this falls back to the first one standing, which
+ * is the slot sendOut would have picked anyway.
+ */
+export function onField(s) {
+  const party = (s && s.party) || [];
+  const act = (s && s.active) || {};
+  if (act.maxHp > 0) {
+    const same = party.filter((m) => m.maxHp === act.maxHp && m.hp === act.hp);
+    if (same.length === 1) return same[0];
+  }
+  return party.find((m) => m.hp > 0) || party[0] || null;
+}
+
 
 export function withBattle(Base) {
   // Named, so a stack trace says which of these a frame came from.
@@ -254,7 +291,7 @@ export function withBattle(Base) {
       }
       if (inMoves.inBattle && inMoves.menu[1] >= 1) {
         const picked =
-          await this.chooseMove(inMoves.party[0] || { moves: [], pp: [] });
+          await this.chooseMove(onField(inMoves) || { moves: [], pp: [] });
         if (picked === null) continue;      // could not aim; take the turn again
       }
       // Turn resolution is text; press through it until the battle ends or the
@@ -304,7 +341,7 @@ export function withBattle(Base) {
   async chip() {
     const menu = await this.awaitBattleMenu();
     if (menu === null) return (await this.snap()).inBattle ? 'stuck' : 'ended';
-    const mon = menu.party[0];
+    const mon = onField(menu);
     if (!mon) return 'nomove';
 
     // Weakest first, and only moves that take HP off at all -- ranking LEER as
@@ -329,7 +366,7 @@ export function withBattle(Base) {
     if (!inMoves.inBattle) return 'ended';
     if (inMoves.menu[1] < 1) return 'stuck';
 
-    const picked = await this.chooseMove(inMoves.party[0] || mon, (usable) => {
+    const picked = await this.chooseMove(onField(inMoves) || mon, (usable) => {
       const chippers = usable.filter(canChip);
       const pool = chippers.length ? chippers : usable;
       return pool.reduce((best, i) => (power(i) < power(best) ? i : best), pool[0]);
