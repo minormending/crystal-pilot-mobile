@@ -1527,7 +1527,7 @@ This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ f7e6903ed762 -->
+<!-- covers: app/main.js index.html @ 4272bd135941 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -2608,6 +2608,15 @@ takes the union, so a hack that renamed its table sends the name it actually
 uses. Without that, the second device would boot, walk and save with nothing to
 hunt — a device that works beside one that does not, which is the exact failure
 this list exists to prevent, one layer further in.
+
+**Which is why nothing is published before the title is known.** `romTag` is set
+the moment a ROM arrives and `symbols` the moment a `.sym` does, but `title` not
+until `reallyStart` runs — so there is a real window, while the room is opening
+in the background, where the first two are true and the third is not. A digest
+built in it would be the app's list alone, which is Crystal's two tables and not
+the hack's; and since the room keeps the *newer* digest, it would displace a
+correct one already sitting there. So `shareSymbols` says nothing until it knows
+what it is holding, and `reallyStart` calls it again a moment later.
 
 The list lives in `gen2/symbols.js` as `SHARED_SYMBOLS`, written by hand,
 because nothing at run time can know which names the code is *going* to ask

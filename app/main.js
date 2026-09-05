@@ -577,9 +577,16 @@ async function shareGame(bytes) {
  * of failure this whole list exists to prevent.
  */
 function shareSymbols() {
-  if (!room || !symbols || !romTag) return;
-  // `title` may still be null: the room can open while the files are picked and
-  // maybeStart is still awaiting the core, and this runs from both.
+  // `title` last, and it is not a formality. The room can open while the files
+  // are being picked -- `romTag` is set the moment a ROM arrives, `symbols` the
+  // moment a .sym does, and `title` not until reallyStart runs -- so there is a
+  // real window where the first three are true and the fourth is not. Publishing
+  // in it would send a digest built from the app's list alone, which is Crystal's
+  // two wild tables and not the hack's; and because the room keeps the *newer*
+  // digest, that one would displace a correct digest already sitting in it. So a
+  // device that does not yet know what it is holding says nothing, and says it a
+  // moment later instead: reallyStart calls this again with the title in hand.
+  if (!room || !symbols || !romTag || !title) return;
   const names = sharedNames(title);
   // Not from a digest we were given: passing one on would spread a set of
   // addresses further than the cartridge that vouched for them.
