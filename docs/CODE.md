@@ -440,7 +440,7 @@ and in `bootstrap.js`, with nothing able to notice if they drifted.
 
 ### `romdata.js` — what the cartridge knows
 
-<!-- covers: gen2/romdata.js @ 399458f9d1f3 -->
+<!-- covers: gen2/romdata.js @ 1a2a14d5d215 -->
 
 Species names, item names, wild-encounter tables, move power. All read out of
 the ROM, not shipped as a copy, so they cannot drift from the build being driven.
@@ -470,6 +470,21 @@ the ROM, not shipped as a copy, so they cannot drift from the build being driven
   store its damage as its power, so Dragon Rage reads 40, takes 40, and ranks
   correctly.
 - `0x54` is a one-byte ligature for `POKé`.
+- **The punctuation block was missing, and it cost more than tidiness.**
+  `decodeText` handled the two letter ranges, the digits, the space and the
+  ligature, and turned everything else into `?`. Five of those bytes are in
+  *species* names — `0xe0` in FARFETCH'D, `0xe3` in HO-OH, `0xe8` in MR.MIME,
+  and `0xef` / `0xf5` in the two NIDORAN — and the last pair is the one that
+  matters: both came back `NIDORAN?`, so the species picker drew two identical
+  chips and hunting for one of them stopped at the other. Route 35 and Route 36
+  each carry the pair. Twelve item names were affected too, `KING'S ROCK` and
+  `EXP.SHARE` among them. Every byte in the table was read out of a real
+  cartridge rather than copied from `charmap.asm` hopefully, since copying
+  hopefully is how the gaps got there.
+
+  `normalise` still folds `é`, because somebody typing *poke ball* means
+  `POKé BALL` — and deliberately does **not** fold `♀` and `♂`, which would undo
+  the fix by making the two names match again.
 
 </details>
 
@@ -987,7 +1002,7 @@ fainted.
 
 ## 7. Catching something
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ 1716ce89efa8 -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ 7fd5aa954e97 -->
 
 Catching is the most involved loop, because a Poké Ball's odds turn on how much
 HP is left. Throwing at a full-health target is mostly throwing balls away.

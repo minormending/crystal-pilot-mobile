@@ -16,6 +16,22 @@
 const NAME_TERMINATOR = 0x50;
 // The charmap's one ligature that shows up in item names.
 const POKE_LIGATURE = 0x54;
+// The rest of charmap.asm that turns up in a name. Without these, every byte
+// here decoded as "?" -- and five of them are in species names, which is not a
+// cosmetic problem: NIDORAN-female and NIDORAN-male both came back "NIDORAN?",
+// so the species picker drew two identical chips and hunting for one of them
+// stopped at the other. Route 35 and Route 36 both carry the pair.
+//
+// Measured out of the cartridge rather than copied hopefully: 0xe0 in
+// FARFETCH'D and KING'S ROCK, 0xe3 in HO-OH, 0xe8 in MR.MIME, GUARD SPEC.,
+// EXP.SHARE and S.S.TICKET, 0xef and 0xf5 in the two NIDORAN. The others are
+// here because they are in the same block of the charmap and a name that uses
+// one would have had the same silent fate.
+const PUNCTUATION = {
+  0xe0: "'", 0xe3: '-', 0xe6: '?', 0xe7: '!', 0xe8: '.',
+  0xe9: '&', 0xea: 'é', 0xef: '\u2642', 0xf1: '×', 0xf3: '/',
+  0xf4: ',', 0xf5: '\u2640',
+};
 // The list ends at $FF. Not an engine field: a terminator is the shape of the
 // table rather than a size in it, and a cartridge that used a different one
 // would need a different scan, not a different number.
@@ -28,6 +44,7 @@ export function decodeText(bytes) {
     if (b === NAME_TERMINATOR) break;            // "@" terminates
     if (b === POKE_LIGATURE) out += 'POKé';      // one byte, four letters
     else if (b === 0x7f) out += ' ';
+    else if (PUNCTUATION[b] !== undefined) out += PUNCTUATION[b];
     else if (b >= 0x80 && b <= 0x99) out += String.fromCharCode(65 + b - 0x80);
     else if (b >= 0xa0 && b <= 0xb9) out += String.fromCharCode(97 + b - 0xa0);
     else if (b >= 0xf6 && b <= 0xff) out += String.fromCharCode(48 + b - 0xf6);
