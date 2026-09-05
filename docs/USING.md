@@ -243,6 +243,14 @@ after dark, entry for entry.
 Grass only, deliberately. The pilot walks; it does not surf, so a route's water
 table is full of Pokémon it could pace the grass all day without meeting.
 
+**NIDORAN♀ and NIDORAN♂ are two chips, not one.** They read the same until the
+character decoder learned the rest of the cartridge's alphabet — both came back
+`NIDORAN?`, so Route 35 and Route 36 offered a pair of identical buttons and
+hunting for the one you tapped stopped at the other. Four other species were
+merely misspelt: FARFETCH'D, HO-OH and MR.MIME lost their punctuation the same
+way. If you have a saved hunt from before v130 that reads `NIDORAN?`, pick it
+again.
+
 Catch does the same walking and then throws balls, counting them **out of the
 bag** rather than trusting a tally — the two coming apart is the failure worth
 catching, and the desktop pilot shipped exactly that bug once, reporting two

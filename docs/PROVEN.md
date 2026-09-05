@@ -312,12 +312,15 @@ second, which is there so the core's own waits finish, not to run a game.
   candidates and returned true standing three tiles clear of any. It checks the
   tile underfoot now.
 
-## Six audits, and what reading found that running had not
+## Seven audits, and how each defect was actually found
 
 Everything above was watched happening. This section is the exception, and the
-exception is the point of it: after the ROM-hack work shipped, six passes went
-looking for defects by **reading** rather than by running, and found seventeen.
-None of them announced itself. Every one was in code that worked.
+exception is the point of it: after the ROM-hack work shipped, seven passes went
+looking for defects in code that already worked, and found nineteen. None of
+them announced itself.
+
+Six of those passes worked by **reading**. The seventh did not, and that turned
+out to matter — see the last note below.
 
 The recurring shape is the same in all five:
 
@@ -335,27 +338,30 @@ callers its author had in mind and not to the rest — and in every case the
 mechanism was *younger* than the code that should have been reading it, which is
 exactly why nothing failed.
 
-| # | What was wrong | To see it happen |
-| --- | --- | --- |
-| 1 | the engine profile reached `GameState` and none of the decisions made from it | one browser |
-| 1 | an unknown cartridge worked and explained none of its four absences | one browser |
-| 2 | `?title=` skipped the contract every other path went through | one browser |
-| 2 | the shared digest carried Crystal's wild tables, not the cartridge's | two devices |
-| 3 | the second press of *Watch* did nothing, and blamed the network | two devices |
-| 3 | *Join* failed in silence when the room could not open | two devices |
-| 3 | a tap-to-walk took the other device's pad away without saying so | two devices |
-| 3 | the digest went out before the title was known | two devices |
-| 4 | the battery was written into whichever cartridge record was there | two cartridges |
-| 4 | the kept save was installed into a cartridge that never wrote it | two cartridges |
-| 5 | the move list was read off the fainted lead, not the replacement | a party of two |
-| 5 | a knockout by the replacement was reported as a whiteout | a party of two |
-| 6 | fleeing never answered the "Which POKéMON?" prompt | a party of two |
-| 6 | nor did catching | a party of two |
-| 6 | three jobs described a whiteout as something else | a whiteout |
-| 6 | a grind walked for a Centre out of a battle it had not left | a stalled battle |
-| 6 | and paced there for ever if the Centre did not restore PP | a hack's Centre |
+| # | What was wrong | To see it happen | Found by |
+| --- | --- | --- | --- |
+| 1 | the engine profile reached `GameState` and none of the decisions made from it | one browser | reading |
+| 1 | an unknown cartridge worked and explained none of its four absences | one browser | reading |
+| 2 | `?title=` skipped the contract every other path went through | one browser | reading |
+| 2 | the shared digest carried Crystal's wild tables, not the cartridge's | two devices | reading |
+| 3 | the second press of *Watch* did nothing, and blamed the network | two devices | reading |
+| 3 | *Join* failed in silence when the room could not open | two devices | reading |
+| 3 | a tap-to-walk took the other device's pad away without saying so | two devices | reading |
+| 3 | the digest went out before the title was known | two devices | reading |
+| 4 | the battery was written into whichever cartridge record was there | two cartridges | reading |
+| 4 | the kept save was installed into a cartridge that never wrote it | two cartridges | reading |
+| 5 | the move list was read off the fainted lead, not the replacement | a party of two | reading |
+| 5 | a knockout by the replacement was reported as a whiteout | a party of two | reading |
+| 6 | fleeing never answered the "Which POKéMON?" prompt | a party of two | reading |
+| 6 | nor did catching | a party of two | reading |
+| 6 | three jobs described a whiteout as something else | a whiteout | reading |
+| 6 | a grind walked for a Centre out of a battle it had not left | a stalled battle | reading |
+| 6 | and paced there for ever if the Centre did not restore PP | a hack's Centre | reading |
+| 6 | *and the fix for the prompt spun for ever* | a stubborn field | **a test, by hanging** |
+| 7 | the two NIDORAN decoded to one name | a route with both | **measuring** |
+| 7 | the map objects trusted an origin nothing checked | a hack's objects | measuring |
 
-Four things in that table are worth more than the individual rows.
+Five things in that table are worth more than the individual rows.
 
 **The last column is a ladder, and it is about situations rather than
 hardware.** Everything reachable in the default one — one browser, one
@@ -364,14 +370,24 @@ device, a second cartridge, a second Pokémon. What it measures is how much of
 the world you have to *arrange*, not how much you have to own: the fifth pass
 needed no hardware at all, only a party with a corpse in slot one.
 
-**Exactly one of the seventeen was caught by a check**, and only after the fix
+**Exactly one of the nineteen was caught by a check**, and only after the fix
 had decided what to look for: the wiring group named the four modules still
 importing constants that had just been deleted. One more was caught by a *test*,
 and only because the test hung — the obvious `continue` for the party prompt
-advanced nothing in a loop bounded by balls thrown. The other fifteen came from
-reading. That is the honest weight to give this repository's fourteen check
-groups and 130 tests: they hold a fix down, and they catch the fix that is
-itself wrong. They do not find the fault.
+advanced nothing in a loop bounded by balls thrown. That is the honest weight to
+give this repository's fourteen check groups and 139 tests: they hold a fix
+down, and they catch the fix that is itself wrong. They do not find the fault.
+
+**And the last column is the seventh pass's whole lesson.** Reading found
+sixteen defects and could not have found the last two, because neither has a
+*shape*. `decodeText` handles two letter ranges, the digits, a space and a
+ligature and falls through to `?`; read it and it looks finished. `occupied()`
+subtracts four and says in its own comment that the four is checked. Faults like
+that are invisible to a reader and obvious to twenty lines that put the
+cartridge's real data through the real code and print what comes out wrong —
+which is how five species names and twelve item names turned up at once, having
+survived six passes. It is now the cheapest audit here, because the cartridge is
+already sitting in `dev/`.
 
 **The two worst were silent data loss**, and both were doors the app opens by
 itself. Every door a *person* opens was already locked and had been for
@@ -393,15 +409,22 @@ stopped on *could not run from a PIDGEY*, with a healthy Pokémon in slot two.
 There is an `onField` and a `coverFaint` now, so there is somewhere to change
 each of them next time.
 
-**And the sixth pass is a different family from the first five.** Those were
+**The sixth pass is a different family from the first five.** Those were
 about *identity* — which cartridge, which Pokémon, which device — and every one
 was the pilot reading the wrong thing. The sixth went at the loops those reads
 sit inside, and nothing there is misread: a prompt nobody answers, a branch
 tried in the wrong order, a sentence that names the wrong event, and two loops
 that terminate only by assumption. One of those assumptions is *a Pokémon Centre
 restores PP*, which is true of Crystal and is not a fact about cartridges in
-general — the last rung on the ladder above, and the only defect in six passes
-that no cartridge on this machine can produce.
+general — and one of three rungs on the ladder above that no cartridge on this
+machine can produce.
+
+**The seventh found the one that was hurting people now.** The two NIDORAN
+decoded to the same string, so the species picker drew two identical chips and
+hunting for the one you picked stopped at the other; Route 35 and Route 36 both
+carry the pair. Nothing about it needs a hack, a second device or an unusual
+situation — only a route with both on it, and a person who wanted a particular
+one.
 
 ## The part that had to be redesigned
 

@@ -15,7 +15,7 @@ what CI checks and what the pre-commit hook blocks on.
 ```mermaid
 flowchart LR
     E[an edit] --> H{{".githooks/pre-commit"}}
-    H --> T["./run-tests<br/>130 behaviour tests"]
+    H --> T["./run-tests<br/>139 behaviour tests"]
     H --> C["tools/check-app<br/>14 groups"]
     H --> D["tools/docs-check<br/>23 tracked sections"]
     T --> OK[commit]
@@ -39,7 +39,7 @@ git config core.hooksPath .githooks
 ./run-tests -v         # notes and stack lines
 ```
 
-130 tests in fourteen files, and what each file is about says more than the count:
+139 tests in sixteen files, and what each file is about says more than the count:
 
 | file | tests | what it pins down |
 | --- | --- | --- |
@@ -50,13 +50,15 @@ git config core.hooksPath .githooks
 | `control.mjs` | 10 | the task lifecycle: stopping, failing, undo points, and loops that must end |
 | `remember.mjs` | 10 | which remembered choices are believed, and which dropped |
 | `engine.mjs` | 8 | that a changed engine number is actually followed |
-| `room.mjs` | 8 | the merge rules and the handshake, so two devices settle rather than fight |
+| `room.mjs` | 9 | the merge rules and the handshake, so two devices settle rather than fight |
 | `journey.mjs` | 6 | choosing where to heal: the cost model, and a map with no name |
 | `state.mjs` | 6 | reading the party, the map and the battery out of work RAM |
 | `symbols.mjs` | 5 | the 45-address digest a second device boots from |
 | `cartridge.mjs` | 4 | reading a ROM's own header: the logo, the title, Color-only |
 | `input.mjs` | 3 | held buttons, and releasing them |
 | `saves.mjs` | 3 | which battery record belongs to the cartridge in the machine |
+| `collision.mjs` | 3 | which tiles have somebody standing on them |
+| `romdata.mjs` | 5 | the cartridge's own character encoding, byte by byte |
 
 No ROM, no browser, no emulator — which is the point rather than a compromise.
 The ROM is not in this repository and never will be, so a test that needs one
