@@ -410,6 +410,12 @@ async function reallyStart() {
   // There is something to look at now, so the menu gets out of the way.
   showPanel(null);
   startLoop();
+  // And there is now something to *show*, which the screen row has to be told.
+  // It is painted from paintRoom, which runs at startup and when the room
+  // changes -- neither of which is "a ROM finished loading". Before the row
+  // asked whether this device had a game the omission cost nothing; the moment
+  // it did, a device with a game sat there saying it was waiting for one.
+  paintScreen();
 
   paintFiles();
   // A safety net, not the usual path: the three places a ROM arrives each take
