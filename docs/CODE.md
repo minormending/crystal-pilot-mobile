@@ -3229,6 +3229,31 @@ the tasks are verified by hand against a local build. The workflow is named
 <details>
 <summary><b>Advanced detail:</b> two of those groups exist because of a real slip</summary>
 
+**The worker answers for the shell and nothing else.** It used to answer for
+every same-origin `GET`, which is not what "cache the shell" means and had a
+consequence: under `?dev=1` the ROM and the `.sym` are fetched from `./dev/`,
+so 3.8MB of game data went into the one cache whose first paragraph says it
+never holds any — and `activate` leaves it there, because it is the current
+version's cache rather than a stale one. `SHELL_PATHS` is the list resolved once
+against the worker's own location, compared by pathname so a cache-busting query
+still matches. `check-app` already keeps `SHELL` complete in both directions, so
+matching against it cannot starve the app of a file it needs.
+
+**And a 200 is not proof the network is honest.** A captive portal answers every
+request with its login page and a 200, so caching on status alone overwrites
+`index.html` and every module with that page — and it is then the *offline* copy
+too, so the app stays broken after the network returns. Those replies arrive
+`redirected`, which is the one signal that separates them from a real answer. A
+non-`ok` response now falls back to the cache rather than being returned: for a
+shell file, a 500 or a 404 means the deploy is broken, and a known-good copy
+beats it.
+
+None of that is exercised by a test — a service worker needs a browser and a
+secure context, and the in-app pane refuses to register one. What *is* checked
+is the path arithmetic, against both the deployed base path and a localhost
+root: 37 entries, 37 distinct paths, the root and `index.html` both matching and
+`./dev/` bypassing.
+
 **`shell` checks both directions.** A file listed in the service worker but
 absent on disk makes the install reject, which takes the whole offline story
 with it. A module present but *unlisted* is quietly served from the network and

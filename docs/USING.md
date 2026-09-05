@@ -479,3 +479,18 @@ in the old cache at all, so it gets fetched fresh. Old HTML against new
 JavaScript is a combination nobody has tested.
 
 It still works with no network — that is what the fallback is for.
+
+Two more things it now refuses to do, both of them ways a cache poisons itself.
+
+**It only caches the shell.** It used to cache *every* same-origin GET, which
+with `?dev=1` meant the 2MB ROM and the 1.8MB symbol file went into the one
+cache this app promises never holds game data — and `activate` does not clear
+them, because they are in the current version's cache rather than an old one.
+
+**And a 200 is not proof.** Hotel and airline wifi answer every request with
+their own login page and a 200, so caching on status alone overwrites
+`index.html` and every module with that page — and the app stays broken after
+the network comes back, because the poison is now the offline copy. Those
+answers arrive *redirected*, which is what separates them from a real reply. A
+500 or a 404 falls back to the cache for the same reason: a known-good copy of
+a shell file beats a broken deploy.
