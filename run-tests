@@ -14,18 +14,37 @@
 # cannot be starved by the one it is watching.
 here=$(cd "$(dirname "$0")" && pwd)
 limit=${TEST_LIMIT_SECONDS:-120}
-inflight=$(mktemp -t crystal-pilot-tests) || exit 1
-trap 'rm -f "$inflight"' EXIT
+inflight=$(mktemp "${TMPDIR:-/tmp}/crystal-pilot-tests.XXXXXX") || exit 1
+trap 'rm -f "$inflight" "$inflight.done"' EXIT
+
+done="$inflight.done"
 
 TEST_INFLIGHT="$inflight" node "$here/tests/index.mjs" "$@" &
 node_pid=$!
-( sleep "$limit"; kill -9 "$node_pid" 2>/dev/null ) &
+
+# Three details here, each of them a bug that was actually hit.
+#
+# The subshell's output goes to /dev/null because killing it does not reliably
+# kill the `sleep` inside it -- measured on one shell: the sleep was orphaned to
+# init and kept the write end of the pipe open, so `./run-tests | tail` sat
+# there for the full limit with the suite long since finished.
+#
+# The marker file is why the orphan is harmless. A stray `kill -9` firing two
+# minutes late against a recorded pid can hit whatever process has since been
+# given that number; a sleep that checks whether the run already finished
+# cannot.
+#
+# And the kill is best effort in both directions: the subshell if it is still
+# there, and anything it spawned, so repeated runs do not leave sleeps behind.
+( sleep "$limit"
+  [ -f "$done" ] || kill -9 "$node_pid" 2>/dev/null
+) >/dev/null 2>&1 &
 dog_pid=$!
 
 wait "$node_pid"
 rc=$?
-kill "$dog_pid" 2>/dev/null
-wait "$dog_pid" 2>/dev/null
+: > "$done"
+{ pkill -P "$dog_pid"; kill "$dog_pid"; wait "$dog_pid"; } 2>/dev/null
 
 # Killed rather than returned: over 128 is a signal, and the watchdog is the
 # only thing here that sends one.
