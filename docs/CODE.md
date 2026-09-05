@@ -1527,7 +1527,7 @@ This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ c245dccbb3fb -->
+<!-- covers: app/main.js index.html @ 381dc9ced6ab -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -2391,7 +2391,7 @@ they have been installed.
 
 ### Watching the other device's screen
 
-<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ ed4a48d09906 -->
+<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ ee637d67e8a5 -->
 
 One device shows its screen; the other watches it, and plays it if the first
 one says so. The picture goes straight between them over WebRTC and never
@@ -2460,6 +2460,16 @@ a question about what a room is saying, it is pure, and `main.js` is where
 things go to stop being tested.
 
 </details>
+
+**A device with no game is never offered *Show*.** That looks like tidiness and
+is not: pressing it captures the blank canvas, announces this device as showing,
+and hands the other one a black rectangle — with the row on *both* devices
+insisting a screen is being shared. So `describeScreen` takes a `game` flag, and
+without one the row says what it is waiting for and draws no button at all, the
+way the sharing row already handles having nothing to offer. Reachable before
+there was any signposting for it — join a room from Settings with no ROM and the
+button was right there — and unavoidable once there is, because a device that
+came to watch has no ROM by definition.
 
 **Whether the watcher may play is the host's answer, and only the host's.** A
 press that arrives is a press that was already sent, so a watcher that chose not

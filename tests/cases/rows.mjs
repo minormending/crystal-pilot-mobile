@@ -247,6 +247,22 @@ test('the screen row says whose screen, and what pressing it would do', async (t
        'watching offers the way out');
 });
 
+test('a device with no game is never offered to show one', async (t) => {
+  // The device that took the "watch my other device" door has no ROM by
+  // definition. Offering Show there is not a button that does nothing: it
+  // captures the blank canvas and announces this device as showing, so the
+  // other one is handed a black rectangle and both rows insist a screen is
+  // being shared.
+  const empty = describeScreen({ game: false });
+  t.eq(empty.button, null, 'no button at all, rather than a disabled one');
+  t.contains(empty.text, 'waiting for your other device',
+             'and it says what it is waiting for');
+  t.eq(describeScreen({ game: false, host: 'iPhone' }).button, 'Watch',
+       'but once there is a screen to watch, watching is still the offer');
+  t.eq(describeScreen({}).button, 'Show',
+       'a device that has a game is unaffected');
+});
+
 test('a host with its screen off says so rather than showing a still picture', async (t) => {
   // A hidden page runs about one frame a second, measured -- so the picture
   // stops being a picture and starts being a photograph. Saying it beats

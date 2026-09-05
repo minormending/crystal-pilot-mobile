@@ -413,7 +413,7 @@ export function describeReplaced(meta, tag = null) {
  */
 export function describeScreen({ hosting = false, watching = false, host = null,
                                  viewer = null, asleep = false, play = true,
-                                 input = null } = {}) {
+                                 input = null, game = true } = {}) {
   if (hosting) {
     const how = play ? 'they can play' : 'view only';
     // The second control is what the *other* mode would be, because a button
@@ -447,6 +447,17 @@ export function describeScreen({ hosting = false, watching = false, host = null,
   if (host) {
     return { text: `${host} is showing its screen${play ? '' : ' · view only'}`,
              button: 'Watch' };
+  }
+  // A device with no game has nothing to show, and offering it anyway is not a
+  // harmless button that does nothing. Pressing it captures the blank canvas,
+  // announces this device as showing, and hands the other one a black
+  // rectangle -- with the row on both devices insisting a screen is being
+  // shared. That was reachable before there was a door for it and is the only
+  // thing on offer after: a device that came to watch has, by definition, no
+  // game, and 'Show' is the wrong verb for every one of them.
+  if (!game) {
+    return { text: 'waiting for your other device to show its screen',
+             button: null };
   }
   return { text: 'not showing this screen', button: 'Show', second: 'View only' };
 }

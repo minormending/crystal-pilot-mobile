@@ -717,6 +717,9 @@ function screenState() {
     // before it has a connection to be told over.
     play: host ? letsPlay : !(showing && showing.play === false),
     input: watcher ? remoteInput : null,
+    // Whether there is anything on this screen to show. A device that joined a
+    // room only to watch has no ROM at all, which is the whole point of it.
+    game: gb.ready,
   };
 }
 
@@ -733,7 +736,10 @@ function paintScreen() {
   row.classList.toggle('hide', !(room && room.code));
   const said = describeScreen(screenState());
   $('#screenstate').textContent = said.text;
-  btn.textContent = said.button;
+  // A missing button rather than a disabled one, the same way the sharing row
+  // does it: there is nothing to explain, so there is nothing to grey out.
+  btn.classList.toggle('hide', !said.button);
+  if (said.button) btn.textContent = said.button;
   // Only where there is a choice to make. Watching is somebody else's decision
   // to change, so the second control is not drawn there at all.
   $('#screenmode').classList.toggle('hide', !said.second);
