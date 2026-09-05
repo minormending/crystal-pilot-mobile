@@ -1,7 +1,7 @@
 // Wiring: file pickers, the render loop, and dispatching a task.
 import { readHeader } from '../gbcore/cartridge.js';
 import { GameBoy } from '../gbcore/gb.js';
-import { SHARED_SYMBOLS, Symbols } from '../gen2/symbols.js';
+import { Symbols, sharedNames } from '../gen2/symbols.js';
 import { describeHandoff, describeOffers, describeParty, describeReplaced,
          describeRoom, describeRows, describeScreen, describeSlot,
          describeTitle, describeUndo, joinFailure } from './rows.js';
@@ -568,13 +568,23 @@ async function shareGame(bytes) {
  * Only the names this app reads -- 45 of them, about a kilobyte, against the
  * 1.8MB file they were parsed out of. The fingerprint goes with them because
  * an address is only true of the build it came from.
+ *
+ * Plus whichever wild tables this cartridge's title declares, because that list
+ * is the title's and `SHARED_SYMBOLS` is the app's. A hack that renamed its
+ * encounter table would have handed the other device a digest with the two
+ * Johto names in it and not the one it actually uses -- and the second device
+ * would boot, walk, save, and quietly have nothing to hunt, which is the shape
+ * of failure this whole list exists to prevent.
  */
 function shareSymbols() {
   if (!room || !symbols || !romTag) return;
+  // `title` may still be null: the room can open while the files are picked and
+  // maybeStart is still awaiting the core, and this runs from both.
+  const names = sharedNames(title);
   // Not from a digest we were given: passing one on would spread a set of
   // addresses further than the cartridge that vouched for them.
-  if (symbols.size > SHARED_SYMBOLS.length) {
-    room.shareSymbols(symbols.digest(SHARED_SYMBOLS), romTag);
+  if (symbols.size > names.length) {
+    room.shareSymbols(symbols.digest(names), romTag);
   }
 }
 

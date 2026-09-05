@@ -103,7 +103,7 @@ of the subtleties in sections 6 and 7.
 
 ## 2. The shape of it
 
-<!-- covers-api: app/main.js gen2/journey.js titles/crystal.js gen2/tasks.js gen2/nav.js gen2/world.js gen2/collision.js gen2/state.js gen2/romdata.js gen2/symbols.js gbcore/gb.js @ 796049a49e15 -->
+<!-- covers-api: app/main.js gen2/journey.js titles/crystal.js gen2/tasks.js gen2/nav.js gen2/world.js gen2/collision.js gen2/state.js gen2/romdata.js gen2/symbols.js gbcore/gb.js @ d597be4699d1 -->
 
 Twenty-seven modules, in four directories, and the directories are the design:
 **an import may point down this list and never up.**
@@ -404,7 +404,7 @@ watching.
 
 ### `symbols.js` — where things live
 
-<!-- covers: gen2/symbols.js @ d69385aa06cb -->
+<!-- covers: gen2/symbols.js @ 1fb187199a74 -->
 
 Parses the `.sym` file into `name → { bank, addr }`. First definition wins;
 later duplicates are aliases and locals.
@@ -1527,7 +1527,7 @@ This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ 9be20d95e10f -->
+<!-- covers: app/main.js index.html @ f7e6903ed762 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -2599,6 +2599,15 @@ flowchart LR
     T --> APP["the second device,<br/>with the ROM and no .sym"]
     C{{"check-app: is SHARED_SYMBOLS<br/>every name the app looks up?"}} -.-> D
 ```
+
+**And the cartridge adds its own wild tables to it.** `SHARED_SYMBOLS` is the
+*app's* list — everything it looks up. Which encounter tables exist is not the
+app's to say: that is a fact about a cartridge's regions, and Crystal's two are
+only in the list because Crystal is what this was written against. `sharedNames`
+takes the union, so a hack that renamed its table sends the name it actually
+uses. Without that, the second device would boot, walk and save with nothing to
+hunt — a device that works beside one that does not, which is the exact failure
+this list exists to prevent, one layer further in.
 
 The list lives in `gen2/symbols.js` as `SHARED_SYMBOLS`, written by hand,
 because nothing at run time can know which names the code is *going* to ask

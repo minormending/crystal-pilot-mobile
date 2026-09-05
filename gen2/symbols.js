@@ -110,3 +110,21 @@ export const SHARED_SYMBOLS = [
   'wTilesetCollisionAddress', 'wTilesetCollisionBank', 'wTimeOfDay',
   'wWindowStackSize', 'wXCoord', 'wYCoord',
 ];
+
+/**
+ * Which names travel to a device that has the ROM and no `.sym`.
+ *
+ * `SHARED_SYMBOLS` is the *app's* list -- everything it looks up, checked
+ * one-directionally by `check-app`. A cartridge's wild tables are not the app's
+ * to name: which regions exist is the title's, and Crystal's two happen to be
+ * in the list because Crystal is the cartridge this was written against.
+ *
+ * A hack that renamed its encounter table would otherwise hand the other device
+ * a digest holding two names it does not use and not the one it does -- and
+ * that device would boot, walk and save with nothing to hunt, which is exactly
+ * the second-phone failure the shared list exists to prevent.
+ */
+export function sharedNames(title = null) {
+  const mine = (title && title.encounters) || [];
+  return [...new Set([...SHARED_SYMBOLS, ...mine])];
+}

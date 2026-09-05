@@ -1,6 +1,6 @@
 // The symbol table, and the small version of it that crosses between devices.
 import { symbols, test } from '../harness.mjs';
-import { Symbols } from '../../gen2/symbols.js';
+import { SHARED_SYMBOLS, Symbols, sharedNames } from '../../gen2/symbols.js';
 
 test('a digest of the names an app uses behaves like the file it came from', async (t) => {
   // 1.8MB of .sym against about a kilobyte of the 45 lines that get read. The
@@ -45,4 +45,23 @@ test('junk in a digest is dropped rather than believed', async (t) => {
 test('a digest asks for names the file does not have, and simply lacks them', async (t) => {
   const made = symbols().digest(['wPartyCount', 'wNoSuchSymbolAnywhere']);
   t.eq(Object.keys(made), ['wPartyCount'], 'absent names are left out, not stored empty');
+});
+
+test('a cartridge sends its own wild tables, not only the app\'s list',
+     async (t) => {
+  t.eq(sharedNames(null).length, SHARED_SYMBOLS.length,
+       'with no title, the app\'s list is the whole of it');
+  t.eq(sharedNames({ encounters: ['JohtoGrassWildMons'] }).length,
+       SHARED_SYMBOLS.length,
+       'a table already in the list adds nothing — Crystal\'s two are in it');
+
+  const hack = sharedNames({ encounters: ['HackGrassWildMons'] });
+  t.eq(hack.length, SHARED_SYMBOLS.length + 1, 'a table of its own is added');
+  t.true(hack.includes('HackGrassWildMons'),
+         'so the device with no .sym can find what this cartridge hunts in');
+
+  // The failure this prevents is quiet: that device boots, walks and saves, and
+  // has nothing to hunt, on a cartridge where hunting works fine next to it.
+  t.false(SHARED_SYMBOLS.includes('HackGrassWildMons'),
+          'and the app\'s own list is left alone');
 });

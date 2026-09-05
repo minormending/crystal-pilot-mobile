@@ -15,7 +15,7 @@ what CI checks and what the pre-commit hook blocks on.
 ```mermaid
 flowchart LR
     E[an edit] --> H{{".githooks/pre-commit"}}
-    H --> T["./run-tests<br/>110 behaviour tests"]
+    H --> T["./run-tests<br/>111 behaviour tests"]
     H --> C["tools/check-app<br/>14 groups"]
     H --> D["tools/docs-check<br/>23 tracked sections"]
     T --> OK[commit]
@@ -39,7 +39,7 @@ git config core.hooksPath .githooks
 ./run-tests -v         # notes and stack lines
 ```
 
-110 tests in thirteen files, and what each file is about says more than the count:
+111 tests in thirteen files, and what each file is about says more than the count:
 
 | file | tests | what it pins down |
 | --- | --- | --- |
@@ -54,7 +54,7 @@ git config core.hooksPath .githooks
 | `battle.mjs` | 7 | whose turn it is, and telling a win from a whiteout |
 | `state.mjs` | 6 | reading the party, the map and the battery out of work RAM |
 | `room.mjs` | 5 | the merge rules, so two devices settle rather than fight |
-| `symbols.mjs` | 4 | the 45-address digest a second device boots from |
+| `symbols.mjs` | 5 | the 45-address digest a second device boots from |
 | `input.mjs` | 3 | held buttons, and releasing them |
 
 No ROM, no browser, no emulator — which is the point rather than a compromise.
