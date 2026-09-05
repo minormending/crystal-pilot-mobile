@@ -5,6 +5,7 @@
 // under test is the decision made between them, not the button pressing. Each
 // stub records what it was asked to do, so a test can assert on the sequence.
 import { FakeGameBoy, fakeRom, symbols, test, worldRam } from '../harness.mjs';
+import { captureOutcome } from '../../gen2/jobs.js';
 import { GameState } from '../../gen2/state.js';
 import { Tasks } from '../../gen2/tasks.js';
 
@@ -123,6 +124,15 @@ test('a catch answers the party prompt instead of losing the thread', async (t) 
   const r = await tasks.captureHere(POKE_BALL, { weakenTo: 0, memory: { biggestHit: 0 } });
   t.eq(sent, 1, 'the prompt was answered');
   t.ne(r.outcome, 'stuck', 'so the catch carried on rather than losing the thread');
+});
+
+test('a whiteout is called a whiteout, not a fainted lead', async (t) => {
+  // The message said "your lead fainted", which stopped being the condition the
+  // day the condition became "every one of them is down" -- so it named one
+  // Pokemon while describing a party.
+  const said = captureOutcome('lost').say({ name: 'PIDGEY' }, (n) => `${n} balls`);
+  t.contains(said, 'whole party', 'it says what actually happened');
+  t.true(!said.includes('lead'), 'and not the thing that used to be true');
 });
 
 test('a field that never comes back is reported, not looped on', async (t) => {

@@ -13,6 +13,19 @@ const MAX_STUCK_BATTLES = 5;
 const MAX_CHIPS = 8;
 
 /**
+ * Everyone is down.
+ *
+ * A whiteout is not a stall and should never be reported as one: Gen 2 takes
+ * you to the last Pokemon Center and halves your money, so it is the single
+ * most consequential thing that can happen while the pilot is driving, and
+ * three different jobs used to describe it as something else -- a grind said
+ * only what level it had stopped at, a hunt said it could not run from a
+ * PIDGEY, and a catch said your *lead* had fainted, which stopped being the
+ * condition the day it started meaning the whole party.
+ */
+const partyDown = (s) => s.party.length > 0 && s.party.every((m) => m.hp === 0);
+
+/**
  * What each capture outcome means, in one place.
  *
  * captureHere reports an outcome code; two callers used to translate it -- a
@@ -41,7 +54,8 @@ const CAPTURE_OUTCOMES = {
   knockedOut: { stop: false, say: (r) => `knocked the ${r.name} out` },
   gone:       { stop: false, say: (r) => `the ${r.name} got away` },
   lost:       { stop: true,
-                say: (r) => `your lead fainted before the ${r.name} could be caught` },
+                say: (r) => `the whole party fainted before the ${r.name} `
+                            + 'could be caught' },
   stuck:      { stop: true, say: () => 'lost track of the battle' },
   cancelled:  { stop: true, say: () => 'stopped' },
   budget:     { stop: true,
@@ -95,7 +109,13 @@ export function withJobs(Base) {
       }
       this.say(`${name} — not the one, running`);
       if (!await this.flee()) {
-        return { ok: false, seen, stats, message: `could not run from a ${name}` };
+        // Why it could not run matters more than that it could not: one is a
+        // refused escape to try again, the other is a whiteout that has already
+        // moved you to a Pokemon Center and taken half your money.
+        return { ok: false, seen, stats,
+                 message: partyDown(await this.snap())
+                   ? 'the whole party fainted'
+                   : `could not run from a ${name}` };
       }
       stats.fled++;
     }
@@ -363,7 +383,10 @@ export function withJobs(Base) {
       if (name !== want) {
         this.say(`${name} — not the one, running`);
         if (!await this.flee()) {
-          return { ok: false, stats, message: `could not run from a ${name}` };
+          return { ok: false, stats,
+                   message: partyDown(await this.snap())
+                     ? 'the whole party fainted'
+                     : `could not run from a ${name}` };
         }
         stats.fled++;
         continue;
@@ -472,7 +495,17 @@ export function withJobs(Base) {
       const outcome = await this.fightBattle();
       stats.battles++;
       if (outcome === 'won') stats.won++;
-      if (outcome === 'lost') break;
+      if (outcome === 'lost') {
+        // Said rather than broken out of. Falling through to the summary
+        // reported "stopped at Lv13 (wanted Lv15)", which is true and leaves
+        // out the only part that needs acting on: the party is down, the game
+        // has moved you to a Pokemon Center, and half your money is gone.
+        return {
+          ok: false,
+          message: `the whole party fainted at Lv${mon.level}`,
+          stats: { ...stats, levels: mon.level - startLevel },
+        };
+      }
       this.say(`battle ${stats.battles}: ${outcome}`);
       // Battles that end without resolving mean the pilot is not driving the
       // fight any more -- something is on screen it does not understand. A few
