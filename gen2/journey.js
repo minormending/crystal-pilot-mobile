@@ -136,8 +136,15 @@ export class Journey {
    * just opened.
    */
   async runScripts(maxTaps = 400, settle = 45) {
-    if (this.stopped) return;
     for (let i = 0; i < maxTaps; i++) {
+      // Inside the loop, not only on the way in. This is the longest loop in
+      // the file by its own account -- Mom's scene is about 190 taps -- and it
+      // presses through this.gb rather than through TaskBase.push, so it gets
+      // none of the cancellation that every other pressing loop is given for
+      // free. Checked once at the top, Stop was ignored for the rest of a scene
+      // it was pressed in the middle of, which is the one place it is most
+      // likely to be pressed.
+      if (this.stopped) return false;
       if (!await this.scriptRunning()) {
         await this.gb.run(settle);
         if (!await this.scriptRunning()) return true;

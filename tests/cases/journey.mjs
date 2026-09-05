@@ -104,3 +104,30 @@ test('a map with no name is still named', async (t) => {
   t.eq(walker({ title: {} }).where(26 * 256 + 1), 'map 26.1',
        'including when a title supplies no names at all');
 });
+
+test('Stop lands inside a script, not after 400 taps of it', async (t) => {
+  // runScripts presses through this.gb rather than through TaskBase.push, so it
+  // gets none of the cancellation every other pressing loop is handed for free.
+  // Checked only on the way in, Stop was ignored for the rest of a scene it was
+  // pressed in the middle of -- and by its own account that is the longest loop
+  // in the file, about 190 taps for Mom's.
+  let taps = 0;
+  const cancel = { cancelled: false, pump: async () => {} };
+  const gb = new FakeGameBoy({ wram: worldRam(sym, {}) });
+  gb.press = async () => { taps++; if (taps === 3) cancel.cancelled = true; };
+  gb.run = async () => {};
+  const j = new Journey(gb, new GameState(sym), cancel, null, null, () => {}, null, {});
+  j.scriptRunning = async () => true;          // a scene that never ends
+  t.false(await j.runScripts(), 'it reports having been stopped');
+  t.true(taps < 10, `it stopped pressing at once — ${taps} taps, not 400`);
+});
+
+test('a script that finishes is still reported as finished', async (t) => {
+  const gb = new FakeGameBoy({ wram: worldRam(sym, {}) });
+  gb.press = async () => {};
+  gb.run = async () => {};
+  const j = new Journey(gb, new GameState(sym), { cancelled: false, pump: async () => {} },
+                        null, null, () => {}, null, {});
+  j.scriptRunning = async () => false;
+  t.true(await j.runScripts(), 'the quiet case is unchanged');
+});

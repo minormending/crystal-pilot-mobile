@@ -318,7 +318,7 @@ was cheaper than moving the boundary.
 
 ### `gb.js` — the emulator
 
-<!-- covers: gbcore/gb.js @ a550184abf5c -->
+<!-- covers: gbcore/gb.js @ 801cf958c309 -->
 
 Wraps WasmBoy. Runs frames, reads work RAM, holds and releases buttons.
 
@@ -681,7 +681,7 @@ point those coordinates mean somewhere else entirely.
 
 ## 5. Crossing to the next map
 
-<!-- covers: gen2/journey.js gen2/world.js @ dec95a9744c1 -->
+<!-- covers: gen2/journey.js gen2/world.js @ 8c28c5123dd1 -->
 
 A connection spans only part of a shared edge, so "walk west until something
 happens" does not work. `crossEdge()` closes the distance in stages, then tries
@@ -930,6 +930,20 @@ answer coming. And `chooseMove` took its list from `party[0]` rather than from
 `onField`, so once the first diamond *had* been answered the moves belonged to
 the Pokémon that had just fainted.
 
+**Stop reaches every pressing loop, and there are two mechanisms for it.**
+`TaskBase.push` and `step` throw `Cancelled` on every press, which covers
+`menus.js`, `battle.js` and `jobs.js` without any of them knowing. `Journey` is
+not a `TaskBase` — it presses through `this.gb` — so it reads the same flag
+through a `stopped` getter and returns a value instead of throwing, and hands
+`walkOpts` to every walk so a Stop lands between steps rather than at the end of
+a leg.
+
+`runScripts` was the hole in that, and it is the loop most worth interrupting:
+by its own account Mom's scene is about 190 taps, and Stop was checked once on
+the way in and then not again for up to four hundred. Pressing Stop in the
+middle of a cutscene — which is exactly where somebody would — did nothing until
+it ended.
+
 **A fainted lead is a prompt, not a state.** Gen 2 does not offer a choice — the
 lead goes down, the game asks "Which POKéMON?" and waits. With a party of one it
 never came up because the battle simply ended. Three separate things had to be
@@ -1100,7 +1114,7 @@ precedes it defaults to yes, which is what we want; the nickname box does not.
 
 ## 7a. Three that act on where you already are
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ 36c6d0c43b65 -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ 9a5e59dd3d8e -->
 
 Grind, hunt and catch all go *looking* for something. These three do the obvious
 thing with the situation you are already in, and take no parameters:
@@ -1360,7 +1374,7 @@ because that failure is only otherwise discovered by reaching for the undo.
 
 ## 8. The errands
 
-<!-- covers: titles/crystal.js gen2/journey.js @ cc9bc5e25f08 -->
+<!-- covers: titles/crystal.js gen2/journey.js @ 97a6f2ffed43 -->
 
 Everything in this section is `crystal.js` — the only file in the app that names
 a Crystal map, a Crystal door or a Crystal NPC. What it stands on is

@@ -202,8 +202,17 @@ export class GameBoy {
     const state = {};
     for (const b of [].concat(buttons)) state[b] = true;
     this.core.setJoypadState(state);
-    await this.run(frames);
-    this.applyHeld();
+    try {
+      await this.run(frames);
+    } finally {
+      // In a `finally` for the reason nav.step's release is: if the frames
+      // throw, the button this pressed is still down in the core and nothing
+      // is left to lift it. A stuck direction walks into a wall for ever, and
+      // a stuck A answers every box on screen. Putting back what was *already*
+      // held rather than clearing outright is the other half -- presses can
+      // arrive from a watching device while a direction is held here.
+      this.applyHeld();
+    }
     if (gap) await this.run(gap);
   }
 
@@ -217,8 +226,12 @@ export class GameBoy {
    *
    * All zeroes means the game has never committed an in-game save, not that the
    * read failed. Crystal writes SRAM only when you choose SAVE, so a cartridge
-   * that has been played but never saved has a blank battery -- and nothing
-   * here drives the SAVE menu yet, so that is currently always the case.
+   * that has been played but never saved has a blank battery. That used to be
+   * *always* the case, and this comment went on saying so long after it stopped
+   * being true: menus.js drives START -> SAVE -> YES, the interface has a Save
+   * row, and slots, undo and the handoff between devices are all built on the
+   * bytes this returns. A reader taking the old sentence at face value would
+   * conclude none of that exists.
    */
   async batterySave() {
     const at = await this.core._getWasmConstant('CARTRIDGE_RAM_LOCATION');
