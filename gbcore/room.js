@@ -278,14 +278,6 @@ export function wasSharing() { return flag(); }
  */
 export async function openRoom({ options, onOptions, onSave, onSignal,
                                  onSymbols, onStatus } = {}) {
-  let createSync;
-  try {
-    ({ createSync } = await import('../sync/kidsync.js'));
-  } catch (e) {
-    // Offline, or gstatic blocked. The app is unaffected.
-    if (onStatus) onStatus('unavailable');
-    return null;
-  }
   // Both `let`, and every use guarded, because kidsync calls onChange -- and
   // can call merge -- from inside createSync, before the handle it returns
   // exists. Written the obvious way round this throws "Cannot access 'sync'
@@ -293,45 +285,66 @@ export async function openRoom({ options, onOptions, onSave, onSignal,
   // own demo page met this first; see its README.
   let sync = null;
   let baton = null;
-  sync = await createSync({
-    firebaseConfig,
-    game: GAME,
-    // `crystal-pilot-` plus five is 19 characters, and the deployed rules want
-    // at least 16 -- which kidsync now checks rather than letting Firebase
-    // answer with a permission denial that reads as a network fault.
-    codes: { generate: makeCode, normalize: readCode },
-    // Seeded with what this device already remembers, not with an empty group.
-    // kidsync keeps its own copy of the synced state, so a device joining with
-    // `{}` would hand the room an empty group -- and on the way back through
-    // onChange, adopt it over its own choices. Measured, the first time this
-    // ran: pressing Share emptied the record it was supposed to be sharing.
-    initialState: options
-      ? { opts: options, optsAt: options.at || 0, optsBy: '' }
-      : { opts: {}, optsAt: 0, optsBy: '' },
-    // Two things share this room and each owns its own keys: the options merge
-    // by stamp, the save by revision. Composed rather than combined, because
-    // neither knows the other's rules and neither should.
-    merge: (a, b) => ({
-      ...mergeOptions(a, b),
-      ...mergeSymbols(a, b),
-      ...mergeSignal(a, b),
-      ...(baton ? baton.merge(a, b) : {}),
-    }),
-    onChange: (state) => {
-      if (!state) return;
-      if (onOptions && state.opts) {
-        // The stamp travels with the group: whoever adopts it has to order it
-        // against their own, and their clock is not the one that chose it.
-        onOptions({ ...state.opts, at: state.optsAt || 0 });
-      }
-      // Metadata only. Nothing decompresses a payload to paint a row -- that
-      // happens when someone asks for the bytes.
-      if (onSave && baton) onSave(baton.peek());
-      if (onSymbols && state.sym) onSymbols(state.sym);
-      if (onSignal) onSignal(liveNotes(state.rtc));
-    },
-    onStatus: (s) => { if (onStatus) onStatus(s); },
-  });
+  // One try over both halves, and the second half is the one that was missing.
+  // The import was guarded because it fetches gstatic. createSync was not, and
+  // it signs in anonymously and opens a socket -- two more ways to fail on the
+  // same bad network. So this could reject while promising above that it does
+  // not, and the three callers had each worked around that separately: startup
+  // catches it, Share catches it and says so, and Join had a `finally` and no
+  // `catch`, so a first press on a device that could not reach Firebase
+  // re-enabled the button and said nothing whatever.
+  //
+  // Mended here rather than at the third call site, because what is wrong is
+  // the contract. A caller reading "resolves to null, never throws" four lines
+  // above is entitled to believe it.
+  try {
+    const { createSync } = await import('../sync/kidsync.js');
+    sync = await createSync({
+      firebaseConfig,
+      game: GAME,
+      // `crystal-pilot-` plus five is 19 characters, and the deployed rules want
+      // at least 16 -- which kidsync now checks rather than letting Firebase
+      // answer with a permission denial that reads as a network fault.
+      codes: { generate: makeCode, normalize: readCode },
+      // Seeded with what this device already remembers, not with an empty group.
+      // kidsync keeps its own copy of the synced state, so a device joining with
+      // `{}` would hand the room an empty group -- and on the way back through
+      // onChange, adopt it over its own choices. Measured, the first time this
+      // ran: pressing Share emptied the record it was supposed to be sharing.
+      initialState: options
+        ? { opts: options, optsAt: options.at || 0, optsBy: '' }
+        : { opts: {}, optsAt: 0, optsBy: '' },
+      // Two things share this room and each owns its own keys: the options merge
+      // by stamp, the save by revision. Composed rather than combined, because
+      // neither knows the other's rules and neither should.
+      merge: (a, b) => ({
+        ...mergeOptions(a, b),
+        ...mergeSymbols(a, b),
+        ...mergeSignal(a, b),
+        ...(baton ? baton.merge(a, b) : {}),
+      }),
+      onChange: (state) => {
+        if (!state) return;
+        if (onOptions && state.opts) {
+          // The stamp travels with the group: whoever adopts it has to order it
+          // against their own, and their clock is not the one that chose it.
+          onOptions({ ...state.opts, at: state.optsAt || 0 });
+        }
+        // Metadata only. Nothing decompresses a payload to paint a row -- that
+        // happens when someone asks for the bytes.
+        if (onSave && baton) onSave(baton.peek());
+        if (onSymbols && state.sym) onSymbols(state.sym);
+        if (onSignal) onSignal(liveNotes(state.rtc));
+      },
+      onStatus: (s) => { if (onStatus) onStatus(s); },
+    });
+  } catch (e) {
+    // Offline, gstatic blocked, sign-in refused, or the socket never opened.
+    // The app is unaffected -- that is the whole point of this returning a
+    // value rather than raising.
+    if (onStatus) onStatus('unavailable');
+    return null;
+  }
   baton = createBaton({ sync, label: deviceName() });
   return {
     sync,

@@ -1527,7 +1527,7 @@ This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ 50f0729fab7a -->
+<!-- covers: app/main.js index.html @ c245dccbb3fb -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -2179,7 +2179,7 @@ five slots once the summaries existed.
 
 ### Sharing between your own devices
 
-<!-- covers: gbcore/room.js sync/kidsync.js @ ab50a1080c50 -->
+<!-- covers: gbcore/room.js sync/kidsync.js @ 1ad37b518af2 -->
 
 One person with a phone and a tablet, no accounts: a room code is the whole
 mechanism. `sync/` is [kidsync](https://github.com/minormending/kidsync)
@@ -2250,6 +2250,16 @@ someone asks to share. kidsync's other consumers get this for free from
 `bridge.js`, which is a separate entry point after their classic scripts have
 run; an ES-module app has to insulate itself.
 
+**`openRoom` answers with a value and never raises**, and the `try` covers
+`createSync` as well as the import — which it did not, at first. Fetching
+gstatic is the obvious way to fail on a bad network; signing in anonymously and
+opening a socket are two more, and they sat outside the guard. The cost of a
+contract that is nearly true is that every caller writes its own version of it:
+startup caught the rejection, *Share* caught it and said so, and *Join* had a
+`finally` and no `catch` — so a first press on a device that could not reach
+Firebase re-enabled the button and said nothing at all. Three call sites, three
+different answers to a question the function had already promised to answer.
+
 **Opening the room is what reaches the network**, and it happens on a press or
 because this device has shared before. Someone who never shares never loads the
 SDK and never signs in.
@@ -2296,7 +2306,7 @@ way any newer value does.
 
 ### Handing the save over
 
-<!-- covers: gbcore/room.js baton/baton.js baton/codec.js @ 24353b0339b8 -->
+<!-- covers: gbcore/room.js baton/baton.js baton/codec.js @ c744cc6482bb -->
 
 The same room carries the save, through
 [baton](https://github.com/minormending/baton) vendored in `baton/`. kidsync
@@ -2381,7 +2391,7 @@ they have been installed.
 
 ### Watching the other device's screen
 
-<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ c17bb1bb686a -->
+<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ ed4a48d09906 -->
 
 One device shows its screen; the other watches it, and plays it if the first
 one says so. The picture goes straight between them over WebRTC and never

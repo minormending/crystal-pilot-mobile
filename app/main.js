@@ -2325,6 +2325,13 @@ $('#joingo').onclick = async () => {
     if (!got.ok) { progress(joinFailure(got.reason)); return; }
     input.value = '';
     progress(`sharing as ${got.code}`);
+  } catch (e) {
+    // The sibling above has always had this. joinRoom answers rather than
+    // throwing for every failure it expects -- a wrong code is a normal thing
+    // to type -- but attaching to the room is a live network call, and a
+    // `finally` alone turned a throw into a button that came back enabled with
+    // nothing said. Silence is the one answer a press must never get.
+    progress(`could not join: ${e && e.message ? e.message : e}`);
   } finally {
     btn.disabled = false;
     paintRoom();
