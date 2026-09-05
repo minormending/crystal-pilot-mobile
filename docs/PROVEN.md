@@ -312,15 +312,16 @@ second, which is there so the core's own waits finish, not to run a game.
   candidates and returned true standing three tiles clear of any. It checks the
   tile underfoot now.
 
-## Seven audits, and how each defect was actually found
+## Eight audits, and how each defect was actually found
 
 Everything above was watched happening. This section is the exception, and the
-exception is the point of it: after the ROM-hack work shipped, seven passes went
-looking for defects in code that already worked, and found nineteen. None of
-them announced itself.
+exception is the point of it: after the ROM-hack work shipped, eight passes went
+looking for defects in code that already worked, and found twenty-two — plus
+one a fix created on the way, which is in the table in italics because it is a
+different kind of thing. None of them announced itself.
 
-Six of those passes worked by **reading**. The seventh did not, and that turned
-out to matter — see the last note below.
+Six of those passes worked by **reading**. The seventh and eighth measured
+instead, and that turned out to matter — see the last two notes below.
 
 The recurring shape is the same in all five:
 
@@ -360,6 +361,9 @@ exactly why nothing failed.
 | 6 | *and the fix for the prompt spun for ever* | a stubborn field | **a test, by hanging** |
 | 7 | the two NIDORAN decoded to one name | a route with both | **measuring** |
 | 7 | the map objects trusted an origin nothing checked | a hack's objects | measuring |
+| 8 | a wrong START row was never closed before the next was tried | a wrong first guess | reading |
+| 8 | the worker cached every same-origin GET, the ROM included | `?dev=1` and a worker | reading |
+| 8 | and believed a captive portal's 200 | hotel wifi | reading |
 
 Five things in that table are worth more than the individual rows.
 
@@ -377,6 +381,15 @@ and only because the test hung — the obvious `continue` for the party prompt
 advanced nothing in a loop bounded by balls thrown. That is the honest weight to
 give this repository's fourteen check groups and 139 tests: they hold a fix
 down, and they catch the fix that is itself wrong. They do not find the fault.
+
+**Measuring also rules things out, which is half of what it is for.** The
+eighth pass put the world graph and the encounter tables through the same
+treatment and found them exactly right: Route 29 really does trade PIDGEY and
+SENTRET for HOOTHOOT after dark, entry for entry with the disassembly. One
+anomaly looked like a bug for about a minute — Route 29 reporting a *third*
+connection, north, where `world.js` says it produces two — and map 5.9 turned
+out to be Route 46, which genuinely adjoins it. The module was right and its
+note was merely partial. An anomaly is not a fault until it is checked.
 
 **And the last column is the seventh pass's whole lesson.** Reading found
 sixteen defects and could not have found the last two, because neither has a
@@ -418,6 +431,19 @@ that terminate only by assumption. One of those assumptions is *a Pokémon Centr
 restores PP*, which is true of Crystal and is not a fact about cartridges in
 general — and one of three rungs on the ladder above that no cartridge on this
 machine can produce.
+
+**The eighth pass found a third family: a promise in a comment that nothing
+kept.** All three of its defects are places where a sentence states the intended
+behaviour and no code implements it — *a wrong guess opens the pack, which is
+recoverable* (nothing recovered), and *the ROM and .sym are never in this cache*
+(with `?dev=1` they were). That is a particular hazard **here**, because this
+repository's comments are unusually load-bearing: a file that explains its own
+reasoning at length reads as a description of what the code does, and an
+aspirational sentence is indistinguishable from a descriptive one. Its last two
+are also the first defects in eight passes that no test here can reach — a
+service worker wants a browser and a secure context — so what is checked is the
+path arithmetic and the behaviour is reasoned about, which the code walkthrough
+says rather than implies.
 
 **The seventh found the one that was hurting people now.** The two NIDORAN
 decoded to the same string, so the species picker drew two identical chips and

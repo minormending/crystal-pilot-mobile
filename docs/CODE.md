@@ -2371,7 +2371,7 @@ recorded at all, so the kept battery was restored into whatever ROM was picked
 next; and `pickKey` was *the only record, if there is exactly one*, which wrote
 this cartridge's save into the previous cartridge's record. Both failed
 silently, and both were on the paths nobody presses — see
-[Seven audits](PROVEN.md#seven-audits-and-how-each-defect-was-actually-found)
+[Eight audits](PROVEN.md#eight-audits-and-how-each-defect-was-actually-found)
 for why that is not a coincidence.
 
 `patchMeta` merges fields into the `meta` record, and it used to do that as a
@@ -3238,6 +3238,21 @@ version's cache rather than a stale one. `SHELL_PATHS` is the list resolved once
 against the worker's own location, compared by pathname so a cache-busting query
 still matches. `check-app` already keeps `SHELL` complete in both directions, so
 matching against it cannot starve the app of a file it needs.
+
+```mermaid
+flowchart TD
+    R["a GET arrives"] --> O{"same origin?"}
+    O -->|no| PASS["not ours — gstatic, a CDN"]
+    O -->|yes| SH{"in SHELL?"}
+    SH -->|no| PASS2["not the shell — ./dev/, anything else"]
+    SH -->|yes| NET["ask the network"]
+    NET -->|"ok, and not redirected"| KEEP["cache it, return it"]
+    NET -->|"500, 404, or a portal"| FB{"a cached copy?"}
+    NET -->|"threw — offline"| FB
+    FB -->|yes| USE["return the cached one"]
+    FB -->|"no, and offline"| THROW["fail, as it would have anyway"]
+    FB -->|"no, and answered"| PASSON["hand the answer on"]
+```
 
 **And a 200 is not proof the network is honest.** A captive portal answers every
 request with its login page and a 200, so caching on status alone overwrites

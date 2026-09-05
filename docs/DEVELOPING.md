@@ -15,7 +15,7 @@ what CI checks and what the pre-commit hook blocks on.
 ```mermaid
 flowchart LR
     E[an edit] --> H{{".githooks/pre-commit"}}
-    H --> T["./run-tests<br/>139 behaviour tests"]
+    H --> T["./run-tests<br/>143 behaviour tests"]
     H --> C["tools/check-app<br/>14 groups"]
     H --> D["tools/docs-check<br/>23 tracked sections"]
     T --> OK[commit]
@@ -39,7 +39,7 @@ git config core.hooksPath .githooks
 ./run-tests -v         # notes and stack lines
 ```
 
-139 tests in sixteen files, and what each file is about says more than the count:
+143 tests in seventeen files, and what each file is about says more than the count:
 
 | file | tests | what it pins down |
 | --- | --- | --- |
@@ -58,6 +58,7 @@ git config core.hooksPath .githooks
 | `input.mjs` | 3 | held buttons, and releasing them |
 | `saves.mjs` | 3 | which battery record belongs to the cartridge in the machine |
 | `collision.mjs` | 3 | which tiles have somebody standing on them |
+| `menus.mjs` | 4 | the order the START menu is driven in, and what is closed between tries |
 | `romdata.mjs` | 5 | the cartridge's own character encoding, byte by byte |
 
 No ROM, no browser, no emulator — which is the point rather than a compromise.
