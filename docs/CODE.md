@@ -103,7 +103,7 @@ of the subtleties in sections 6 and 7.
 
 ## 2. The shape of it
 
-<!-- covers-api: app/main.js gen2/journey.js titles/crystal.js gen2/tasks.js gen2/nav.js gen2/world.js gen2/collision.js gen2/state.js gen2/romdata.js gen2/symbols.js gbcore/gb.js @ d597be4699d1 -->
+<!-- covers-api: app/main.js gen2/journey.js titles/crystal.js gen2/tasks.js gen2/nav.js gen2/world.js gen2/collision.js gen2/state.js gen2/romdata.js gen2/symbols.js gbcore/gb.js @ f34558569029 -->
 
 Twenty-seven modules, in four directories, and the directories are the design:
 **an import may point down this list and never up.**
@@ -1527,7 +1527,7 @@ This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ 4272bd135941 -->
+<!-- covers: app/main.js index.html @ b305703a5ac4 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -2179,7 +2179,7 @@ five slots once the summaries existed.
 
 ### Sharing between your own devices
 
-<!-- covers: gbcore/room.js sync/kidsync.js @ a157ae0f01c8 -->
+<!-- covers: gbcore/room.js sync/kidsync.js @ ab50a1080c50 -->
 
 One person with a phone and a tablet, no accounts: a room code is the whole
 mechanism. `sync/` is [kidsync](https://github.com/minormending/kidsync)
@@ -2296,7 +2296,7 @@ way any newer value does.
 
 ### Handing the save over
 
-<!-- covers: gbcore/room.js baton/baton.js baton/codec.js @ 301464a5be94 -->
+<!-- covers: gbcore/room.js baton/baton.js baton/codec.js @ 24353b0339b8 -->
 
 The same room carries the save, through
 [baton](https://github.com/minormending/baton) vendored in `baton/`. kidsync
@@ -2381,7 +2381,7 @@ they have been installed.
 
 ### Watching the other device's screen
 
-<!-- covers: gbcore/stream.js @ 9c0d2f8c8cdb -->
+<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ 4d2bcaa9b287 -->
 
 One device shows its screen; the other watches it, and plays it if the first
 one says so. The picture goes straight between them over WebRTC and never
@@ -2406,6 +2406,50 @@ sequenceDiagram
     W-->>H: joypad, over the data channel
     Note over H: applyRemoteInput refuses<br/>unless letsPlay and not running
 ```
+
+**Both sides run the same handler on every change and each acts only on the
+note addressed to it**, which is why the handshake needs no ordering beyond *is
+this for me?* — but "for me" has to mean the right thing. Each of the three
+branches is a question about a *note*, not about a device: the watcher answers
+an offer stamped later than the last one it answered, the host accepts an answer
+stamped later than the last one it accepted, and the host offers when the ask is
+newer than the ask it last offered to. `needsOffer` is that last one, and it is
+the branch that got it wrong first — see below.
+
+<details>
+<summary><b>Advanced detail:</b> the second press of Watch, and why it did
+nothing</summary>
+
+The host's branch used to ask whether the watching device was a *different* one
+from the last it had offered to:
+
+```js
+if (host && signal.watching && signal.watching.id !== offeredTo) {
+```
+
+Which is the wrong question, because the usual second ask comes from the same
+device. Watch, Leave, Watch again, on the one tablet you own: the second press
+wrote the same id, the host saw nothing new, and no offer was ever made. The
+tablet sat on a fresh `RTCPeerConnection` with nothing to answer, and fifteen
+seconds later said *could not reach the other device — this works on one wifi,
+and across networks it often will not*. Every word of that is true in general
+and false here: nothing was wrong with the network, and nothing was going to
+change until the host pressed Stop and Show, because `showScreen` is the only
+place `offeredTo` was ever cleared.
+
+Reloading the watching device did not help either, which is the detail that
+makes it worth a paragraph — kidsync's device id is kept in `localStorage`, so
+it is the same id after a reload, and the host went on recognising it as the one
+it had already answered.
+
+The fix is to key on the ask rather than the asker: every note carries the stamp
+its writer put on it, so a second press is a newer stamp. That is how the other
+two branches already worked, and this one was the odd branch out. `needsOffer`
+lives in `room.js` beside `liveNotes` for the same reason that one does — it is
+a question about what a room is saying, it is pure, and `main.js` is where
+things go to stop being tested.
+
+</details>
 
 **Whether the watcher may play is the host's answer, and only the host's.** A
 press that arrives is a press that was already sent, so a watcher that chose not

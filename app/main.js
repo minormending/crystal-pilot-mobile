@@ -8,7 +8,7 @@ import { describeHandoff, describeOffers, describeParty, describeReplaced,
 import { VERSION } from '../gbcore/version.js';
 import { forgetKept, keepBattery, keepRom, keepSym, keptMeta, readOpts, recall,
          sanitise, writeOpts } from '../gbcore/remember.js';
-import { chosenName, openRoom, wasSharing } from '../gbcore/room.js';
+import { chosenName, needsOffer, openRoom, wasSharing } from '../gbcore/room.js';
 import { createHost, createWatcher } from '../gbcore/stream.js';
 import { Cancelled } from '../gbcore/taskbase.js';
 import { REPLACED_SLOT, Saves, SLOT_IDS, UNDO_SLOT } from '../gbcore/saves.js';
@@ -79,7 +79,7 @@ let hostAsleep = false;
 // left behind by a session that has since reloaded blocked the next one --
 // measured, with a watcher that could never be offered a picture because an
 // offer addressed to the device it used to be was still sitting there.
-let offeredTo = null, answeredAt = 0, acceptedAt = 0;
+let offeredTo = null, offeredAt = 0, answeredAt = 0, acceptedAt = 0;
 let watchTimer = null;
 // The host re-stamps its announcement every 30s; anything older than this is a
 // tab that has gone away without saying so.
@@ -765,6 +765,7 @@ function showScreen({ play = true } = {}) {
   // the same write that announces this one: a stale offer is an introduction
   // to a connection that no longer exists.
   offeredTo = null;
+  offeredAt = 0;
   answeredAt = 0;
   acceptedAt = 0;
   const announce = () => room.signal(
@@ -913,11 +914,14 @@ async function onSignal(rtc) {
   if (!room) return;
   const me = room.id;
   try {
-    // Host: somebody is asking, and it is not the device this connection was
-    // made for. An offer is only good for the device it was made for, so a new
-    // asker gets a new one rather than the old one being left to fail.
-    if (host && signal.watching && signal.watching.id !== offeredTo) {
+    // Host: somebody is asking for an introduction that has not been made.
+    // Keyed on the ask rather than on the asker -- see needsOffer, and the two
+    // branches below, which were already keyed that way. Both fields are set
+    // before the await, so a room change arriving mid-offer does not start a
+    // second one.
+    if (host && needsOffer(signal.watching, { to: offeredTo, at: offeredAt })) {
       offeredTo = signal.watching.id;
+      offeredAt = signal.watching.at || Date.now();
       answeredAt = 0;
       acceptedAt = 0;
       const offer = await host.offer();

@@ -190,6 +190,34 @@ export function liveNotes(rtc) {
 }
 
 /**
+ * Has the watching device asked for an introduction that has not been made?
+ *
+ * An offer is only good for the device it was made for, so the host has to
+ * notice a new asker and make a fresh one. It used to notice by identity alone
+ * -- "is this a different device from the one I last offered to?" -- and that is
+ * the wrong question, because the usual second ask comes from the *same* device.
+ * Watch, Leave, Watch again, on the one tablet you own: the second press wrote
+ * the same id, the host saw nothing new, and no offer was ever made. The tablet
+ * sat on a fresh connection with nothing to answer and, fifteen seconds later,
+ * blamed the network -- for a state machine that had decided it was already
+ * done. Reloading did not help either: the device id outlives the tab.
+ *
+ * So the question is about the *asking*, not the asker. Every note carries the
+ * stamp its writer put on it, and a second press is a newer stamp -- which is
+ * how the two branches after this one in onSignal already work, and this one
+ * was the odd branch out.
+ *
+ * @param watching  the live `watching` note, or nothing
+ * @param made      { to, at } -- who the last offer went to, and for which ask
+ */
+export function needsOffer(watching, made) {
+  if (!watching || !watching.id) return false;
+  const { to = null, at = 0 } = made || {};
+  if (watching.id !== to) return true;
+  return (watching.at || 0) > at;
+}
+
+/**
  * Combine two devices' options.
  *
  * These are preferences, not progress: nothing here is a score to protect, and

@@ -3,7 +3,7 @@
 // browser or Firebase -- which is the only reason the bugs below were fixable
 // with a test rather than with two phones and some patience.
 import { test } from '../harness.mjs';
-import { liveNotes, mergeOptions, mergeSignal } from '../../gbcore/room.js';
+import { liveNotes, mergeOptions, mergeSignal, needsOffer } from '../../gbcore/room.js';
 
 test('a withdrawn note stays withdrawn, however it is merged', async (t) => {
   // The bug: a cleared key was simply absent, and in the merge an absent key
@@ -53,4 +53,28 @@ test('merging a merge changes nothing, which is what kidsync requires', async (t
   const once = { ...mergeOptions(a, b), ...mergeSignal(a, b) };
   const twice = { ...mergeOptions(once, b), ...mergeSignal(once, b) };
   t.eq(JSON.stringify(twice), JSON.stringify(once), 'it settles');
+});
+
+test('the same device asking twice is asked twice', async (t) => {
+  // Watch, Leave, Watch again, on the one tablet you own. The second press
+  // carries the same device id and a newer stamp, and the second press is the
+  // one that used to be ignored.
+  const made = { to: null, at: 0 };
+  t.true(needsOffer({ id: 'tablet', at: 1000 }, made), 'the first ask is an ask');
+  made.to = 'tablet'; made.at = 1000;
+  t.false(needsOffer({ id: 'tablet', at: 1000 }, made), 'and is not re-asked');
+  t.true(needsOffer({ id: 'tablet', at: 3000 }, made), 'asking again is a new ask');
+});
+
+test('a different device asking is always a new ask', async (t) => {
+  // Even with an older stamp: two devices do not share a clock, and the id
+  // changing is by itself enough.
+  t.true(needsOffer({ id: 'phone', at: 500 }, { to: 'tablet', at: 1000 }));
+});
+
+test('nobody asking is not an ask', async (t) => {
+  // liveNotes strips a withdrawal, so this is what a host sees the moment the
+  // watching device presses Leave.
+  t.false(needsOffer(null, { to: 'tablet', at: 1000 }), 'withdrawn');
+  t.false(needsOffer({ at: 1000 }, { to: null, at: 0 }), 'a note with no id');
 });
