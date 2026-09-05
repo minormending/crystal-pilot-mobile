@@ -3,7 +3,7 @@
 // browser or Firebase -- which is the only reason the bugs below were fixable
 // with a test rather than with two phones and some patience.
 import { test } from '../harness.mjs';
-import { liveNotes, mergeOptions, mergeSignal, needsOffer } from '../../gbcore/room.js';
+import { liveNotes, mergeOptions, mergeSignal, mergeSymbols, needsOffer } from '../../gbcore/room.js';
 
 test('a withdrawn note stays withdrawn, however it is merged', async (t) => {
   // The bug: a cleared key was simply absent, and in the merge an absent key
@@ -77,4 +77,23 @@ test('nobody asking is not an ask', async (t) => {
   // watching device presses Leave.
   t.false(needsOffer(null, { to: 'tablet', at: 1000 }), 'withdrawn');
   t.false(needsOffer({ at: 1000 }, { to: null, at: 0 }), 'a note with no id');
+});
+
+test('the newer symbol digest wins, and an absent one never does', async (t) => {
+  // The one merge rule in this file that had no test, in the half of the app
+  // two earlier audits found bugs in. A digest only changes when the ROM does,
+  // and whoever takes one checks the fingerprint against their own cartridge
+  // before believing an address -- so the worst a wrong winner can do is be
+  // ignored. That is the argument for the rule being this simple; it is not an
+  // argument for it being untested.
+  const older = { sym: { map: { a: 1 }, tag: 'A', at: 100 } };
+  const newer = { sym: { map: { b: 2 }, tag: 'B', at: 300 } };
+  t.eq(mergeSymbols(older, newer).sym.tag, 'B', 'the newer one');
+  t.eq(mergeSymbols(newer, older).sym.tag, 'B', 'and the same either way round');
+  t.eq(mergeSymbols(null, newer).sym.tag, 'B', 'a device with none takes theirs');
+  t.eq(mergeSymbols(older, null).sym.tag, 'A', 'and keeps its own against none');
+  t.eq(Object.keys(mergeSymbols(null, null)).length, 0,
+       'two devices with none say nothing');
+  t.eq(mergeSymbols({ sym: { tag: 'A' } }, { sym: { tag: 'B', at: 1 } }).sym.tag, 'B',
+       'a digest with no stamp loses to one that has any');
 });

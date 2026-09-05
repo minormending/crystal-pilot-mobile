@@ -169,6 +169,11 @@ const WRAM_NAMES = [
   ['wEnemyMonMaxHP', 2], ['wBattleMonHP', 2], ['wBattleMonMaxHP', 2],
   ['wNumBalls', 1], ['wBalls', 40], ['wCurPocket', 1], ['wCurItem', 1],
   ['wWindowStackSize', 1],
+  // The map, so a CollisionMap can be built at all. wOverworldMapBlocks is the
+  // real size -- a stride of mapWidth+6 over a tall map indexes a long way in.
+  ['wOverworldMapBlocks', 0x510], ['wMapWidth', 1], ['wMapHeight', 1],
+  ['wTilesetCollisionBank', 1], ['wTilesetCollisionAddress', 2],
+  ['wMapObjects', 16 * 0x10],
   // These four sit next to each other on purpose: state.js reads them as one
   // small window, and a layout that scattered them would not exercise that.
   ['wMenuDataItems', 1], ['wMenuBorderTopCoord', 1], ['wMenuBorderRightCoord', 1],
@@ -189,6 +194,7 @@ function buildSymText() {
   lines.push('10:5afb Moves');
   lines.push('0e:4000 PokemonNames');
   lines.push('0e:5000 ItemNames');
+  lines.push('0d:4000 CollisionPermissionTable');
   lines.push('01:a008 sCheckValue1');
   lines.push('01:ad0f sCheckValue2');
   return lines.join('\n') + '\n';
@@ -266,6 +272,11 @@ export function worldRam(sym, {
   scriptMode = 0, tile = 0, menu = [0, 0], battleCursor = 0, windowStack = 0,
   enemy = null, active = null, balls = [], curPocket = 0, curItem = 0,
   menuItems = 0, menuTop = 0, menuRight = 0,
+  // The map's size in *blocks*; a block is two tiles each way. `objects` are
+  // MAPOBJECT entries, whose coordinates the cartridge stores four higher than
+  // the map's own -- given here the way the game gives them, so a test that
+  // says (8,15) is saying what the ROM says.
+  mapBlocks = null, objects = [],
 } = {}) {
   const wram = new Uint8Array(WRAM_BYTES);
   w8(wram, sym.addr('wPartyCount'), party.length);
@@ -303,6 +314,16 @@ export function worldRam(sym, {
     w16(wram, sym.addr('wBattleMonHP'), active.hp ?? 20);
     w16(wram, sym.addr('wBattleMonMaxHP'), active.maxHp ?? 20);
   }
+  if (mapBlocks) {
+    w8(wram, sym.addr('wMapWidth'), mapBlocks[0]);
+    w8(wram, sym.addr('wMapHeight'), mapBlocks[1]);
+  }
+  objects.forEach((o, i) => {
+    const at = sym.addr('wMapObjects') + i * 0x10;
+    w8(wram, at + 1, o.sprite ?? 1);
+    w8(wram, at + 2, o.y ?? 0);
+    w8(wram, at + 3, o.x ?? 0);
+  });
   w8(wram, sym.addr('wNumBalls'), balls.length);
   balls.forEach(([id, qty], i) => {
     w8(wram, sym.addr('wBalls') + i * 2, id);

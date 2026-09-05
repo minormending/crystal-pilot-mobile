@@ -490,7 +490,7 @@ the ROM, not shipped as a copy, so they cannot drift from the build being driven
 
 ### `collision.js` — what you can walk on
 
-<!-- covers: gen2/collision.js @ cd5eb078d515 -->
+<!-- covers: gen2/collision.js @ d41a76b3960e -->
 
 Decodes the loaded map into "can I stand on this tile", and does breadth-first
 pathfinding over the result. This is what turns walking from trial and error
@@ -529,6 +529,18 @@ Two more things the map alone will not tell you:
   `wMapObjects` — sixteen 16-byte entries, coordinates stored four higher than
   the map's own — and those tiles are *preferred against* rather than treated as
   walls, because an object hidden by its event flag still has an entry.
+- **That +4 is the one cartridge assumption here that `calibrate` does not
+  cover**, and it used to claim it was "checked against the player" while
+  nothing checked it. Nor can it be, that way: index 0 holds where the map
+  *placed* the player, not where the player is — measured in Elm's lab, the
+  entry reads `(8,15)` while the player stands at `(7,4)`, having come in
+  through a door. So the check is the map's own bounds, and a tile outside them
+  is dropped instead of kept as a key that can never match. Which is also the
+  right way to fail: on a cartridge storing objects at a different origin, an
+  empty set means the planner walks into people and *recovers* — `walkTo` puts a
+  refused tile in `avoid` and routes around it — whereas a set of in-bounds but
+  wrong tiles can seal a one-tile corridor, and `unreachable` is the one answer
+  `walkTo` cannot recover from.
 
 </details>
 
@@ -571,7 +583,7 @@ Route 30's door to it at `(17,5)`.
 
 ## 4. Taking one step, and planning a walk
 
-<!-- covers: gen2/nav.js gen2/collision.js @ 7d0479684c7f -->
+<!-- covers: gen2/nav.js gen2/collision.js @ 7f29dce13157 -->
 
 ### One step
 

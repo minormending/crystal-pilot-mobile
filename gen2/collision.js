@@ -126,16 +126,33 @@ export class CollisionMap {
    * event flag has hidden it is still an entry -- so these are treated as tiles
    * to prefer avoiding rather than walls, and the caller drops them if that is
    * the only way through. Index 0 is the player and is skipped. Coordinates are
-   * stored four higher than the map's own, which is checked against the player.
+   * stored four higher than the map's own.
+   *
+   * That offset used to claim it was "checked against the player", and it was
+   * not -- nor can it be that way. Index 0 holds where the map *placed* the
+   * player, not where the player is: measured in Elm's lab, the entry reads
+   * (8,15) while the player stands at (7,4), because they came in through a
+   * door. So the only check available is the bounds of the map, and tiles
+   * outside them are dropped rather than kept as keys that can never match.
+   *
+   * Which is also the right way to fail. On a cartridge that stored objects at
+   * a different origin, an empty set means the planner walks into people and
+   * recovers -- walkTo puts a refused tile in `avoid` and routes around it. A
+   * set of in-bounds but *wrong* tiles is the bad outcome: it can seal a
+   * one-tile corridor, and "unreachable" is the one answer walkTo cannot
+   * recover from.
    */
   occupied(wram = this.wram) {
     const taken = new Set();
     if (this.a.objects === null) return taken;
+    const w = b(wram, this.a.mapWidth) * 2, h = b(wram, this.a.mapHeight) * 2;
     for (let i = 1; i < MAP_OBJECT_COUNT; i++) {
       const at = this.a.objects + i * MAP_OBJECT_BYTES;
       if (!b(wram, at + MAP_OBJECT_SPRITE)) continue;
-      taken.add((b(wram, at + MAP_OBJECT_X) - MAP_OBJECT_ORIGIN) + ',' +
-                (b(wram, at + MAP_OBJECT_Y) - MAP_OBJECT_ORIGIN));
+      const x = b(wram, at + MAP_OBJECT_X) - MAP_OBJECT_ORIGIN;
+      const y = b(wram, at + MAP_OBJECT_Y) - MAP_OBJECT_ORIGIN;
+      if (x < 0 || y < 0 || x >= w || y >= h) continue;
+      taken.add(x + ',' + y);
     }
     return taken;
   }
