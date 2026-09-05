@@ -115,6 +115,17 @@ section gives. Everything by hand runs against a local build.
 
 ## The checks that need no ROM
 
+```mermaid
+flowchart BT
+    C["the app"] --> T["./run-tests<br/>147 behaviour tests"]
+    C --> A["tools/check-app<br/>15 groups"]
+    C --> D["tools/docs-check<br/>23 tracked sections"]
+    T --> M{{"mutation testing<br/>change a line, see who notices"}}
+    A --> K["tools/check-checks<br/>break each group's own subject"]
+    M -.->|"13 of 15 caught"| R(["the suite is load-bearing"])
+    K -.->|"15 of 15 bite"| R2(["the groups are awake"])
+```
+
 ### Are the checks still checking?
 
 ```bash

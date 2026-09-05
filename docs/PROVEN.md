@@ -312,18 +312,18 @@ second, which is there so the core's own waits finish, not to run a game.
   candidates and returned true standing three tiles clear of any. It checks the
   tile underfoot now.
 
-## Nine audits, and how each defect was actually found
+## Ten audits, and how each defect was actually found
 
 Everything above was watched happening. This section is the exception, and the
-exception is the point of it: after the ROM-hack work shipped, nine passes went
-looking for defects in code that already worked, and found twenty-six — plus
+exception is the point of it: after the ROM-hack work shipped, ten passes went
+looking for defects in code that already worked, and found twenty-seven — plus
 one a fix created on the way, which is in the table in italics because it is a
 different kind of thing. None of them announced itself.
 
-Six of those passes worked by **reading**, two by **measuring**, and the ninth
-by **checking the claims the comments make**. Each change of method found what
-the one before it was structurally bad at, which is the thread worth pulling
-below.
+Six of those passes worked by **reading**, two by **measuring**, the ninth by
+**checking the claims the comments make**, and the tenth by **checking the
+things that do the checking**. Each change of method found what the one before
+it was structurally bad at, which is the thread worth pulling below.
 
 The recurring shape is the same in all five:
 
@@ -370,6 +370,7 @@ exactly why nothing failed.
 | 9 | a thrown frame left a button held down for ever | a core that throws | reading |
 | 9 | `saves.js` reached past the emulator wrapper | one browser | checking a claim |
 | 9 | and a docstring said the app could not save | one browser | checking a claim |
+| 10 | an ambiguous HP match gave up on every candidate | two look-alike slots | **mutation testing** |
 
 Five things in that table are worth more than the individual rows.
 
@@ -450,6 +451,26 @@ are also the first defects in eight passes that no test here can reach — a
 service worker wants a browser and a secure context — so what is checked is the
 path arithmetic and the behaviour is reasoned about, which the code walkthrough
 says rather than implies.
+
+**The tenth pass audited the apparatus rather than the code, and the headline
+is that it held.** All fifteen check groups fail when the one thing they claim
+to watch is broken, and thirteen of fifteen source mutations are caught by the
+suite — both of those are now results rather than assumptions, and the first is
+repeatable as [`tools/check-checks`](DEVELOPING.md#are-the-checks-still-checking).
+It matters here because four groups *have* gone silent historically and every
+one went on printing `ok`.
+
+The two mutations that survived were worth the visit: `onField` demanded a
+unique HP match and fell back to the first Pokémon standing when it did not get
+one, which returns the *lead* in the one case that arises — and `partyDown`, the
+predicate that separates a whiteout from a refused escape, had no test at all
+though its code was right.
+
+**The honest caveat is that both new instruments fail towards the false alarm.**
+The first draft of `check-checks` reported seven groups blunt, and all seven were
+my mutations being wrong rather than the checks being asleep. A tool that reports
+on tools is a tool, and its cost is the afternoon spent finding out which of the
+two was mistaken.
 
 **The ninth pass made the eighth's finding into a method, and then into a
 check.** If a comment says *never*, *always* or *every*, it is a claim, and a
