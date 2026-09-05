@@ -115,6 +115,35 @@ section gives. Everything by hand runs against a local build.
 
 ## The checks that need no ROM
 
+### Are the checks still checking?
+
+```bash
+tools/check-checks            # every group
+tools/check-checks symbols    # one of them
+```
+
+`check-app` printing `ok` means nothing if a group has quietly stopped looking,
+and that is not hypothetical here — **four groups have gone silent** at one time
+or another. A word table that stopped at twenty, so the twenty-first entry
+disabled the count it fed. A regex that wanted `modules. Arrows` and broke on a
+comma. A diagram found by `flowchart TD`, switched to `LR`. A constant read from
+a file it had moved out of. Every one still printed `ok`.
+
+So `check-checks` breaks, on purpose, the one thing each group claims to watch,
+and asserts the group fails. It works on a copy of the tree — nothing it does
+can reach your files — and re-runs each group after restoring, so a mutation
+that fails to undo itself is reported rather than believed. **All fifteen bite.**
+
+Writing a mutation is the whole cost of the tool, and it is easy to get wrong in
+a way that reads as a broken check: the first draft of seven of these missed what
+the group actually greps for — `s.addr(...)` where the pattern wants
+`symbols.addr(...)`, an orphan `id` where the check walks the other direction, a
+`.sym` that `.gitignore` was already refusing. **A mutation has to violate what
+the group claims**, and when it does not, the honest reading is that the mutation
+is wrong, not the check. It is not in the pre-commit hook: it runs `check-app`
+about forty-five times, which is the wrong price for every commit and the right
+one for the commit that changes a check.
+
 `tools/check-app` is fifteen groups, each one a class of mistake that parses
 fine and is wrong at run time:
 

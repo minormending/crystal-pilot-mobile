@@ -1,0 +1,163 @@
+#!/usr/bin/env python3
+"""Does each check group actually bite?
+
+`check-app` passing means nothing if a group has quietly stopped looking. That
+is not hypothetical here: four groups have gone silent at one time or another --
+a word table that stopped at twenty so the twenty-first entry disabled the count,
+a regex that wanted "modules. Arrows" and broke on a comma, a diagram found by
+`flowchart TD` that was switched to `LR`, and a constant read from a file it had
+moved out of. Every one of them still printed `ok`.
+
+So this breaks, on purpose, the one thing each group claims to watch, and
+asserts the group fails. A group that still passes is not checking what its name
+says.
+
+It works on a copy of the tree, so nothing here can touch your working files,
+and it re-runs the group after restoring to prove the break was undone.
+
+    tools/check-checks            every group
+    tools/check-checks symbols    one of them
+
+Writing a mutation is the whole cost of this tool, and it is easy to get wrong
+in a way that reads as a broken check: the first draft of seven of these missed
+what the group actually greps for -- `s.addr(...)` where the pattern wants
+`symbols.addr(...)`, an orphan id where the check walks the other direction, a
+`.sym` file that `.gitignore` was already refusing. A mutation has to violate
+what the group *claims*, and if it does not, the honest reading is that the
+mutation is wrong.
+"""
+import pathlib
+import shutil
+import subprocess
+import sys
+import tempfile
+
+HERE = pathlib.Path(__file__).resolve().parent
+REPO = HERE.parent
+
+
+def sub(old, new):
+    """Replace the first occurrence, and insist it was there."""
+    def go(text):
+        if old not in text:
+            raise SystemExit(f"mutation anchor missing: {old[:60]!r}")
+        return text.replace(old, new, 1)
+    return go
+
+
+def append(line):
+    return lambda text: text + line
+
+
+def mutations(root):
+    def edit(rel, fn):
+        p = root / rel
+        before = p.read_text()
+        p.write_text(fn(before))
+        return lambda: p.write_text(before)
+
+    def track(rel, text):
+        p = root / rel
+        p.write_text(text)
+        # -f, because .gitignore already refuses *.sym -- which is the belt this
+        # group is the braces for.
+        subprocess.run(["git", "add", "-f", rel], cwd=root, capture_output=True)
+
+        def undo():
+            subprocess.run(["git", "rm", "-f", "--cached", rel],
+                           cwd=root, capture_output=True)
+            p.unlink(missing_ok=True)
+        return undo
+
+    return {
+        "syntax": lambda: edit("gen2/state.js", append("\nfunction ((){\n")),
+        "layers": lambda: edit("gen2/state.js", sub(
+            "import", "import { describeRows } from '../app/rows.js';\nimport")),
+        "seam": lambda: edit("gen2/state.js", append("\n// probe: gb.core.thing()\n")),
+        "titles": lambda: edit("titles/crystal.js", sub(
+            "  async healAtElm() {",
+            "  async travelTo() { return null; }\n  async healAtElm() {")),
+        "shell": lambda: edit("sw.js", sub("'./gen2/battle.js', ", "")),
+        "markup": lambda: edit("index.html", sub("</main>", "<div></main>")),
+        # A token inside the :root block the group actually parses, set to the
+        # background so the pair it is measured against cannot pass.
+        "contrast": lambda: edit("index.html", sub("--ink:", "--ink:var(--bg);--was-ink:")),
+        "gamefiles": lambda: track("probe.sym", "00:0000 wThing\n"),
+        "buttons": lambda: edit("gen2/state.js", append(
+            "\nexport const probe = (gb) => gb.press('Start', 5);\n")),
+        "wiring": lambda: edit("app/rows.js", append(
+            "\nexport const probe = () => $('#no-such-row');\n")),
+        "version": lambda: edit("sw.js", sub("crystal-pilot-v", "crystal-pilot-x")),
+        "symbols": lambda: edit("gen2/state.js", append(
+            "\nexport const probe = (symbols) => symbols.addr('wProbeNeverShared');\n")),
+        "docshape": lambda: edit("docs/CODE.md", sub(
+            'btl["battle.js<br/>one turn"]', 'btl["battle-probe.js<br/>one turn"]')),
+        "names": lambda: edit("gen2/state.js", append(
+            "\nexport const probe = () => ProbeUndefinedName();\n")),
+        "moves": lambda: edit("gen2/engine.js", sub(
+            "lethalEffects: [38, 40, 87, 88, 89, 144]", "lethalEffects: [40]")),
+    }
+
+
+def copy_tree(into):
+    subprocess.run(
+        ["rsync", "-a", "--exclude", ".git", "--exclude", "dev",
+         "--exclude", "node_modules", f"{REPO}/", f"{into}/"], check=True)
+    # `gamefiles` asks git what is tracked, so the copy needs to be a repo.
+    subprocess.run(["git", "init", "-q", "."], cwd=into, capture_output=True)
+    subprocess.run(["git", "add", "-A"], cwd=into, capture_output=True)
+    # `moves` drives the real move table when a cartridge is here, and skips
+    # itself when there is not. Linked rather than copied: it is 4MB.
+    dev = REPO / "dev"
+    if dev.is_dir():
+        (into / "dev").symlink_to(dev)
+
+
+def main(argv):
+    wanted = [a for a in argv if not a.startswith("-")]
+    with tempfile.TemporaryDirectory(prefix="check-checks-") as tmp:
+        root = pathlib.Path(tmp)
+        copy_tree(root)
+        table = mutations(root)
+        unknown = [w for w in wanted if w not in table]
+        if unknown:
+            print(f"unknown group(s): {', '.join(unknown)}")
+            return 2
+        groups = wanted or list(table)
+
+        def run(group):
+            r = subprocess.run(["./tools/check-app", group], cwd=root,
+                               capture_output=True, text=True)
+            return r.returncode == 0
+
+        print("check-checks:")
+        blunt = []
+        for group in groups:
+            if not run(group):
+                print(f"  ??    {group}: already failing on a clean tree")
+                blunt.append(group)
+                continue
+            undo = table[group]()
+            try:
+                broke = not run(group)
+            finally:
+                undo()
+            if not run(group):
+                print(f"  ??    {group}: the mutation did not restore cleanly")
+                blunt.append(group)
+            elif broke:
+                print(f"  ok    {group} fails when its own subject is broken")
+            else:
+                print(f"  BLUNT {group} passed with its subject broken")
+                blunt.append(group)
+        print()
+        if blunt:
+            print(f"BLUNT — {len(blunt)}/{len(groups)} group(s) are not checking "
+                  f"what they say: {', '.join(blunt)}")
+            return 1
+        print(f"all sharp — {len(groups)}/{len(groups)} check groups bite")
+        return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
