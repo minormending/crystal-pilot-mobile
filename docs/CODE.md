@@ -1544,7 +1544,7 @@ This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ ea8f61238cbe -->
+<!-- covers: app/main.js index.html @ e9ab062714e7 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -2075,7 +2075,7 @@ game's own picture, not on a surface of ours.
 
 ### What it remembers
 
-<!-- covers: gbcore/remember.js @ 24ba57802ae1 -->
+<!-- covers: gbcore/remember.js @ 2e95dcff0be1 -->
 
 The app forgets everything on a reload, and a reload is not rare: the Update
 button causes one deliberately, and a phone discards a background tab whenever
@@ -2134,6 +2134,22 @@ had verified byte for byte — the library persists a cartridge only when
 something asks it to. So the copy is taken when the app knows the bytes moved:
 a save it drove, a `.sav` it installed, a slot it loaded, and immediately
 before the Update button's reload.
+
+**And it carries the cartridge it came from**, because it is a *separate key*
+from the ROM. Picking a new ROM overwrites `rom` and does not touch `battery`,
+so a kept save outlives the cartridge that wrote it — and restoring it on the
+next open put a save written in one build's layout into another. Every other
+door here is locked against exactly that: the handoff checks the room's tag,
+`loadSlot` checks the slot's, `describeSlot` says *from a different ROM*. This
+one had no lock, because the kept record had no tag to check. `recall` now hands
+its `meta` back so the caller can compare against the ROM it just fingerprinted,
+and `keepBatteryFor` in `main.js` stamps every write in one place rather than at
+its three call sites — the same reasoning `saves.js` gives for holding `tag` on
+the instance.
+
+A mismatch leaves the battery alone rather than deleting it. It is the only copy
+of that save the app holds, and putting the old cartridge back makes it match
+again.
 
 ```mermaid
 flowchart TD
@@ -2430,7 +2446,7 @@ they have been installed.
 
 ### Watching the other device's screen
 
-<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ 42fc53880858 -->
+<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ 7d56a22bb361 -->
 
 One device shows its screen; the other watches it, and plays it if the first
 one says so. The picture goes straight between them over WebRTC and never

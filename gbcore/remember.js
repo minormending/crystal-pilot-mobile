@@ -288,14 +288,21 @@ export async function keepBattery(bytes, extra = {}) {
  * The pair is all or nothing: a ROM without its symbol file cannot start the
  * pilot, and half a restore that leaves one picker to find is worse than
  * asking for both -- it looks broken rather than like a question.
+ *
+ * The meta comes back with them because the battery is a *separate key* from
+ * the ROM, and picking a new ROM overwrites one without touching the other. So
+ * a kept battery can outlive the cartridge it was written by, and only the
+ * caller knows which cartridge is which. This hands over what it recorded and
+ * lets the caller decide; deciding here would mean this module fingerprinting
+ * ROMs, which is not its job.
  */
 export async function recall() {
   try {
-    const [rom, sym, battery] = await work('readonly', (s) => Promise.all([
-      one(s, ROM), one(s, SYM), one(s, BATTERY),
+    const [rom, sym, battery, meta] = await work('readonly', (s) => Promise.all([
+      one(s, ROM), one(s, SYM), one(s, BATTERY), one(s, META),
     ]));
     if (!rom || !rom.buffer || !sym || !sym.text) return null;
-    return { rom, sym, battery: battery || null };
+    return { rom, sym, battery: battery || null, meta: meta || {} };
   } catch (e) {
     return null;
   }

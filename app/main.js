@@ -107,6 +107,16 @@ let grindRestored = false;
 // maybeStart runs so that the one place which decides "are we in the world
 // now?" can see it.
 let pendingBattery = null;
+
+/**
+ * Keep this device's battery, stamped with the cartridge it came from.
+ *
+ * The tag goes on here rather than at each of the three call sites, for the
+ * reason saves.js gives about its own `this.tag`: several call sites that must
+ * all remember the same field is the shape of the bug this exists to prevent.
+ */
+const keepBatteryFor = (bytes, extra = {}) =>
+  keepBattery(bytes, { tag: romTag, ...extra });
 // The boot in flight, so two callers share one start rather than racing.
 let starting = null;
 // The 1.2s repaint while nobody is driving. One of them, always.
@@ -577,7 +587,7 @@ async function keepGame() {
   try {
     const bytes = await gb.batterySave();
     if (!state.saveIsPresent(bytes)) return false;
-    const ok = await keepBattery(bytes);
+    const ok = await keepBatteryFor(bytes);
     paintFiles();
     await shareGame(bytes);
     return ok;
@@ -616,7 +626,7 @@ async function shareGame(bytes) {
   }
   // The revision is stored beside the bytes it belongs to, so this device can
   // tell "the same save" from "also a save" when it looks at the room again.
-  await keepBattery(bytes, { rev: said.rev });
+  await keepBatteryFor(bytes, { rev: said.rev });
   paintHandoff();
 }
 
@@ -1117,7 +1127,7 @@ $('#takeover').onclick = () => runTask('#takeover', 'taking the shared save',
     // the room can move between a row being drawn and a button being pressed,
     // and recording the older number makes this device believe it is behind a
     // save it is already holding.
-    await keepBattery(got.bytes, { rev: got.rev });
+    await keepBatteryFor(got.bytes, { rev: got.rev });
     savedThisSession = true;
     await paintSlots();
     paintFiles();
@@ -2717,7 +2727,23 @@ $('#exportsav').onclick = async () => {
     symbols.require(NEEDED_SYMBOLS);
     romBytes = kept.rom.buffer;
     romTag = fingerprintRom(kept.rom.buffer);
-    pendingBattery = kept.battery;
+    // The battery is kept under its own key, and picking a new ROM overwrites
+    // the ROM without touching it -- so the kept save can be the *previous*
+    // cartridge's. Installing it would put a save written in one build's layout
+    // into another, which is the thing every other path here refuses: the
+    // handoff checks the room's tag, loadSlot checks the slot's, describeSlot
+    // says "from a different ROM". This was the one door with no lock on it.
+    //
+    // Not deleted, only left alone. It is the only copy of that save this app
+    // holds, and putting the old cartridge back makes it match again.
+    const keptTag = kept.meta && kept.meta.tag;
+    if (keptTag && keptTag !== romTag) {
+      pendingBattery = null;
+      progress('the kept save belongs to a different ROM — it has been left '
+               + 'where it is rather than loaded');
+    } else {
+      pendingBattery = kept.battery;
+    }
     restoredSession = true;
   } catch (e) {
     // A record this build cannot use is not something to argue with: drop it
