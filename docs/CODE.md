@@ -1100,7 +1100,7 @@ precedes it defaults to yes, which is what we want; the nickname box does not.
 
 ## 7a. Three that act on where you already are
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ 600cc57bd8b6 -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ 36c6d0c43b65 -->
 
 Grind, hunt and catch all go *looking* for something. These three do the obvious
 thing with the situation you are already in, and take no parameters:
@@ -1198,6 +1198,17 @@ session leaves the tab.
 once they appear. Rows are counted by stepping DOWN until the cursor repeats,
 and SAVE is `count - 2`, because the last three are always SAVE, OPTION, EXIT.
 If the first guess opens the pack instead, the others are tried.
+
+**And a wrong guess is closed before the next is tried**, which is the recovery
+that sentence has always promised and nothing was performing. `_trySaveRow`
+returns false with whatever it opened still on screen, and `_openStartMenu`
+cannot tell a submenu from the START menu: all it asks is whether *some* cursor
+is live, because nothing in memory distinguishes them the way `wMenuDataItems`
+distinguishes the battle menu. So the next row was driven blind through the last
+row's leftovers — DOWN moving a cursor inside the pack's USE / GIVE / TOSS box,
+and the A behind it answering that rather than the START menu. Four B presses
+between attempts is the whole fix, and it is what makes trying the other rows
+the safe idea the paragraph above claims it is.
 
 **Counting rows is also how it notices the menu never opened.** If those DOWN
 presses are reaching the world rather than a menu, the player walks — which in

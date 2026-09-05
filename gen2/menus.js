@@ -184,6 +184,16 @@ export function withMenus(Base) {
     for (const row of order) {
       if (this.cancelled) return false;
       if (await this._trySaveRow(row, count)) return true;
+      // The recovery the paragraph above promises, which nothing was actually
+      // doing. A wrong row opens the pack or the party and _trySaveRow returns
+      // false with that submenu still on screen -- and _openStartMenu cannot
+      // tell a submenu from the START menu, because all it asks is whether
+      // *some* cursor is non-zero. So the next row was driven blind through
+      // whatever the last one left open: DOWN moved a cursor in the pack's
+      // USE / GIVE / TOSS box rather than in the START menu, and the A behind
+      // it answered that.
+      await this.closeMenus(4);
+      await this.step(SETTLE_FRAMES);
     }
     return false;
   }
@@ -211,7 +221,16 @@ export function withMenus(Base) {
     return s.worldLoaded && !s.windowOpen && !s.inBattle;
   }
 
-  /** Open the START menu and confirm it really opened. */
+  /**
+   * Open the START menu and confirm it really opened.
+   *
+   * "Really" is doing less work than it looks: this asks whether a cursor is
+   * live, not whether it is the START menu's. Nothing in memory distinguishes
+   * them the way wMenuDataItems distinguishes the battle menu, so the honest
+   * guard is the caller's -- _saveOnce closes whatever a failed row opened
+   * before trying the next, and _menuRowCount bails if the player turns out to
+   * be walking, which is what "no menu at all" looks like from here.
+   */
   async _openStartMenu(tries = 3) {
     for (let attempt = 0; attempt < tries; attempt++) {
       await this.push('START', 5, 10);
