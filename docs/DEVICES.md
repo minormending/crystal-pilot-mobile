@@ -96,6 +96,24 @@ than reasoning about it:
   is one. The `.sav` and slot paths never met this, because by the time a
   person presses either, the emulator has been running for a while.
 
+## When the app does not know your cartridge
+
+Point it at a ROM hack and it works, and one line in settings says what that
+costs. **Game — no profile for this cartridge: maps are numbered, and the pilot
+cannot start a game or heal.**
+
+That row exists because the app behaves *correctly* in a way that reads as
+broken. A cartridge nobody has described gets a profile that names no map and
+knows nowhere that heals, so the header says `map 26.1` where it would say
+*Route 30*, there is no offer to start a new game, and Heal is not on the list.
+Each of those is the right answer to a question the app cannot answer, and
+without the line they are four separate mysteries.
+
+It is silent for a cartridge the app knows, because *this is Crystal* is not
+news to somebody who just picked Crystal. In between — a profile with some maps
+named and no healers yet — it names the profile and says what is still missing,
+because that one is a file somebody can go and finish.
+
 ## Sharing it with your other device
 
 One person, a phone and a tablet, no accounts: `sync/` is

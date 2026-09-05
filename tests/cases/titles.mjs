@@ -3,6 +3,7 @@
 import { test } from '../harness.mjs';
 import { TITLES, pickTitle } from '../../titles/pick.js';
 import { engineFor, validateTitle } from '../../titles/contract.js';
+import { describeTitle } from '../../app/rows.js';
 import { gen2 } from '../../gen2/engine.js';
 
 // The smallest thing that passes the contract, for tests about picking rather
@@ -119,4 +120,30 @@ test('an engine override is a patch, not a replacement', async (t) => {
   t.eq(e.partyStride, gen2.partyStride, 'and everything it did not is intact');
   t.eq(e.speciesCount, gen2.speciesCount, 'including the ones it never mentioned');
   t.eq(engineFor(ok({})), gen2, 'a title with no overrides gets the stock profile');
+});
+
+test('the app says which cartridge it is driving, only when that is news',
+     async (t) => {
+  class Full { run() {} heal() {} }
+  const complete = { id: 'crystal', drive: Full, names: { 6151: 'Route 29' },
+                     healers: [{ map: 6151, reach: 'heal' }] };
+  t.false(describeTitle(complete).show,
+          'a cartridge it knows needs no announcement that it knows it');
+
+  const none = describeTitle({ id: 'generic', drive: class {} });
+  t.true(none.show, 'a cartridge nobody has described is worth a line');
+  t.contains(none.text, 'maps are numbered',
+             'and the line is the consequences, not the id');
+  t.contains(none.text, 'cannot start a game or heal',
+             'because those absences are what looks broken');
+
+  // The middle, which is the one somebody can act on: a file to go and finish.
+  const half = describeTitle({ id: 'crystal-early', drive: class {},
+                               names: { 6151: 'Route 29' } });
+  t.contains(half.text, 'crystal-early', 'a half-written profile is named');
+  t.contains(half.text, '1 map named', 'with how much of it there is');
+  t.contains(half.text, 'nowhere to heal', 'and what it has not said yet');
+  t.contains(half.text, 'no scripted start', 'both of them');
+
+  t.false(describeTitle(null).show, 'and nothing at all before a game loads');
 });

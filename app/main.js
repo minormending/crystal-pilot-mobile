@@ -4,7 +4,7 @@ import { GameBoy } from '../gbcore/gb.js';
 import { SHARED_SYMBOLS, Symbols } from '../gen2/symbols.js';
 import { describeHandoff, describeOffers, describeParty, describeReplaced,
          describeRoom, describeRows, describeScreen, describeSlot,
-         describeUndo, joinFailure } from './rows.js';
+         describeTitle, describeUndo, joinFailure } from './rows.js';
 import { VERSION } from '../gbcore/version.js';
 import { forgetKept, keepBattery, keepRom, keepSym, keptMeta, readOpts, recall,
          sanitise, writeOpts } from '../gbcore/remember.js';
@@ -370,6 +370,11 @@ async function reallyStart() {
   // construction, because that is the first line where the fingerprint is
   // certain to exist.
   saves.tag = romTag;
+  // Said once, and only when it is worth saying: a cartridge the pilot has no
+  // description of behaves correctly in a way that reads as broken.
+  const known = describeTitle(title);
+  $('#titlerow').classList.toggle('hide', !known.show);
+  $('#titlestate').textContent = known.text;
   shareSymbols();
 
   // A battery that came back with the files, put in through the same path a

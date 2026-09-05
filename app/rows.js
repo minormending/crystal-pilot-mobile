@@ -255,6 +255,45 @@ export function describeUndo(point, refused) {
 }
 
 /**
+ * Which cartridge the pilot thinks it is driving, and how well it knows it.
+ *
+ * Silent for a game it has a full description of, because "this is Crystal" is
+ * not news to somebody who just picked Crystal. It exists for the other case: a
+ * cartridge nobody has described gets a profile that names no map and knows
+ * nowhere to heal, and the app then behaves *correctly* in a way that looks
+ * broken -- "map 26.1" in the header, no offer to start a game, no Heal. This
+ * is the sentence that makes those a consequence rather than a mystery.
+ *
+ * `names` and `healers` are counted rather than trusted, because a profile with
+ * no names is the generic one whatever it calls itself -- and a profile with
+ * names and no healers is somebody's half-finished file, which is worth saying
+ * differently because it is a file to go and finish.
+ */
+export function describeTitle(title) {
+  if (!title) return { text: '', show: false };
+  const names = Object.keys(title.names || {}).length;
+  const healers = (title.healers || []).length;
+  const scripted = typeof title.drive === 'function'
+    && typeof title.drive.prototype.run === 'function';
+  if (names && healers && scripted) return { text: '', show: false };
+  if (!names) {
+    return {
+      show: true,
+      text: 'no profile for this cartridge — maps are numbered, and the pilot '
+            + 'cannot start a game or heal',
+    };
+  }
+  const missing = [];
+  if (!healers) missing.push('nowhere to heal');
+  if (!scripted) missing.push('no scripted start');
+  return {
+    show: true,
+    text: `${title.id} · ${names} map${names === 1 ? '' : 's'} named`
+          + (missing.length ? ` · ${missing.join(', ')}` : ''),
+  };
+}
+
+/**
  * What the Devices row says, and what its button offers.
  *
  * Here rather than in main.js for the same reason every other row's wording is
