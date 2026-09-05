@@ -171,6 +171,19 @@ test('a healthy lead is still the one on the field', async (t) => {
        [1, 2, 0, 0], 'the ordinary case is unchanged');
 });
 
+test('an ambiguous match still picks a Pokemon the HP could belong to', async (t) => {
+  // The case that made the old rule wrong. Two slots read alike, so no unique
+  // match -- and the *lead* is standing at a different HP entirely. Demanding
+  // uniqueness sent the caller to that lead, whose numbers plainly are not the
+  // battle mon's. Any of the ones that match is a better answer than one that
+  // does not.
+  const lead = { hp: 30, maxHp: 30, moves: [1, 0, 0, 0], pp: [5, 0, 0, 0] };
+  const b = { hp: 20, maxHp: 25, moves: [2, 0, 0, 0], pp: [5, 0, 0, 0] };
+  const c = { hp: 20, maxHp: 25, moves: [3, 0, 0, 0], pp: [5, 0, 0, 0] };
+  const out = onField({ party: [lead, b, c], active: { hp: 20, maxHp: 25 } });
+  t.eq(out.moves, [2, 0, 0, 0], 'one of the two that match, not the lead');
+});
+
 test('two Pokemon that read alike fall back to the one sendOut would pick', async (t) => {
   // Same species, same level, both untouched: the HP pair cannot tell them
   // apart, so guessing between them would be worse than the rule sendOut

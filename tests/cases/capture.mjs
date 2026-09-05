@@ -5,7 +5,7 @@
 // under test is the decision made between them, not the button pressing. Each
 // stub records what it was asked to do, so a test can assert on the sequence.
 import { FakeGameBoy, fakeRom, symbols, test, worldRam } from '../harness.mjs';
-import { captureOutcome } from '../../gen2/jobs.js';
+import { captureOutcome, partyDown } from '../../gen2/jobs.js';
 import { GameState } from '../../gen2/state.js';
 import { Tasks } from '../../gen2/tasks.js';
 
@@ -192,4 +192,16 @@ test('an empty pocket is refused before the battle is touched', async (t) => {
   const r = await tasks.captureHere(POKE_BALL, {});
   t.eq(r.outcome, 'noballs', 'no balls of that kind');
   t.eq(tasks.log.length, 0, 'nothing was attempted');
+});
+
+test('a whiteout is every one of them down, not any one of them', async (t) => {
+  // partyDown decides whether a failed escape is reported as "could not run
+  // from a PIDGEY" or as "the whole party fainted", and those want opposite
+  // responses from a person. Loosening it to `some` broke no test, which is how
+  // it came up for writing one.
+  t.true(partyDown({ party: [{ hp: 0 }, { hp: 0 }] }), 'all down is a whiteout');
+  t.false(partyDown({ party: [{ hp: 0 }, { hp: 12 }] }),
+          'one down is not — somebody is still standing');
+  t.false(partyDown({ party: [{ hp: 12 }] }), 'nor is a healthy party');
+  t.false(partyDown({ party: [] }), 'and no party at all is not a whiteout either');
 });

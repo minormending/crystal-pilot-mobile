@@ -25,7 +25,7 @@ const MAX_HEALS = 12;
  * PIDGEY, and a catch said your *lead* had fainted, which stopped being the
  * condition the day it started meaning the whole party.
  */
-const partyDown = (s) => s.party.length > 0 && s.party.every((m) => m.hp === 0);
+export const partyDown = (s) => s.party.length > 0 && s.party.every((m) => m.hp === 0);
 
 /**
  * What each capture outcome means, in one place.

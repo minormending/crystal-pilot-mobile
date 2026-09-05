@@ -813,7 +813,7 @@ eight kilobytes a full snapshot copies, which is worth keeping distinct.
 
 ## 6. Battles
 
-<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 273d0a2a6958 -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 08a8081eae0f -->
 
 ### Is it our turn?
 
@@ -984,8 +984,16 @@ right:
   arrived after the code that reads moves. `active` carries `hp` and `maxHp` and
   no move list, so the moves come from a party entry — and that entry was
   `party[0]`, which is the lead, which after a switch is the corpse. `onField`
-  matches the party against the battle mon's HP pair instead, uniquely or not at
-  all, falling back to the first Pokémon standing: the slot `sendOut` would have
+  matches the party against the battle mon's HP pair instead, taking the first
+  that matches: several can, since two untouched slots of the same species read
+  alike, and every one of them is consistent with what is on the field. It used
+  to demand a *unique* match and give up otherwise, which is worse in the case
+  that arises — a healthy lead at 30/30 with the replacement out at 20/25
+  alongside another 20/25 sent the caller to the lead, whose HP plainly is not
+  the battle mon's. Surfaced by mutation testing: loosening the `=== 1` broke no
+  test, which is how it came up for re-reading. The fallback is for no match at
+  all — the battle mon not loaded, or a read caught mid-update — and it is the
+  first Pokémon standing: the slot `sendOut` would have
   chosen. It is matched on HP rather than read from `wCurBattleMon` because that
   would be another name on `SHARED_SYMBOLS`, and every device taking a digest
   would then need it.
@@ -1042,7 +1050,7 @@ fainted.
 
 ## 7. Catching something
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ 7fd5aa954e97 -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ 4d883e63e675 -->
 
 Catching is the most involved loop, because a Poké Ball's odds turn on how much
 HP is left. Throwing at a full-health target is mostly throwing balls away.
@@ -1128,7 +1136,7 @@ precedes it defaults to yes, which is what we want; the nickname box does not.
 
 ## 7a. Three that act on where you already are
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ 9a5e59dd3d8e -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ ef6913ec6fd5 -->
 
 Grind, hunt and catch all go *looking* for something. These three do the obvious
 thing with the situation you are already in, and take no parameters:
@@ -1190,7 +1198,7 @@ running the thing.
 
 ## 7b. Saving, and getting the save out
 
-<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 273d0a2a6958 -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 08a8081eae0f -->
 
 ```mermaid
 flowchart TD

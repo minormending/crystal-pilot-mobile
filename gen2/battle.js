@@ -64,16 +64,26 @@ export function menuIsLive(s) {
  * out" in the snapshot -- wCurBattleMon would mean another name on the shared
  * symbol list, and every device taking a digest would need it. Gen 2 keeps the
  * battle mon's HP and its party entry's in step, so the pair identifies it.
- * Only when it identifies it *uniquely*: two full-health slots of the same
- * species read alike, and then this falls back to the first one standing, which
- * is the slot sendOut would have picked anyway.
+ *
+ * Several can match -- two untouched slots of the same species read alike --
+ * and the first of *those* is still the right answer, because every one of them
+ * is consistent with what is on the field. This used to demand a unique match
+ * and fall back to "the first one standing" when it did not get one, which is
+ * worse in the case that actually arises: a healthy lead at 30/30 with the
+ * replacement out at 20/25 alongside another 20/25 sent the caller to the lead,
+ * whose HP plainly is not the battle mon's. Surfaced by mutation testing --
+ * loosening the `=== 1` broke no test, which is how it came up for re-reading.
+ *
+ * The fallback is for no match at all: the battle mon not loaded yet, or a read
+ * caught mid-update. Then the first one standing is the slot sendOut would have
+ * chosen anyway.
  */
 export function onField(s) {
   const party = (s && s.party) || [];
   const act = (s && s.active) || {};
   if (act.maxHp > 0) {
     const same = party.filter((m) => m.maxHp === act.maxHp && m.hp === act.hp);
-    if (same.length === 1) return same[0];
+    if (same.length) return same[0];
   }
   return party.find((m) => m.hp > 0) || party[0] || null;
 }
