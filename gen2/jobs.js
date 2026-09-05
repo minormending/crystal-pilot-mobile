@@ -11,6 +11,8 @@ import { onField } from './battle.js';
 const MAX_STUCK_BATTLES = 5;
 // Swings at one target before giving up on weakening it any further.
 const MAX_CHIPS = 8;
+// Trips to a Center in one grind before calling it a loop rather than a cure.
+const MAX_HEALS = 12;
 
 /**
  * Everyone is down.
@@ -448,7 +450,7 @@ export function withJobs(Base) {
                               heal = null, regrass = null } = {}) {
     const started = Date.now();
     const stats = { battles: 0, won: 0, levels: 0 };
-    let stuckRun = 0;
+    let stuckRun = 0, heals = 0;
     let s = await this.snap();
     const mon0 = s.party[slot];
     if (!mon0) return { ok: false, message: `party slot ${slot + 1} is empty`, stats };
@@ -470,10 +472,30 @@ export function withJobs(Base) {
       const dry = mon.pp && mon.moves &&
         !mon.pp.some((pp, i) => mon.moves[i] && pp > 0);
       if (dry) this.say('out of PP');
-      if (dry || mon.hp / Math.max(1, mon.maxHp) < healBelow) {
+      // Not while a battle is still up. fightBattle can come back 'stuck' with
+      // one on screen, and this branch sits above the one that fights -- so it
+      // preempted it and sent the pilot walking to a Pokemon Center out of a
+      // battle it had not left. nav.step yields on a battle, so the walk failed
+      // and the grind reported that healing did not work, which is not what
+      // went wrong. In a battle there is nothing to do but finish it.
+      if (!s.inBattle && (dry || mon.hp / Math.max(1, mon.maxHp) < healBelow)) {
         // Where the Pokemon Center is, and how to get there, is map knowledge
         // this file deliberately does not have -- the caller passes in a way to
         // heal, or the grind stops rather than training something to death.
+        // Bounded, and this loop is the reason: healing does not count a
+        // battle, so nothing else here advances. It terminates only because a
+        // Center restores HP *and* PP and healUp verifies the HP half -- which
+        // is an assumption about the cartridge, and this app now runs
+        // cartridges nobody has seen. A Center that left PP alone would walk
+        // there and back for ever.
+        if (++heals > MAX_HEALS) {
+          return {
+            ok: false,
+            message: `stopped at Lv${mon.level}: healed ${MAX_HEALS} times and `
+                     + 'kept needing it',
+            stats: { ...stats, levels: mon.level - startLevel },
+          };
+        }
         const healed = heal ? await heal() : false;
         if (!healed) {
           return {

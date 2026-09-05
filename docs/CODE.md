@@ -786,7 +786,7 @@ eight kilobytes a full snapshot copies, which is worth keeping distinct.
 
 ## 6. Battles
 
-<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ ecea898e5bea -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 273d0a2a6958 -->
 
 ### Is it our turn?
 
@@ -938,6 +938,18 @@ fainted party come back through the same `false`; a catch said your *lead* had
 fainted, which stopped being the condition the day it started meaning the whole
 party. `partyDown` is the shared answer, and each job says it in its own words.
 
+**The heal branch is gated on not being in a battle, and bounded.** Two faults
+in one place. `fightBattle` can return `'stuck'` with a battle still on screen,
+and the heal branch sits *above* the one that fights — so it preempted it and
+sent the pilot walking to a Centre out of a battle it had not left. `nav.step`
+yields on a battle, so the walk failed and the grind reported that healing did
+not work, which is not what went wrong; in a battle there is nothing to do but
+finish it. And healing counts no battles, so nothing in that loop advances: it
+terminated only because a Centre restores PP as well as HP and `healUp` verifies
+the HP half. That is an assumption about the cartridge, in an app whose whole
+recent direction is cartridges nobody has seen — a Centre that left PP alone
+would walk there and back for ever. Twelve trips, then it says so.
+
 **You cannot run from a trainer.** `wBattleMode` is 1 for wild and 2 for
 trainer. `escapeBattle()` fights trainers and flees wild ones — a pilot that
 only knew how to flee stood in the rival battle losing HP until something
@@ -949,7 +961,7 @@ fainted.
 
 ## 7. Catching something
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ 7e72d9d451ff -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ 1716ce89efa8 -->
 
 Catching is the most involved loop, because a Poké Ball's odds turn on how much
 HP is left. Throwing at a full-health target is mostly throwing balls away.
@@ -1035,7 +1047,7 @@ precedes it defaults to yes, which is what we want; the nickname box does not.
 
 ## 7a. Three that act on where you already are
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ dbf8795338df -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ 600cc57bd8b6 -->
 
 Grind, hunt and catch all go *looking* for something. These three do the obvious
 thing with the situation you are already in, and take no parameters:
@@ -1097,7 +1109,7 @@ running the thing.
 
 ## 7b. Saving, and getting the save out
 
-<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ ecea898e5bea -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 273d0a2a6958 -->
 
 ```mermaid
 flowchart TD

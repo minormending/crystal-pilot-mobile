@@ -96,3 +96,36 @@ test('an outcome nobody taught it still reports something honest', async (t) => 
   t.true(how.stop, 'an unknown outcome stops rather than looping');
   t.contains(how.say({}, () => ''), 'somethingNew', 'and names the code');
 });
+
+test('a grind that keeps needing a Center gives up rather than pacing', async (t) => {
+  // The heal branch counts no battles, so nothing in that loop advances. It
+  // terminates only because a Center restores PP as well as HP and healUp
+  // verifies the HP half -- an assumption about the cartridge, in an app that
+  // now runs cartridges nobody has seen. A Center that left PP alone walked
+  // there and back for ever.
+  const { tasks } = pilot();
+  const mon = { species: 155, level: 5, hp: 44, maxHp: 44,
+                moves: [33, 0, 0, 0], pp: [0, 0, 0, 0] };   // full HP, no PP
+  tasks.snap = async () => ({ party: [mon], inBattle: false, worldLoaded: true });
+  let trips = 0;
+  const r = await tasks.grind(0, 20, { heal: async () => { trips++; return true; } });
+  t.false(r.ok, 'it stops');
+  t.contains(r.message, 'kept needing it', 'and says why rather than sitting there');
+  t.true(trips <= 13, `bounded at ${trips} trips`);
+});
+
+test('a grind does not walk to a Center out of a battle it has not left', async (t) => {
+  // fightBattle can come back 'stuck' with a battle still on screen, and the
+  // heal branch sits above the one that fights -- so it preempted it, nav.step
+  // yielded on the battle, and the grind reported that healing did not work.
+  const { tasks } = pilot();
+  const mon = { species: 155, level: 5, hp: 1, maxHp: 44,
+                moves: [33, 0, 0, 0], pp: [35, 0, 0, 0] };
+  tasks.snap = async () => ({ party: [mon], inBattle: true, worldLoaded: true });
+  let trips = 0, fights = 0;
+  tasks.fightBattle = async () => { fights++; return 'stuck'; };
+  const r = await tasks.grind(0, 20, { heal: async () => { trips++; return true; } });
+  t.eq(trips, 0, 'it never tried to walk out of the battle');
+  t.gte(fights, 1, 'it fought instead');
+  t.contains(r.message, 'went nowhere', 'and reports the stall it actually had');
+});
