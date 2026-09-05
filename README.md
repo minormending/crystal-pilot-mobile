@@ -9,13 +9,35 @@ auto-pilot run on an Android phone itself**, rather than on a Mac with the phone
 as a remote?
 
 **It is live: https://minormending.github.io/crystal-pilot-mobile/** — open it
-on your phone, pick your own ROM and `.sym`, and it runs. Android will offer to
+on your phone and it asks which of three people you are. Android will offer to
 install it to the home screen.
 
-It also runs on *both* your phone and your tablet: a room code carries the save
-between them, so you can put one down and pick the other up, and a second device
-needs only the ROM. What travels, and what never does, is set out in
+## Start here
+
+| you | what you need | what to take |
+| --- | --- | --- |
+| **You want to run it** | a `.gbc` and a `.sym`, both out of your own [pokecrystal](https://github.com/pret/pokecrystal) build | *I have the game files* |
+| **Your other device is already playing** | five characters. **No ROM on this one.** | *Watch my other device* |
+| **You are just looking** | nothing | *I'm just looking*, or [The code](docs/CODE.md) |
+
+The middle row is the one people miss, so it is worth saying twice: a device
+that is only **watching needs no game files at all**. The picture goes straight
+from your other device over WebRTC, and its pad works from here if that device
+hands it over. Load nothing, type the code, and the game is on your phone.
+
+The first row is the one with a real cost, and it is better said than
+discovered: **no game files are distributed here, and none ever will be** —
+not in this repo, not by the site. So "can I just try it" is *not without
+building the ROM yourself*, which is a `make` in the pokecrystal disassembly and
+gives you both files at once. `tools/check-app` fails the build if a ROM, save
+or symbol file is ever committed, and CI runs it on every push.
+
+Between two of your own devices a room code also carries the **save**, so you
+can put one down and pick the other up — that one needs the ROM on both, because
+the ROM never travels. What does travel, and what never does, is set out in
 [Two devices, one game](docs/DEVICES.md#what-leaves-the-device-and-when).
+
+## Does it work
 
 Short answer: yes, in the browser — and this repo is a working spike that proves
 the hard part. It boots a Pokémon Crystal ROM on the device, reads the game's
@@ -31,8 +53,8 @@ bootstrap lands. Same address, same value, different emulator.
 
 ## Where things are
 
-This file is the short version: what it is, why a browser, and how to run it.
-Everything else has a page of its own.
+This file is the short version: who it is for, what it is, why a browser, and
+how to run it. Everything else has a page of its own.
 
 | | |
 | --- | --- |
@@ -90,11 +112,14 @@ but the pilot is still doing hours of work while you wait for a coffee.
 
 ## Running it
 
-Open **https://minormending.github.io/crystal-pilot-mobile/** and pick your ROM
-and `.sym`. Both files stay in the browser, which is also why hosting this
-publicly is fine: no game data is served, only the app. Nothing is uploaded
-unless you press *Share*, and even then the ROM never is — see
-[What leaves the device](docs/DEVICES.md#what-leaves-the-device-and-when).
+Open **https://minormending.github.io/crystal-pilot-mobile/**, take *I have the
+game files*, and pick your ROM and `.sym`. Both files stay in the browser, which
+is also why hosting this publicly is fine: no game data is served, only the app.
+Nothing is uploaded unless you press *Share*, and even then the ROM never is —
+see [What leaves the device](docs/DEVICES.md#what-leaves-the-device-and-when).
+
+If your other device already has the game running, take *Watch my other device*
+instead and type the code it is showing. That one needs no files at all.
 
 It is a static site with no build step, so it also runs from any directory:
 

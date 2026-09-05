@@ -237,6 +237,14 @@ the second device gets the screen and a working pad — no ROM, no symbol file,
 nothing but the room code. The picture goes straight between the two devices
 over WebRTC; the room only introduces them.
 
+On the watching device that is one card, not a hunt: the app opens on *what
+brings you here*, and **Watch my other device** is a door of its own holding the
+code box and, once you are in a room, the Watch button beside what the room is
+saying. This paragraph was true for several versions before that door existed,
+and the four steps it took to reach it — open the gear, find the code box, join,
+notice a new row further down — are why somebody who came only to watch could
+read this page and still be looking at a file picker.
+
 **Or press *View only* instead, and they get the screen without the pad.** The
 Screen row carries both: the button that starts or stops it, and one that names
 the mode you are *not* in, so it reads *View only* while you are handing the pad
