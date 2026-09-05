@@ -877,6 +877,32 @@ A into a message.
 **Out of PP is a reason to heal**, not to fight on: the game forces Struggle,
 which hurts the thing being trained, and a Pokémon Center restores PP.
 
+**Three loops drive a battle, and each has to answer the same two questions.**
+That is not obvious from any one of them, which is exactly how `sendOut` came to
+be wired into one and not the other two:
+
+```mermaid
+flowchart TD
+    F["fightBattle<br/><i>grind, battleHere</i>"] --> Q1{"is the field empty?"}
+    L["flee<br/><i>hunt, catch_</i>"] --> Q1
+    C["captureHere<br/><i>catch, catchHere</i>"] --> Q1
+    Q1 -->|yes| CF["coverFaint → sendOut"]
+    Q1 -->|no| Q2{"is the battle menu up?"}
+    CF -->|"ok"| Q2
+    CF -->|"lost"| WO["the party is down —<br/>each job names it"]
+    CF -->|"ended"| OUT["read the outcome"]
+    Q2 -->|yes| ACT["choose: fight, run, or the pack"]
+    Q2 -->|"never"| GIVE["give up after the budget"]
+    ACT --> MOVE["chooseMove, on onField's move list"]
+```
+
+Both diamonds were got wrong by omission rather than by logic. Only
+`fightBattle` asked the first, so fleeing and catching walked straight into a
+prompt and spent their whole press budget on the second question, which had no
+answer coming. And `chooseMove` took its list from `party[0]` rather than from
+`onField`, so once the first diamond *had* been answered the moves belonged to
+the Pokémon that had just fainted.
+
 **A fainted lead is a prompt, not a state.** Gen 2 does not offer a choice — the
 lead goes down, the game asks "Which POKéMON?" and waits. With a party of one it
 never came up because the battle simply ended. Three separate things had to be
@@ -2307,7 +2333,7 @@ recorded at all, so the kept battery was restored into whatever ROM was picked
 next; and `pickKey` was *the only record, if there is exactly one*, which wrote
 this cartridge's save into the previous cartridge's record. Both failed
 silently, and both were on the paths nobody presses — see
-[Five audits](PROVEN.md#five-audits-and-what-reading-found-that-running-had-not)
+[Six audits](PROVEN.md#six-audits-and-what-reading-found-that-running-had-not)
 for why that is not a coincidence.
 
 `patchMeta` merges fields into the `meta` record, and it used to do that as a

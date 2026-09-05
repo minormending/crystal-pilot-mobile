@@ -389,6 +389,27 @@ You will not see any of that working. You would only have seen it failing —
 your first cartridge's save quietly replaced, and a Load here that said it had
 restored a game while the screen never moved.
 
+## When it all goes wrong
+
+Three things the pilot can run into that end a job, and it now says which:
+
+| it says | what happened | what to do |
+| --- | --- | --- |
+| **the whole party fainted** | a whiteout. Gen 2 has already moved you to the last Pokémon Center and taken half your money | nothing to undo — heal and go again |
+| **could not run from a PIDGEY** | the escape was refused, and the party is fine | try again, or Fight it |
+| **N battles in a row went nowhere** | the pilot has lost the thread of the fight — something is on screen it does not understand | look at the screen; press through whatever is there |
+
+They used to be one message. A whiteout came back as *stopped at Lv13* from a
+grind, as *could not run from a PIDGEY* from a hunt, and as *your lead fainted*
+from a catch — three descriptions of the most consequential thing that can
+happen while the pilot drives, none of which named it. A refused escape and a
+fainted party want opposite responses from you, so telling them apart is the
+whole point.
+
+**Undo is still there after a whiteout**, and it is worth knowing: the undo
+point is written before the job started, so it puts you back before the money
+went.
+
 ## A note on updates
 
 **The header shows which build you are running**, next to the app's name: the

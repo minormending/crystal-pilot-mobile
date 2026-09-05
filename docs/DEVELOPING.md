@@ -15,7 +15,7 @@ what CI checks and what the pre-commit hook blocks on.
 ```mermaid
 flowchart LR
     E[an edit] --> H{{".githooks/pre-commit"}}
-    H --> T["./run-tests<br/>122 behaviour tests"]
+    H --> T["./run-tests<br/>130 behaviour tests"]
     H --> C["tools/check-app<br/>14 groups"]
     H --> D["tools/docs-check<br/>23 tracked sections"]
     T --> OK[commit]
@@ -39,16 +39,16 @@ git config core.hooksPath .githooks
 ./run-tests -v         # notes and stack lines
 ```
 
-122 tests in fourteen files, and what each file is about says more than the count:
+130 tests in fourteen files, and what each file is about says more than the count:
 
 | file | tests | what it pins down |
 | --- | --- | --- |
 | `rows.mjs` | 31 | what every row and offer says, and when its button works |
+| `battle.mjs` | 13 | whose turn it is, which Pokémon is out, and a win from a whiteout |
+| `capture.mjs` | 12 | weakening, ball choice, the party prompt, and counting throws out of the bag |
 | `titles.mjs` | 11 | choosing a profile for a cartridge, and falling back to generic |
-| `battle.mjs` | 10 | whose turn it is, which Pokémon is out, and a win from a whiteout |
+| `control.mjs` | 10 | the task lifecycle: stopping, failing, undo points, and loops that must end |
 | `remember.mjs` | 10 | which remembered choices are believed, and which dropped |
-| `capture.mjs` | 9 | weakening, ball choice, and counting throws out of the bag |
-| `control.mjs` | 8 | the task lifecycle: stopping, failing, and undo points |
 | `engine.mjs` | 8 | that a changed engine number is actually followed |
 | `room.mjs` | 8 | the merge rules and the handshake, so two devices settle rather than fight |
 | `journey.mjs` | 6 | choosing where to heal: the cost model, and a map with no name |

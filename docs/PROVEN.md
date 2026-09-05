@@ -312,11 +312,11 @@ second, which is there so the core's own waits finish, not to run a game.
   candidates and returned true standing three tiles clear of any. It checks the
   tile underfoot now.
 
-## Five audits, and what reading found that running had not
+## Six audits, and what reading found that running had not
 
 Everything above was watched happening. This section is the exception, and the
-exception is the point of it: after the ROM-hack work shipped, five passes went
-looking for defects by **reading** rather than by running, and found twelve.
+exception is the point of it: after the ROM-hack work shipped, six passes went
+looking for defects by **reading** rather than by running, and found seventeen.
 None of them announced itself. Every one was in code that worked.
 
 The recurring shape is the same in all five:
@@ -349,8 +349,13 @@ exactly why nothing failed.
 | 4 | the kept save was installed into a cartridge that never wrote it | two cartridges |
 | 5 | the move list was read off the fainted lead, not the replacement | a party of two |
 | 5 | a knockout by the replacement was reported as a whiteout | a party of two |
+| 6 | fleeing never answered the "Which POKéMON?" prompt | a party of two |
+| 6 | nor did catching | a party of two |
+| 6 | three jobs described a whiteout as something else | a whiteout |
+| 6 | a grind walked for a Centre out of a battle it had not left | a stalled battle |
+| 6 | and paced there for ever if the Centre did not restore PP | a hack's Centre |
 
-Three things in that table are worth more than the individual rows.
+Four things in that table are worth more than the individual rows.
 
 **The last column is a ladder, and it is about situations rather than
 hardware.** Everything reachable in the default one — one browser, one
@@ -359,11 +364,14 @@ device, a second cartridge, a second Pokémon. What it measures is how much of
 the world you have to *arrange*, not how much you have to own: the fifth pass
 needed no hardware at all, only a party with a corpse in slot one.
 
-**Exactly one of the twelve was caught by a check**, and only after the fix had
-decided what to look for: the wiring group named the four modules still
-importing constants that had just been deleted. The other eleven came from
+**Exactly one of the seventeen was caught by a check**, and only after the fix
+had decided what to look for: the wiring group named the four modules still
+importing constants that had just been deleted. One more was caught by a *test*,
+and only because the test hung — the obvious `continue` for the party prompt
+advanced nothing in a loop bounded by balls thrown. The other fifteen came from
 reading. That is the honest weight to give this repository's fourteen check
-groups and 122 tests — they hold a fix down; they do not find the fault.
+groups and 130 tests: they hold a fix down, and they catch the fix that is
+itself wrong. They do not find the fault.
 
 **The two worst were silent data loss**, and both were doors the app opens by
 itself. Every door a *person* opens was already locked and had been for
@@ -374,14 +382,26 @@ Both pass-four defects are on paths nobody presses — a record written inside
 checks went where somebody was visibly making a choice, and not where the app
 made the choice for them.
 
-Pass five is the direct sequel to [When the lead faints](#when-the-lead-faints)
-above. `sendOut` was built there and works; what none of it reached was the four
-other places that spell *the Pokémon on the field* as `party[0]`. In a fight
-that stalls the turn until the ceiling; in a catch, `chip` ranks the gentlest
-move against the wrong list and can hand the replacement a knockout — and a
-fainted Pokémon cannot be caught, which is the one thing `chip` exists to
-prevent. There is an `onField` now, so there is somewhere to change it next
-time.
+**Passes five and six are both sequels to
+[When the lead faints](#when-the-lead-faints)** above, which is the single
+richest source of defects in this log. `sendOut` was built there and works. What
+it never reached, across two passes, was everything downstream of it: four
+places that spell *the Pokémon on the field* as `party[0]`, and two of the three
+loops that drive a battle, neither of which answered the prompt at all. Fleeing
+spent its 150 presses hunting for a battle menu that was never coming and a hunt
+stopped on *could not run from a PIDGEY*, with a healthy Pokémon in slot two.
+There is an `onField` and a `coverFaint` now, so there is somewhere to change
+each of them next time.
+
+**And the sixth pass is a different family from the first five.** Those were
+about *identity* — which cartridge, which Pokémon, which device — and every one
+was the pilot reading the wrong thing. The sixth went at the loops those reads
+sit inside, and nothing there is misread: a prompt nobody answers, a branch
+tried in the wrong order, a sentence that names the wrong event, and two loops
+that terminate only by assumption. One of those assumptions is *a Pokémon Centre
+restores PP*, which is true of Crystal and is not a fact about cartridges in
+general — the last rung on the ladder above, and the only defect in six passes
+that no cartridge on this machine can produce.
 
 ## The part that had to be redesigned
 
