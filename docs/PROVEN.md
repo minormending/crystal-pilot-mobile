@@ -10,6 +10,26 @@ bullet here was watched happening rather than reasoned about.
 
 ## What has been run
 
+**A whole session, end to end, on the real cartridge.** Driven with the app's
+own modules against the live emulator, in this order and with nothing between
+the steps but the pilot:
+
+```mermaid
+flowchart LR
+    I["the intro<br/><i>played, named, downstairs, out</i>"] --> S["a starter<br/><i>TOTODILE Lv5</i>"]
+    S --> G["out to the grass<br/><i>Route 29</i>"]
+    G --> H["a hunt<br/><i>SENTRET, 2 encounters, 1 fled</i>"]
+    H --> B["a battle<br/><i>won, 17/21 left</i>"]
+    B --> R["a grind to Lv8<br/><i>10 battles, 10 won, 16s</i>"]
+    R --> HE["a heal<br/><i>to Elm's lab and back to the grass</i>"]
+    HE --> E["the ball errand<br/><i>POKé BALL ×5</i>"]
+    E --> C["a catch<br/><i>RATTATA Lv2, 1 ball</i>"]
+```
+
+Every step of that is the first time it has been watched on a cartridge since
+the battle and job code was rewritten, and one of them failed the first time
+round — see [the eleventh pass](#eleven-audits-and-how-each-defect-was-actually-found).
+
 Proven, and visible in [the screenshot on the front page](../README.md):
 
 - a 2 MB Crystal ROM boots in the browser
@@ -312,18 +332,20 @@ second, which is there so the core's own waits finish, not to run a game.
   candidates and returned true standing three tiles clear of any. It checks the
   tile underfoot now.
 
-## Ten audits, and how each defect was actually found
+## Eleven audits, and how each defect was actually found
 
-Everything above was watched happening. This section is the exception, and the
-exception is the point of it: after the ROM-hack work shipped, ten passes went
-looking for defects in code that already worked, and found twenty-seven — plus
-one a fix created on the way, which is in the table in italics because it is a
-different kind of thing. None of them announced itself.
+Everything above was watched happening. This section was the exception, and the
+exception was the point of it: after the ROM-hack work shipped, eleven passes
+went looking for defects in code that already worked, and found twenty-nine —
+plus one a fix created on the way, which is in the table in italics because it
+is a different kind of thing. None of them announced itself.
 
 Six of those passes worked by **reading**, two by **measuring**, the ninth by
-**checking the claims the comments make**, and the tenth by **checking the
-things that do the checking**. Each change of method found what the one before
-it was structurally bad at, which is the thread worth pulling below.
+**checking the claims the comments make**, the tenth by **checking the things
+that do the checking**, and the eleventh by **playing the game** — which is the
+method this whole document is built on and the last one an audit here got round
+to. Each change of method found what the one before it was structurally bad at,
+which is the thread worth pulling below.
 
 The recurring shape is the same in all five:
 
@@ -371,6 +393,8 @@ exactly why nothing failed.
 | 9 | `saves.js` reached past the emulator wrapper | one browser | checking a claim |
 | 9 | and a docstring said the app could not save | one browser | checking a claim |
 | 10 | an ambiguous HP match gave up on every candidate | two look-alike slots | **mutation testing** |
+| 11 | the pack was stepped on a timer, and walked past the balls | playing it | **playing it** |
+| 11 | and "the pack never opened" could not fire | playing it | playing it |
 
 Five things in that table are worth more than the individual rows.
 
@@ -451,6 +475,24 @@ are also the first defects in eight passes that no test here can reach — a
 service worker wants a browser and a secure context — so what is checked is the
 path arithmetic and the behaviour is reasoned about, which the code walkthrough
 says rather than implies.
+
+**The eleventh pass played the game, which is the method this document opens by
+insisting on, and which no audit had used.** Eighteen changes to the battle and
+job paths had shipped without one of them being run against a cartridge. Almost
+all of it worked first time — ten battles out of ten, a real trip to Elm's lab
+to heal and back, `onField` and `coverFaint` and the whiteout wording all
+exercised for the first time on a real game. The catch did not: *could not reach
+the ball in the pack*, nine encounters in, five Poké Balls in the bag.
+
+Both defects behind that are in `throwBall`, and neither is visible from
+reading. The pack loops waited a fixed twenty frames and re-read, which is not
+long enough to be sure — the pocket switch swallows presses while it animates
+and `wCurItem` lands a frame after `wCurPocket` — so two presses landing for one
+observed change walk past the pocket being aimed at. **The fingerprint is a pair
+that cannot both be current**: pocket 2 with item 5, when pocket 2 is the key
+items and its first entry reads 255. And the guard for *the pack never opened*
+asked whether the pocket index was above 3, which measured cannot happen, since
+the four read 0 to 3.
 
 **The tenth pass audited the apparatus rather than the code, and the headline
 is that it held.** All fifteen check groups fail when the one thing they claim
