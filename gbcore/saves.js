@@ -71,6 +71,47 @@ const wrap = (req) => new Promise((resolve, reject) => {
   req.onerror = () => reject(req.error);
 });
 
+/**
+ * Two cartridge keys, byte for byte.
+ *
+ * Worth its own function because the two sides are never the same type: the
+ * library files its record under the 27-byte Uint8Array the core hands back,
+ * and IndexedDB gives a binary key back as an ArrayBuffer. So `===` is false
+ * between a key and itself, and anything comparing them without normalising is
+ * comparing the wrappers rather than the bytes.
+ */
+export function sameKey(a, b) {
+  if (!a || !b) return false;
+  const x = new Uint8Array(a.buffer || a);
+  const y = new Uint8Array(b.buffer || b);
+  if (x.length !== y.length) return false;
+  for (let i = 0; i < x.length; i++) if (x[i] !== y[i]) return false;
+  return true;
+}
+
+/**
+ * Which of the library's records belongs to the cartridge in the machine.
+ *
+ * This used to be "the only one, if there is exactly one", which is wrong in
+ * the one way this app now actively encourages. The key is ROM bytes
+ * 0x134-0x14E: the title, the cartridge flags, the header checksum *and* the
+ * top byte of the global checksum. So it changes when the ROM does -- a hack is
+ * a different key, and so is a rebuild of the same disassembly.
+ *
+ * The library also writes nothing until a battery is persisted, so after
+ * playing one cartridge the store holds exactly one record. Loading a second
+ * cartridge then matched that single stale key, and writing this cartridge's
+ * save into the other cartridge's record fails twice over, silently: the reload
+ * looks up the record for the cartridge actually loaded, finds none and applies
+ * nothing -- so the install reports success and does nothing -- while the save
+ * belonging to the first cartridge is overwritten with bytes from a game it has
+ * never seen.
+ */
+export function pickKey(keys, mine) {
+  for (const k of keys || []) if (sameKey(k, mine)) return k;
+  return null;
+}
+
 export class Saves {
   constructor(gb, state, romdata, log = () => {}) {
     this.gb = gb;
@@ -174,15 +215,20 @@ export class Saves {
     });
   }
 
-  /** The key the library has already used here, or null if it has none. */
-  async _existingKey() {
+  /**
+   * The key the library has already used *for this cartridge*, or null.
+   *
+   * The stored key is handed back rather than the derived one, even though
+   * pickKey has just proved them equal byte for byte: it is the object the
+   * library itself filed the record under, which is one assumption fewer than
+   * rebuilding an equal one.
+   */
+  async _existingKey(mine) {
     const wdb = await this.libraryDb();
     if (!wdb.objectStoreNames.contains(WASMBOY_STORE)) return null;
     const keys = await tx(wdb, WASMBOY_STORE, 'readonly',
                           (os) => wrap(os.getAllKeys()));
-    // One cartridge per session. With several, this would have to match the
-    // header against the loaded ROM rather than take the only entry.
-    return keys && keys.length === 1 ? keys[0] : null;
+    return pickKey(keys, mine);
   }
 
   /**
@@ -240,16 +286,17 @@ export class Saves {
         + 'restarts the emulator, which a hidden tab cannot do');
     }
 
-    // Prefer the key the library has already filed this cartridge under, and
-    // only derive one when there is none. Both work, but they are not equally
-    // well evidenced: writing the record under an existing key is the path
-    // that was watched loading a real save back into a real game, while the
-    // derived key is reasoning about how the library builds it. So the proven
-    // path stays primary, and the derivation covers only the case that used to
-    // fail outright -- a browser where the library has never persisted
-    // anything, which is every first visit.
-    const existing = await this._existingKey();
-    const key = existing || await this._cartridgeKey();
+    // Prefer the key the library has already filed *this cartridge* under, and
+    // derive one when there is none. Both work, but they are not equally well
+    // evidenced: writing under an existing key is the path that was watched
+    // loading a real save into a real game, while the derived key is reasoning
+    // about how the library builds one. So the proven path stays primary, and
+    // the derivation covers the two cases where there is no record of ours to
+    // find -- a browser the library has never written in, which is every first
+    // visit, and a second cartridge in a browser where it has. See pickKey for
+    // what the second one used to do instead.
+    const mine = await this._cartridgeKey();
+    const key = await this._existingKey(mine) || mine;
     // Opened with no version and no upgrade, unlike our own database. This one
     // belongs to the library: naming a version means a VersionError the day it
     // bumps its own, and an upgrade callback would have us inventing its schema

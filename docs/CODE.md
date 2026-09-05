@@ -1135,7 +1135,7 @@ Tackle and Leer. Two emulators, two implementations, one save file.
 
 ## 7c. Slots, undo, and bringing a save in
 
-<!-- covers: gbcore/saves.js @ edb065772d05 -->
+<!-- covers: gbcore/saves.js @ 126fca77510a -->
 
 Three slots a person picks, plus an undo point the pilot writes before every
 job and the game a handoff replaced, if there is one — five records. A slot
@@ -1194,12 +1194,29 @@ means writing that record and re-loading the ROM — which is also why loading a
 slot leaves you at the title screen, and why `continueFromTitle` drives CONTINUE
 for you.
 
-**The record is addressed by the key the library already used**, and only
-derived from `_getCartridgeInfo().header` when there is none. Both work; they
-are not equally well evidenced. Writing under an existing key is the path that
-was watched loading a real save back into a real game; the derivation is
-reasoning about how the library builds its key. The proven one is primary and
-the other covers first visits.
+**The record is addressed by the key the library already used *for this
+cartridge***, and derived from `_getCartridgeInfo().header` when there is none.
+Both work; they are not equally well evidenced. Writing under an existing key is
+the path that was watched loading a real save back into a real game; the
+derivation is reasoning about how the library builds its key. The proven one is
+primary, and the other covers the two cases where there is no record of ours —
+a browser the library has never written in, and a second cartridge in one where
+it has.
+
+**The second of those used to be a silent data loss**, and it is the case this
+app now actively invites. The key is ROM bytes `0x134`–`0x14E`: the title, the
+cartridge flags, the header checksum, and the top byte of the global checksum —
+so a hack is a different key, and so is a rebuild of the same disassembly. The
+library also writes nothing until a battery is persisted, so after playing one
+cartridge the store holds exactly *one* record. `_existingKey` took the only
+record when there was exactly one, without ever asking whether it was ours, and
+the result failed twice over without a word: the re-load looks up the cartridge
+actually loaded, finds no record and applies nothing — so the install reports
+success and does nothing — while the save belonging to the *first* cartridge is
+overwritten with bytes from a game it has never seen. `pickKey` compares bytes
+instead, and `sameKey` exists because the two sides are never the same type:
+the library files the record under a `Uint8Array` and IndexedDB hands binary
+keys back as `ArrayBuffer`, so `===` is false between a key and itself.
 
 **That record belongs to the library, so it is opened with no version and no
 upgrade callback.** Naming a version means a `VersionError` the day the library
