@@ -454,6 +454,36 @@ export function withBattle(Base) {
    * ball nobody asked for. Selecting a ball opens a USE/QUIT box, so the throw
    * takes a second confirm.
    */
+  /**
+   * Press once, and wait for the pack to actually move.
+   *
+   * The same lesson nav.step learned about walking, arriving late in the one
+   * place that had not had it: a step is not "press, then wait a fixed number
+   * of frames", because the pocket switch swallows presses while it animates
+   * and wCurItem is written a frame or so after wCurPocket. Waiting a set 20
+   * frames and re-reading gives a value that has not caught up yet, so the loop
+   * presses again -- and two presses landing for one observed change walk
+   * straight past the pocket being aimed at.
+   *
+   * Measured, on a catch that failed with five Poke Balls in the bag: it left
+   * the pack reading pocket 2 with item 5, and those two cannot both be current
+   * -- pocket 2 is the key items, whose first entry reads 255. A mismatched
+   * pair is the fingerprint of exactly this.
+   *
+   * Bounded, and it hands back whatever it has if nothing moves, so a press the
+   * game genuinely ignored costs a re-read rather than a hang.
+   */
+  async _packMoved(button, of, tries = 10) {
+    const before = of(await this.snap());
+    await this.push(button, 4, 8);
+    for (let i = 0; i < tries; i++) {
+      await this.step(SETTLE_FRAMES);
+      const now = await this.snap();
+      if (of(now) !== before) return now;
+    }
+    return this.snap();
+  }
+
   async throwBall(ballId) {
     // The menu has to be up first. Called straight after an encounter, the
     // screen is still running the "wild SENTRET appeared" text, and pressing
@@ -464,8 +494,15 @@ export function withBattle(Base) {
     await this.chooseAction(PACK);
     await this.step(60);
     let s = await this.snap();
-    if ((s.curItem === 0 || s.curItem === 0xff) && s.curPocket > 3) {
-      await this.closeMenus();          // the pack never opened
+    // The pack never opened -- read off the menu the game is *actually* drawing.
+    // This used to ask whether wCurPocket was above 3, which measured on the
+    // real cartridge cannot happen: the four pockets read 0 to 3 and the value
+    // never leaves that range, so the guard could not fire. The battle menu's
+    // own signature is what tells the two apart, and menuIsLive already knows
+    // it -- the pack measures five items at row one, the battle menu
+    // thirty-four at twelve.
+    if (menuIsLive(s)) {
+      await this.closeMenus();
       return false;
     }
     // wCurItem is written a frame or so after wCurPocket, so reading straight
@@ -476,8 +513,7 @@ export function withBattle(Base) {
     const settled = async () => { await this.step(SETTLE_FRAMES); return this.snap(); };
 
     for (let i = 0; i < 10 && s.curPocket !== BALL_POCKET; i++) {
-      await this.push('RIGHT', 4, 8);
-      s = await settled();
+      s = await this._packMoved('RIGHT', (x) => x.curPocket);
     }
     if (s.curPocket !== BALL_POCKET) { await this.closeMenus(); return false; }
 
@@ -492,8 +528,7 @@ export function withBattle(Base) {
         await this.closeMenus();
         return false;
       }
-      await this.push('DOWN', 4, 8);
-      s = await settled();
+      s = await this._packMoved('DOWN', (x) => x.curItem);
     }
     if (s.curItem !== ballId) { await this.closeMenus(); return false; }
     await this.push('A', 6, 10);

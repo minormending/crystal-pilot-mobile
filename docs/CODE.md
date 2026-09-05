@@ -813,7 +813,7 @@ eight kilobytes a full snapshot copies, which is worth keeping distinct.
 
 ## 6. Battles
 
-<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 08a8081eae0f -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 16529daa80e0 -->
 
 ### Is it our turn?
 
@@ -1039,6 +1039,29 @@ the HP half. That is an assumption about the cartridge, in an app whose whole
 recent direction is cartridges nobody has seen — a Centre that left PP alone
 would walk there and back for ever. Twelve trips, then it says so.
 
+**Throwing a ball drives the pack, and the pack has to be stepped until it
+moves.** `throwBall` reads `wCurPocket` and `wCurItem` rather than counting
+presses, because the pack remembers where it was left — but it waited a fixed
+twenty frames after each press and re-read. That is not long enough to be sure:
+the pocket switch swallows presses while it animates, and `wCurItem` is written
+a frame or so *after* `wCurPocket`, so the re-read can return a value that has
+not caught up. The loop then presses again, and two presses landing for one
+observed change walk straight past the pocket being aimed at.
+
+Measured on a catch that failed with five Poké Balls in the bag, nine encounters
+in and none thrown: it left the pack reading pocket 2 with item 5, and those two
+cannot both be current — pocket 2 is the key items, whose first entry reads 255.
+A mismatched pair is the fingerprint. `_packMoved` presses once and waits for the
+value to *change*, bounded, which is the lesson `nav.step` learned about walking
+arriving late in the one place that had not had it.
+
+**And "the pack never opened" is read off the menu.** That guard used to ask
+whether `wCurPocket` was above 3, which measured on the real cartridge cannot
+happen: the four pockets read 0, 1, 2, 3 — ITEM, BALL, KEY ITEM, TM/HM — and the
+value never leaves that range, so the guard could not fire. `menuIsLive` already
+knows the difference, because the pack measures five items at row one and the
+battle menu thirty-four at twelve.
+
 **You cannot run from a trainer.** `wBattleMode` is 1 for wild and 2 for
 trainer. `escapeBattle()` fights trainers and flees wild ones — a pilot that
 only knew how to flee stood in the rival battle losing HP until something
@@ -1050,7 +1073,7 @@ fainted.
 
 ## 7. Catching something
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ 4d883e63e675 -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ 7503879c9eff -->
 
 Catching is the most involved loop, because a Poké Ball's odds turn on how much
 HP is left. Throwing at a full-health target is mostly throwing balls away.
@@ -1198,7 +1221,7 @@ running the thing.
 
 ## 7b. Saving, and getting the save out
 
-<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 08a8081eae0f -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 16529daa80e0 -->
 
 ```mermaid
 flowchart TD

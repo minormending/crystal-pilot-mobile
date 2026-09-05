@@ -246,3 +246,45 @@ test('with nothing left standing, fleeing says so rather than looping', async (t
   tasks.awaitBattleMenu = async () => { throw new Error('should not look for a menu'); };
   t.false(await tasks.flee(), 'there is nothing to run with');
 });
+
+test('the pack is stepped until it moves, not for a fixed time', async (t) => {
+  // The lesson nav.step learned about walking, arriving late in the one place
+  // that had not had it. The pocket switch swallows presses while it animates
+  // and wCurItem is written a frame after wCurPocket, so a fixed wait re-reads
+  // a value that has not caught up -- and the loop presses again, walking two
+  // pockets for one observed change.
+  const { tasks } = pilot();
+  let pocket = 0, polls = 0;
+  tasks.snap = async () => ({ curPocket: pocket, curItem: 0 });
+  tasks.push = async () => { polls = 0; };          // the press lands...
+  tasks.step = async () => { if (++polls >= 3) pocket++; };  // ...three polls later
+  const s = await tasks._packMoved('RIGHT', (x) => x.curPocket);
+  t.eq(s.curPocket, 1, 'it waited for the pocket to actually change');
+});
+
+test('a pack that never moves is handed back rather than waited on for ever', async (t) => {
+  const { tasks } = pilot();
+  tasks.snap = async () => ({ curPocket: 2, curItem: 0 });
+  tasks.push = async () => {};
+  tasks.step = async () => {};
+  const s = await tasks._packMoved('RIGHT', (x) => x.curPocket);
+  t.eq(s.curPocket, 2, 'a press the game ignored costs a re-read, not a hang');
+});
+
+test('a pack that never opened is told apart by the menu, not by the pocket', async (t) => {
+  // The old guard asked whether wCurPocket was above 3. Measured on the real
+  // cartridge the four pockets read 0..3 and the value never leaves that range,
+  // so it could not fire. The battle menu's own signature is what separates
+  // them: five items at row one for the pack, thirty-four at twelve for the
+  // battle menu.
+  const { tasks, sym, state } = pilot();
+  const stillBattleMenu = state.read(worldRam(sym, {
+    battleMode: 1, menu: [1, 1], menuItems: 34, menuTop: 12, curPocket: 0, curItem: 0,
+  }));
+  t.true(Tasks.menuIsLive(stillBattleMenu),
+         'that is the battle menu, so the pack never opened');
+  const packOpen = state.read(worldRam(sym, {
+    battleMode: 1, menu: [1, 1], menuItems: 5, menuTop: 1, curPocket: 0, curItem: 18,
+  }));
+  t.false(Tasks.menuIsLive(packOpen), 'and this is the pack, which is what we wanted');
+});
