@@ -103,7 +103,7 @@ of the subtleties in sections 6 and 7.
 
 ## 2. The shape of it
 
-<!-- covers-api: app/main.js gen2/journey.js titles/crystal.js gen2/tasks.js gen2/nav.js gen2/world.js gen2/collision.js gen2/state.js gen2/romdata.js gen2/symbols.js gbcore/gb.js @ e5bd200beec4 -->
+<!-- covers-api: app/main.js gen2/journey.js titles/crystal.js gen2/tasks.js gen2/nav.js gen2/world.js gen2/collision.js gen2/state.js gen2/romdata.js gen2/symbols.js gbcore/gb.js @ 3ce37cf8eb5f -->
 
 Twenty-seven modules, in four directories, and the directories are the design:
 **an import may point down this list and never up.**
@@ -411,7 +411,7 @@ later duplicates are aliases and locals.
 
 ### `state.js` — what the game is doing right now
 
-<!-- covers: gen2/state.js @ cd762db74898 -->
+<!-- covers: gen2/state.js @ 6134dc6623d7 -->
 
 One snapshot, many answers: `inBattle`, `party`, `pos`, `onGrass`,
 `worldLoaded`, `menu`, `balls`, and the enemy's HP.
@@ -654,7 +654,7 @@ point those coordinates mean somewhere else entirely.
 
 ## 5. Crossing to the next map
 
-<!-- covers: gen2/journey.js gen2/world.js @ 2848e5b49a21 -->
+<!-- covers: gen2/journey.js gen2/world.js @ dec95a9744c1 -->
 
 A connection spans only part of a shared edge, so "walk west until something
 happens" does not work. `crossEdge()` closes the distance in stages, then tries
@@ -786,7 +786,7 @@ eight kilobytes a full snapshot copies, which is worth keeping distinct.
 
 ## 6. Battles
 
-<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 4b753b271156 -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 893c79b6a3f8 -->
 
 ### Is it our turn?
 
@@ -910,7 +910,7 @@ fainted.
 
 ## 7. Catching something
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ 533dfe01fea0 -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ a85ccf19a820 -->
 
 Catching is the most involved loop, because a Poké Ball's odds turn on how much
 HP is left. Throwing at a full-health target is mostly throwing balls away.
@@ -996,7 +996,7 @@ precedes it defaults to yes, which is what we want; the nickname box does not.
 
 ## 7a. Three that act on where you already are
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ 0463763ee6a6 -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ 5d4002a13f12 -->
 
 Grind, hunt and catch all go *looking* for something. These three do the obvious
 thing with the situation you are already in, and take no parameters:
@@ -1058,7 +1058,7 @@ running the thing.
 
 ## 7b. Saving, and getting the save out
 
-<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 4b753b271156 -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 893c79b6a3f8 -->
 
 ```mermaid
 flowchart TD
@@ -1228,7 +1228,7 @@ because that failure is only otherwise discovered by reaching for the undo.
 
 ## 8. The errands
 
-<!-- covers: titles/crystal.js gen2/journey.js @ 514ff6b4b54d -->
+<!-- covers: titles/crystal.js gen2/journey.js @ cc9bc5e25f08 -->
 
 Everything in this section is `crystal.js` — the only file in the app that names
 a Crystal map, a Crystal door or a Crystal NPC. What it stands on is
@@ -1281,6 +1281,21 @@ battery's check bytes — every number that describes the machine, with its sour
 in the disassembly beside it. A title declares `engine` only if its cartridge
 changed one, which a hack that moved the maps has not; `GameState` and `RomData`
 take it and fall back to the stock profile.
+
+**And every reader takes it from the live profile**, which took a second pass to
+be true. The first version left `state.js` exporting `MAX_PARTY`,
+`TRAINER_BATTLE`, `GRASS_TILES` and `NAME_MENU_FIRST_PRESET` as module-level
+constants computed from the stock profile *at import time*, and `jobs.js`,
+`journey.js`, `menus.js` and `rows.js` imported those. So a title raising the
+party cap had it honoured in `state.party()` — and in nothing that decides
+anything: the catch that refuses a full party, the grass a walk looks for, the
+name-menu step and the row that says *the party is full* all went on reading six
+and `0x10, 0x14, 0x18, 0x1c`. The profile applied to half the app.
+
+Those exports are gone, which is the enforcement: the wiring check names any
+module still importing them. `rows.js` is a pure function and has no instance to
+read, so the numbers arrive in its `ctx` like every other thing it cannot see
+for itself.
 
 The useful half of that file is what it refuses to hold:
 
@@ -1512,7 +1527,7 @@ This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ 72e1e47415c5 -->
+<!-- covers: app/main.js index.html @ b6004008ab3c -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.

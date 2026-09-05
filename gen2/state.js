@@ -12,28 +12,23 @@ const b = GameBoy.byteAt, w = GameBoy.wordAt;
 // "is that tile grass" of the collision map. Those are one engine fact, and it
 // was written down twice -- here and in bootstrap.js -- with nothing to notice
 // if the two copies ever disagreed.
-export const GRASS_TILES = new Set(gen2.grassTiles);
+
 
 // The intro's NAME menu, from ChrisNameMenuHeader in data/player_names.asm:
 // five items (NEW NAME plus four presets) drawn in the top-left ten columns.
 // Matched on the menu's own shape rather than on the cursor, because the
 // cursor still holds whatever the gender prompt left there until this menu is
 // actually drawn.
-const NAME_MENU_ITEMS = gen2.nameMenu.items;
-const NAME_MENU_RIGHT = gen2.nameMenu.right;
 // Cursor 1 is NEW NAME, which opens the letter grid. 2 and below are the names
 // the game ships: CHRIS/MAT/ALLAN/JON, or KRIS/AMANDA/JUANA/JODI.
-export const NAME_MENU_FIRST_PRESET = gen2.nameMenu.firstPreset;
 
 // wBattleMode: 0 none, 1 a wild Pokemon, 2 a trainer. Exported because both
 // tasks.js and bootstrap.js need it -- you cannot run from a trainer, and a
 // trainer's Pokemon cannot be caught -- and a magic 2 stated in two places is
 // exactly the kind of thing that drifts.
-export const TRAINER_BATTLE = gen2.trainerBattle;
 
 // Six. The cap the game enforces, and the reason a catch refuses a full party
 // rather than sending it to a box this does not handle.
-export const MAX_PARTY = gen2.maxParty;
 
 // Where the cartridge's save data lives, and how the game knows it is real.
 //
@@ -47,10 +42,6 @@ export const MAX_PARTY = gen2.maxParty;
 // the obvious thing to reach for and it is wrong: a battery that has never
 // been saved to still reads five non-zero bytes here, so "any non-zero byte
 // means there is a save" calls a blank cartridge saved.
-const SRAM_START = gen2.sram.start;
-const SRAM_BANK_BYTES = gen2.sram.bankBytes;
-const SAVE_CHECK_VALUE_1 = gen2.saveCheck[0];
-const SAVE_CHECK_VALUE_2 = gen2.saveCheck[1];
 
 export class GameState {
   /**
@@ -104,8 +95,8 @@ export class GameState {
   /** Is the intro's NAME menu on screen? `win` comes from menuWindow. */
   nameMenuUp(win) {
     const at = (addr) => win[addr - this.menuWindow.addr];
-    return at(this.a.menuItems) === NAME_MENU_ITEMS
-      && at(this.a.menuRight) === NAME_MENU_RIGHT
+    return at(this.a.menuItems) === this.e.nameMenu.items
+      && at(this.a.menuRight) === this.e.nameMenu.right
       && at(this.a.menuTop) === 0;
   }
 
@@ -123,16 +114,18 @@ export class GameState {
    * the flat block is bank * 0x2000 + (addr - 0xA000).
    */
   saveIsPresent(sram) {
-    if (!sram || sram.length < SRAM_BANK_BYTES) return false;
+    const { start, bankBytes } = this.e.sram;
+    if (!sram || sram.length < bankBytes) return false;
     const at = (name) => {
       if (!this.s.has(name)) return -1;
-      return this.s.bank(name) * SRAM_BANK_BYTES + (this.s.addr(name) - SRAM_START);
+      return this.s.bank(name) * bankBytes + (this.s.addr(name) - start);
     };
     const one = at('sCheckValue1'), two = at('sCheckValue2');
     if (one < 0 || two < 0 || one >= sram.length || two >= sram.length) {
       return false;
     }
-    return sram[one] === SAVE_CHECK_VALUE_1 && sram[two] === SAVE_CHECK_VALUE_2;
+    const [one_, two_] = this.e.saveCheck;
+    return sram[one] === one_ && sram[two] === two_;
   }
 
   read(wram) {
@@ -148,7 +141,7 @@ export class GameState {
       worldLoaded: b(wram, a.mapStatus) === 2 && b(wram, a.mapGroup) !== 0,
       scriptRunning: b(wram, a.scriptMode) !== 0,
       pos: [b(wram, a.x), b(wram, a.y)],
-      onGrass: GRASS_TILES.has(b(wram, a.tile)),
+      onGrass: this.e.grassTiles.includes(b(wram, a.tile)),
       menu: [b(wram, a.menuX), b(wram, a.menuY)],
       battleCursor: b(wram, a.battleCursor),
       enemy: {

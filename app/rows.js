@@ -9,7 +9,6 @@
 // main.js applies what comes back. That division is worth keeping: a wrong
 // string here is a wrong string, but a wrong string tangled up with the DOM is
 // a bug you can only find by loading a phone and squinting at it.
-import { MAX_PARTY, TRAINER_BATTLE } from '../gen2/state.js';
 
 /**
  * `ctx` is everything outside the game that changes what a row says:
@@ -22,7 +21,15 @@ import { MAX_PARTY, TRAINER_BATTLE } from '../gen2/state.js';
  */
 export function describeRows(s, ctx = {}) {
   const { rom = null, target = 5, huntWanted = null, ballId = null,
-          savedThisSession = false, healPlace = null } = ctx;
+          savedThisSession = false, healPlace = null,
+          // The cartridge's own numbers. A party of six and a trainer battle of
+          // 2 are Gen 2's, not this module's, and reading them from an import
+          // meant the stock values reached here even when a title had changed
+          // them -- the engine profile applied to half the app.
+          engine = {} } = ctx;
+  const maxParty = engine.maxParty || 6;
+  const trainerBattle = engine.trainerBattle === undefined
+    ? 2 : engine.trainerBattle;
   const name = (id) => (rom ? rom.speciesName(id) : null);
 
   const lead = s.party[0];
@@ -30,7 +37,7 @@ export function describeRows(s, ctx = {}) {
   const needsBalls = !ballId;
   const ballName = ballId && rom ? rom.itemName(ballId) : null;
   const foe = s.inBattle ? name(s.enemy.species) : null;
-  const trainer = s.battleMode === TRAINER_BATTLE;
+  const trainer = s.battleMode === trainerBattle;
   const hurt = s.party.filter((m) => m.hp < m.maxHp);
 
   // Saving drives the START menu, and that menu does not open in a battle or
@@ -43,7 +50,7 @@ export function describeRows(s, ctx = {}) {
   // worse than no offer.
   const afoot = s.worldLoaded && !s.inBattle;
   const canCatchHere = s.inBattle && !trainer && !!ballId
-                       && s.party.length < MAX_PARTY;
+                       && s.party.length < maxParty;
 
   return {
     grind: {
@@ -89,7 +96,7 @@ export function describeRows(s, ctx = {}) {
     here: {
       text: !s.inBattle ? 'not in a battle'
         : trainer ? 'a trainer’s Pokémon cannot be caught'
-        : s.party.length >= MAX_PARTY ? 'the party is full'
+        : s.party.length >= maxParty ? 'the party is full'
         : needsBalls ? 'no Poké Balls yet'
         : `${foe} Lv${s.enemy.level} · ${ballName || 'a ball'}`,
       enabled: canCatchHere,

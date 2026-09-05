@@ -2,7 +2,8 @@
 // about. Cheap to test and worth testing, because everything downstream trusts
 // it -- a misread here shows up much later as a bad decision.
 import { FakeGameBoy, symbols, test, worldRam, markSaved } from '../harness.mjs';
-import { GameState, MAX_PARTY, TRAINER_BATTLE } from '../../gen2/state.js';
+import { GameState } from '../../gen2/state.js';
+import { gen2 } from '../../gen2/engine.js';
 
 test('a party is read back with levels, HP and moves intact', async (t) => {
   const sym = symbols();
@@ -66,6 +67,9 @@ test('a battery with no save in it is not mistaken for one that has', async (t) 
 });
 
 test('the shared constants are the ones the game uses', async (t) => {
-  t.eq(TRAINER_BATTLE, 2, 'wBattleMode 2 is a trainer');
-  t.eq(MAX_PARTY, 6, 'six party slots');
+  // On the profile now, not exported from this module. They were module-level
+  // constants computed from the stock profile at import time, which meant a
+  // title that changed one had it honoured in `party()` and nowhere else.
+  t.eq(gen2.trainerBattle, 2, 'wBattleMode 2 is a trainer');
+  t.eq(gen2.maxParty, 6, 'six party slots');
 });

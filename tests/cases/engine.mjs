@@ -5,10 +5,11 @@
 // Crystal in three ways -- a wider party entry, an eleventh character in a
 // name, and four encounter slots instead of seven -- and check that what comes
 // back is read at the new layout rather than the old one.
-import { FakeGameBoy, symbols, test } from '../harness.mjs';
+import { FakeGameBoy, symbols, test, worldRam } from '../harness.mjs';
 import { gen2 } from '../../gen2/engine.js';
 import { GameState } from '../../gen2/state.js';
 import { RomData } from '../../gen2/romdata.js';
+import { describeRows } from '../../app/rows.js';
 
 const sym = symbols();
 const WRAM_BYTES = 0x2000, GB_WRAM_START = 0xc000;
@@ -130,4 +131,36 @@ test('a cartridge that added species is read to its own count', async (t) => {
   // which this test is the reason for: it was found by the name test failing
   // for a species id the profile had no say over.
   t.eq(named(gen2, 251).startsWith('#'), false, 'Crystal still reads its last');
+});
+
+test('a changed number reaches the whole app, not just the reader',
+     async (t) => {
+  // The half-applied bug this closes: `maxParty` and `trainerBattle` were
+  // module-level constants computed from the stock profile when state.js was
+  // imported, so a title that raised the party cap had it honoured in
+  // `party()` -- and nowhere that decides anything.
+  const eight = { ...gen2, maxParty: 8 };
+  const seven = Array.from({ length: 7 }, () => ({ hp: 5, maxHp: 5 }));
+  const world = { party: seven, battleMode: 1, enemy: { species: 16, level: 3, hp: 9, maxHp: 9 } };
+  const s = new GameState(sym, eight).read(worldRam(sym, world));
+
+  t.eq(s.party.length, 7, 'the reader follows the profile, as it always did');
+  const said = describeRows(s, { engine: eight, ballId: 5, rom: null });
+  t.true(said.here.enabled,
+         'and so does the row that refuses a catch when the party is full');
+  t.eq(describeRows(s, { engine: gen2, ballId: 5, rom: null }).here.enabled, false,
+       'which the stock cap would have refused at seven');
+});
+
+test('a cartridge that renumbered its battle modes is read that way',
+     async (t) => {
+  const odd = { ...gen2, trainerBattle: 3 };
+  const world = { battleMode: 3, party: [{ hp: 5, maxHp: 5 }],
+                  enemy: { species: 16, level: 3, hp: 9, maxHp: 9 } };
+  const s = new GameState(sym, odd).read(worldRam(sym, world));
+  t.contains(describeRows(s, { engine: odd, ballId: 5, rom: null }).here.text,
+             'trainer', 'mode 3 is the trainer battle this cartridge declares');
+  t.false(describeRows(s, { engine: gen2, ballId: 5, rom: null }).here.text
+            .includes('trainer'),
+          'and the stock profile reads the same bytes as a wild one');
 });

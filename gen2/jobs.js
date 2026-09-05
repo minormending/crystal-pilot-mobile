@@ -3,7 +3,6 @@
 // These are the only methods the interface calls. Each one loops over the
 // battle primitives, decides when to stop, and returns { ok, message, stats }
 // -- the shape the interface renders without knowing what happened.
-import { MAX_PARTY, TRAINER_BATTLE } from './state.js';
 import { SETTLE_FRAMES } from '../gbcore/taskbase.js';
 // Consecutive unresolved battles that mean the pilot has lost the thread.
 const MAX_STUCK_BATTLES = 5;
@@ -134,8 +133,9 @@ export function withJobs(Base) {
 
     let s = await this.snap();
     if (!s.inBattle) return { outcome: 'nobattle' };
-    if (s.battleMode === TRAINER_BATTLE) return { outcome: 'trainer' };
-    if (s.party.length >= MAX_PARTY) return { outcome: 'full' };
+    const e = this.state.e;
+    if (s.battleMode === e.trainerBattle) return { outcome: 'trainer' };
+    if (s.party.length >= e.maxParty) return { outcome: 'full' };
     if (ballsOf(s) <= 0) return { outcome: 'noballs', ballName };
 
     const name = this.rom.speciesName(s.enemy.species);
@@ -268,7 +268,8 @@ export function withJobs(Base) {
     if (!before.inBattle) {
       return { ok: false, stats: {}, message: 'not in a battle' };
     }
-    const kind = before.battleMode === TRAINER_BATTLE ? 'trainer' : 'wild';
+    const kind = before.battleMode === this.state.e.trainerBattle
+      ? 'trainer' : 'wild';
     const foe = this.rom ? this.rom.speciesName(before.enemy.species) : 'it';
     this.say(`fighting the ${kind} ${foe}`);
 
@@ -295,7 +296,7 @@ export function withJobs(Base) {
     const stats = { encounters: 0, fled: 0, thrown: 0 };
     const started = Date.now();
     let s = await this.snap();
-    if (s.party.length >= MAX_PARTY) {
+    if (s.party.length >= this.state.e.maxParty) {
       return { ok: false, stats, message:
         'the party is full — a caught Pokemon would go to the PC, '
         + 'which this does not handle. Free a slot first.' };

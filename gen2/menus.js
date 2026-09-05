@@ -3,7 +3,6 @@
 // Driving a menu means reading the cursor and stepping it, never counting
 // presses from an assumed origin -- the cursor persists between openings, so
 // an assumed origin is wrong exactly when it matters.
-import { NAME_MENU_FIRST_PRESET } from './state.js';
 import { SETTLE_FRAMES } from '../gbcore/taskbase.js';
 // Times to try the whole START -> SAVE -> YES flow before giving up.
 const SAVE_ATTEMPTS = 3;
@@ -63,17 +62,18 @@ export function withMenus(Base) {
     const win = await this.gb.readBytes(
       this.state.menuWindow.addr, this.state.menuWindow.len);
     if (!this.state.nameMenuUp(win)) return false;
+    const first = this.state.e.nameMenu.firstPreset;
     for (let i = 0; i < 12; i++) {
       const now = await this.gb.readBytes(
         this.state.menuWindow.addr, this.state.menuWindow.len);
       const cur = this.state.menuCursorY(now);
-      if (cur === NAME_MENU_FIRST_PRESET) {
+      if (cur === first) {
         await this.push('A', 6, 20);
         this.named = true;
         this.say('picked one of the game\'s own names');
         return true;
       }
-      await this.push(cur < NAME_MENU_FIRST_PRESET ? 'DOWN' : 'UP', 4, 6);
+      await this.push(cur < first ? 'DOWN' : 'UP', 4, 6);
     }
     return false;
   }

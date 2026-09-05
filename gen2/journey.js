@@ -15,7 +15,6 @@
 // to land on and stops with a plain description if it lands somewhere else,
 // because a walk that quietly drifts off course ends up mashing A at a wall.
 import { CollisionMap } from './collision.js';
-import { GRASS_TILES, TRAINER_BATTLE } from './state.js';
 
 export class Journey {
   /**
@@ -353,6 +352,7 @@ export class Journey {
 
   /** Stand on a tile that rolls for wild encounters. */
   async findGrass() {
+    const grass = this.state.e.grassTiles;
     const wram = await this.settled();
     if (!wram) return false;
     const [w, h] = this.collision.mapSize();
@@ -360,7 +360,7 @@ export class Journey {
     const patches = [];
     for (let y = 0; y < h; y++) {
       for (let x = 0; x < w; x++) {
-        if (GRASS_TILES.has(this.collision.collisionAt(x, y))) patches.push([x, y]);
+        if (grass.includes(this.collision.collisionAt(x, y))) patches.push([x, y]);
       }
     }
     if (!patches.length) return false;
@@ -390,7 +390,8 @@ export class Journey {
     const wram = await this.settled();
     if (!wram) return false;
     const at = this.collision.playerPos(wram);
-    return GRASS_TILES.has(this.collision.collisionAt(at[0], at[1]));
+    return this.state.e.grassTiles
+      .includes(this.collision.collisionAt(at[0], at[1]));
   }
 
   /** Find a way off this map and take it. */
@@ -496,7 +497,7 @@ export class Journey {
   async escapeBattle() {
     const s = await this.snap();
     if (!s.inBattle) return true;
-    if (s.battleMode === TRAINER_BATTLE) {
+    if (s.battleMode === this.state.e.trainerBattle) {
       const how = await this.tasks.fightBattle();
       this.say(how === 'won' ? 'won a trainer battle' : `trainer battle: ${how}`);
       return how === 'won';

@@ -12,7 +12,7 @@ import { chosenName, openRoom, wasSharing } from '../gbcore/room.js';
 import { createHost, createWatcher } from '../gbcore/stream.js';
 import { Cancelled } from '../gbcore/taskbase.js';
 import { REPLACED_SLOT, Saves, SLOT_IDS, UNDO_SLOT } from '../gbcore/saves.js';
-import { GameState, TRAINER_BATTLE, MAX_PARTY } from '../gen2/state.js';
+import { GameState } from '../gen2/state.js';
 import { Tasks } from '../gen2/tasks.js';
 import { CollisionMap } from '../gen2/collision.js';
 import { Nav } from '../gen2/nav.js';
@@ -1269,7 +1269,8 @@ function paintJobs(s) {
   // first Poké Balls is a scripted walk to particular places, and a cartridge
   // nobody has described has no such walk.
   const ctx = { rom: romdata, target, huntWanted, ballId, savedThisSession,
-                healPlace, canFetch: typeof boot.eggErrand === 'function' };
+                healPlace, canFetch: typeof boot.eggErrand === 'function',
+                engine: state.e };
   const rows = describeRows(s, ctx);
   const offers = describeOffers(s, ctx);
 
