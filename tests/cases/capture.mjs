@@ -12,6 +12,10 @@ const POKE_BALL = 5;
 
 /** A pilot in a wild battle, with the primitives replaced by scripted ones. */
 function inBattle({ enemyHp = 20, enemyMax = 20, party = 1, balls = 10,
+                    // What is on the field. Separate from the party on purpose:
+                    // once a lead can faint and be replaced, "our HP" and "slot
+                    // one's HP" are two different facts.
+                    active = { hp: 40, maxHp: 44 },
                     chip = async () => 'ok', throwBall = async () => true,
                     watchThrow = async () => 'gone' } = {}) {
   const sym = symbols();
@@ -26,7 +30,7 @@ function inBattle({ enemyHp = 20, enemyMax = 20, party = 1, balls = 10,
   tasks.snap = async () => state.read(worldRam(sym, {
     battleMode: 1, party: mons, balls: balls > 0 ? [[POKE_BALL, balls]] : [],
     enemy: { species: 16, level: 3, hp: live.hp, maxHp: enemyMax },
-    active: { hp: 40, maxHp: 44 }, menuItems: 34, menuTop: 12, menu: [1, 1],
+    active, menuItems: 34, menuTop: 12, menu: [1, 1],
   }));
   tasks.log = [];
   tasks.chip = async () => { tasks.log.push('chip'); return chip(live); };
@@ -101,6 +105,39 @@ test('a knockout by the replacement is not a whiteout', async (t) => {
   const r = await tasks.captureHere(POKE_BALL, { weakenTo: 0.5, memory });
   t.eq(r.outcome, 'knockedOut', 'somebody is still standing, so we won it');
   t.gte(memory.biggestHit, 30, 'and the guard still learns from the swing');
+});
+
+test('a catch answers the party prompt instead of losing the thread', async (t) => {
+  // The thing being caught gets turns too. When ours went down mid-catch, chip
+  // spent its budget looking for a battle menu that had been replaced by
+  // "Which POKeMON?", and this reported having lost track of the battle -- with
+  // a healthy Pokemon in slot two and one line of input outstanding.
+  const field = { hp: 0, maxHp: 44 };
+  const { tasks, mons } = inBattle({ party: 2, enemyHp: 30, enemyMax: 40,
+                                     active: field });
+  mons[0].hp = 0;
+  let sent = 0;
+  // Answering it puts slot two out, so the field is no longer empty. The object
+  // is shared with the snapshot, so mutating it is what the game would do.
+  tasks.sendOut = async () => { sent++; field.hp = 25; return 'ok'; };
+  const r = await tasks.captureHere(POKE_BALL, { weakenTo: 0, memory: { biggestHit: 0 } });
+  t.eq(sent, 1, 'the prompt was answered');
+  t.ne(r.outcome, 'stuck', 'so the catch carried on rather than losing the thread');
+});
+
+test('a field that never comes back is reported, not looped on', async (t) => {
+  // Answering the prompt does not spend a ball, and this loop is bounded by
+  // balls -- so a replacement that reads as fainted too would spin for ever.
+  // Bounded by the party instead, because that is the most times anything can
+  // go down before there is nobody left to send.
+  const { tasks } = inBattle({ party: 3, enemyHp: 30, enemyMax: 40,
+                               active: { hp: 0, maxHp: 44 } });
+  let sent = 0;
+  tasks.sendOut = async () => { sent++; return 'ok'; };   // never actually lands
+  const r = await tasks.captureHere(POKE_BALL, { weakenTo: 0, memory: { biggestHit: 0 } });
+  t.eq(r.outcome, 'stuck', 'it gives up rather than spinning');
+  t.gte(sent, 1, 'having tried');
+  t.true(sent <= 8, `and stopped trying — ${sent} attempts`);
 });
 
 test('a catch is reported with the ball count actually spent', async (t) => {

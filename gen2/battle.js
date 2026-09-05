@@ -255,6 +255,29 @@ export function withBattle(Base) {
     return 'stuck';
   }
 
+  /**
+   * If the Pokemon on the field has fainted, put the next one out.
+   *
+   * Gen 2 does not offer a choice about this -- it asks "Which POKeMON?" and
+   * waits -- so any loop that drives a battle has to answer it or sit there.
+   * fightBattle answered it from the day sendOut was written and nothing else
+   * did, which is the whole of this: flee spent its 150 presses looking for a
+   * battle menu that was never coming and reported it could not run, and a
+   * catch reported it had lost track of the battle, both with healthy Pokemon
+   * in the party and the game waiting on one line of input.
+   *
+   * Returns null when there was nothing to answer, so a caller can tell "no
+   * faint" from sendOut's own outcomes.
+   */
+  async coverFaint(s) {
+    if (!s || !s.inBattle || !s.party.length) return null;
+    // maxHp as well as hp: at "Wild PIDGEY appeared!" the battle mon is not
+    // loaded and both read zero, so hp alone fires at the start of every
+    // battle -- which is how this was got wrong the first time.
+    if (!(s.active.maxHp > 0 && s.active.hp === 0)) return null;
+    return this.sendOut();
+  }
+
   async fightBattle(maxTurns = 40) {
     for (let turn = 0; turn < maxTurns && !this.cancelled; turn++) {
       await this.pump();
@@ -262,17 +285,11 @@ export function withBattle(Base) {
       // on the party screen and awaitBattleMenu would spend 150 presses finding
       // out that no battle menu is coming.
       const pre = await this.snap();
-      // maxHp as well as hp, because "no HP" and "no Pokemon on the field yet"
-      // read identically otherwise: at "Wild PIDGEY appeared!" the battle mon is
-      // not loaded and both are zero, so keying off hp alone fired at the start
-      // of every battle and reported five stuck battles in four tenths of a
-      // second, having sent nothing out.
-      if (pre.inBattle && pre.party.length &&
-          pre.active.maxHp > 0 && pre.active.hp === 0) {
-        const how = await this.sendOut();
-        if (how === 'lost') return 'lost';
-        if (how === 'ended') return this._outcome();
-        if (how === 'stuck') return 'stuck';
+      const covered = await this.coverFaint(pre);
+      if (covered) {
+        if (covered === 'lost') return 'lost';
+        if (covered === 'ended') return this._outcome();
+        if (covered === 'stuck') return 'stuck';
         continue;
       }
       const menu = await this.awaitBattleMenu();
@@ -395,6 +412,14 @@ export function withBattle(Base) {
    */
   async flee(maxTurns = 8) {
     for (let turn = 0; turn < maxTurns && !this.cancelled; turn++) {
+      // Running can fail, and a wild Pokemon that gets a turn can knock ours
+      // out -- so the prompt is as reachable from here as from a fight. Without
+      // this, hunting stopped on "could not run from a PIDGEY" while the game
+      // sat waiting to be told which Pokemon to send out.
+      const covered = await this.coverFaint(await this.snap());
+      if (covered === 'lost') return false;      // nothing left to run with
+      if (covered === 'ended') return true;
+      if (covered === 'stuck') return !(await this.snap()).inBattle;
       const menu = await this.awaitBattleMenu();
       if (menu === null) return !(await this.snap()).inBattle;
       await this.chooseAction(RUN);

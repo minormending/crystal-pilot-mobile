@@ -182,3 +182,54 @@ test('two Pokemon that read alike fall back to the one sendOut would pick', asyn
        [2, 0, 0, 0], 'the first one standing');
   t.eq(onField({ party: [], active: { hp: 0, maxHp: 0 } }), null, 'no party, nobody out');
 });
+
+test('a fainted Pokemon on the field is answered, whatever loop is driving', async (t) => {
+  // Gen 2 asks "Which POKeMON?" and waits. fightBattle answered it from the day
+  // sendOut was written and nothing else did -- so fleeing spent 150 presses
+  // hunting for a battle menu that was never coming.
+  const { tasks } = pilot();
+  let asked = 0;
+  tasks.sendOut = async () => { asked++; return 'ok'; };
+
+  const live = { inBattle: true, party: [{ hp: 0, maxHp: 30 }],
+                 active: { hp: 0, maxHp: 30 } };
+  t.eq(await tasks.coverFaint(live), 'ok', 'it sends the next one out');
+  t.eq(asked, 1, 'by way of sendOut');
+
+  const standing = { inBattle: true, party: [{ hp: 12, maxHp: 30 }],
+                     active: { hp: 12, maxHp: 30 } };
+  t.eq(await tasks.coverFaint(standing), null, 'nothing to answer while it stands');
+
+  // "Wild PIDGEY appeared!": the battle mon is not loaded and both read zero.
+  const appearing = { inBattle: true, party: [{ hp: 30, maxHp: 30 }],
+                      active: { hp: 0, maxHp: 0 } };
+  t.eq(await tasks.coverFaint(appearing), null, 'and not at the start of one');
+
+  t.eq(await tasks.coverFaint({ inBattle: false, party: [], active: {} }), null,
+       'nor outside a battle');
+  t.eq(asked, 1, 'sendOut was reached exactly once');
+});
+
+test('fleeing sends out a replacement rather than giving up', async (t) => {
+  // Running can fail, and the wild Pokemon that gets the turn can knock ours
+  // out. Hunting flees from everything, so this arrives eventually on any long
+  // hunt -- and it stopped it with "could not run from a PIDGEY".
+  const { tasks } = pilot();
+  let sent = 0;
+  const live = { inBattle: true, party: [{ hp: 0, maxHp: 30 }, { hp: 20, maxHp: 25 }],
+                 active: { hp: 0, maxHp: 30 } };
+  tasks.snap = async () => live;
+  tasks.sendOut = async () => { sent++; live.inBattle = false; return 'ended'; };
+  tasks.awaitBattleMenu = async () => { throw new Error('should not look for a menu'); };
+  t.true(await tasks.flee(), 'the battle is over, so it ran');
+  t.eq(sent, 1, 'and it answered the prompt instead of hunting for a menu');
+});
+
+test('with nothing left standing, fleeing says so rather than looping', async (t) => {
+  const { tasks } = pilot();
+  tasks.snap = async () => ({ inBattle: true, party: [{ hp: 0, maxHp: 30 }],
+                              active: { hp: 0, maxHp: 30 } });
+  tasks.sendOut = async () => 'lost';
+  tasks.awaitBattleMenu = async () => { throw new Error('should not look for a menu'); };
+  t.false(await tasks.flee(), 'there is nothing to run with');
+});

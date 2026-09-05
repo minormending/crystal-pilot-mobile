@@ -145,10 +145,29 @@ export function withJobs(Base) {
     const partyBefore = s.party.length;
     let weakening = weakenTo > 0;
     let thrown = 0, chips = 0;
+    // Answering the party prompt does not spend a ball, and this loop is
+    // bounded by balls -- so an unbounded `continue` here would spin for ever
+    // if the field never came back. Bounded by the party, because that is the
+    // most times anything can faint before there is nobody left to send.
+    let covers = 0;
 
     while (thrown < maxBalls && !this.cancelled) {
       const snap = await this.snap();
       if (!snap.inBattle) break;
+      // The thing being caught can knock ours out between throws, and the
+      // prompt that follows is not a battle menu -- chip would spend its whole
+      // budget looking for one and this reported having lost track of the
+      // battle, with a healthy party and one line of input outstanding.
+      const covered = await this.coverFaint(snap);
+      if (covered === 'lost') return { outcome: 'lost', name, thrown, chips };
+      if (covered === 'ended') break;
+      if (covered === 'stuck') return { outcome: 'stuck', name, thrown, chips };
+      if (covered) {
+        if (++covers > e.maxParty) {
+          return { outcome: 'stuck', name, thrown, chips };
+        }
+        continue;
+      }
 
       // Soften it up first. A ball's odds turn on how much HP is left, so
       // throwing at something untouched is mostly throwing balls away.

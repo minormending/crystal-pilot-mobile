@@ -786,7 +786,7 @@ eight kilobytes a full snapshot copies, which is worth keeping distinct.
 
 ## 6. Battles
 
-<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 93f79734966d -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 176ce09a7fe4 -->
 
 ### Is it our turn?
 
@@ -907,7 +907,21 @@ right:
   all, falling back to the first Pokémon standing: the slot `sendOut` would have
   chosen. It is matched on HP rather than read from `wCurBattleMon` because that
   would be another name on `SHARED_SYMBOLS`, and every device taking a digest
-  would then need it. `jobs.js` asks the same question twice more, and one of
+  would then need it.
+- *And every loop that drives a battle has to answer the prompt.* `fightBattle`
+  did from the day `sendOut` was written, and nothing else did. Fleeing spent
+  its 150 presses looking for a battle menu that was never coming and reported
+  it could not run; a catch reported it had lost track of the battle. Both with
+  healthy Pokémon in the party and the game waiting on one line of input, and
+  both reachable on any long hunt, because running can fail and the wild
+  Pokémon that gets the turn can knock yours out. `coverFaint` is the one guard
+  all three use. In `captureHere` it is *bounded* — answering the prompt does
+  not spend a ball, and that loop counts balls, so an unbounded `continue`
+  would spin for ever if the field never came back. The bound is the party
+  size, which is the most times anything can faint before there is nobody left
+  to send.
+
+  `jobs.js` asks the same question twice more, and one of
   them decided an *outcome*: when our own swing ends the battle, whether we
   knocked the target out or were knocked out ourselves was read off
   `party[0].hp`. Beginning a catch with slot one already down — which a grind
@@ -926,7 +940,7 @@ fainted.
 
 ## 7. Catching something
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ 9763a1f78e8c -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ bb1829e819a4 -->
 
 Catching is the most involved loop, because a Poké Ball's odds turn on how much
 HP is left. Throwing at a full-health target is mostly throwing balls away.
@@ -1012,7 +1026,7 @@ precedes it defaults to yes, which is what we want; the nickname box does not.
 
 ## 7a. Three that act on where you already are
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ 8a469819502d -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ cc587ec8cce4 -->
 
 Grind, hunt and catch all go *looking* for something. These three do the obvious
 thing with the situation you are already in, and take no parameters:
@@ -1074,7 +1088,7 @@ running the thing.
 
 ## 7b. Saving, and getting the save out
 
-<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 93f79734966d -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 176ce09a7fe4 -->
 
 ```mermaid
 flowchart TD
