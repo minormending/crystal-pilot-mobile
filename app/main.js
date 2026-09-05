@@ -18,7 +18,7 @@ import { CollisionMap } from '../gen2/collision.js';
 import { Nav } from '../gen2/nav.js';
 import { RomData, normalise } from '../gen2/romdata.js';
 import { engineFor } from '../titles/contract.js';
-import { TITLES, pickTitle } from '../titles/pick.js';
+import { pickTitle, titleById } from '../titles/pick.js';
 import { World } from '../gen2/world.js';
 
 const $ = (s) => document.querySelector(s);
@@ -313,7 +313,7 @@ async function reallyStart() {
   // class. `?title=` names one by hand, for pointing the app at the generic
   // profile without going and finding a hack to test with.
   const wanted = PARAMS.get('title');
-  title = (wanted && TITLES.find((x) => x.id === wanted))
+  title = (wanted && titleById(wanted))
           || pickTitle({ header: readHeader(romBytes), symbols, tag: romTag });
   await gb.start($('#screen'));
   await gb.loadRom(romBytes);

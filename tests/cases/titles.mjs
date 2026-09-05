@@ -1,7 +1,7 @@
 // Choosing a profile for a cartridge, which is the one thing that has to be
 // right before a ROM hack can be pointed at this app at all.
 import { test } from '../harness.mjs';
-import { TITLES, pickTitle } from '../../titles/pick.js';
+import { TITLES, pickTitle, titleById } from '../../titles/pick.js';
 import { engineFor, validateTitle } from '../../titles/contract.js';
 import { describeTitle } from '../../app/rows.js';
 import { gen2 } from '../../gen2/engine.js';
@@ -146,4 +146,21 @@ test('the app says which cartridge it is driving, only when that is news',
   t.contains(half.text, 'no scripted start', 'both of them');
 
   t.false(describeTitle(null).show, 'and nothing at all before a game loads');
+});
+
+test('naming a profile by hand goes through the same gate as recognising one',
+     async (t) => {
+  t.eq(titleById('crystal').id, 'crystal', 'a usable profile comes back');
+  t.eq(titleById('no-such-thing'), null, 'and a name nobody has is a no');
+
+  // The path a profile author uses to try their own file was the path that
+  // skipped the check that would tell them it is wrong.
+  const broken = { id: 'broken', matches: () => true };   // no drive
+  TITLES.unshift(broken);
+  try {
+    t.eq(titleById('broken'), null,
+         'a profile that fails the contract is not handed back by id either');
+  } finally {
+    TITLES.shift();
+  }
 });

@@ -15,7 +15,7 @@ what CI checks and what the pre-commit hook blocks on.
 ```mermaid
 flowchart LR
     E[an edit] --> H{{".githooks/pre-commit"}}
-    H --> T["./run-tests<br/>109 behaviour tests"]
+    H --> T["./run-tests<br/>110 behaviour tests"]
     H --> C["tools/check-app<br/>14 groups"]
     H --> D["tools/docs-check<br/>23 tracked sections"]
     T --> OK[commit]
@@ -39,13 +39,13 @@ git config core.hooksPath .githooks
 ./run-tests -v         # notes and stack lines
 ```
 
-109 tests in thirteen files, and what each file is about says more than the count:
+110 tests in thirteen files, and what each file is about says more than the count:
 
 | file | tests | what it pins down |
 | --- | --- | --- |
 | `rows.mjs` | 30 | what every row and offer says, and when its button works |
 | `engine.mjs` | 8 | that a changed engine number is actually followed |
-| `titles.mjs` | 10 | choosing a profile for a cartridge, and falling back to generic |
+| `titles.mjs` | 11 | choosing a profile for a cartridge, and falling back to generic |
 | `cartridge.mjs` | 4 | reading a ROM's own header: the logo, the title, Color-only |
 | `journey.mjs` | 6 | choosing where to heal: the cost model, and a map with no name |
 | `remember.mjs` | 10 | which remembered choices are believed, and which dropped |
@@ -137,6 +137,11 @@ Two query parameters, both for development, both off by default:
 | `?autostart=1` | lets the pilot play the intro itself, taking one of the game's own names — see [Using it](USING.md#starting-a-game-is-yours-not-the-pilots) |
 | `?title=generic` | forces a title profile by id instead of recognising the cartridge. The reason it exists is that the interesting profile is the one for a cartridge nobody has described, and testing it otherwise means going and finding a ROM hack |
 | `?title=crystal-early` | the same, for a *partly* described cartridge: two named maps, one healer, no engine changes, driven by Crystal's procedures. What a hack profile looks like in its first hour |
+
+Both go through `titleById`, which runs the same contract check as recognising a
+cartridge does — naming your own profile by hand is exactly when you want to be
+told it is the wrong shape, and for a while it was the one path that skipped
+that.
 
 `window.PILOT` exposes the live objects — `gb`, `tasks`, `state`, `collision`,
 `world`, `nav`, `romdata`, `boot`, `walkToTap`, `showVersion`, and the two

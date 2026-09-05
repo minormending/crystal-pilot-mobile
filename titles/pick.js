@@ -35,6 +35,26 @@ export const TITLES = [
 ];
 
 /**
+ * One profile by id, if it is usable.
+ *
+ * The `?title=` override went straight to the array, which put the one path a
+ * profile author would use to try their own file -- naming it by hand -- past
+ * the only thing that would tell them it is wrong. Same gate as recognising
+ * one: a profile that fails the contract is not returned, and says why.
+ */
+export function titleById(id) {
+  const found = TITLES.find((t) => t.id === id);
+  if (!found) {
+    console.warn(`[title] no profile called ${id}; there is `
+                 + TITLES.map((t) => t.id).join(', '));
+    return null;
+  }
+  const wrong = validateTitle(found);
+  for (const line of wrong) console.warn(`[title] ${line}`);
+  return wrong.length ? null : found;
+}
+
+/**
  * The profile for this cartridge.
  *
  * `header` is gbcore/cartridge.js's, `symbols` the parsed .sym, `tag` the ROM
