@@ -1527,7 +1527,7 @@ This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ 381dc9ced6ab -->
+<!-- covers: app/main.js index.html @ a8bfabe48940 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -1718,6 +1718,28 @@ open flags: "both open" is a state with no meaning, and two booleans would let i
 happen. Both doors are also visible with no game loaded — the device that most
 needs the room code is the one with no ROM on it yet, which is the same reason
 the version display moved into the header in v71.
+
+`openGate` is the same idea one level out, and for a sharper reason. The menu's
+first card was a file picker, which is the right first question for one of the
+three people who open this page and the wrong one for the other two — badly
+wrong for the one whose other device is already playing, since watching needs
+nothing from this device at all. It takes `'files'`, `'watch'`, `'about'` or
+`null` for the fork itself, and toggles four cards from that one value for the
+same reason `showPanel` holds one: three doors open at once is a state with no
+meaning. `closeGateway` is the separate word for *a game is running, so none of
+the three questions applies*, which is what `reallyStart` calls — the fork does
+not have a fifth value for "not applicable", because that is not a door.
+
+Two controls are drawn twice, deliberately: the code box and the screen button
+each appear in Settings and in the watch card. One `joinWith` and one
+`screenPress` behind both, and both surfaces painted from the same `describeRoom`
+and `describeScreen` — the duplication is two elements, not two behaviours, and
+the alternative was sending somebody who had just said *I came to watch* off to
+find Settings. The reason the watch card carries the **state** and not only the
+button is that a card which only gets you as far as Settings moves the confusion
+rather than removing it. `check-app`'s wiring group counts every one of the ids,
+so a control that gets added to one surface and forgotten on the other is named
+rather than discovered.
 
 The gear made the header seven items wide, and at 375px the row wrapped: flex
 lays items onto lines *before* it shrinks them, so an item that does not fit
@@ -2391,7 +2413,7 @@ they have been installed.
 
 ### Watching the other device's screen
 
-<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ ee637d67e8a5 -->
+<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ dabcc57b75dd -->
 
 One device shows its screen; the other watches it, and plays it if the first
 one says so. The picture goes straight between them over WebRTC and never

@@ -297,6 +297,34 @@
 
   .tiphint{color:var(--dim);font-size:12px;margin:8px 2px 0;text-align:center}
 
+  /* The fork, in the same shape as the pilot's job rows and for the same
+     reason: several things you might be here for, exactly one of which is
+     yours. It exists because this page used to open with a file picker, which
+     is the right first question for exactly one of the three people who arrive
+     -- somebody who came to watch the game on their other device was told, in
+     effect, to go and build a ROM first, and the control they actually wanted
+     was behind the gear icon. Which door you are is cheaper to ask than to
+     guess.
+     The description is body text rather than .jstate's clipped monospace:
+     these are sentences read once on the way in, not state scanned mid-game. */
+  .gates{display:flex;flex-direction:column}
+  button.gate{display:grid;grid-template-columns:1fr auto;gap:10px;
+              align-items:center;width:100%;padding:12px 0;min-height:0;
+              border:0;border-top:1px solid var(--line);border-radius:0;
+              background:none;text-align:left}
+  button.gate:first-child{border-top:0;padding-top:2px}
+  .gate .gname{display:block;font-size:15px;font-weight:600}
+  .gate .gwhy{display:block;font-size:12.5px;color:var(--dim);margin-top:3px;
+              line-height:1.45}
+  .gate .garrow{color:var(--dim);font-size:16px}
+  .gate:hover .gname,.gate:focus-visible .gname{color:var(--accent)}
+  /* Back to the fork. A link rather than a button, because it undoes a choice:
+     a full-width control here would compete with the thing the card is for. */
+  button.backlink{flex:0 0 auto;min-height:0;padding:2px 0;border:0;
+                  background:none;color:var(--dim);font-size:12px;
+                  text-align:left}
+  button.backlink:hover{color:var(--ink)}
+
   /* The landing card. Someone arriving here has no idea what the app is or why
      it wants two files, and all of that used to live only in the README. */
   .intro h2{margin-bottom:10px}
@@ -690,7 +718,38 @@
 
   <div class="sheet open" id="sheet">
 
-  <div class="card intro" id="intro">
+  <!-- Three ways to arrive, and only one of them wants a file picker. -->
+  <div class="card" id="gateway">
+    <h2>What brings you here</h2>
+    <div class="gates">
+      <button class="gate" id="gate-files">
+        <span class="what">
+          <span class="gname">I have the game files</span>
+          <span class="gwhy">A <code>.gbc</code> and a <code>.sym</code>. The
+            game runs on this device and the pilot plays it.</span>
+        </span>
+        <span class="garrow" aria-hidden="true">&rarr;</span>
+      </button>
+      <button class="gate" id="gate-watch">
+        <span class="what">
+          <span class="gname">Watch my other device</span>
+          <span class="gwhy">Just the code it is sharing. This device needs no
+            ROM at all &mdash; the picture comes over the network.</span>
+        </span>
+        <span class="garrow" aria-hidden="true">&rarr;</span>
+      </button>
+      <button class="gate" id="gate-about">
+        <span class="what">
+          <span class="gname">I&rsquo;m just looking</span>
+          <span class="gwhy">What this is, and why it needs two files that only
+            you can build.</span>
+        </span>
+        <span class="garrow" aria-hidden="true">&rarr;</span>
+      </button>
+    </div>
+  </div>
+
+  <div class="card intro hide" id="intro">
     <h2>What this is</h2>
     <p class="lede">An auto-pilot for Pokémon Crystal that runs entirely in this
       browser tab. Tell it to grind a Pokémon to a level and it plays the battles
@@ -721,9 +780,10 @@
       can pick the game up. The ROM never goes, the room is reachable by anyone
       holding its code, and until you press Share nothing leaves at
       all.</div></div>
+    <footer><button class="backlink" id="backfromabout">&larr; the other two things you might be here for</button></footer>
   </div>
 
-  <div class="card" id="loader">
+  <div class="card hide" id="loader">
     <h2>Load your own files</h2>
     <div class="row">
       <!-- No accept filter on purpose. Android resolves accept extensions to
@@ -734,6 +794,31 @@
       <label class="file">Symbols (.sym)<input type="file" id="symFile"></label>
     </div>
     <footer id="loadernote">Pick the ROM first; the symbol file can follow.</footer>
+    <footer><button class="backlink" id="backfromfiles">&larr; I do not have these files</button></footer>
+  </div>
+
+  <!-- The whole watching flow in one card, because it used to be four
+       non-obvious steps behind a gear: join a room, notice a new row had
+       appeared in Settings, read it, press Watch. Everything here is painted
+       from the same describeRoom and describeScreen the Settings rows use. -->
+  <div class="card hide" id="watchcard">
+    <h2>Watch your other device</h2>
+    <p class="lede">On the device that has the game, open Settings and press
+      <em>Share</em>. It shows a five-character code &mdash; type it here.</p>
+    <div class="themerow hide" id="watchjoinrow">
+      <input class="code" id="joincode2" spellcheck="false" autocomplete="off"
+             maxlength="7" placeholder="K7M2P" aria-label="Room code">
+      <button class="themebtn" id="joingo2">Join</button>
+    </div>
+    <div class="themerow hide" id="watchrow">
+      <span class="val" id="watchstate">&mdash;</span>
+      <button class="themebtn" id="watchgo">Watch</button>
+    </div>
+    <div class="note"><div>Nothing is needed on this device but the code. The
+      picture arrives straight from your other device rather than through a
+      server, and if that device hands the pad over you can play it from
+      here.</div></div>
+    <footer><button class="backlink" id="backfromwatch">&larr; the other two things you might be here for</button></footer>
   </div>
 
   <div class="card" id="statuscard">

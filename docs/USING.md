@@ -8,6 +8,32 @@ goes. For what the screen is made of rather than what it does, see
 
 ---
 
+## The first thing it asks
+
+The app opens on one question — *what brings you here* — because there are three
+answers and only one of them wants a file picker.
+
+| door | what you need | where it takes you |
+| --- | --- | --- |
+| **I have the game files** | a `.gbc` and a `.sym` | the picker, then the game and the pilot |
+| **Watch my other device** | five characters, and nothing else | the other device's screen, and its pad if it offers it |
+| **I'm just looking** | nothing | what this is, and why it needs files only you can build |
+
+The middle one is worth knowing about even if you have the files, because it is
+the one people miss: **a device that is only watching needs no ROM.** Not a
+smaller one, not a shared one — none. Load nothing on your phone, type the code
+your laptop is showing, and the game appears on it.
+
+If your files are already kept from a previous visit the question is never
+asked; the app opens on the game, as it always has. Every door goes back in one
+tap, so guessing wrong costs nothing.
+
+To get the code: on the device that *has* the game, open Settings (the ⚙ in the
+header) and press **Share**. It shows five characters. Type those on the other
+device and press **Join** — then **Watch** when the button appears. What travels
+and what never does is set out in
+[Two devices, one game](DEVICES.md#what-leaves-the-device-and-when).
+
 ## Controls
 
 Eight on-screen buttons: the D-pad, A, B, Select and Start. **Press and hold** —

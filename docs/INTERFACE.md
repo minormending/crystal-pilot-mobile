@@ -228,6 +228,60 @@ pad is taken apart into two grid areas -- and stayed there. So on a phone held
 upright the pad looked exactly as available as ever and quietly did nothing,
 which is this page's own rule read backwards.
 
+## Three ways in, and the page opened on one of them
+
+The first card used to be a file picker. That is the right first question for
+exactly one of the three people who arrive here, and the page asked it of all
+of them.
+
+| who arrives | what they need | what the page used to say |
+| --- | --- | --- |
+| somebody who built pokecrystal | the two files, in order | exactly right |
+| somebody whose other device is playing | five characters | *load your own files* |
+| somebody who followed a link | what this is | *load your own files* |
+
+The second row is the one that stings, because **watching needs nothing from
+this device at all** — no ROM, no `.sym`, no storage. The picture arrives over
+WebRTC and `hold()` routes every press to `watcher.press()` without touching the
+emulator. It has always worked. It was reachable in four non-obvious steps:
+guess that the gear is worth opening, find the code box, join, then notice that
+a new row has appeared further down the same card and press *Watch* in it.
+
+So the page opens on the question instead of on one of the three answers:
+
+```mermaid
+flowchart TD
+    G["What brings you here"] --> F["I have the game files"]
+    G --> W["Watch my other device"]
+    G --> A["I'm just looking"]
+    F --> FL["the ROM and .sym picker<br/>— unchanged"]
+    W --> WC["one card: the code, Join,<br/>then Watch when it appears"]
+    A --> AB["what this is, and why it needs<br/>files only you can build"]
+    FL --> P["the game, and the pilot"]
+    WC --> P2["the other device's screen,<br/>and its pad if it hands it over"]
+    R(["files already kept"]) -.->|"the fork is never drawn"| P
+```
+
+Three properties of it are deliberate.
+
+**Nothing is remembered.** A door is a question about why you are here *today*,
+not a preference. The one person who would resent answering twice — somebody
+whose files are already in storage — never sees it, because the restore path
+takes the whole fork away before it is looked at.
+
+**Every door goes back.** The fork is a guess about yourself made before you
+have seen anything, so getting it wrong has to cost one tap.
+
+**The bar answers the same question the card did.** It said *waiting for a ROM
+and a .sym* to somebody who had just been told, one card above, that no ROM was
+needed. Asking a question and then contradicting the answer is worse than never
+having asked, so the status line follows the door.
+
+The watch card carries the state as well as the control, and that is the whole
+point of it rather than a detail: a card that only got you as far as Settings
+would have moved the confusion rather than removed it. Both surfaces are painted
+from one `describeScreen`, so they cannot disagree about what is happening.
+
 ## Two doors, and never two panels
 
 There are exactly two things behind doors, and they are behind different ones:
@@ -413,4 +467,4 @@ So this page carries a marker naming the files it describes and the hash they
 had when it was last read against them. `tools/docs-check` reports it when they
 move, and the pre-commit hook blocks on that report.
 
-<!-- covers: index.html app/main.js app/rows.js @ a63c849c563e -->
+<!-- covers: index.html app/main.js app/rows.js @ 30dae870a602 -->

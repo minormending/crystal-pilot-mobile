@@ -234,6 +234,59 @@ function showPanel(which) {
   $('#gear').setAttribute('aria-expanded',
                           which === 'settings' ? 'true' : 'false');
 }
+/**
+ * Which door of the fork is open, or the fork itself when nothing is passed.
+ *
+ * Three people arrive here and only one of them wants a file picker. The page
+ * used to open with one anyway, so somebody who came to watch the game running
+ * on their other device was told, in effect, to go and build a ROM -- while the
+ * control they actually needed sat behind the gear icon, in a row that stays
+ * hidden until you are already in a room. That is four non-obvious steps to
+ * reach a feature that needs nothing from this device but five characters.
+ *
+ * Nothing is remembered between visits. A door is a question about why you are
+ * here *today*, and the one person who would be annoyed to answer it twice --
+ * somebody whose files are already kept -- never sees it at all, because
+ * reallyStart takes the whole fork away.
+ */
+const GATE_STATUS = {
+  files: 'waiting for a ROM and a .sym',
+  watch: 'no ROM needed here — type the code from your other device',
+  about: 'nothing to load — this is the tour',
+};
+function openGate(which = null) {
+  // The bar is the app saying what it is waiting for, and until now it said
+  // "waiting for a ROM and a .sym" to somebody who had just been promised, one
+  // card above, that no ROM was needed. Answering a question and then
+  // contradicting the answer is worse than never asking.
+  setStatus(GATE_STATUS[which] || 'waiting for a ROM and a .sym');
+  $('#gateway').classList.toggle('hide', !!which);
+  $('#intro').classList.toggle('hide', which !== 'about');
+  $('#loader').classList.toggle('hide', which !== 'files');
+  $('#watchcard').classList.toggle('hide', which !== 'watch');
+}
+
+/** A game is running: none of the three questions applies any more. */
+function closeGateway() {
+  for (const id of ['#gateway', '#intro', '#loader', '#watchcard']) {
+    $(id).classList.add('hide');
+  }
+}
+
+$('#gate-files').onclick = () => openGate('files');
+$('#gate-watch').onclick = () => {
+  openGate('watch');
+  // Warmed while the code is being typed off the other screen, which is several
+  // seconds of doing nothing otherwise. Left floating deliberately: openRoom
+  // answers with a value for every failure it has, so there is no rejection to
+  // catch -- and if it fails, the row this paints says so.
+  ensureRoom();
+};
+$('#gate-about').onclick = () => openGate('about');
+for (const id of ['#backfromfiles', '#backfromwatch', '#backfromabout']) {
+  $(id).onclick = () => openGate(null);
+}
+
 // The pilot's own account of what it is doing, kept rather than overwritten.
 // It emits exactly the right events already -- "heading left", "healing up",
 // "slot 1 is down - sending out slot 2" -- and a single label threw all but
@@ -345,8 +398,7 @@ async function reallyStart() {
   };
 
   // Hand the game over immediately: buttons visible, emulator running.
-  $('#loader').classList.add('hide');
-  $('#intro').classList.add('hide');
+  closeGateway();
   $('#ctrls').classList.remove('hide');
   $('#speedbox').classList.remove('hide');
   $('#huntcard').classList.remove('hide');
@@ -718,7 +770,7 @@ function screenState() {
     play: host ? letsPlay : !(showing && showing.play === false),
     input: watcher ? remoteInput : null,
     // Whether there is anything on this screen to show. A device that joined a
-    // room only to watch has no ROM at all, which is the whole point of it.
+    // room to watch has no ROM at all, which is the whole point of it.
     game: gb.ready,
   };
 }
@@ -744,6 +796,14 @@ function paintScreen() {
   // to change, so the second control is not drawn there at all.
   $('#screenmode').classList.toggle('hide', !said.second);
   if (said.second) $('#screenmode').textContent = said.second;
+  // The same sentence and the same control, on the other surface. The watch
+  // card is not a shortcut to Settings -- it has to finish the job, which means
+  // carrying the state as well as the button. One describeScreen, two places to
+  // put it, so they cannot disagree about what is happening.
+  $('#watchrow').classList.toggle('hide', !(room && room.code));
+  $('#watchstate').textContent = said.text;
+  $('#watchgo').classList.toggle('hide', !said.button);
+  if (said.button) $('#watchgo').textContent = said.button;
 }
 
 /**
@@ -956,12 +1016,21 @@ async function onSignal(rtc) {
   }
 }
 
-$('#screenshare').onclick = () => {
+/**
+ * The one control the screen row has, wherever it is drawn.
+ *
+ * Settings has it because that is where a device already playing goes; the
+ * watch card has it because the whole reason that card exists is that this
+ * press used to be four steps away from somebody who had just arrived.
+ */
+function screenPress() {
   const said = describeScreen(screenState());
   if (said.button === 'Show') showScreen();
   else if (said.button === 'Watch') watchScreen();
   else stopScreen();      // nothing waits on it here; the room is staying open
-};
+}
+$('#screenshare').onclick = screenPress;
+$('#watchgo').onclick = screenPress;
 
 /**
  * Hand the pad over, or take it back.
@@ -2247,6 +2316,7 @@ function paintRoom() {
   btn.textContent = said.button || 'Share';
   btn.classList.toggle('hide', !said.button);
   $('#joinrow').classList.toggle('hide', !said.joining);
+  $('#watchjoinrow').classList.toggle('hide', !said.joining);
 }
 
 /**
@@ -2321,9 +2391,17 @@ $('#rename').onclick = () => {
   progress(`your other devices will call this one ${said}`);
 };
 
-$('#joingo').onclick = async () => {
-  const btn = $('#joingo'), input = $('#joincode');
-  btn.disabled = true;
+/**
+ * Join the room whose code is in that box.
+ *
+ * Two boxes reach this: the one in Settings, for a device already in use, and
+ * the one in the watch card, for a device that has just been asked what it is
+ * here for. Same room, same failures, same words -- so the handler is shared
+ * and only the pair of elements differs. Duplicating the four lines instead is
+ * how the two copies drift, and the copy that drifts is always the one nobody
+ * is testing.
+ */
+async function joinWith(btn, input) {
   try {
     const r = await ensureRoom();
     if (!r) { progress('sharing needs a connection'); return; }
@@ -2342,7 +2420,9 @@ $('#joingo').onclick = async () => {
     btn.disabled = false;
     paintRoom();
   }
-};
+}
+$('#joingo').onclick = () => joinWith($('#joingo'), $('#joincode'));
+$('#joingo2').onclick = () => joinWith($('#joingo2'), $('#joincode2'));
 
 // Painted once at load, because the markup can only hold one of the four states
 // and the honest one before anything happens is "not sharing, here is how".
@@ -2641,6 +2721,10 @@ $('#exportsav').onclick = async () => {
     setStatus('the kept files could not be read — pick them again', 'bad');
     await forgetKept();
     paintFiles();
+    // Straight to the loader rather than to the fork. Somebody whose kept files
+    // failed demonstrably has files, so asking them which of three people they
+    // are is a question they have already answered.
+    openGate('files');
     return;
   }
   maybeStart();
