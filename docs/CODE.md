@@ -1527,7 +1527,7 @@ This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ b305703a5ac4 -->
+<!-- covers: app/main.js index.html @ 50f0729fab7a -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -2381,7 +2381,7 @@ they have been installed.
 
 ### Watching the other device's screen
 
-<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ 4d2bcaa9b287 -->
+<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ c17bb1bb686a -->
 
 One device shows its screen; the other watches it, and plays it if the first
 one says so. The picture goes straight between them over WebRTC and never
@@ -2481,11 +2481,20 @@ host.tell({ t: 'input', v: ok, why: ok ? null : (letsPlay ? 'busy' : 'view') });
 on the other device and will not change on its own; *the pilot is driving* ends
 by itself in ninety seconds.
 
-Three moments send it, and the first is the one that is easy to miss: `send`
+Four moments send it, and the first is the one that is easy to miss: `send`
 drops anything written before the channel opens, so a host that announced its
 mode at `offer()` time would have said nothing at all. `createHost` therefore
-takes an `onReady` and fires it from `channel.onopen`. The other two are the
-mode being flipped and `setMode` — a job starting or ending.
+takes an `onReady` and fires it from `channel.onopen`. Then the mode being
+flipped, and `setMode` — a job starting or ending.
+
+The fourth was missed for exactly the reason the list is worth writing down.
+`tellInput` lived in `setMode`, so it reached every caller that goes through
+`setMode` — and tap-to-walk is the one place that sets `running` and
+deliberately does not, because reordering the page under a thumb that just
+tapped it is worse than the dimming is worth. That reasoning is about *this*
+device. The other one still had its pad taken away without being told: live to
+look at, sending into nothing, back a few seconds later on its own. So
+`walkToTap` says so at both ends of the walk.
 
 Anything held when the answer turns to no is released at **both** ends: the host
 drops it because it holds the joypad, and the watcher drops it because its own

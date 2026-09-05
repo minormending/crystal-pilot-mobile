@@ -1838,7 +1838,14 @@ async function walkToTap(tx, ty) {
   // must stand down and no task may start on top of it -- but it does not call
   // setMode: a walk lasts a couple of seconds, and reordering the page under a
   // thumb that just tapped it would be worse than the dimming is worth.
+  //
+  // The watching device is a different matter, and not calling setMode is
+  // exactly how it got missed: setMode is where tellInput lives, so a tap here
+  // took the remote pad away without a word. Locally that is invisible, because
+  // the person who took it is the person who tapped. On the other device it is a
+  // pad that looks live, sends nothing, and comes back on its own.
   running = true;
+  tellInput();
   let arrived = false;
   // The previous walk's marker is cleared on a timer. Without cancelling it,
   // tapping again inside that window let the old timer fire mid-route and hide
@@ -1931,6 +1938,7 @@ async function walkToTap(tx, ty) {
       markGoal(null);
     }
     running = false;
+    tellInput();
     $('#go').disabled = false;
     refresh();
   }
