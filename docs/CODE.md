@@ -786,7 +786,7 @@ eight kilobytes a full snapshot copies, which is worth keeping distinct.
 
 ## 6. Battles
 
-<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ d6ed8384fcff -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 93f79734966d -->
 
 ### Is it our turn?
 
@@ -907,7 +907,13 @@ right:
   all, falling back to the first Pokémon standing: the slot `sendOut` would have
   chosen. It is matched on HP rather than read from `wCurBattleMon` because that
   would be another name on `SHARED_SYMBOLS`, and every device taking a digest
-  would then need it.
+  would then need it. `jobs.js` asks the same question twice more, and one of
+  them decided an *outcome*: when our own swing ends the battle, whether we
+  knocked the target out or were knocked out ourselves was read off
+  `party[0].hp`. Beginning a catch with slot one already down — which a grind
+  can leave you in, since Gen 2 leads the next battle with the first Pokémon
+  that is *not* fainted — reported our own knockout as a whiteout. It follows
+  `_outcome`'s rule now: we lost only if every one of them is down.
 
 **You cannot run from a trainer.** `wBattleMode` is 1 for wild and 2 for
 trainer. `escapeBattle()` fights trainers and flees wild ones — a pilot that
@@ -920,7 +926,7 @@ fainted.
 
 ## 7. Catching something
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ e6cbd3d99278 -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ 9763a1f78e8c -->
 
 Catching is the most involved loop, because a Poké Ball's odds turn on how much
 HP is left. Throwing at a full-health target is mostly throwing balls away.
@@ -1006,7 +1012,7 @@ precedes it defaults to yes, which is what we want; the nickname box does not.
 
 ## 7a. Three that act on where you already are
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ 5d4002a13f12 -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ 8a469819502d -->
 
 Grind, hunt and catch all go *looking* for something. These three do the obvious
 thing with the situation you are already in, and take no parameters:
@@ -1068,7 +1074,7 @@ running the thing.
 
 ## 7b. Saving, and getting the save out
 
-<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ d6ed8384fcff -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 93f79734966d -->
 
 ```mermaid
 flowchart TD

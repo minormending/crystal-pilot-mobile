@@ -88,6 +88,21 @@ test('our own lead going down is reported as that, not as a knockout', async (t)
   t.eq(r.outcome, 'lost', 'a different situation, reported differently');
 });
 
+test('a knockout by the replacement is not a whiteout', async (t) => {
+  // Gen 2 leads a battle with the first Pokemon that is not fainted, so a
+  // catch begun with slot one already down -- which a grind can leave you in --
+  // has a corpse at party[0] for the whole encounter. Asking that corpse
+  // whether we were still standing read our own knockout as a whiteout, and
+  // told you the party had fainted while two thirds of it was fine.
+  const { tasks, mons } = inBattle({ party: 3, enemyHp: 30, enemyMax: 40,
+                                     chip: () => 'ended' });
+  mons[0].hp = 0;
+  const memory = { biggestHit: 0 };
+  const r = await tasks.captureHere(POKE_BALL, { weakenTo: 0.5, memory });
+  t.eq(r.outcome, 'knockedOut', 'somebody is still standing, so we won it');
+  t.gte(memory.biggestHit, 30, 'and the guard still learns from the swing');
+});
+
 test('a catch is reported with the ball count actually spent', async (t) => {
   let thrown = 0;
   const { tasks } = inBattle({

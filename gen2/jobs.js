@@ -4,6 +4,9 @@
 // battle primitives, decides when to stop, and returns { ok, message, stats }
 // -- the shape the interface renders without knowing what happened.
 import { SETTLE_FRAMES } from '../gbcore/taskbase.js';
+// Which party member is on the field. Both mixins need the answer and it is
+// battle.js's to give -- see the note on it for what reading party[0] cost.
+import { onField } from './battle.js';
 // Consecutive unresolved battles that mean the pilot has lost the thread.
 const MAX_STUCK_BATTLES = 5;
 // Swings at one target before giving up on weakening it any further.
@@ -185,14 +188,19 @@ export function withJobs(Base) {
             // and the guard learns nothing from the one measurement worth
             // having. Our own party still answers after the battle ends.
             const after = await this.snap();
-            const lead = after.party[0];
-            if (lead && lead.hp > 0) {
+            // Anyone still standing, not slot one. Gen 2 leads a battle with
+            // the first Pokemon that is not fainted, so beginning a catch with
+            // a knocked-out slot one -- which a grind can leave you in -- put a
+            // corpse at party[0] for the whole encounter, and asking it whether
+            // we survived read our own knockout as a whiteout. The rule is
+            // _outcome's: we lost only if every one of them is down.
+            if (after.party.some((m) => m.hp > 0)) {
               mem.biggestHit = Math.max(mem.biggestHit, hpBefore);
               return { outcome: 'knockedOut', name, thrown, chips };
             }
-            // It was our lead that went down. Say so: falling through to the
-            // budget report would tell you the balls ran out, which is both
-            // untrue and the wrong thing to go and fix.
+            // The party went down. Say so: falling through to the budget report
+            // would tell you the balls ran out, which is both untrue and the
+            // wrong thing to go and fix.
             return { outcome: 'lost', name, thrown, chips };
           }
           if (how === 'ok') {
@@ -280,8 +288,9 @@ export function withJobs(Base) {
       outcome: how,
       seconds: ((Date.now() - started) / 1000).toFixed(1),
     };
-    const lead = after.party[0];
-    if (lead) stats.lead = `${lead.hp}/${lead.maxHp}`;
+    // The one that did the fighting, which after a switch is not slot one.
+    const mine = onField(after);
+    if (mine) stats.lead = `${mine.hp}/${mine.maxHp}`;
     if (how === 'won') {
       return { ok: true, stats, message: `won the ${kind} battle` };
     }
