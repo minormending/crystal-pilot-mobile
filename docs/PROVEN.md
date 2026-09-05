@@ -312,6 +312,77 @@ second, which is there so the core's own waits finish, not to run a game.
   candidates and returned true standing three tiles clear of any. It checks the
   tile underfoot now.
 
+## Five audits, and what reading found that running had not
+
+Everything above was watched happening. This section is the exception, and the
+exception is the point of it: after the ROM-hack work shipped, five passes went
+looking for defects by **reading** rather than by running, and found twelve.
+None of them announced itself. Every one was in code that worked.
+
+The recurring shape is the same in all five:
+
+```mermaid
+flowchart LR
+    M["a mechanism ships<br/><code>sendOut</code>, <code>needsOffer</code>, <code>sharedNames</code>, an engine profile"]
+    M --> A["the caller its author<br/>had in mind"]
+    M -.->|"never told"| B["the third caller"]
+    B --> W["works. is wrong.<br/>says nothing."]
+    W --> L["surfaces hours later,<br/>on the other device,<br/>in the other cartridge"]
+```
+
+Not one was a wrong line of code. Each was a correct mechanism wired to the
+callers its author had in mind and not to the rest — and in every case the
+mechanism was *younger* than the code that should have been reading it, which is
+exactly why nothing failed.
+
+| # | What was wrong | To see it happen |
+| --- | --- | --- |
+| 1 | the engine profile reached `GameState` and none of the decisions made from it | one browser |
+| 1 | an unknown cartridge worked and explained none of its four absences | one browser |
+| 2 | `?title=` skipped the contract every other path went through | one browser |
+| 2 | the shared digest carried Crystal's wild tables, not the cartridge's | two devices |
+| 3 | the second press of *Watch* did nothing, and blamed the network | two devices |
+| 3 | *Join* failed in silence when the room could not open | two devices |
+| 3 | a tap-to-walk took the other device's pad away without saying so | two devices |
+| 3 | the digest went out before the title was known | two devices |
+| 4 | the battery was written into whichever cartridge record was there | two cartridges |
+| 4 | the kept save was installed into a cartridge that never wrote it | two cartridges |
+| 5 | the move list was read off the fainted lead, not the replacement | a party of two |
+| 5 | a knockout by the replacement was reported as a whiteout | a party of two |
+
+Three things in that table are worth more than the individual rows.
+
+**The last column is a ladder, and it is about situations rather than
+hardware.** Everything reachable in the default one — one browser, one
+cartridge, one Pokémon — was found first, then everything needing a second
+device, a second cartridge, a second Pokémon. What it measures is how much of
+the world you have to *arrange*, not how much you have to own: the fifth pass
+needed no hardware at all, only a party with a corpse in slot one.
+
+**Exactly one of the twelve was caught by a check**, and only after the fix had
+decided what to look for: the wiring group named the four modules still
+importing constants that had just been deleted. The other eleven came from
+reading. That is the honest weight to give this repository's fourteen check
+groups and 122 tests — they hold a fix down; they do not find the fault.
+
+**The two worst were silent data loss**, and both were doors the app opens by
+itself. Every door a *person* opens was already locked and had been for
+versions: the handoff refuses a room save whose tag differs, `loadSlot` refuses
+a slot's, `describeSlot` draws *from a different ROM* where a date would go.
+Both pass-four defects are on paths nobody presses — a record written inside
+`install`, a battery restored at startup before anyone has touched anything. The
+checks went where somebody was visibly making a choice, and not where the app
+made the choice for them.
+
+Pass five is the direct sequel to [When the lead faints](#when-the-lead-faints)
+above. `sendOut` was built there and works; what none of it reached was the four
+other places that spell *the Pokémon on the field* as `party[0]`. In a fight
+that stalls the turn until the ceiling; in a catch, `chip` ranks the gentlest
+move against the wrong list and can hand the replacement a knockout — and a
+fainted Pokémon cannot be caught, which is the one thing `chip` exists to
+prevent. There is an `onField` now, so there is somewhere to change it next
+time.
+
 ## The part that had to be redesigned
 
 The desktop pilot hangs its whole design on CPU hooks: the game's own routines

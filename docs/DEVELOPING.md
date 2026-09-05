@@ -15,7 +15,7 @@ what CI checks and what the pre-commit hook blocks on.
 ```mermaid
 flowchart LR
     E[an edit] --> H{{".githooks/pre-commit"}}
-    H --> T["./run-tests<br/>111 behaviour tests"]
+    H --> T["./run-tests<br/>122 behaviour tests"]
     H --> C["tools/check-app<br/>14 groups"]
     H --> D["tools/docs-check<br/>23 tracked sections"]
     T --> OK[commit]
@@ -39,23 +39,24 @@ git config core.hooksPath .githooks
 ./run-tests -v         # notes and stack lines
 ```
 
-111 tests in thirteen files, and what each file is about says more than the count:
+122 tests in fourteen files, and what each file is about says more than the count:
 
 | file | tests | what it pins down |
 | --- | --- | --- |
-| `rows.mjs` | 30 | what every row and offer says, and when its button works |
-| `engine.mjs` | 8 | that a changed engine number is actually followed |
+| `rows.mjs` | 31 | what every row and offer says, and when its button works |
 | `titles.mjs` | 11 | choosing a profile for a cartridge, and falling back to generic |
-| `cartridge.mjs` | 4 | reading a ROM's own header: the logo, the title, Color-only |
-| `journey.mjs` | 6 | choosing where to heal: the cost model, and a map with no name |
+| `battle.mjs` | 10 | whose turn it is, which Pokémon is out, and a win from a whiteout |
 | `remember.mjs` | 10 | which remembered choices are believed, and which dropped |
-| `capture.mjs` | 8 | weakening, ball choice, and counting throws out of the bag |
+| `capture.mjs` | 9 | weakening, ball choice, and counting throws out of the bag |
 | `control.mjs` | 8 | the task lifecycle: stopping, failing, and undo points |
-| `battle.mjs` | 7 | whose turn it is, and telling a win from a whiteout |
+| `engine.mjs` | 8 | that a changed engine number is actually followed |
+| `room.mjs` | 8 | the merge rules and the handshake, so two devices settle rather than fight |
+| `journey.mjs` | 6 | choosing where to heal: the cost model, and a map with no name |
 | `state.mjs` | 6 | reading the party, the map and the battery out of work RAM |
-| `room.mjs` | 5 | the merge rules, so two devices settle rather than fight |
 | `symbols.mjs` | 5 | the 45-address digest a second device boots from |
+| `cartridge.mjs` | 4 | reading a ROM's own header: the logo, the title, Color-only |
 | `input.mjs` | 3 | held buttons, and releasing them |
+| `saves.mjs` | 3 | which battery record belongs to the cartridge in the machine |
 
 No ROM, no browser, no emulator — which is the point rather than a compromise.
 The ROM is not in this repository and never will be, so a test that needs one
@@ -94,7 +95,7 @@ fine and is wrong at run time:
 | --- | --- |
 | `layers` | every import points down `gbcore → gen2 → titles → app`, never up |
 | `titles` | a title adds methods to the engine and never overrides one |
-| `syntax` | all 26 modules and `sw.js` parse — copied to `.mjs` first, because `node --check` on a `.js` file with a syntax error exits 0 |
+| `syntax` | all 27 modules and `sw.js` parse — copied to `.mjs` first, because `node --check` on a `.js` file with a syntax error exits 0 |
 | `shell` | the service worker's shell lists every file it needs, and each exists |
 | `markup` | `index.html`'s tags and its CSS braces balance |
 | `contrast` | 22 colour pairs meet WCAG in **both** themes |
@@ -104,7 +105,7 @@ fine and is wrong at run time:
 | `wiring` | every `$('#id')` exists in the markup, and every named import — same directory, another one, or a vendored module — resolves to something that exports it |
 | `symbols` | the shared digest is every symbol the app looks up |
 | `version` | `gbcore/version.js` and `sw.js` agree, and both doors are reachable with no ROM |
-| `docshape` | section 2's architecture diagram draws, counts and tables all 26 modules |
+| `docshape` | section 2's architecture diagram draws, counts and tables all 27 modules |
 | `names` | every capitalised name a module uses is one it can see |
 
 `tools/docs-check` is the other half, and it checks the prose rather than the

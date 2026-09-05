@@ -377,6 +377,18 @@ loads, so putting a save in means writing that record and re-loading the ROM —
 which is why loading a slot leaves you at the title screen's CONTINUE, driven
 for you.
 
+**Which record is *per cartridge*, and that matters if you have two.** The
+library files each one under the ROM's own header bytes, and it writes nothing
+until a battery is first persisted — so after playing one cartridge there is
+exactly one record in there. If you then load a hack, or simply rebuild the
+disassembly, that record is not yours: writing into it would put this game's
+save where the other game's lives, and leave this cartridge with none. It is
+matched by bytes now rather than taken because it happens to be the only one.
+
+You will not see any of that working. You would only have seen it failing —
+your first cartridge's save quietly replaced, and a Load here that said it had
+restored a game while the screen never moved.
+
 ## A note on updates
 
 **The header shows which build you are running**, next to the app's name: the

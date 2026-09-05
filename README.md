@@ -61,7 +61,7 @@ how to run it. Everything else has a page of its own.
 | **[Using it](docs/USING.md)** | the controls, tap-to-walk, starting a game, hunting, healing, your save, slots and undo, updates |
 | **[The interface](docs/INTERFACE.md)** | why it is shaped like a Game Boy: the fixed screen and pad, the ranked offers, the two doors, three layouts, colour |
 | **[Two devices, one game](docs/DEVICES.md)** | what the page remembers, room codes, handing the save over, watching the other screen, and what leaves the device |
-| **[What is proven](docs/PROVEN.md)** | the engineering log — what has been run and measured, what broke, and the traps in the emulator core |
+| **[What is proven](docs/PROVEN.md)** | the engineering log — what has been run and measured, what broke, the twelve defects five audits found by reading, and the traps in the emulator core |
 | **[Developing it](docs/DEVELOPING.md)** | the tests, the checks that run without a ROM, and serving it locally |
 | **[The code](docs/CODE.md)** | a walkthrough of every module, written for someone who has not seen it before, with mermaid diagrams for the decision trees — how a step is taken, how a walk is planned, how a map crossing works, how a battle and a catch play out |
 

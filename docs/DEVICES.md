@@ -81,6 +81,19 @@ installed, because the library pushes its own record in on every ROM load — a
 restored session can arrive holding a game nothing in this session put there,
 and it is just as much a game to carry on from.
 
+**And the save has to belong to the ROM you just picked.** The battery is kept
+under its own key, beside the ROM and the `.sym`, so choosing a different `.gbc`
+replaces the ROM and leaves the save exactly where it was — and a save written
+by one build loaded into another is not a save, it is 32,768 bytes of confident
+nonsense. So the kept battery carries the fingerprint of the cartridge that
+wrote it, and a mismatch says *the kept save belongs to a different ROM — it has
+been left where it is rather than loaded*.
+
+Left, not deleted: it is the only copy of that game this app holds, and putting
+the old cartridge back makes it match again. It is the same refusal a slot makes
+(*from a different ROM*) and the same one the room makes when your other device
+is holding a save from a build this one is not running.
+
 Two more things had to be true first, and both were found by doing it rather
 than reasoning about it:
 

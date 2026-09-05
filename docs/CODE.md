@@ -2217,16 +2217,63 @@ read-modify-write that had to become one transaction</summary>
 
 Four places, and knowing which is which is most of understanding *Forget*:
 
-| where | holds | written by |
-| --- | --- | --- |
-| `localStorage` — `crystal-pilot-opts` | speed, grind preset, hunted species, and a stamp | `remember.js` |
-| `localStorage` — the theme key, older | light / dark / auto | the theme button |
-| IndexedDB `crystal-pilot-files`, store `kept` | `rom`, `sym`, `battery`, `meta` | `remember.js` |
-| IndexedDB `crystal-pilot`, store `slots` | five records and five `:about` summaries | `saves.js` |
-| IndexedDB `wasmboy`, store `keyval` | the library's own per-cartridge record | WasmBoy, and `saves.install` |
+| where | holds | written by | whose cartridge it is |
+| --- | --- | --- | --- |
+| `localStorage` — `crystal-pilot-opts` | speed, grind preset, hunted species, and a stamp | `remember.js` | nobody's — preferences outlive cartridges |
+| `localStorage` — the theme key, older | light / dark / auto | the theme button | nobody's |
+| IndexedDB `crystal-pilot-files`, store `kept` | `rom`, `sym`, `battery`, `meta` | `remember.js` | `meta.tag`, the ROM's fingerprint |
+| IndexedDB `crystal-pilot`, store `slots` | five records and five `:about` summaries | `saves.js` | `rec.tag` on every slot |
+| IndexedDB `wasmboy`, store `keyval` | the library's own per-cartridge record | WasmBoy, and `saves.install` | the key *is* the identity: ROM bytes `0x134`–`0x14E` |
 
 *Forget* clears the first and third. The slots are a different database and
 survive, which is what the confirmation says.
+
+**That last column is the one worth reading twice.** Four different things can
+hand this app 32,768 bytes claiming to be your game, and every one of them can
+be a *different game* — a hack, a rebuild of the same disassembly, the cartridge
+you were playing yesterday. Bytes from the wrong cartridge load and are then
+confidently wrong, which is worse than not loading, so each source is gated
+before `install` and `install` is gated again on the way out:
+
+```mermaid
+flowchart TD
+    C[["the cartridge in the machine"]]
+    C --> RT["romTag<br/>a fingerprint of the ROM bytes"]
+    C --> HK["the 27-byte header<br/>0x134–0x14E"]
+
+    S1["a slot<br/><i>crystal-pilot / slots</i>"] --> G1{"rec.tag = romTag?"}
+    S2["the kept battery<br/><i>crystal-pilot-files / kept</i>"] --> G2{"meta.tag = romTag?"}
+    S3["the room's save<br/><i>baton, over the network</i>"] --> G3{"c.tag = romTag?"}
+    S4["a .sav you picked"] --> G4["no tag to check —<br/>you chose the file"]
+
+    RT -.-> G1
+    RT -.-> G2
+    RT -.-> G3
+
+    G1 -->|no| R1["from a different ROM"]
+    G2 -->|no| R2["left where it is"]
+    G3 -->|no| R3["made with a different ROM"]
+
+    G1 -->|yes| I["saves.install"]
+    G2 -->|yes| I
+    G3 -->|yes| I
+    G4 --> I
+
+    I --> PK{"pickKey:<br/>which stored record is ours?"}
+    HK -.-> PK
+    PK -->|"matched"| W[["wasmboy / keyval"]]
+    PK -->|"none of them"| N["write a new one<br/>under the derived key"]
+    N --> W
+    W --> LR["loadROM pushes cartridgeRam in"]
+```
+
+Two of those gates did not exist until an audit went looking. `meta.tag` was not
+recorded at all, so the kept battery was restored into whatever ROM was picked
+next; and `pickKey` was *the only record, if there is exactly one*, which wrote
+this cartridge's save into the previous cartridge's record. Both failed
+silently, and both were on the paths nobody presses — see
+[Five audits](PROVEN.md#five-audits-and-what-reading-found-that-running-had-not)
+for why that is not a coincidence.
 
 `patchMeta` merges fields into the `meta` record, and it used to do that as a
 read *then* a write — two transactions with an `await` between them. Two
