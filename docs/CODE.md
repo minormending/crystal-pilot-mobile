@@ -44,6 +44,7 @@ and the code disagree, the code is right and the section is a bug — see
    · [Slots, undo, and bringing a save in](#7c-slots-undo-and-bringing-a-save-in)
 8. [The errands](#8-the-errands)
 9. [The interface](#9-the-interface)
+   · [One thing at a time](#one-thing-at-a-time)
    · [Colour](#colour) · [What it remembers](#what-it-remembers)
    · [Sharing between your own devices](#sharing-between-your-own-devices)
    · [Handing the save over](#handing-the-save-over)
@@ -1745,7 +1746,7 @@ This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ 890abec6cfa1 -->
+<!-- covers: app/main.js index.html @ 60d27b51f9c3 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -2235,6 +2236,90 @@ pending when a page is hidden never arrives — so the chain was lost, the loop
 died on the first background, and the game stayed frozen ever after, including
 back in the foreground. Measured: zero animation frames scheduled in three
 seconds by a page whose loop was supposedly running.
+
+</details>
+
+### One thing at a time
+
+<!-- covers: app/main.js @ 7e73c6e52836 -->
+
+One Game Boy, one joypad, one canvas — so a great deal of this app is about
+making sure two things are never driving them at once. There are three claims,
+and they are three different mechanisms because they guard three different
+things:
+
+```mermaid
+flowchart TD
+    subgraph J["one job on the joypad"]
+      R["<b>running</b> — a flag<br/>claimed on the first line, before any await"]
+    end
+    subgraph L["one loop stepping the core"]
+      G["<b>generation</b> — a counter<br/>a newer chain retires the older by being newer"]
+      S["<b>loopStarted</b> — a latch<br/>one loop per page, whoever asks"]
+    end
+    subgraph M["one marker tracking the map"]
+      K["<b>markGen</b> — a counter<br/>same shape as the loop's"]
+    end
+    R --> W["walkToTap · runTask · the idle refresh<br/>all read it, none may set it late"]
+    G --> V["visibilitychange · a lost step"]
+    S --> P["re-picking a ROM or a .sym"]
+```
+
+**A flag is claimed before the first `await`, or it is not a claim.** This is
+the rule the whole section reduces to, and `runTask` broke it: it read
+`running`, awaited a snapshot to check the world was loaded, and set the flag
+after. Two presses arriving inside that await both read false and both went on
+to run. Measured with a double tap on Save, one tick apart — every line of the
+job's log came out twice, two undo points were taken, and two save sequences
+drove one emulator. `walkToTap` has always claimed it on its first line, which
+is exactly why tapping twice never started two walks.
+
+**A counter beats a handle, because a handle can be read mid-await.** The idle
+loop uses a generation: a chain checks whether it is still the current one and
+stops if it is not, so a newer chain retires an older one by existing. The
+marker used a *handle* instead — `trackGoal` cleared `markRaf` at its top and
+re-armed it at the bottom, and in between it awaited a read of work RAM. For the
+whole of that await the handle said null while the chain was very much alive, so
+`markGoal` starting a second one there left both running, each reading the
+emulator every frame. The way in is ordinary: arrive somewhere, then tap again
+inside the 1.8 seconds the marker outlives the walk. It uses a generation now,
+like the loop.
+
+**A latch, where the thing being guarded is construction rather than a chain.**
+`generation` lives inside `startLoop`'s closure, so it can retire chains that
+closure started and cannot see one started by a different closure. And there
+*was* a different closure: `reallyStart` calls `startLoop`, and `reallyStart`
+runs again every time somebody picks a ROM or a symbol file, which this app
+supports because it is built to hold more than one cartridge. Measured by
+counting simultaneous animation-frame callbacks — re-picking the same `.sym`
+three times took the live chains from 7 to 8 to 9, one added each time and none
+ever retired. On a visible page that is nine chains stepping one Game Boy every
+frame: the game runs at nine times the chosen speed and the phone spends nine
+times the battery on it. `loopStarted` makes the loop start once, which is
+right rather than merely cheap — everything it reads is module state and `gb` is
+a `const`, so the loop started for the first cartridge is already correct for
+the second.
+
+<details>
+<summary><b>Advanced detail:</b> Stop, and the button that could not be
+pressed</summary>
+
+`#stopRun`'s own note says it reaches "the task flag, which a walk never reads,
+and the walk flag, which a task never reads". The second half could not
+happen. The button is hidden by default and the only thing that unhides it is
+`setMode(true)` — and a tap-to-walk is the one caller that deliberately does not
+call `setMode`, because reordering the page under a thumb that has just tapped
+it is worse than the dimming is worth.
+
+Both decisions are right on their own. Together they made `walkCancelled`
+unreachable from the interface for the whole of every walk. So the button is now
+shown by itself during a walk, without the rest of piloting mode coming with
+it — and `walkCancelled` is cleared at the *top* of `walkToTap` rather than
+after the planning, which only started to matter once Stop became pressable:
+settling, reading, calibrating and searching for a route are all awaits somebody
+can now press it during, and a reset below them would have wiped the answer and
+walked anyway. A stop that lands while the route is being worked out is answered
+before a step is taken, so a stopped walk does not move at all.
 
 </details>
 
@@ -2731,7 +2816,7 @@ they have been installed.
 
 ### Watching the other device's screen
 
-<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ 3e4a2a0807e3 -->
+<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ b9f868887e87 -->
 
 One device shows its screen; the other watches it, and plays it if the first
 one says so. The picture goes straight between them over WebRTC and never
@@ -3328,7 +3413,7 @@ about that code did not.
 
 ### The other checks
 
-<!-- covers: tools/check-app @ 4ae1f72cb633 -->
+<!-- covers: tools/check-app @ 105f55f6bcb6 -->
 
 `tools/check-app` runs everything that can be verified without a ROM:
 

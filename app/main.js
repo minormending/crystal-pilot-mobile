@@ -1206,7 +1206,37 @@ async function awaitWorld() {
  * frozen. Tasks drive the emulator themselves, so the loop stands down while
  * one is running to avoid two things stepping the same core.
  */
+let loopStarted = false;
+// The loop's re-arm, declared before there is a loop to re-arm: visibility can
+// change while somebody is still choosing files. Subscribed once here, at the
+// top level, rather than from inside startLoop -- a listener on `document`
+// outlives every function that could add one, so adding it from in there made
+// the number of listeners the number of times that ran.
+let restartLoop = () => {};
+document.addEventListener('visibilitychange', () => restartLoop());
+
 function startLoop() {
+  // Once per page, whatever asks. `reallyStart` calls this, and `reallyStart`
+  // runs again every time somebody picks a ROM or a symbol file -- which is a
+  // supported thing to do, since this app is built to hold more than one
+  // cartridge. Each call used to build a *new closure*, and the generation
+  // counter below lives in that closure: a fresh loop could retire its own
+  // chains and could not see, let alone stop, the ones the previous closure
+  // left running.
+  //
+  // Measured, by counting simultaneous animation-frame callbacks: re-picking
+  // the same .sym three times took the live chains from 7 to 8 to 9, one added
+  // each time and none ever retired. On a visible page at 60fps that is nine
+  // chains stepping one emulator every frame -- the game runs at nine times
+  // the chosen speed and the phone spends nine times the battery on it. The
+  // duplicate `visibilitychange` listener below went the same way.
+  //
+  // Starting once is right rather than merely cheap: everything the loop reads
+  // -- `gb`, `speed`, `running` -- is module state, and `gb` is a const, so the
+  // loop that was started for the first cartridge is already correct for the
+  // second.
+  if (loopStarted) return;
+  loopStarted = true;
   let stepping = false, since = 0, stepId = 0, generation = 0;
   const tick = async (mine) => {
     // A newer chain has taken over; this one is a leftover and stops here.
@@ -1251,8 +1281,10 @@ function startLoop() {
     const mine = generation;
     requestAnimationFrame(() => tick(mine));
   };
+  // Handed out rather than subscribed here -- see the declaration above. It
+  // was the same mistake as the duplicate chains, in the same six lines.
+  restartLoop = restart;
   restart();
-  document.addEventListener('visibilitychange', restart);
 }
 
 /**
@@ -1289,14 +1321,36 @@ function setMode(piloting) {
 async function runTask(id, busy, work,
                        { needsWorld = true, takeUndoPoint = true } = {}) {
   if (running) return null;
+  // Claimed here, before the first await, and the order is the whole of it.
+  // `running = true` used to sit *below* the world check -- so the check read
+  // the flag, awaited a snapshot, and only then set it. Two presses arriving
+  // inside that await both read false and both went on to run.
+  //
+  // Measured rather than reasoned about: a double tap on Save, one tick apart,
+  // logged every step of the job twice -- two undo points, two save sequences
+  // driving one emulator, two "saved" messages. The flag that exists to keep
+  // one job on the joypad was set a few milliseconds too late to do it.
+  //
+  // `walkToTap` has always claimed it on its first line, which is why tapping
+  // twice was never able to start two walks. This is the same discipline, and
+  // runTask was the caller without it.
+  running = true;
   // Every one of these needs a game already running -- the buttons are on
   // screen before that is true, and pressing one first got "no way from map
   // 0.0 to Route 30", which is honest but not much help.
-  if (needsWorld && tasks && !(await tasks.snap()).worldLoaded) {
-    setStatus('start a game first', 'bad');
-    return null;
+  //
+  // Released on the way out, both ways: a refusal here is not a job, and a
+  // snapshot that throws must not leave the app believing one is under way.
+  try {
+    if (needsWorld && tasks && !(await tasks.snap()).worldLoaded) {
+      running = false;
+      setStatus('start a game first', 'bad');
+      return null;
+    }
+  } catch (e) {
+    running = false;
+    throw e;
   }
-  running = true;
   setMode(true);
   // Cleared here rather than when a run finishes: the last thing the pilot
   // said is the most useful thing on screen once it stops.
@@ -1870,6 +1924,7 @@ let markTimer = null;
 let walkCancelled = false;
 let markState = null;        // { goal, kx, ky } while a marker is on screen
 let markRaf = null;
+let markGen = 0;         // retires a marker chain the moment a newer one starts
 
 /**
  * Mark a destination on the map, and keep it there.
@@ -1891,14 +1946,25 @@ let markRaf = null;
  */
 function markGoal(goal) {
   const mark = $('#tapmark');
-  if (!goal) {
-    markState = null;
-    if (markRaf !== null) { cancelAnimationFrame(markRaf); markRaf = null; }
-    mark.classList.add('hide');
-    return;
-  }
+  // A generation, for the same reason the idle loop has one: this chain reads
+  // the emulator, so it *awaits*, and anything that decides whether to start a
+  // chain by looking at the handle is deciding on a value the await is in the
+  // middle of changing. `trackGoal` cleared `markRaf` at its top and re-armed
+  // at the bottom, so between those two lines the handle read null while the
+  // chain was very much alive -- and `markGoal` starting a second one there
+  // left both running, each reading work RAM every frame, for as long as the
+  // marker stayed up. The window is every frame, and the way in is ordinary:
+  // arrive somewhere, tap again inside the 1.8s the marker outlives the walk.
+  //
+  // With a generation there is no handle to misread. Whatever was running is
+  // retired by being out of date, which is a decision that cannot be raced.
+  markGen++;
+  markState = null;
+  if (markRaf !== null) { cancelAnimationFrame(markRaf); markRaf = null; }
+  if (!goal) { mark.classList.add('hide'); return; }
   markState = { goal, k: null };
-  if (markRaf === null) markRaf = requestAnimationFrame(trackGoal);
+  const mine = markGen;
+  markRaf = requestAnimationFrame(() => trackGoal(mine));
 }
 
 /** Signed distance from a resting camera offset to the live one, in tiles. */
@@ -1908,7 +1974,9 @@ function cameraFraction(rest, live) {
   return d / 16;
 }
 
-async function trackGoal() {
+async function trackGoal(mine) {
+  // A newer marker has taken over; this chain is a leftover and stops here.
+  if (mine !== markGen) return;
   markRaf = null;
   if (!markState || !gb.ready) return;
   const mark = $('#tapmark');
@@ -1937,7 +2005,11 @@ async function trackGoal() {
       mark.classList.remove('hide');
     }
   } catch (e) { /* a read can fail across a map load; try again next frame */ }
-  if (markState) markRaf = requestAnimationFrame(trackGoal);
+  // Re-armed only if this is still the current chain: the read above is an
+  // await, and the marker can have been cleared or replaced while it ran.
+  if (markState && mine === markGen) {
+    markRaf = requestAnimationFrame(() => trackGoal(mine));
+  }
 }
 
 async function walkToTap(tx, ty) {
@@ -1953,6 +2025,20 @@ async function walkToTap(tx, ty) {
   // pad that looks live, sends nothing, and comes back on its own.
   running = true;
   tellInput();
+  // Stop's own note says it reaches "the walk flag, which a task never reads".
+  // It could not: the button that sets that flag is hidden, and the only thing
+  // that unhides it is setMode(true) -- which this is the one caller that
+  // deliberately does not call, for the reason directly above. Both decisions
+  // are right on their own and together they made `walkCancelled` unreachable
+  // from the interface for the whole of every walk. So the button is shown by
+  // itself, without the rest of piloting mode coming with it.
+  $('#stopRun').classList.remove('hide');
+  // Cleared here rather than after the planning below, which is the half that
+  // only matters once Stop is reachable: every await between here and there --
+  // settling, reading, calibrating, searching for a route -- is a moment
+  // somebody can now press it, and a reset further down would wipe the answer
+  // and walk anyway.
+  walkCancelled = false;
   let arrived = false;
   // The previous walk's marker is cleared on a timer. Without cancelling it,
   // tapping again inside that window let the old timer fire mid-route and hide
@@ -1999,9 +2085,11 @@ async function walkToTap(tx, ty) {
       progress('ledges are one-way, and some tiles only open up the long way round');
       return;
     }
+    // Pressed while the route was being worked out. Answered before a step is
+    // taken rather than at the first one, so a stopped walk does not move.
+    if (walkCancelled) { setStatus('stopped', 'ok'); return; }
     setStatus(`walking to (${goal[0]},${goal[1]})`, 'busy');
     markGoal(goal);
-    walkCancelled = false;
     const res = await nav.walkTo(collision, goal, {
       onStep: (n, at) => progress(`step ${n} — at (${at[0]},${at[1]})`),
       cancelled: () => walkCancelled,
@@ -2046,6 +2134,7 @@ async function walkToTap(tx, ty) {
     }
     running = false;
     tellInput();
+    $('#stopRun').classList.add('hide');
     $('#go').disabled = false;
     refresh();
   }
