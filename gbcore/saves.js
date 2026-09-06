@@ -41,7 +41,7 @@ export const UNDO_SLOT = 'undo';
 // handoff was the wrong one -- and unlike slots 1 to 3, nothing a person does
 // on purpose can land here, so it is always the last game this device had.
 export const REPLACED_SLOT = 'replaced';
-export const ALL_SLOTS = [...SLOT_IDS, UNDO_SLOT, REPLACED_SLOT];
+const ALL_SLOTS = [...SLOT_IDS, UNDO_SLOT, REPLACED_SLOT];
 // Where a slot's one-line summary lives, beside the slot itself. A key rather
 // than a second store, so no version change and nothing to migrate.
 const summaryKey = (slot) => `${slot}:about`;
@@ -311,11 +311,16 @@ export class Saves {
     await this.gb.run(120);
   }
 
-  /** Install a slot's bytes. Returns false if the slot is empty. */
-  async restore(slot) {
-    const rec = await this.read(slot);
-    if (!rec || !rec.bytes) return false;
-    await this.install(rec.bytes);
-    return true;
-  }
+  // There is no `restore(slot)` here, and its absence is deliberate.
+  //
+  // One used to sit at this line: read the slot, install the bytes, return
+  // true. Nothing called it -- `loadSlot` in main.js does the same job -- and
+  // the difference between them is the whole reason it is gone. `loadSlot`
+  // refuses a slot whose ROM fingerprint is not this cartridge's, which is the
+  // check the fourth audit pass added after finding two ways to install a save
+  // from a build that did not write it. This one had no such refusal.
+  //
+  // So it was the pre-audit version of an operation that already exists, left
+  // where the next person would reach for it by name. Deleted rather than
+  // patched: two ways to load a slot is the thing that made one of them wrong.
 }

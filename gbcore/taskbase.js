@@ -13,7 +13,7 @@
 // still running and gave up, and the job then ran with no undo point. The wait
 // is cheap -- it ends the moment the game is quiet -- so the budget is set by
 // the worst case worth surviving rather than the common one.
-export const QUIET_TRIES = 250;
+const QUIET_TRIES = 250;
 // Long enough for the pack to write wCurItem for the pocket now showing.
 export const SETTLE_FRAMES = 20;
 

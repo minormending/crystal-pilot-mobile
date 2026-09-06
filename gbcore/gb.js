@@ -22,7 +22,6 @@ const GB_WRAM_START = 0xc000;   // where work RAM begins in the Game Boy's map
 // this window is not a value byteAt can read -- it indexes the snapshot, so an
 // address past the end reads `undefined` rather than failing.
 const GB_WRAM_BYTES = 0x2000;
-const GB_W = 160, GB_H = 144;
 
 export class GameBoy {
   constructor() {
@@ -280,4 +279,4 @@ export class GameBoy {
   }
 }
 
-export { GB_WRAM_START, GB_WRAM_BYTES, GB_W, GB_H, SRAM_BYTES };
+export { GB_WRAM_START, GB_WRAM_BYTES, SRAM_BYTES };

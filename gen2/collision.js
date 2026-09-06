@@ -44,7 +44,7 @@ const LEDGE_HOPS = {
   6: ['UP', 'RIGHT'], 7: ['UP', 'LEFT'],
 };
 
-export const DIRS = ['UP', 'DOWN', 'LEFT', 'RIGHT'];
+const DIRS = ['UP', 'DOWN', 'LEFT', 'RIGHT'];
 export const DELTA = {
   UP: [0, -1], DOWN: [0, 1], LEFT: [-1, 0], RIGHT: [1, 0],
 };
