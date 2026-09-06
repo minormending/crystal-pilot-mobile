@@ -2482,7 +2482,7 @@ five slots once the summaries existed.
 
 ### Sharing between your own devices
 
-<!-- covers: gbcore/room.js sync/kidsync.js @ 1ad37b518af2 -->
+<!-- covers: gbcore/room.js sync/kidsync.js @ ea3692012964 -->
 
 One person with a phone and a tablet, no accounts: a room code is the whole
 mechanism. `sync/` is [kidsync](https://github.com/minormending/kidsync)
@@ -2566,6 +2566,23 @@ different answers to a question the function had already promised to answer.
 **Opening the room is what reaches the network**, and it happens on a press or
 because this device has shared before. Someone who never shares never loads the
 SDK and never signs in.
+
+**What comes back out of the room is another device's word, and the rules can
+only check its shape from the outside.** They say the payload is a string under
+32,768 characters and that `rev` is a number — they cannot look inside the
+string, because it is JSON the app wrote and Firebase never parses. So
+everything past `JSON.parse` is untrusted, and it was audited that way: every
+merge in `room.js` was fed null, a number, a string, an array and a bare `true`,
+and all five came back with the local value intact, because the
+`(x && x.y) || default` idiom is used consistently. `adoptRemote` in kidsync was
+the exception — `"null"` parses, and reading `_epoch` off it throws from inside
+an `onValue` callback, which loses the room subscription rather than one bad
+snapshot. It now refuses anything that is not an object.
+
+Worth being plain that this is hardening rather than a fix: nothing this app
+writes is a non-object, so it took another writer to reach. The reason to do it
+anyway is that the guard immediately above it already checks `typeof data.state
+!== "string"` — the intent to validate was there, and it stopped one step short.
 
 **Options are a settings group, not progress.** kidsync's grow-only merge is
 for stars and unlocks; every one of these three can be *changed back*, and a
@@ -3218,7 +3235,7 @@ which is the right way round.
 
 ### The code that came from somewhere else
 
-Two folders here are copies, and neither is edited in place.
+Two folders here are copies.
 
 | folder | canonical | what it does |
 | --- | --- | --- |
@@ -3231,6 +3248,23 @@ of a module graph is a dependency that fails exactly when the network does.
 What that costs is drift, and the answer to drift is that each canonical repo
 carries `tools/install` and `tools/check` — run `tools/check` there and it
 compares every consumer's copy against the original, byte for byte.
+
+**This section used to say neither folder is edited in place, and that was not
+true when it was written.** Fixes found here have been made here since
+[`b845788`](https://github.com/minormending/crystal-pilot-mobile/commit/b845788),
+because a bug found by using the code is worth fixing where it was found. What
+that means in practice is that `tools/check` upstream will report these files as
+drifted, and the honest thing is to say which and why rather than to let the
+next person discover it:
+
+| file | what changed here | found by |
+| --- | --- | --- |
+| `sync/kidsync.js` | `adoptRemote` refuses a parsed state that is not an object | reading a peer's data as untrusted |
+| `baton/codec.js` | `through` no longer abandons the writer's two promises | fuzzing `unpack` with malformed payloads |
+
+Both belong upstream, and neither is reachable from this app on its own: this
+app only ever writes an object into a room, and only ever unpacks a payload it
+wrote. They are fixes to a contract, not to a failure anyone here has seen.
 
 `sync/bridge.js` is vendored and unused: it joins a host app's *classic
 scripts* to kidsync's ES module, and this app is modules end to end. Keeping the

@@ -325,6 +325,17 @@ export async function createSync({
     try { remoteState = JSON.parse(data.state); }
     catch { return console.warn("[kidsync] Remote state was unparseable; ignoring."); }
 
+    // Parsing is not the same as being a state. The rules can only say the
+    // payload is a string under the cap; what is inside it is whatever the
+    // other writer put there, and "null", "7" and "[1,2]" all parse. Only one
+    // of those was fatal -- reading `_epoch` off null throws, from inside an
+    // onValue callback, which breaks the room subscription for good rather than
+    // ignoring one bad snapshot -- but a merge is written to combine two
+    // objects, so anything else is refused here rather than half-handled below.
+    if (!remoteState || typeof remoteState !== "object" || Array.isArray(remoteState)) {
+      return console.warn("[kidsync] Remote state was not an object; ignoring.");
+    }
+
     // Don't clobber a local edit that hasn't been flushed yet — let it land and
     // have the resulting snapshot settle things, so no keystroke is silently
     // lost. A remote reset is exempt: it is meant to win immediately.
