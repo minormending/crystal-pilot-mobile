@@ -403,6 +403,9 @@ exactly why nothing failed.
 | 13 | every ROM or `.sym` re-pick added a chain that stepped the core for ever | picking twice | two things at once |
 | 13 | the marker started a second chain if it was asked mid-read | tapping again inside 1.8s | two things at once |
 | 13 | Stop could not be pressed for the whole of a walk | trying to stop one | two things at once |
+| 14 | the save flow closed the menu it had just counted, and recovered by timing out | a save | **measuring what never runs** |
+| 14 | the menu's stated reason for reading the cursor was not true of the cartridge | a save | measuring what never runs |
+| 14 | a second way to load a slot, without the refusal the first one has | nothing — that was the trouble | measuring what never runs |
 
 Five things in that table are worth more than the individual rows.
 
@@ -413,12 +416,12 @@ device, a second cartridge, a second Pokémon. What it measures is how much of
 the world you have to *arrange*, not how much you have to own: the fifth pass
 needed no hardware at all, only a party with a corpse in slot one.
 
-**Exactly one of the thirty-eight was caught by a check**, and only after the fix
+**Exactly one of the forty-one was caught by a check**, and only after the fix
 had decided what to look for: the wiring group named the four modules still
 importing constants that had just been deleted. One more was caught by a *test*,
 and only because the test hung — the obvious `continue` for the party prompt
 advanced nothing in a loop bounded by balls thrown. That is the honest weight to
-give this repository's sixteen check groups and 155 tests: they hold a fix
+give this repository's seventeen check groups and 161 tests: they hold a fix
 down, and they catch the fix that is itself wrong. They do not find the fault.
 
 **Measuring also rules things out, which is half of what it is for.** The
@@ -541,6 +544,65 @@ deliberately never calls it. Two correct decisions, in two different functions,
 that between them made a flag unreachable. No amount of staring at either one
 finds it; the question that finds it is *who can actually press this*.
 
+**The fourteenth pass asked which code has never run at all.** The eleventh
+found a guard that *could not fire* — the pack test that asked whether a pocket
+index was above 3, when the four read 0 to 3 — and found it by accident, while
+looking at something else. Looking for that on purpose means measuring, so this
+pass ran the suite under V8 coverage and ranked the modules by how much of each
+had never been executed.
+
+The number on its own is close to meaningless: a third of this app cannot be
+exercised without a cartridge. What the ranking said was worth knowing.
+
+| | before | after |
+| --- | --- | --- |
+| `gen2/menus.js` — drives the save | **16%** | 41% |
+| `gbcore/saves.js` — writes the battery | **16%** | 17% |
+| everything | 40% | 42% |
+
+**The two least-run modules in the repository were the two on the save path**,
+where the worst thing that can happen is a game that no longer exists. menus.js
+had tests, and they stubbed out every method that touches the machine — the file
+asserted on the order the rows were tried in and on nothing else. saves.js is
+bound to IndexedDB and cannot be run in this harness at all, which is why its
+number barely moved and why saying so is better than a fake one.
+
+Writing tests that drive the real menu code needed a model of the cartridge, and
+the first attempt guessed it. Measuring it instead — driving the same core the
+app drives, in Elm's lab — corrected two things this repository believed:
+
+```mermaid
+flowchart LR
+    subgraph W["what the code said"]
+      A["the cursor persists<br/>between openings"]
+      B["_openStartMenu just<br/>opens the menu"]
+    end
+    subgraph M["what the cartridge does"]
+      C["closed, re-opened from<br/>rows 3, 6, 2 → row 1 each time"]
+      D["START toggles:<br/>stack 0, 1, 0, 1"]
+    end
+    subgraph R["what follows"]
+      C --> E["the reason for reading<br/>the cursor was the row<br/>count, not the cursor"]
+      D --> F["the save flow closed<br/>the menu it had counted,<br/>then timed out and re-opened"]
+    end
+    A -.->|wrong| C
+    B -.->|incomplete| D
+```
+
+Recovering by timing out is not the same as being right, and the state it passed
+through on the way was one where the next DOWN press would have walked the
+player rather than a cursor. That is the failure `_menuRowCount` already has a
+guard against, reached by a route that guard does not cover.
+
+**And the third finding is one only this method could produce.** `Saves.restore`
+read a slot and installed its bytes. Nothing called it — `loadSlot` in `main.js`
+had taken the job over — and the difference between them is the refusal the
+fourth pass added, which stops a save from a build that did not write it being
+installed over the one that did. So the dead copy was the pre-audit version of a
+live operation, sitting under an inviting name, unexercised and therefore unable
+to drift back into agreement. Nothing that reads code finds that, because
+nothing about it looks wrong. What finds it is asking what never runs.
+
 **The two worst were silent data loss**, and both were doors the app opens by
 itself. Every door a *person* opens was already locked and had been for
 versions: the handoff refuses a room save whose tag differs, `loadSlot` refuses
@@ -603,7 +665,7 @@ asked whether the pocket index was above 3, which measured cannot happen, since
 the four read 0 to 3.
 
 **The tenth pass audited the apparatus rather than the code, and the headline
-is that it held.** All fifteen check groups then, sixteen now, fail when the one
+is that it held.** All fifteen check groups then, seventeen now, fail when the one
 thing they claim to watch is broken, and thirteen of fifteen source mutations
 are caught by the
 suite — both of those are now results rather than assumptions, and the first is

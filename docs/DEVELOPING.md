@@ -16,8 +16,8 @@ what CI checks and what the pre-commit hook blocks on.
 flowchart LR
     E[an edit] --> H{{".githooks/pre-commit"}}
     H --> T["./run-tests<br/>143 behaviour tests"]
-    H --> C["tools/check-app<br/>15 groups"]
-    H --> D["tools/docs-check<br/>23 tracked sections"]
+    H --> C["tools/check-app<br/>17 groups"]
+    H --> D["tools/docs-check<br/>24 tracked sections"]
     T --> OK[commit]
     C --> OK
     D --> OK
@@ -117,14 +117,49 @@ section gives. Everything by hand runs against a local build.
 
 ```mermaid
 flowchart BT
-    C["the app"] --> T["./run-tests<br/>147 behaviour tests"]
-    C --> A["tools/check-app<br/>15 groups"]
-    C --> D["tools/docs-check<br/>23 tracked sections"]
+    C["the app"] --> T["./run-tests<br/>161 behaviour tests"]
+    C --> A["tools/check-app<br/>17 groups"]
+    C --> D["tools/docs-check<br/>24 tracked sections"]
+    C --> V["tools/coverage<br/>what the suite never runs"]
     T --> M{{"mutation testing<br/>change a line, see who notices"}}
     A --> K["tools/check-checks<br/>break each group's own subject"]
+    T -.-> V
     M -.->|"13 of 15 caught"| R(["the suite is load-bearing"])
-    K -.->|"15 of 15 bite"| R2(["the groups are awake"])
+    K -.->|"17 of 17 bite"| R2(["the groups are awake"])
+    V -.->|"42%, and where"| R3(["the gaps are known"])
 ```
+
+### What the tests never run
+
+```bash
+tools/coverage          # the table
+tools/coverage --dead   # branches that never fired inside a function that did
+```
+
+Not a score to chase, and the total is close to meaningless on its own: a third
+of this app cannot be exercised without a real cartridge, and no amount of
+mocking makes a fake one worth trusting. What the table is for is *where*. It
+ranks the modules by how much of each has never been run, and the question worth
+asking is whether the bottom of that list is somewhere you would mind being
+wrong.
+
+The first run answered no. `menus.js` sat lowest at 16% — and `menus.js` is the
+module that saves your game. Its tests stubbed out every method that touches the
+machine and asserted only on the order the rows were tried in. `saves.js` was
+beside it at the same number. **The two least-run modules were the two on the
+save path**, where the worst outcome is a game that no longer exists.
+
+`--dead` prints the other half: branches that never fired *inside a function that
+did run*. That is the shape a guard which cannot fire has — the eleventh pass
+found one of those by accident, and this is what looking for them on purpose
+costs. Most of what it prints is ordinary untested defensiveness; the value is
+that the list is short enough to read.
+
+Two limits worth knowing before reading the number. `saves.js` is bound to
+IndexedDB and cannot run in this harness at all, so its figure will not move
+without a dependency this repository does not want. And `app/main.js` is not in
+the table: it needs a DOM, so the four fixes the thirteenth pass made there were
+verified in a browser rather than by a test.
 
 ### Are the checks still checking?
 
@@ -143,7 +178,7 @@ a file it had moved out of. Every one still printed `ok`.
 So `check-checks` breaks, on purpose, the one thing each group claims to watch,
 and asserts the group fails. It works on a copy of the tree — nothing it does
 can reach your files — and re-runs each group after restoring, so a mutation
-that fails to undo itself is reported rather than believed. **All fifteen bite.**
+that fails to undo itself is reported rather than believed. **All seventeen bite.**
 
 Writing a mutation is the whole cost of the tool, and it is easy to get wrong in
 a way that reads as a broken check: the first draft of seven of these missed what
@@ -155,7 +190,7 @@ is wrong, not the check. It is not in the pre-commit hook: it runs `check-app`
 about forty-five times, which is the wrong price for every commit and the right
 one for the commit that changes a check.
 
-`tools/check-app` is fifteen groups, each one a class of mistake that parses
+`tools/check-app` is seventeen groups, each one a class of mistake that parses
 fine and is wrong at run time:
 
 | group | asserts |
