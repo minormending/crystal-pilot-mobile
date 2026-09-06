@@ -395,6 +395,10 @@ exactly why nothing failed.
 | 10 | an ambiguous HP match gave up on every candidate | two look-alike slots | **mutation testing** |
 | 11 | the pack was stepped on a timer, and walked past the balls | playing it | **playing it** |
 | 11 | and "the pack never opened" could not fire | playing it | playing it |
+| 12 | a `.sym` placing a read outside work RAM loaded, and read `undefined` | a hack that moved one | **feeding it the wrong thing** |
+| 12 | a ROM the phone could not read changed nothing and said nothing | an evicted iCloud file | feeding it the wrong thing |
+| 12 | `unpack` threw twice on a corrupt payload, once uncatchably | a truncated save | feeding it the wrong thing |
+| 12 | a room state that parsed but was not an object killed the subscription | another writer | feeding it the wrong thing |
 
 Five things in that table are worth more than the individual rows.
 
@@ -405,12 +409,12 @@ device, a second cartridge, a second Pokémon. What it measures is how much of
 the world you have to *arrange*, not how much you have to own: the fifth pass
 needed no hardware at all, only a party with a corpse in slot one.
 
-**Exactly one of the nineteen was caught by a check**, and only after the fix
+**Exactly one of the thirty-four was caught by a check**, and only after the fix
 had decided what to look for: the wiring group named the four modules still
 importing constants that had just been deleted. One more was caught by a *test*,
 and only because the test hung — the obvious `continue` for the party prompt
 advanced nothing in a loop bounded by balls thrown. That is the honest weight to
-give this repository's fifteen check groups and 145 tests: they hold a fix
+give this repository's fifteen check groups and 155 tests: they hold a fix
 down, and they catch the fix that is itself wrong. They do not find the fault.
 
 **Measuring also rules things out, which is half of what it is for.** The
@@ -432,6 +436,64 @@ cartridge's real data through the real code and print what comes out wrong —
 which is how five species names and twelve item names turned up at once, having
 survived six passes. It is now the cheapest audit here, because the cartridge is
 already sitting in `dev/`.
+
+**The twelfth pass asked a different question: what happens when the input is
+wrong?** Every pass before it fed the app what it expects — the real cartridge,
+a real save, a well-formed `.sym` — and asked whether the code did the right
+thing. This one fed it what it does not expect, at every point where something
+crosses in from outside, and asked whether the code *says so*.
+
+```mermaid
+flowchart TD
+    subgraph P["a person picks a file"]
+        ROM[".gbc"]
+        SYM[".sym"]
+        SAV[".sav"]
+    end
+    subgraph N["another device writes to the room"]
+        OPT["options"]
+        DIG["45 addresses"]
+        GZ["a gzipped battery"]
+        SDP["an offer or answer"]
+    end
+    subgraph S["the phone's own store"]
+        KEPT["a kept ROM, .sym and battery"]
+    end
+
+    ROM --> H["readHeader<br/>logo at $104, and 32KB"]
+    SYM --> RQ["Symbols.require<br/>names present, and readable"]
+    SAV --> L["32,768 bytes, and the<br/>cartridge's own save marker"]
+    DIG --> RQ
+    OPT --> M["room.js merges<br/>every field defaulted"]
+    GZ --> U["unpack<br/>returns bytes, or throws"]
+    U --> L
+    SDP --> C["onSignal<br/>one try, one sentence"]
+    KEPT --> RQ
+    KEPT --> L
+
+    H --> OK["the app builds on it"]
+    RQ --> OK
+    L --> OK
+    M --> OK
+    U --> OK
+    C --> OK
+```
+
+Four of those gates had a hole, and the shape of each is the same: a check that
+was *nearly* there. `readHeader` bounds its own reads and the picker around it
+did not guard the read that fetches the file. `require` asked whether a name was
+present and not whether its address could be read. `unpack` threw, and also
+raised a second failure its caller could not catch. `adoptRemote` checked that
+the payload was a string and not that it parsed to an object.
+
+The rest held, and the negative results are the point of doing it this way:
+every merge in `room.js` was fed null, a number, a string, an array and a bare
+`true`, and every one returned the local value intact; `party` and `balls` clamp
+to what the engine says exists; `describeHandoff` and its four siblings render
+junk as a sentence rather than throwing. Even the gzip bomb is already bounded —
+nothing caps what a decompression expands to, but the room's 32,768-character
+limit caps the *input*, so the worst reachable unpack is about 23 MB. Accidental,
+and worth writing down precisely because nobody designed it.
 
 **The two worst were silent data loss**, and both were doors the app opens by
 itself. Every door a *person* opens was already locked and had been for
