@@ -26,10 +26,25 @@ function toBinaryString(bytes) {
   return out;
 }
 
+/**
+ * Push bytes through a compression stream and collect what comes out.
+ *
+ * `write` and `close` return promises, and on a stream that errors -- which is
+ * every malformed payload `unpack` is handed -- those promises reject too. They
+ * used to be dropped on the floor, so a corrupt save produced the error the
+ * caller catches AND an unhandled rejection it cannot: measured, three of five
+ * bad inputs raised one, arriving a turn later with no stack pointing here.
+ *
+ * The readable is what actually carries the failure to the caller, so the two
+ * writer promises are silenced rather than awaited. Awaiting `write` before
+ * reading deadlocks -- nothing drains the readable until the Response below
+ * starts -- and awaiting `close` swaps a useful error for a duplicate one.
+ */
 async function through(stream, bytes) {
   const writer = stream.writable.getWriter();
-  writer.write(bytes);
-  writer.close();
+  const quiet = () => {};
+  writer.write(bytes).catch(quiet);
+  writer.close().catch(quiet);
   const done = await new Response(stream.readable).arrayBuffer();
   return new Uint8Array(done);
 }
@@ -40,7 +55,8 @@ export async function pack(bytes) {
   return btoa(toBinaryString(gz));
 }
 
-/** And back. Throws on anything that is not what pack produced. */
+/** And back. Throws -- and only throws -- on anything that is not what pack
+ *  produced: see `through` for the second failure this used to raise. */
 export async function unpack(text) {
   const binary = atob(text);
   const gz = new Uint8Array(binary.length);

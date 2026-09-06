@@ -87,9 +87,11 @@ questions that actually matter — *what species is this*, *what is behind that
 wall*, *which tile is a doorway*. Those are not on screen at all.
 
 The cost is a hard dependency on a `.sym` from the same build as the ROM.
-`Symbols.require()` fails at load rather than mid-task if a name is missing, so
-a mismatched pair is a sentence on the loader instead of a mystery three minutes
-into a grind.
+`Symbols.require()` fails at load rather than mid-task if a name is missing —
+or if an address is somewhere the app cannot read it — so a mismatched pair is a
+sentence on the loader instead of a mystery three minutes into a grind. See
+[`symbols.js`](#symbolsjs--where-things-live) for why those are two questions
+and not one.
 
 The desktop sibling ([crystal-pilot](https://github.com/minormending/crystal-pilot))
 does the same thing with PyBoy, and additionally sets **CPU hooks** — the game
@@ -2607,7 +2609,7 @@ way any newer value does.
 
 ### Handing the save over
 
-<!-- covers: gbcore/room.js baton/baton.js baton/codec.js @ c744cc6482bb -->
+<!-- covers: gbcore/room.js baton/baton.js baton/codec.js @ ac382ba5e3ae -->
 
 The same room carries the save, through
 [baton](https://github.com/minormending/baton) vendored in `baton/`. kidsync
@@ -2675,6 +2677,26 @@ Compression is therefore not an optimisation, it is the only reason this works
 runs of zeroes. `fits(packed, maxBytes, spare = 2048)` keeps two kilobytes back
 for the rest of the room's JSON: the cap is on the whole string, not on the
 payload, so a payload that exactly fills it is one that cannot be published.
+
+**Unpacking either returns the bytes or throws, and does nothing else.** That
+is a narrower contract than it looks, and it took a fuzz to see it was not being
+kept. `through` gets a writer from the stream and calls `write` and `close` on
+it; both return promises, and on a stream that errors — which is every malformed
+payload — both reject. They were dropped, so a corrupt save raised the error
+`take` catches *and* an unhandled rejection it cannot, arriving a turn later
+with no stack pointing at the codec. Three of five bad inputs did it. They are
+silenced rather than awaited: the readable is what carries the failure to the
+caller, awaiting `write` before reading deadlocks because nothing drains the
+readable until the `Response` starts, and awaiting `close` swaps a useful error
+for a duplicate one.
+
+The cap does one more job nobody designed it for. Nothing bounds what a gzip
+stream expands to, so an unpack is an allocation chosen by whoever wrote the
+payload — but the room's 32,768-character limit bounds the *input*, and measured,
+the largest expansion that fits is about 23 MB of zeroes. A spike, not a crash,
+and `install` refuses anything that is not exactly 32,768 bytes immediately
+after. Worth writing down because the bound is accidental: it comes from
+Firebase's rules, not from any check here.
 
 `toBinaryString` chunks at `0x2000` bytes rather than spreading the array into
 `String.fromCharCode(...bytes)`, which overflows the call stack — an argument
