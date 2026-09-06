@@ -1,0 +1,109 @@
+#!/usr/bin/env node
+// Which code the tests actually run.
+//
+// Not a score to chase. The number on its own is close to meaningless here --
+// a third of this app cannot be exercised without a real cartridge, and no
+// amount of mocking makes a fake one worth trusting. What the table is for is
+// *where*: it ranks the modules by how much of each has never been run, and the
+// interesting question is always whether the bottom of that list is somewhere
+// you would mind being wrong.
+//
+// The first run of it answered no. menus.js sat at 16%, the lowest in the app,
+// and menus.js is the module that saves your game -- its own tests stubbed out
+// every method that touches the machine and asserted only on the order the rows
+// were tried in. saves.js was beside it at the same number. The two least-tested
+// modules in the repository were the two on the path where the worst thing that
+// can happen is a game that no longer exists.
+//
+// Usage:  tools/coverage            the table
+//         tools/coverage --dead     branches that never fired inside a function
+//                                   that did run -- the shape a guard that
+//                                   cannot fire has
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..') + '/';
+const WATCHED = /^(gbcore|gen2|titles)\//;
+const dir = mkdtempSync(join(tmpdir(), 'cov-'));
+
+try {
+  execFileSync(process.execPath, [join(ROOT, 'tests/index.mjs')], {
+    cwd: ROOT, stdio: 'ignore', env: { ...process.env, NODE_V8_COVERAGE: dir },
+  });
+} catch {
+  console.error('the suite did not pass, so its coverage would not mean much');
+  process.exit(1);
+}
+
+const scripts = new Map();
+for (const f of readdirSync(dir)) {
+  for (const s of JSON.parse(readFileSync(join(dir, f), 'utf8')).result) {
+    if (!s.url.startsWith('file://')) continue;
+    const p = fileURLToPath(s.url);
+    if (!p.startsWith(ROOT)) continue;
+    const rel = p.slice(ROOT.length);
+    if (WATCHED.test(rel)) scripts.set(rel, s);
+  }
+}
+rmSync(dir, { recursive: true, force: true });
+
+const dead = process.argv.includes('--dead');
+const rows = [];
+for (const [rel, s] of scripts) {
+  const src = readFileSync(ROOT + rel, 'utf8');
+  // Paint what ran, then un-paint what did not: V8 nests ranges, and the
+  // zero-count ones are the holes inside a covered parent.
+  const hit = new Uint8Array(src.length);
+  for (const fn of s.functions) for (const r of fn.ranges) {
+    if (r.count > 0) hit.fill(1, r.startOffset, r.endOffset);
+  }
+  for (const fn of s.functions) for (const r of fn.ranges) {
+    if (r.count === 0) hit.fill(0, r.startOffset, r.endOffset);
+  }
+  let off = 0, code = 0, run = 0;
+  for (const line of src.split('\n')) {
+    const t = line.trim();
+    // Comments and blanks are not code, and counting them flatters every module
+    // that is well commented -- which, in this repository, is all of them.
+    if (t && !t.startsWith('//') && !t.startsWith('*') && !t.startsWith('/*')) {
+      code++;
+      if (hit[off + line.length - line.trimStart().length]) run++;
+    }
+    off += line.length + 1;
+  }
+  rows.push([rel, code, run, code ? Math.round(run * 100 / code) : 100]);
+
+  if (!dead) continue;
+  const holes = [];
+  for (const fn of s.functions) {
+    // Only functions whose body ran: a whole function nothing calls is a gap in
+    // the tests, and a branch that never fired inside one that ran is a
+    // different thing -- possibly a guard that cannot fire at all.
+    if (!fn.ranges[0] || fn.ranges[0].count === 0) continue;
+    for (const r of fn.ranges.slice(1)) {
+      if (r.count !== 0 || r.endOffset - r.startOffset > 120) continue;
+      const text = src.slice(r.startOffset, r.endOffset).trim();
+      if (!text) continue;
+      holes.push([src.slice(0, r.startOffset).split('\n').length,
+                  fn.functionName || '(top)', text.split('\n')[0].slice(0, 64)]);
+    }
+  }
+  if (holes.length) {
+    console.log(`\n${rel}`);
+    for (const [n, fn, t] of holes.sort((a, b) => a[0] - b[0])) {
+      console.log(`  :${String(n).padEnd(4)} ${fn.slice(0, 18).padEnd(18)} ${t}`);
+    }
+  }
+}
+
+if (dead) console.log('');
+rows.sort((a, b) => a[3] - b[3]);
+console.log('module                    code   run     %');
+for (const [rel, code, run, pct] of rows) {
+  console.log(`${rel.padEnd(24)} ${String(code).padStart(5)} ${String(run).padStart(5)} ${String(pct).padStart(5)}%`);
+}
+const c = rows.reduce((a, r) => a + r[1], 0), r2 = rows.reduce((a, r) => a + r[2], 0);
+console.log(`\n${r2}/${c} lines of code run by the suite — ${Math.round(r2 * 100 / c)}%`);
