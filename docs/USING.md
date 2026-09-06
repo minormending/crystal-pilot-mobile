@@ -444,6 +444,14 @@ about 190 taps — checked whether you had pressed Stop once, when it started, a
 then not again. Pressing Stop in the middle of a scene now stops it in the
 middle of that scene.
 
+**And it works during a tap-to-walk, which until v139 it could not.** The code
+behind Stop has always reached walks as well as jobs — but the button was hidden
+for the whole of every walk, because a walk deliberately does not dim the page
+the way a job does, and hiding the button was part of the same switch. Two
+sensible decisions that between them made the thing unpressable. Stop now
+appears on its own during a walk, and a walk stopped while the route is still
+being worked out does not take a step at all.
+
 They used to be one message. A whiteout came back as *stopped at Lv13* from a
 grind, as *could not run from a PIDGEY* from a hunt, and as *your lead fainted*
 from a catch — three descriptions of the most consequential thing that can

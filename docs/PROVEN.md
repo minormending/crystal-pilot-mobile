@@ -399,6 +399,10 @@ exactly why nothing failed.
 | 12 | a ROM the phone could not read changed nothing and said nothing | an evicted iCloud file | feeding it the wrong thing |
 | 12 | `unpack` threw twice on a corrupt payload, once uncatchably | a truncated save | feeding it the wrong thing |
 | 12 | a room state that parsed but was not an object killed the subscription | another writer | feeding it the wrong thing |
+| 13 | a double tap ran the whole job twice, on one emulator | tapping twice | **two things at once** |
+| 13 | every ROM or `.sym` re-pick added a chain that stepped the core for ever | picking twice | two things at once |
+| 13 | the marker started a second chain if it was asked mid-read | tapping again inside 1.8s | two things at once |
+| 13 | Stop could not be pressed for the whole of a walk | trying to stop one | two things at once |
 
 Five things in that table are worth more than the individual rows.
 
@@ -409,12 +413,12 @@ device, a second cartridge, a second Pokémon. What it measures is how much of
 the world you have to *arrange*, not how much you have to own: the fifth pass
 needed no hardware at all, only a party with a corpse in slot one.
 
-**Exactly one of the thirty-four was caught by a check**, and only after the fix
+**Exactly one of the thirty-eight was caught by a check**, and only after the fix
 had decided what to look for: the wiring group named the four modules still
 importing constants that had just been deleted. One more was caught by a *test*,
 and only because the test hung — the obvious `continue` for the party prompt
 advanced nothing in a loop bounded by balls thrown. That is the honest weight to
-give this repository's fifteen check groups and 155 tests: they hold a fix
+give this repository's sixteen check groups and 155 tests: they hold a fix
 down, and they catch the fix that is itself wrong. They do not find the fault.
 
 **Measuring also rules things out, which is half of what it is for.** The
@@ -495,6 +499,48 @@ nothing caps what a decompression expands to, but the room's 32,768-character
 limit caps the *input*, so the worst reachable unpack is about 23 MB. Accidental,
 and worth writing down precisely because nobody designed it.
 
+**The thirteenth pass asked what happens when two things arrive at once.** Every
+pass before it followed one thing at a time — one read, one job, one payload —
+and this app is full of state machines where the interesting question is what
+the *other* thing was doing meanwhile. Four defects, all in the same family, and
+all four had a mechanism that was correct and a claim that was late.
+
+```mermaid
+flowchart LR
+    subgraph B["what went wrong"]
+      F["a flag set<br/><i>after</i> an await"]
+      H["a handle read<br/>while an await<br/>was changing it"]
+      C["a counter that<br/>lived in a closure<br/>built more than once"]
+    end
+    subgraph R["what it cost"]
+      F --> F2["two jobs on<br/>one joypad"]
+      H --> H2["two marker chains<br/>reading every frame"]
+      C --> C2["7 → 8 → 9 loops<br/>stepping one core"]
+    end
+    subgraph W["what fixes it"]
+      F2 --> W1["claim before<br/>the first await"]
+      H2 --> W2["a generation:<br/>newer retires older"]
+      C2 --> W3["a latch:<br/>construct once"]
+    end
+```
+
+**Three of the four were measured on the running app, before and after**, which
+is why this pass is worth more than the reading that preceded it. The double tap
+was not argued about: the status line and the run log were watched through a
+`MutationObserver`, and every line came out twice — two undo points, two save
+sequences. Then once. The accumulating loops were counted by wrapping
+`requestAnimationFrame` and recording how many callbacks were outstanding at the
+same moment: 7, then 8, then 9, one per re-pick, and afterwards pinned at 1
+through three more.
+
+**The fourth is the one reading alone would have found, and had not.** Stop's own
+comment says it reaches "the walk flag, which a task never reads" — a sentence
+that has been true about the code and false about the interface for as long as
+both have existed, because the button is unhidden by `setMode(true)` and a walk
+deliberately never calls it. Two correct decisions, in two different functions,
+that between them made a flag unreachable. No amount of staring at either one
+finds it; the question that finds it is *who can actually press this*.
+
 **The two worst were silent data loss**, and both were doors the app opens by
 itself. Every door a *person* opens was already locked and had been for
 versions: the handoff refuses a room save whose tag differs, `loadSlot` refuses
@@ -557,8 +603,9 @@ asked whether the pocket index was above 3, which measured cannot happen, since
 the four read 0 to 3.
 
 **The tenth pass audited the apparatus rather than the code, and the headline
-is that it held.** All fifteen check groups fail when the one thing they claim
-to watch is broken, and thirteen of fifteen source mutations are caught by the
+is that it held.** All fifteen check groups then, sixteen now, fail when the one
+thing they claim to watch is broken, and thirteen of fifteen source mutations
+are caught by the
 suite — both of those are now results rather than assumptions, and the first is
 repeatable as [`tools/check-checks`](DEVELOPING.md#are-the-checks-still-checking).
 It matters here because four groups *have* gone silent historically and every
