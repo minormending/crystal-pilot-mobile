@@ -1520,7 +1520,23 @@ const NEEDED_SYMBOLS = [
 $('#romFile').addEventListener('change', async (e) => {
   const f = e.target.files[0];
   if (!f) return;
-  const buf = await f.arrayBuffer();
+  // Reading a picked file can fail, and this is the handler where that shows.
+  // A phone hands back a File for something it cannot currently read -- an
+  // iCloud file that has been evicted and the network is gone, a file moved or
+  // deleted between the picker and here -- and `arrayBuffer()` rejects. With
+  // nothing catching it the rejection escaped the listener, romBytes stayed
+  // null, and the status line still read "waiting for a ROM and a .sym" to
+  // somebody who had just picked one. The .sym picker below has always caught
+  // this; the two disagreed about whether reading a file can fail.
+  let buf;
+  try {
+    buf = await f.arrayBuffer();
+  } catch (err) {
+    romBytes = null;
+    setStatus(`could not read ${f.name}: ${err && err.message ? err.message : err}`
+              + ' — if it is in iCloud or Drive, open it there first', 'bad');
+    return;
+  }
   if (!readHeader(buf).ok) {
     romBytes = null;
     setStatus(`${f.name} is not a Game Boy ROM — expected a .gbc built from ` +

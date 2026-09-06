@@ -34,6 +34,37 @@ device and press **Join** — then **Watch** when the button appears. What trave
 and what never does is set out in
 [Two devices, one game](DEVICES.md#what-leaves-the-device-and-when).
 
+### What the two pickers refuse
+
+Both file pickers check what they are given before the app builds anything on
+it, and both say which check failed rather than failing later. The gates are
+different because the two files fail differently — a wrong `.gbc` will not boot,
+and a wrong `.sym` boots fine and then reads nonsense.
+
+| you picked | it says | why |
+| --- | --- | --- |
+| a `.gbc` that will not open | *could not read NAME* | the phone handed back a file it cannot currently read. Usually an iCloud or Drive file that has been evicted with no network — open it in Files first |
+| something that is not a cartridge | *NAME is not a Game Boy ROM* | the Nintendo logo at `$104` is missing, or the file is under 32KB. Every Game Boy ROM carries that logo; nothing else does |
+| a `.sym` from somewhere else | *does not look like an rgblink .sym file* | no line reads `BB:AAAA name`, which is the only format rgblink writes |
+| a `.sym` from another build | *missing N expected symbol(s)* | the names this app reads are not in it. Said now rather than mid-grind an hour later |
+| a `.sym` with reads outside work RAM | *N symbol(s) this app reads are outside work RAM* | see below |
+
+That last one is the quiet one, and it is the reason the gate is not simply
+"are the names there". Everything the app knows about the running game comes
+from one snapshot of work RAM, `$C000–$DFFF`, and a read reaches into that
+snapshot by subtracting the base — so an address **outside** the window does not
+fail, it returns `undefined`. Measured, with `wBattleMode` moved into HRAM:
+`inBattle` became `undefined !== 0`, which is *true*, and the pilot believed it
+was in a battle it could never leave. No message, no clue, and by the time
+anything goes wrong the address is gone and only the rubbish it read is left.
+
+A hack can legitimately move a variable there. So the table is checked for
+placement as well as presence, and the two halves are strict about different
+things: a name the app would like but cannot find only costs the feature that
+wanted it — a hack that renamed its wild tables loses the species picker and
+keeps everything else — but an address that cannot be read is never usable,
+whoever asked for it.
+
 ## Controls
 
 Eight on-screen buttons: the D-pad, A, B, Select and Start. **Press and hold** —
