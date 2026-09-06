@@ -74,6 +74,12 @@ def mutations(root):
         "layers": lambda: edit("gen2/state.js", sub(
             "import", "import { describeRows } from '../app/rows.js';\nimport")),
         "seam": lambda: edit("gen2/state.js", append("\n// probe: gb.core.thing()\n")),
+        # Indented, so inside something, and an inline arrow that nothing can
+        # take off again -- exactly the shape startLoop had.
+        "listeners": lambda: edit("app/rows.js", append(
+            "\nexport function probe() {\n"
+            "  document.addEventListener('visibilitychange', () => {});\n"
+            "}\n")),
         "titles": lambda: edit("titles/crystal.js", sub(
             "  async healAtElm() {",
             "  async travelTo() { return null; }\n  async healAtElm() {")),

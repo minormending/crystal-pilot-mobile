@@ -856,10 +856,65 @@ def check_emulator_seam():
         else ok(f"only gb.js touches the emulator core")
 
 
+# `document.addEventListener('x', handler)` and its window/bare equivalents.
+# Element listeners are deliberately not matched: an element listener's life is
+# the element's, and elements get replaced. `document` and `window` do not.
+LONG_LIVED = re.compile(
+    r"^(\s*)(?:document|window)?\.?addEventListener\(\s*['\"]([^'\"]+)['\"]\s*,\s*([^,)]*)")
+UNSUBSCRIBE = re.compile(r"removeEventListener\(")
+
+
+def check_listeners():
+    """A listener on document or window is added once, or taken off again.
+
+    `document` and `window` outlive every function in the app, so a listener
+    added from inside a function is added again every time that function runs.
+    Nothing fails; the handler simply runs N times per event, for ever.
+
+    Measured, which is why this exists: `startLoop` subscribed
+    `visibilitychange` from its own body, and `reallyStart` calls `startLoop`
+    every time somebody picks a ROM or a symbol file -- a supported thing to do
+    in an app built to hold more than one cartridge. Counting simultaneous
+    animation-frame callbacks, re-picking the same .sym three times took the
+    live emulator-stepping chains from 7 to 8 to 9, one added each time and none
+    retired. On a visible page that is nine chains stepping one Game Boy every
+    frame. The duplicate listener came with it and had the same shape.
+
+    Two ways to be right, and both are allowed. Subscribe at the top level,
+    where running twice is not a thing that can happen -- that is what the fix
+    did. Or subscribe inside a function and take it off again, which is what
+    `whenVisible` does: it adds `visibilitychange`, resolves once, and removes
+    its own handler on the way out.
+
+    So the rule is: indented means inside something, and inside something means
+    there must be a `removeEventListener` for the same handler in the same file.
+    Named handlers only -- an inline arrow cannot be removed, which is precisely
+    why one must not be subscribed from inside a function.
+    """
+    problems = []
+    for path in APP:
+        text = path.read_text()
+        removed = set(re.findall(r"removeEventListener\(\s*['\"][^'\"]+['\"]\s*,\s*(\w+)",
+                                 text))
+        for i, line in enumerate(text.split("\n"), 1):
+            m = LONG_LIVED.match(line)
+            if not m or not m.group(1):        # column 0 is top level, and fine
+                continue
+            handler = m.group(3).strip()
+            if handler and re.fullmatch(r"\w+", handler) and handler in removed:
+                continue
+            problems.append(f"{rel(path)}:{i}  {m.group(2)} <- {handler or 'an inline handler'}")
+    for p in problems:
+        print(f"        {p}")
+    return fail(f"{len(problems)} long-lived listener(s) added from inside a function") \
+        if problems else ok("every document/window listener is added once or removed")
+
+
 CHECKS = {
     "syntax": check_syntax,
     "layers": check_layers,
     "seam": check_emulator_seam,
+    "listeners": check_listeners,
     "titles": check_title_adds,
     "shell": check_shell,
     "markup": check_markup,
