@@ -1,8 +1,20 @@
 // The game's own menus: the intro, the START menu, and saving.
 //
 // Driving a menu means reading the cursor and stepping it, never counting
-// presses from an assumed origin -- the cursor persists between openings, so
-// an assumed origin is wrong exactly when it matters.
+// presses from an assumed origin.
+//
+// That used to say the reason was that "the cursor persists between openings",
+// and measured on the cartridge it does not -- not for this menu. Walking the
+// START menu to row 3, 6 and 2, closing it and re-opening it each time, put the
+// cursor back on row 1 every time, and `wMenuCursorY` read 0 for the whole of
+// every interval when nothing was open. So the origin is more predictable than
+// this module assumed.
+//
+// Reading the cursor is still right, and the better reason is the one below it:
+// the number of rows is not fixed either. The START menu grows as the game
+// gives you a POKeDEX and a POKeGEAR -- measured at six rows in Elm's lab --
+// so counting presses from a known origin still lands on the wrong row later
+// even when the origin is known.
 import { SETTLE_FRAMES } from '../gbcore/taskbase.js';
 // Times to try the whole START -> SAVE -> YES flow before giving up.
 const SAVE_ATTEMPTS = 3;
@@ -233,6 +245,20 @@ export function withMenus(Base) {
    */
   async _openStartMenu(tries = 3) {
     for (let attempt = 0; attempt < tries; attempt++) {
+      // Nothing is pressed if a window is already up, and that is not a saved
+      // press -- it is a wrong state avoided. START *toggles* this menu:
+      // measured on the cartridge, the window stack goes 0, 1, 0, 1 across
+      // three presses. And `_saveOnce` reaches here with the menu already open,
+      // because it opens it, counts its rows, and then calls `_trySaveRow`,
+      // which calls this. So the press closed the very menu that had just been
+      // counted; the poll below then read a zero cursor for all of its tries,
+      // and the *next* attempt pressed START again and re-opened it. It came
+      // out right, by timing out, which is not the same as being right.
+      //
+      // `windowOpen` rather than the cursor, because it is the signal state.js
+      // calls reliable -- and because the question here is only "is something
+      // open", which is exactly what it answers.
+      if ((await this.snap()).windowOpen) return true;
       await this.push('START', 5, 10);
       for (let i = 0; i < MENU_OPEN_TRIES; i++) {
         await this.step(6);

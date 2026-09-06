@@ -1187,7 +1187,7 @@ precedes it defaults to yes, which is what we want; the nickname box does not.
 
 ## 7a. Three that act on where you already are
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ ef6913ec6fd5 -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ c7ecff2ea019 -->
 
 Grind, hunt and catch all go *looking* for something. These three do the obvious
 thing with the situation you are already in, and take no parameters:
@@ -1301,6 +1301,25 @@ the safe idea the paragraph above claims it is.
 presses are reaching the world rather than a menu, the player walks — which in
 grass starts a wild battle and makes saving impossible. So the position is
 checked after each press, and a move means stop.
+
+**And the menu it counted is not pressed shut again before the rows are tried.**
+START *toggles*: measured on the cartridge, the window stack goes 0, 1, 0, 1
+across three presses. `_saveOnce` opens the menu, counts its rows, and then calls
+`_trySaveRow`, which called `_openStartMenu` again — so the press closed the very
+menu that had just been counted. It recovered: the poll then read a zero cursor
+for all twenty-five tries, and the next attempt pressed START again and re-opened
+it. Recovering by timing out is not the same as being right, and the state it
+passed through on the way was one where the next DOWN would have walked the
+player. `_openStartMenu` now asks `windowOpen` first and presses nothing when
+something is already up.
+
+Two things this module's header used to assert were measured while establishing
+that, and one of them was wrong. **The START menu's cursor does not persist
+between openings** — walked to row 3, 6 and 2, closed and re-opened each time, it
+came back on row 1 every time — and **`wMenuCursorY` reads 0 for the whole of any
+interval when nothing is open**, tracking `wWindowStackSize` exactly, at least
+indoors. Reading the cursor rather than counting presses is still right, but the
+reason is the growing row count above it, not a cursor that remembers.
 
 **Success is the battery changing, not the presses landing.** The desktop pilot
 watches its `SaveGameData` hook fire; there are no hooks in a browser. So this
