@@ -65,3 +65,38 @@ test('a cartridge sends its own wild tables, not only the app\'s list',
   t.false(SHARED_SYMBOLS.includes('HackGrassWildMons'),
           'and the app\'s own list is left alone');
 });
+
+test('a symbol moved out of work RAM is refused, not read as undefined',
+     async (t) => {
+  // The failure this replaces is the quietest one in the app. Every `w` read
+  // goes through a snapshot of 0xC000-0xDFFF and `GameBoy.byteAt` indexes it by
+  // subtracting the base, so an address outside that window does not throw --
+  // it reads `undefined`. Measured with wBattleMode in HRAM: `inBattle` became
+  // `undefined !== 0`, which is true, and the pilot believed it was in a battle
+  // it could never leave. Nothing downstream can name that as the cause.
+  const full = symbols();
+  const moved = Symbols.fromDigest({
+    ...full.digest(SHARED_SYMBOLS),
+    wBattleMode: [0, 0xff90],        // HRAM
+    wXCoord: [0, 0xa123],            // SRAM
+  });
+  const e = await t.rejects(async () => moved.require(['wBattleMode']),
+                            'a table with reads outside work RAM is refused');
+  t.contains(e.message, 'outside work RAM', 'and says what is wrong');
+  t.contains(e.message, 'wBattleMode at $ff90', 'naming one, with its address');
+
+  // Presence and placement are different questions, and only the second one is
+  // absolute: a hack may legitimately lack a name this app would like.
+  const partial = Symbols.fromDigest(full.digest(['wPartyCount', 'wBattleMode']));
+  partial.require(['wPartyCount']);
+  t.true(true, 'a short table whose addresses are all readable still loads');
+});
+
+test('the stock table places every symbol this app reads where it can read it',
+     async (t) => {
+  // The other direction, and the one that would catch this check being wrong:
+  // if the range or the `w` rule were off, the ordinary path would refuse.
+  const full = symbols();
+  full.require(SHARED_SYMBOLS.filter((n) => full.has(n)));
+  t.true(true, 'every name the harness places passes its own gate');
+});

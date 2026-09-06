@@ -103,7 +103,7 @@ of the subtleties in sections 6 and 7.
 
 ## 2. The shape of it
 
-<!-- covers-api: app/main.js gen2/journey.js titles/crystal.js gen2/tasks.js gen2/nav.js gen2/world.js gen2/collision.js gen2/state.js gen2/romdata.js gen2/symbols.js gbcore/gb.js @ f34558569029 -->
+<!-- covers-api: app/main.js gen2/journey.js titles/crystal.js gen2/tasks.js gen2/nav.js gen2/world.js gen2/collision.js gen2/state.js gen2/romdata.js gen2/symbols.js gbcore/gb.js @ 823ab00e9e83 -->
 
 Twenty-seven modules, in four directories, and the directories are the design:
 **an import may point down this list and never up.**
@@ -318,9 +318,13 @@ was cheaper than moving the boundary.
 
 ### `gb.js` — the emulator
 
-<!-- covers: gbcore/gb.js @ a0749d16505b -->
+<!-- covers: gbcore/gb.js @ 2fdb0564b101 -->
 
 Wraps WasmBoy. Runs frames, reads work RAM, holds and releases buttons.
+
+It exports the work-RAM window as `GB_WRAM_START` and `GB_WRAM_BYTES`, stated
+once because two things depend on them agreeing: the snapshot `readWram` takes,
+and the range `Symbols.require` insists a `w` address falls inside.
 
 The important part of its interface is that **buttons are held, not tapped**:
 `hold('LEFT')`, then `release('LEFT')`. Gen 2 turns you before it walks you, so
@@ -404,10 +408,31 @@ watching.
 
 ### `symbols.js` — where things live
 
-<!-- covers: gen2/symbols.js @ 1fb187199a74 -->
+<!-- covers: gen2/symbols.js @ adfec8a1061e -->
 
 Parses the `.sym` file into `name → { bank, addr }`. First definition wins;
 later duplicates are aliases and locals.
+
+`require(names)` is the gate a symbol table has to pass before the app will use
+it, and it asks two questions rather than one:
+
+- **Are the names present?** Asked of the list handed in, which is deliberately
+  narrower than everything the app reads. A hack that renamed its wild tables
+  should lose the species picker and keep the rest, so this half stays lenient.
+- **Are the addresses readable?** Asked of every `w`-prefixed name the table
+  holds, against work RAM's own bounds. This half is absolute, because an
+  address outside `$C000–$DFFF` is not a value this app can read at all: every
+  `w` read goes through one snapshot of that window and `GameBoy.byteAt` indexes
+  it by subtracting the base, so an address past the end returns `undefined`
+  instead of failing. Measured with `wBattleMode` moved into HRAM — the table
+  loaded without a word, `battleMode` read `undefined`, `inBattle` was therefore
+  `undefined !== 0`, and the pilot believed it was in a battle it could never
+  leave.
+
+The naming convention is what makes the second question answerable: pokecrystal
+names a variable for the memory it lives in — `w` and a capital is work RAM, `s`
+is SRAM, `h` is HRAM, a bare capital is a ROM label — and the linker script
+enforces it, so it is a fact about the build rather than a habit.
 
 ### `state.js` — what the game is doing right now
 

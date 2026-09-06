@@ -16,6 +16,12 @@
 
 const SRAM_BYTES = 32768;
 const GB_WRAM_START = 0xc000;   // where work RAM begins in the Game Boy's map
+// And how much of it there is. Stated once because two different things depend
+// on it being the same number: the snapshot readWram takes, and the range
+// Symbols.require insists a work-RAM address falls inside. A `w` symbol outside
+// this window is not a value byteAt can read -- it indexes the snapshot, so an
+// address past the end reads `undefined` rather than failing.
+const GB_WRAM_BYTES = 0x2000;
 const GB_W = 160, GB_H = 144;
 
 export class GameBoy {
@@ -138,7 +144,7 @@ export class GameBoy {
    * and yields plausible-looking rubbish, so the result is normalised here
    * rather than trusted.
    */
-  async readWram(bytes = 0x2000) {
+  async readWram(bytes = GB_WRAM_BYTES) {
     const section = await this.core._getWasmMemorySection(
       this.workRam, this.workRam + bytes
     );
@@ -274,4 +280,4 @@ export class GameBoy {
   }
 }
 
-export { GB_WRAM_START, GB_W, GB_H, SRAM_BYTES };
+export { GB_WRAM_START, GB_WRAM_BYTES, GB_W, GB_H, SRAM_BYTES };
