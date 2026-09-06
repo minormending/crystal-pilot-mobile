@@ -910,11 +910,72 @@ def check_listeners():
         if problems else ok("every document/window listener is added once or removed")
 
 
+NAMED_EXPORT = re.compile(
+    r"^export\s+(?:async\s+)?(?:function|class|const|let)\s+(\w+)", re.M)
+EXPORT_LIST = re.compile(r"^export\s*\{([^}]*)\}", re.M)
+
+
+def check_exports():
+    """Nothing is exported that nothing outside the module reads.
+
+    An export is a promise to somebody else. When there is no somebody else it
+    is not a small untidiness -- it is a second way to do a thing, sitting where
+    the next person will find it by name, and drifting away from the way that is
+    actually used because nothing exercises it.
+
+    Which is exactly what it was. `Saves.restore(slot)` read a slot and installed
+    its bytes, and nothing had called it since `loadSlot` in main.js took the
+    job over. The difference between the two is the refusal the fourth audit
+    pass added: loadSlot will not install a save whose ROM fingerprint is not
+    this cartridge's, and `restore` had no such check. So the dead one was the
+    pre-audit version of a live operation, waiting under an inviting name. Found
+    by coverage -- it is in the module the tests run least of -- and this is what
+    stops the next one sitting there as long.
+
+    Test code counts as somebody else, and so do the tools and the markup: an
+    export that exists to be tested is doing a job. What does not count is the
+    module's own body, which is what un-exporting is for.
+    """
+    others = {p: p.read_text() for p in APP}
+    outside = "\n".join(
+        (ROOT / f).read_text() for f in ("index.html", "sw.js"))
+    outside += "\n".join(p.read_text() for p in (ROOT / "tests").rglob("*.mjs"))
+    # `check-app` is excluded because it is the thing asking, and `check-checks`
+    # because it holds fragments of deliberately broken source -- including, the
+    # first time this ran, the very export it mutates in to prove this group
+    # bites. A corpus that counts a checker's own straw man as a reader cannot
+    # find anything.
+    outside += "\n".join(p.read_text() for p in (ROOT / "tools").iterdir()
+                          if p.is_file() and p.name not in ("check-app", "check-checks"))
+    problems = []
+    for path in APP:
+        text = others[path]
+        names = set(NAMED_EXPORT.findall(text))
+        for block in EXPORT_LIST.findall(text):
+            for part in block.split(","):
+                bit = part.strip().split(" as ")[-1].strip()
+                if bit:
+                    names.add(bit)
+        for name in sorted(names):
+            word = re.compile(rf"\b{re.escape(name)}\b")
+            if any(word.search(t) for q, t in others.items() if q != path):
+                continue
+            if word.search(outside):
+                continue
+            problems.append(f"{rel(path)}  exports {name}, and nothing outside it "
+                            f"ever says that word")
+    for p in problems:
+        print(f"        {p}")
+    return fail(f"{len(problems)} export(s) with no reader") if problems \
+        else ok("every export is read by something outside its module")
+
+
 CHECKS = {
     "syntax": check_syntax,
     "layers": check_layers,
     "seam": check_emulator_seam,
     "listeners": check_listeners,
+    "exports": check_exports,
     "titles": check_title_adds,
     "shell": check_shell,
     "markup": check_markup,

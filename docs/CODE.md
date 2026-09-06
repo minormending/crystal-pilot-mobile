@@ -106,7 +106,7 @@ of the subtleties in sections 6 and 7.
 
 ## 2. The shape of it
 
-<!-- covers-api: app/main.js gen2/journey.js titles/crystal.js gen2/tasks.js gen2/nav.js gen2/world.js gen2/collision.js gen2/state.js gen2/romdata.js gen2/symbols.js gbcore/gb.js @ 823ab00e9e83 -->
+<!-- covers-api: app/main.js gen2/journey.js titles/crystal.js gen2/tasks.js gen2/nav.js gen2/world.js gen2/collision.js gen2/state.js gen2/romdata.js gen2/symbols.js gbcore/gb.js @ df2e8d85bd9d -->
 
 Twenty-seven modules, in four directories, and the directories are the design:
 **an import may point down this list and never up.**
@@ -321,7 +321,7 @@ was cheaper than moving the boundary.
 
 ### `gb.js` — the emulator
 
-<!-- covers: gbcore/gb.js @ 2fdb0564b101 -->
+<!-- covers: gbcore/gb.js @ 1e81443546a7 -->
 
 Wraps WasmBoy. Runs frames, reads work RAM, holds and releases buttons.
 
@@ -518,7 +518,7 @@ the ROM, not shipped as a copy, so they cannot drift from the build being driven
 
 ### `collision.js` — what you can walk on
 
-<!-- covers: gen2/collision.js @ d41a76b3960e -->
+<!-- covers: gen2/collision.js @ adf086cff308 -->
 
 Decodes the loaded map into "can I stand on this tile", and does breadth-first
 pathfinding over the result. This is what turns walking from trial and error
@@ -611,7 +611,7 @@ Route 30's door to it at `(17,5)`.
 
 ## 4. Taking one step, and planning a walk
 
-<!-- covers: gen2/nav.js gen2/collision.js @ 7f29dce13157 -->
+<!-- covers: gen2/nav.js gen2/collision.js @ e54161ead38d -->
 
 ### One step
 
@@ -841,7 +841,7 @@ eight kilobytes a full snapshot copies, which is worth keeping distinct.
 
 ## 6. Battles
 
-<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 16529daa80e0 -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 19fa4e92b8b2 -->
 
 ### Is it our turn?
 
@@ -1249,7 +1249,7 @@ running the thing.
 
 ## 7b. Saving, and getting the save out
 
-<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 16529daa80e0 -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 19fa4e92b8b2 -->
 
 ```mermaid
 flowchart TD
@@ -1356,7 +1356,16 @@ Tackle and Leer. Two emulators, two implementations, one save file.
 
 ## 7c. Slots, undo, and bringing a save in
 
-<!-- covers: gbcore/saves.js @ def66f02d439 -->
+<!-- covers: gbcore/saves.js @ c7ab145f2ff7 -->
+
+**There is one way to load a slot, and that is the point.** `loadSlot` in
+`main.js` reads the record, refuses it if its ROM fingerprint is not this
+cartridge's, and installs the bytes. `Saves` used to offer a `restore(slot)`
+beside it that did the same three steps *minus the refusal* — and nothing called
+it, so nothing exercised it, so it stayed as the fourth audit pass had found the
+code before that pass fixed it. Found by coverage, in the module the tests run
+least of, and deleted rather than patched: two ways to load a slot is what made
+one of them wrong in the first place.
 
 Three slots a person picks, plus an undo point the pilot writes before every
 job and the game a handoff replaced, if there is one — five records. A slot
@@ -3432,7 +3441,7 @@ about that code did not.
 
 ### The other checks
 
-<!-- covers: tools/check-app @ 105f55f6bcb6 -->
+<!-- covers: tools/check-app @ b80b74333892 -->
 
 `tools/check-app` runs everything that can be verified without a ROM:
 
@@ -3458,6 +3467,8 @@ tools/check-app contrast     # or one group
 | `names` | every capitalised name a module uses is imported or declared there |
 | `moves` | the moves that would knock out what you are catching stay out of weakening |
 | `symbols` | every symbol the app looks up is one it can hand to another device |
+| `listeners` | a `document` or `window` listener is added once, or removed again |
+| `exports` | nothing is exported that nothing outside the module reads |
 
 Half of that table was missing until the marker above was added: six groups had
 been written and never listed, so the document described five checks while

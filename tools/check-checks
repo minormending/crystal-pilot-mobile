@@ -76,6 +76,9 @@ def mutations(root):
         "seam": lambda: edit("gen2/state.js", append("\n// probe: gb.core.thing()\n")),
         # Indented, so inside something, and an inline arrow that nothing can
         # take off again -- exactly the shape startLoop had.
+        # An export with no reader anywhere -- the shape saves.restore had.
+        "exports": lambda: edit("gen2/state.js", append(
+            "\nexport const probeNobodyReads = 1;\n")),
         "listeners": lambda: edit("app/rows.js", append(
             "\nexport function probe() {\n"
             "  document.addEventListener('visibilitychange', () => {});\n"
