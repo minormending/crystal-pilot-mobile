@@ -215,13 +215,29 @@ test('an older cache cannot answer for this version', async (t) => {
                   'the stale cache is not consulted');
 });
 
-test('a cache-busting query still matches the file it asks for', async (t) => {
-  // The version check appends `?cb=` to defeat HTTP caching. SHELL_PATHS is
-  // compared by pathname so that request is still recognised as the shell.
-  const w = worker({ net: () => reply('v140') });
+test('a query string does not stop a shell file being recognised', async (t) => {
+  // SHELL_PATHS compares pathname rather than href, which sw.js explains as
+  // letting a cache-busting query still match. Worth saying plainly: nothing in
+  // the app appends one today, so this is defensiveness rather than a live
+  // caller -- but it is the behaviour the file promises, and a switch to href
+  // would break it silently.
+  const w = worker({ net: () => reply('v141') });
   const res = await w.fetched(request(BASE + 'gbcore/version.js?cb=12345'));
-  t.ne(res, null, 'the worker answers it');
-  t.eq(res.body, 'v140', 'from the network, as it should');
+  t.ne(res, null, 'the worker still answers it');
+  t.eq(res.body, 'v141', 'from the network, as it should');
+});
+
+test('the worker never answers for itself, which is how updates are seen',
+     async (t) => {
+  // Load-bearing, and easy to break by adding one line to SHELL. `showVersion`
+  // fetches ./sw.js to read the deployed cache name and compare it against the
+  // running one -- so a worker that served itself from its own cache would
+  // report the running version as the live one, for ever, and the Update button
+  // would never appear. It is the one same-origin GET this file deliberately
+  // declines.
+  const w = worker({ net: () => reply('const CACHE = \'crystal-pilot-v999\';') });
+  t.eq(await w.fetched(request(BASE + 'sw.js')), null, 'passed to the network');
+  t.false(SRC.includes("'./sw.js'"), 'and it is not in the shell list');
 });
 
 test('a worker that cannot open its cache still serves the app', async (t) => {

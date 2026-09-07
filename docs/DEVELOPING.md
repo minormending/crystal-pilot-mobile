@@ -17,7 +17,7 @@ flowchart LR
     E[an edit] --> H{{".githooks/pre-commit"}}
     H --> T["./run-tests<br/>143 behaviour tests"]
     H --> C["tools/check-app<br/>17 groups"]
-    H --> D["tools/docs-check<br/>24 tracked sections"]
+    H --> D["tools/docs-check<br/>25 tracked sections"]
     T --> OK[commit]
     C --> OK
     D --> OK
@@ -117,9 +117,9 @@ section gives. Everything by hand runs against a local build.
 
 ```mermaid
 flowchart BT
-    C["the app"] --> T["./run-tests<br/>161 behaviour tests"]
+    C["the app"] --> T["./run-tests<br/>175 behaviour tests"]
     C --> A["tools/check-app<br/>17 groups"]
-    C --> D["tools/docs-check<br/>24 tracked sections"]
+    C --> D["tools/docs-check<br/>25 tracked sections"]
     C --> V["tools/coverage<br/>what the suite never runs"]
     T --> M{{"mutation testing<br/>change a line, see who notices"}}
     A --> K["tools/check-checks<br/>break each group's own subject"]
@@ -158,8 +158,16 @@ that the list is short enough to read.
 Two limits worth knowing before reading the number. `saves.js` is bound to
 IndexedDB and cannot run in this harness at all, so its figure will not move
 without a dependency this repository does not want. And `app/main.js` is not in
-the table: it needs a DOM, so the four fixes the thirteenth pass made there were
-verified in a browser rather than by a test.
+the table: it needs a DOM, so the fixes the thirteenth and fifteenth passes made
+there were verified in a browser rather than by a test.
+
+`sw.js` **is** in the table, at 100%, and the difference is worth knowing because
+it is a way round the DOM problem. The worker is not a module and never will be,
+so it is loaded the way the browser loads it — evaluated in a `vm` context
+holding fakes for the four globals it uses. The code under test is the deployed
+file byte for byte, and the vm script is given its real filename so V8 attributes
+the coverage to `sw.js` rather than to `evalmachine.<anonymous>`, which is what
+it does otherwise.
 
 ### Are the checks still checking?
 

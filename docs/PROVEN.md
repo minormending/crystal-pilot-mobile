@@ -406,6 +406,8 @@ exactly why nothing failed.
 | 14 | the save flow closed the menu it had just counted, and recovered by timing out | a save | **measuring what never runs** |
 | 14 | the menu's stated reason for reading the cursor was not true of the cartridge | a save | measuring what never runs |
 | 14 | a second way to load a slot, without the refusal the first one has | nothing — that was the trouble | measuring what never runs |
+| 15 | the worker broke the app outright wherever storage was unavailable | a private window | **testing the offline promise** |
+| 15 | Join re-enabled a button nothing had disabled, so a double tap joined twice | tapping twice | testing the offline promise |
 
 Five things in that table are worth more than the individual rows.
 
@@ -416,12 +418,12 @@ device, a second cartridge, a second Pokémon. What it measures is how much of
 the world you have to *arrange*, not how much you have to own: the fifth pass
 needed no hardware at all, only a party with a corpse in slot one.
 
-**Exactly one of the forty-one was caught by a check**, and only after the fix
+**Exactly one of the forty-three was caught by a check**, and only after the fix
 had decided what to look for: the wiring group named the four modules still
 importing constants that had just been deleted. One more was caught by a *test*,
 and only because the test hung — the obvious `continue` for the party prompt
 advanced nothing in a loop bounded by balls thrown. That is the honest weight to
-give this repository's seventeen check groups and 161 tests: they hold a fix
+give this repository's seventeen check groups and 175 tests: they hold a fix
 down, and they catch the fix that is itself wrong. They do not find the fault.
 
 **Measuring also rules things out, which is half of what it is for.** The
@@ -602,6 +604,52 @@ installed over the one that did. So the dead copy was the pre-audit version of a
 live operation, sitting under an inviting name, unexercised and therefore unable
 to drift back into agreement. Nothing that reads code finds that, because
 nothing about it looks wrong. What finds it is asking what never runs.
+
+**The fifteenth pass tested the one thing this app promises.** *It runs with no
+signal* is the reason `sw.js` exists, and `sw.js` had no tests — 5KB of decisions
+that only show themselves on a bad network, two of them fixes the eighth pass had
+to find by reading, because nothing would ever have caught them going.
+
+Verified first on the live deploy, which is the only place a service worker would
+register: plain-HTTP localhost is refused, HTTPS is not, and the control run
+against `minormending.github.io` settled that it was the origin rather than the
+app. There the worker is active, and its cache holds **all 37 shell entries, each
+a non-empty un-redirected 200, 905KB in total, with nothing from `dev/` or any
+game file in it**. The only path the page asks for and does not have cached is
+`sw.js` itself, which is correct and load-bearing — a worker that served itself
+from its own cache would report the running version as the live one for ever, and
+the Update button would never appear.
+
+Then the file itself, in a `vm` context holding fakes for the four globals it
+uses, so the code under test is the deployed worker byte for byte. Thirteen
+tests, and the two that matter most are the eighth pass's fixes: removing the
+redirect guard fails the captive-portal test, removing the shell gate fails the
+ROM test, and unscoping the cache lookup fails the stale-cache test.
+
+**And writing them found the one way a service worker can leave an app worse off
+than not having one.**
+
+```mermaid
+flowchart TD
+    R["a request for a shell file"] --> O{"caches.open"}
+    O -- "resolves" --> N["network first,<br/>cache as the fallback"]
+    O -- "rejects — private window,<br/>site data blocked, no quota" --> B["<b>before:</b> respondWith rejects<br/>→ every shell file fails<br/>→ no app at all"]
+    O -- "rejects" --> A["<b>now:</b> hand it to the network<br/>→ exactly what would happen<br/>if this file were never installed"]
+```
+
+`caches.open` sat outside the error handling. It can reject — a private window,
+an origin whose site data the browser has been told to block, a device out of
+quota — and then the whole response rejected and every shell file failed to load,
+on a device where the app would have worked perfectly with no worker registered.
+The fix is to stand aside rather than to try harder, which is the same rule
+`room.js` states for itself: *nothing here may be able to break the app.*
+
+The pass's second finding is the thirteenth pass's shape again, one layer out.
+`joinWith` re-enabled its button in a `finally` — and nothing had ever disabled
+it. That is what made it invisible: the function reads as though the press were
+guarded, and `Share` a few lines above genuinely is. Measured with a double tap
+on a code that does not exist: two joins ran and the room answered twice. One
+now.
 
 **The two worst were silent data loss**, and both were doors the app opens by
 itself. Every door a *person* opens was already locked and had been for

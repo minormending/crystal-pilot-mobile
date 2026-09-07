@@ -26,7 +26,8 @@ const SHELL = [
 // The shell as paths, for the fetch handler to match against. Resolved once,
 // relative to this worker -- which sits at the app root, so './' is the root
 // itself. Compared by pathname rather than by href so a cache-busting query
-// still matches the file it is asking for.
+// still matches the file it is asking for -- defensively: nothing in the app
+// appends one today, and a switch to href would break that in silence.
 const SHELL_PATHS = new Set(SHELL.map((p) => new URL(p, self.location).pathname));
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
