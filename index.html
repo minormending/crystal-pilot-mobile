@@ -878,6 +878,14 @@
       </div>
       <button class="jgo" id="heal" disabled>Go</button>
     </div>
+
+    <div class="job" id="job-travel">
+      <div class="what">
+        <span class="jname">Travel</span>
+        <span class="jstate" id="travelstate">—</span>
+      </div>
+      <button class="jgo" id="travel" disabled>Walk</button>
+    </div>
     </div>
 
     <p class="offerhint" id="offerhint"></p>
@@ -885,6 +893,14 @@
     <div class="param" id="pick">
       <span class="lvlabel">Look for</span>
       <div class="chips" id="species"></div>
+    </div>
+
+    <!-- Built from the map graph, so the list is what this cartridge can
+         actually reach from where the player is standing. Empty on a cartridge
+         nobody has named, and then neither this nor the row above it is drawn. -->
+    <div class="param" id="wheretogo" hidden>
+      <span class="lvlabel">Walk to</span>
+      <div class="chips" id="places"></div>
     </div>
 
     <div class="levels" id="levels" hidden>

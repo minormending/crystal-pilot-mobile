@@ -31,7 +31,7 @@ const OPTS_KEY = 'crystal-pilot-opts';
 // rather than derived because it has to survive a reload: it is what orders
 // this device's choices against another device's, and a stamp invented at load
 // time would make every reload look like a fresh decision.
-const OPT_KEYS = ['speed', 'grind', 'hunt', 'at'];
+const OPT_KEYS = ['speed', 'grind', 'hunt', 'travel', 'at'];
 
 function store(given) {
   if (given) return given;
@@ -57,7 +57,7 @@ function store(given) {
  * record than a number to be salvaged.
  */
 export function sanitise(raw, { speeds = 0, grinds = [] } = {}) {
-  const out = { speed: null, grind: null, hunt: null, at: 0 };
+  const out = { speed: null, grind: null, hunt: null, travel: null, at: 0 };
   if (!raw || typeof raw !== 'object') return out;
   // A stamp, not a date: anything that is not a positive finite number is no
   // ordering at all, and 0 loses to every real choice, which is the safe way
@@ -74,6 +74,13 @@ export function sanitise(raw, { speeds = 0, grinds = [] } = {}) {
   // This one is only keeping something absurd out of the app.
   if (typeof raw.hunt === 'string' && raw.hunt.length > 0 && raw.hunt.length <= 24) {
     out.hunt = raw.hunt;
+  }
+  // A map key, which is one byte of group and one of number -- so the range is
+  // the range, and anything outside it is another build's record rather than a
+  // place. Whether it can be *reached* is asked where the list is built, for
+  // the same reason the hunted species is: that answer changes as you walk.
+  if (Number.isInteger(raw.travel) && raw.travel > 0 && raw.travel <= 0xffff) {
+    out.travel = raw.travel;
   }
   return out;
 }

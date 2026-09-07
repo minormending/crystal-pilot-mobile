@@ -35,6 +35,16 @@ let symbols = null, state = null, tasks = null, romBytes = null;
 let collision = null, nav = null, romdata = null, boot = null, title = null;
 let world;
 let huntWanted = null;
+// Where Travel would walk to, as a map key. Held here rather than in the
+// title, because it is a choice somebody made on this page and not a fact about
+// the cartridge -- the same reason `huntWanted` and `target` live here.
+let travelTo = null;
+let travelPlaces = [];
+// How many species the encounter tables give for where we are standing, at this
+// hour. The offers list needs it to know whether the species picker has
+// anything in it -- a row that waits on a choice has to be drawn for the choice
+// to be makeable, and the picker is drawn with the row.
+let huntable = 0;
 let ballId = null;
 // Frames advanced per animation frame while nobody is driving. The steps are
 // powers of two because that is how it reads: 1x, 2x, 4x... and the last one is
@@ -1433,6 +1443,7 @@ const JOB_ROWS = {
   hunt: ['#huntstate', '#hunt', '#job-hunt'],
   catch: ['#catchstate', '#catch', '#job-catch'],
   heal: ['#healstate', '#heal', '#job-heal'],
+  travel: ['#travelstate', '#travel', '#job-travel'],
 };
 
 function paintJobs(s) {
@@ -1441,6 +1452,7 @@ function paintJobs(s) {
   // nobody has described has no such walk.
   const ctx = { rom: romdata, target, huntWanted, ballId, savedThisSession,
                 healPlace, canFetch: typeof boot.eggErrand === 'function',
+                places: travelPlaces, travelTo, huntable,
                 engine: state.e };
   const rows = describeRows(s, ctx);
   const offers = describeOffers(s, ctx);
@@ -1471,6 +1483,10 @@ function paintJobs(s) {
   const picking = offers.rank.hunt !== undefined || offers.rank.catch !== undefined;
   $('#pick').hidden = !picking;
   $('#seen').hidden = !picking;
+  // Shown with the row that reads it and hidden with it, the same rule the
+  // species picker and the level presets follow: a control for a job that is
+  // not on the list is a control for nothing.
+  $('#wheretogo').hidden = offers.rank.travel === undefined;
   $('#levels').hidden = !rows.grind.levels || offers.rank.grind === undefined;
 
   // The battle's own two actions, beside the pad rather than behind the door.
@@ -1524,6 +1540,7 @@ async function refresh() {
     ? s.party.map(monRow).join('')
     : '<span class="seen">no party yet</span>';
   await refreshSpecies(s);
+  await refreshPlaces(s);
   if (romdata) refreshBag(s);
   // Remembered so the relative presets have something to be relative to.
   lastLead = s.party.length ? s.party[0].level : null;
@@ -1808,6 +1825,7 @@ async function refreshSpecies(s) {
   if (key === speciesKey) return;
   speciesKey = key;
   const here = romdata.wildOn(s.map[0], s.map[1], tod);
+  huntable = here.length;
   const list = $('#species');
   list.textContent = '';
   if (!here.length) {
@@ -1843,6 +1861,61 @@ async function refreshSpecies(s) {
 function markSpecies(list) {
   for (const b of list.children) {
     b.classList.toggle('on', b.textContent === huntWanted);
+  }
+}
+
+// The map the destination list was built for. Rebuilt when that changes and not
+// otherwise: the graph search is cheap but the list is chips somebody may be
+// mid-tap on, and rebuilding it under a thumb loses the press.
+let placesKey = '';
+
+/**
+ * Offer the places this cartridge can be walked to from here.
+ *
+ * Which places those are is the journey's answer, not this function's -- see
+ * `placesFrom`. What happens here is only the drawing of it, plus one decision
+ * that belongs to the interface: a destination that has gone out of reach stops
+ * being the chosen one. Walking changes the answer, and a button reading
+ * "Cherrygrove City · two maps away" for a place the graph can no longer route
+ * to is a button that would fail on being pressed.
+ */
+async function refreshPlaces(s) {
+  if (!boot || typeof boot.placesFrom !== 'function') return;
+  const here = s.map[0] * 256 + s.map[1];
+  if (String(here) === placesKey) return;
+  placesKey = String(here);
+  travelPlaces = boot.placesFrom(here);
+  const list = $('#places');
+  list.textContent = '';
+  for (const place of travelPlaces) {
+    const b = document.createElement('button');
+    b.textContent = place.name;
+    b.onclick = () => {
+      travelTo = place.key;
+      saveOption({ travel: place.key });
+      markPlaces();
+      refresh();
+    };
+    list.appendChild(b);
+  }
+  // Whatever was chosen may not be reachable from where we now stand.
+  if (travelTo !== null && !travelPlaces.some((pl) => pl.key === travelTo)) {
+    travelTo = null;
+  }
+  // Last session's destination, but only where it can still be walked to and
+  // only when nothing is chosen -- so this restores a choice and never
+  // overrides one. Same rule as the hunted species above.
+  if (travelTo === null && wanted.travel
+      && travelPlaces.some((pl) => pl.key === wanted.travel)) {
+    travelTo = wanted.travel;
+  }
+  markPlaces();
+}
+
+function markPlaces() {
+  for (const b of $('#places').children) {
+    const place = travelPlaces.find((pl) => pl.name === b.textContent);
+    b.classList.toggle('on', !!place && place.key === travelTo);
   }
 }
 
@@ -2188,6 +2261,31 @@ $('#heal').onclick = async () => {
   await runTask('#heal', 'off to heal', () => boot.healNow());
 };
 
+/**
+ * Walk to somewhere else on the map.
+ *
+ * `travelTo` is the only job here that does nothing when it arrives, which is
+ * the point of it: everything else in this list is a job with a destination
+ * attached, and this is the destination on its own. It reports where it got to
+ * either way, because a route that stops halfway leaves you somewhere you did
+ * not choose and the header alone does not say how you got there.
+ */
+$('#travel').onclick = async () => {
+  if (!boot || travelTo === null) return;
+  const place = travelPlaces.find((pl) => pl.key === travelTo);
+  const name = place ? place.name : boot.where(travelTo);
+  await runTask('#travel', `walking to ${name}`, async () => {
+    const r = await boot.travelTo(travelTo);
+    // `travelTo` answers with its own message, and the ones it gives for a
+    // refusal already name the map -- "could not leave Route 29 going LEFT".
+    // What it does not say is where you ended up, which is the only thing left
+    // worth knowing after a walk that did not finish.
+    if (r.ok) return { ok: true, message: `arrived at ${name}` };
+    const now = await describeGame();
+    return { ok: false, message: `${r.message} — stopped at ${now.where}` };
+  });
+};
+
 $('#door').onclick = () => showPanel(panel === 'menu' ? null : 'menu');
 $('#gear').onclick = () => showPanel(panel === 'settings' ? null : 'settings');
 // The log's card starts empty, and nothing paints it until a job runs.
@@ -2398,6 +2496,13 @@ function applyWanted() {
     // re-select *through* that rule rather than around it.
     huntWanted = null;
     speciesKey = '';
+  }
+  // The same treatment, for the same reason: whether a place can be reached
+  // from where this device is standing is refreshPlaces' rule, and the other
+  // device was somewhere else when it chose.
+  if (wanted.travel !== travelTo) {
+    travelTo = null;
+    placesKey = '';
   }
 }
 

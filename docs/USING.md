@@ -320,6 +320,37 @@ Two bugs surfaced while measuring that, both from walking into people:
   matches the disassembly's `object_event` lists on Route 29 and Route 30, in
   order.
 
+## Travel: take me somewhere else
+
+Tap to walk moves you around the map you are standing on. **Travel** walks you
+to a different one — through doors, off the edges of routes, across as much of
+Johto as the cartridge joins up.
+
+The list under the row is not written down anywhere. It is the map graph read
+out of your ROM, filtered to the places this cartridge's profile has names for,
+filtered again to the ones actually reachable from where you are standing, and
+sorted so the nearest is first. Standing in Elm's lab it offers nine places and
+says *downstairs · one map away*; walk downstairs and the list rebuilds without
+*downstairs* in it and with *Elm's lab* added.
+
+| it says | what that means |
+| --- | --- |
+| **pick a place below** | the row is waiting on a choice; the chips are under the offers |
+| **Route 29 · two maps away** | the route the graph found is two legs long — a leg is a door or an edge |
+| **nowhere named to walk to** | this cartridge has no named maps, so the row is not drawn at all |
+| **finish the battle first** | walking needs the overworld |
+
+Two things it deliberately does not do. It does not offer a place it cannot
+reach — a chosen destination that goes out of range as you move stops being
+chosen, because a button that would fail on being pressed is worse than no
+button. And it does not offer numbers: a cartridge nobody has written a profile
+for has no list here, the same way it has no scripted intro and no ball errand.
+
+Like every job it takes an undo point first, so one press of **Undo** puts you
+back where you started. If a leg fails it says which and where it stopped —
+*could not leave Route 29 going LEFT — stopped at Route 29* — because a route
+that gives up halfway leaves you somewhere you did not choose.
+
 ## Two places to heal
 
 Elm has a healing machine in his lab, and it works from the moment you take a
@@ -508,7 +539,7 @@ deployed, which is not the question you are asking when a bug you saw fixed is
 still in front of you. `tools/check-app` asserts that number matches the service
 worker's cache name, because a version display that lies is worse than none.
 
-<!-- covers: sw.js @ 8633edbe958f -->
+<!-- covers: sw.js @ acbff8c5fa8e -->
 
 The worker fetches **network first, falling back to the cache**. That is the
 opposite of the usual offline-first advice, on purpose.

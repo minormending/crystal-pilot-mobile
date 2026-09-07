@@ -108,6 +108,7 @@ rule in that order is a fact about the game rather than a preference:
 | someone has fainted | Heal | it is what stops every other job finishing |
 | a species is picked | Catch, Hunt | the specific intent beats the general one |
 | otherwise | Grind | the job that needs nothing but a party |
+| last of the five | Travel | a place is still there in a minute |
 
 Healing drops back below the jobs when the party is merely scratched, which is
 the same rule read the other way. The accent follows whatever ranks first: it
@@ -121,15 +122,43 @@ Catch's empty state instead, so the row that says you need balls is the row that
 fetches them, and that row stays on the list when the only thing missing is the
 balls. Hiding it would hide the way out of the state it describes.
 
+**And a row earns its place while it is waiting to be chosen for**, which was
+missing and was a dead end rather than an untidiness. The pickers under the list
+— the species chips, the level presets, the destinations — are drawn only when
+the row that reads them is *on* the list. So a row that appears only once a
+choice has been made can never be chosen for.
+
+Measured with Poké Balls in the bag and no species picked: the offers were
+`{grind}` alone, the species picker was not drawn, and the line underneath still
+read *pick something below to hunt or catch*. Nothing below. Hunt and Catch were
+both unreachable for the rest of the session — and that state is exactly what
+running the ball errand leaves you in. Catch had a version of this rule already,
+for the *no* balls case, which is why the empty bag worked and the full one did
+not. Travel walked into the same trap the day it was added, which is how it was
+found.
+
 One quiet line survives the cull. It says what would *add* to the list, and only
 when there is something to do about it — *most jobs need a Pokémon with you*,
-*pick something below to hunt or catch*. Two clauses at most, and silence when
+*pick something below to hunt or catch*, *or a place to walk to*. That last
+condition is doing real work: the picker line used to be printed whenever no
+species was chosen, which indoors — Elm's lab, a Pokémon Center, anywhere with
+no encounter table — pointed at a picker reading *nothing wild appears here* and
+asked you to choose from it. Two clauses at most, and silence when
 the reason a job is missing is that nothing is wrong: "everyone is at full
 health" is the good state, and a line explaining the absence of an offer nobody
 wanted is the noise all of this removes.
 
 Measured in the bedroom of a new game, where one job of six can run: the card
 went from 603px to 260px.
+
+**Travel is the one offer with no job in it.** Every other row is a task with a
+destination attached; this is the destination on its own, and its list is not
+written down anywhere — it is your ROM's map graph, filtered to the places this
+cartridge's profile names, filtered again to the ones reachable from where you
+stand, sorted nearest first. Walk somewhere and the list rebuilds: standing in
+Elm's lab it offers *downstairs · one map away*, and from downstairs that entry
+is gone and *Elm's lab* has appeared. A cartridge nobody has described has no
+list and no row, the same way it has no scripted intro.
 
 Two other things went in the same pass, further back. *Pick one to look for* was
 a filled accent primary button that was disabled and did nothing, sitting below
@@ -467,4 +496,4 @@ So this page carries a marker naming the files it describes and the hash they
 had when it was last read against them. `tools/docs-check` reports it when they
 move, and the pre-commit hook blocks on that report.
 
-<!-- covers: index.html app/main.js app/rows.js @ 5a03f228c672 -->
+<!-- covers: index.html app/main.js app/rows.js @ ba634ef0f427 -->

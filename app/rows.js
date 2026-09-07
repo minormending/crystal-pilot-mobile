@@ -18,10 +18,14 @@
  *   ballId            the ball to throw, or null when there are none
  *   savedThisSession  whether this tab has committed a save
  *   healPlace         where healing would go, worked out once per refresh
+ *   places            named maps reachable from here, [{ key, name, legs }]
+ *   travelTo          the map key chosen to walk to, or null
+ *   huntable          how many species appear here at this hour
  */
 export function describeRows(s, ctx = {}) {
   const { rom = null, target = 5, huntWanted = null, ballId = null,
           savedThisSession = false, healPlace = null,
+          places = [], travelTo = null,
           // The cartridge's own numbers. A party of six and a trainer battle of
           // 2 are Gen 2's, not this module's, and reading them from an import
           // meant the stock values reached here even when a title had changed
@@ -51,6 +55,9 @@ export function describeRows(s, ctx = {}) {
   const afoot = s.worldLoaded && !s.inBattle;
   const canCatchHere = s.inBattle && !trainer && !!ballId
                        && s.party.length < maxParty;
+  // Indexed once, because the row asks about the chosen place twice and the
+  // list is the journey's answer rather than something to search repeatedly.
+  const byKey = new Map(places.map((pl) => [pl.key, pl]));
 
   return {
     grind: {
@@ -109,7 +116,28 @@ export function describeRows(s, ctx = {}) {
           : 'everyone is at full health',
       enabled: afoot && hurt.length > 0,
     },
+    // Walking somewhere else, which the pilot could always do and was never
+    // asked to. `places` is what the journey says is reachable and named from
+    // here; an empty list means this cartridge has no names, and the row is not
+    // drawn at all -- the rule the scripted intro and the errand already follow.
+    travel: {
+      text: s.inBattle ? 'finish the battle first'
+        : !places.length ? 'nowhere named to walk to'
+        : travelTo && byKey.has(travelTo)
+          ? `${byKey.get(travelTo).name} · ${legsWord(byKey.get(travelTo).legs)}`
+          : 'pick a place below',
+      enabled: afoot && !!travelTo && byKey.has(travelTo),
+      places,
+    },
   };
+}
+
+/** "one map away", "three maps away" -- a cost somebody can feel. */
+function legsWord(legs) {
+  const words = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven',
+                 'eight', 'nine', 'ten'];
+  const n = words[legs] || String(legs);
+  return `${n} map${legs === 1 ? '' : 's'} away`;
 }
 
 /**
@@ -144,7 +172,11 @@ export function describeOffers(s, ctx = {}) {
   // wrong shape for the only two actions that are ever modal.
   const order = [];
   if (fainted) order.push('heal');
-  order.push('catch', 'hunt', 'grind', 'heal');
+  // Travel sits below the jobs and above nothing: it is the one offer that is
+  // never urgent -- a place is still there in a minute -- and it is also the
+  // only one somebody reaches for while *not* mid-task, so burying it would be
+  // wrong too. Last of the five, drawn whenever there is somewhere to go.
+  order.push('catch', 'hunt', 'grind', 'heal', 'travel');
 
   const offered = [];
   for (const key of order) {
@@ -154,9 +186,27 @@ export function describeOffers(s, ctx = {}) {
     // way out of the very state it describes. On a cartridge with no errand
     // there is no way out, so the row goes -- an offer whose only action does
     // not exist is worse than an absence, and the hint says what is missing.
-    const usable = rows[key].enabled
-                   || (key === 'catch' && rows.catch.needsBalls && afoot
-                       && ctx.canFetch !== false);
+    let usable = rows[key].enabled
+                 || (key === 'catch' && rows.catch.needsBalls && afoot
+                     && ctx.canFetch !== false);
+    // A row also earns its place while it is *waiting on a choice that can be
+    // made here*, and leaving that out was a dead end rather than an
+    // untidiness. The picker below the list is drawn only when the row that
+    // reads it is on the list -- so a row that appears only once a choice is
+    // made can never be chosen for.
+    //
+    // Measured: with Poké Balls in the bag and no species picked, the rank was
+    // `{grind:1}`, the species picker was hidden, and the hint underneath still
+    // read "pick something below to hunt or catch". Nothing below. Hunt and
+    // Catch were both unreachable for the rest of the session -- and that state
+    // is exactly what running the ball errand leaves you in. Catch had a
+    // version of this rule already, for the no-balls case, which is why the
+    // no-balls path worked and the has-balls one did not.
+    if (!usable && afoot) {
+      if (key === 'hunt') usable = (ctx.huntable || 0) > 0;
+      if (key === 'catch') usable = (ctx.huntable || 0) > 0 && !!ctx.ballId;
+      if (key === 'travel') usable = rows.travel.places.length > 0;
+    }
     if (usable) offered.push(key);
   }
 
@@ -175,7 +225,20 @@ export function describeOffers(s, ctx = {}) {
   if (afoot && ctx.huntWanted && ctx.canFetch === false && rows.catch.needsBalls) {
     hint.push('catching needs Poké Balls, and this build cannot fetch them');
   }
-  if (afoot && !ctx.huntWanted) hint.push('pick something below to hunt or catch');
+  // Only where there is in fact something below. The line used to be
+  // unconditional on "no species chosen", which pointed at a picker that is
+  // hidden whenever neither Hunt nor Catch is on the list -- see the ranking
+  // above, which is where that is now fixed rather than papered over here.
+  if (afoot && !ctx.huntWanted && (ctx.huntable || 0) > 0) {
+    hint.push('pick something below to hunt or catch');
+  }
+  // Only when the row is drawn and waiting on a choice. A cartridge with no
+  // named places has no row and no hint -- there is nothing to do about it from
+  // here, and saying so would be nagging about a file somebody else has to
+  // write.
+  if (afoot && rows.travel.places.length && !ctx.travelTo) {
+    hint.push('or a place to walk to');
+  }
   return {
     offered,
     rank: Object.fromEntries(offered.map((key, i) => [key, i + 1])),

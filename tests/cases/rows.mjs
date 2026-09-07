@@ -330,9 +330,18 @@ test('the catch row survives having no balls, because it holds the errand',
 });
 
 test('the hint only names things there is something to do about', async (t) => {
-  const empty = offers({});
+  const empty = offers({}, { huntable: 4 });
   t.contains(empty.hint, 'need a Pokémon', 'no party is worth saying');
   t.contains(empty.hint, 'pick something', 'so is the picker below');
+
+  // And not where there is nothing to pick. This used to be said unconditionally
+  // whenever no species was chosen, which indoors -- Elm's lab, a Pokémon
+  // Center, anywhere with no encounter table -- pointed at a picker holding
+  // "nothing wild appears here" and asked somebody to choose from it.
+  const indoors = offers({}, { huntable: 0 });
+  t.false(indoors.hint.includes('pick something'),
+          'nowhere with anything wild in it, so nothing to pick');
+  t.contains(indoors.hint, 'need a Pokémon', 'the rest of the line stands');
 
   const chosen = offers({ party: [{ species: CYNDAQUIL, level: 5, hp: 20, maxHp: 20 }] },
                         { huntWanted: 'SENTRET' });
@@ -476,4 +485,65 @@ test('a cartridge that cannot fetch balls does not offer a catch it cannot run',
                                 canFetch: false });
   t.true(armed.offered.includes('catch'), 'balls in the bag need no errand');
   t.eq(armed.hint, '', 'and nothing is missing, so nothing is said');
+});
+
+// --- travel -----------------------------------------------------------------
+
+const PLACES = [
+  { key: 26 * 256 + 1, name: 'Cherrygrove City', legs: 1 },
+  { key: 26 * 256 + 2, name: 'Route 30', legs: 3 },
+];
+const PARTY = { party: [{ hp: 20, maxHp: 20, species: CYNDAQUIL, level: 5 }] };
+const FIGHTING = { ...PARTY, battleMode: 1, enemy: { species: PIDGEY, level: 3 } };
+
+test('travel names the place and what the walk will cost', async (t) => {
+  const none = look(PARTY, { places: PLACES }).travel;
+  t.eq(none.text, 'pick a place below', 'with nothing chosen it asks');
+  t.false(none.enabled, 'and will not walk');
+
+  const near = look(PARTY, { places: PLACES, travelTo: PLACES[0].key }).travel;
+  t.eq(near.text, 'Cherrygrove City · one map away', 'singular for one leg');
+  t.true(near.enabled, 'and it can go');
+
+  const far = look(PARTY, { places: PLACES, travelTo: PLACES[1].key }).travel;
+  t.eq(far.text, 'Route 30 · three maps away', 'and plural beyond that');
+});
+
+test('a cartridge with no named places offers no travel at all', async (t) => {
+  // The rule the scripted intro and the ball errand follow: a row full of
+  // `map 26.4` is a data dump, not an offer.
+  const row = look(PARTY, { places: [] }).travel;
+  t.eq(row.text, 'nowhere named to walk to', 'it says so if asked');
+  t.false(row.enabled, 'and cannot be pressed');
+  const o = offers(PARTY, { places: [] });
+  t.eq(o.rank.travel, undefined, 'and the row is not drawn');
+  t.false(o.hint.includes('walk to'),
+          'nor nagged about — there is nothing to be done about it from here');
+});
+
+test('a place that has gone out of reach is not still offered', async (t) => {
+  // Walking changes the answer. A chosen key no longer in the list would be a
+  // button that fails on being pressed.
+  const row = look(PARTY, { places: PLACES, travelTo: 999 }).travel;
+  t.eq(row.text, 'pick a place below', 'it falls back to asking');
+  t.false(row.enabled, 'rather than offering a walk it cannot make');
+});
+
+test('travel is last of the five, and gone in a battle', async (t) => {
+  const rank = offers(PARTY, { places: PLACES, travelTo: PLACES[0].key,
+                               ballId: POKE_BALL, huntWanted: 'PIDGEY' }).rank;
+  t.eq(rank.travel, 4, 'below the jobs, because a place is still there later');
+
+  const fighting = offers(FIGHTING, { places: PLACES, travelTo: PLACES[0].key });
+  t.eq(fighting.rank.travel, undefined, 'and not offered mid-battle');
+  t.eq(look(FIGHTING, { places: PLACES, travelTo: PLACES[0].key }).travel.text,
+       'finish the battle first', 'which the row says if it is looked at');
+});
+
+test('the hint offers a place only while one is worth picking', async (t) => {
+  t.contains(offers(PARTY, { places: PLACES }).hint, 'a place to walk to',
+             'asked when the row is drawn and waiting');
+  t.false(offers(PARTY, { places: PLACES, travelTo: PLACES[0].key })
+            .hint.includes('a place to walk to'),
+          'and silent once one is chosen');
 });
