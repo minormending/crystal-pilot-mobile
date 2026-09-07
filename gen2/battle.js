@@ -21,6 +21,13 @@ const PARTY_HOLD = 12, PARTY_GAP = 24, PARTY_SETTLE = 40;
 // it: wMenuDataItems and wMenuBorderTopCoord.
 const BATTLE_MENU_ITEMS = gen2.battleMenu.items,
       BATTLE_MENU_TOP = gen2.battleMenu.top;
+// Those two and BALL_POCKET above are read from the *stock* profile at import
+// time, which is the shape the first audit pass fixed in state.js and did not
+// fix here: a title that moved its battle menu or its ball pocket would have
+// the override honoured nowhere in this file. Written down rather than left as
+// a surprise. The new reader below takes its numbers off the instance --
+// `this.state.e` is the engine the title actually chose -- which is the pattern
+// the other two should follow when somebody has a cartridge that needs it.
 
 /**
  * Is the battle menu up and waiting for a choice?
@@ -33,6 +40,38 @@ const BATTLE_MENU_ITEMS = gen2.battleMenu.items,
  * spot an unbound name, and the tests exercised the static directly rather than
  * any of its callers.
  */
+/**
+ * Is the box asking whether to delete a move to make room for a new one?
+ *
+ * The one decision the battle loop can be handed that it must not answer with
+ * A. Everything else during turn resolution is text, and A advances text; this
+ * is a YES/NO box with YES under the cursor, so an A takes YES, the move list
+ * opens, and the next A deletes whatever is at the top of it.
+ *
+ * Measured rather than reasoned about -- see `engine.learnMove`. A Chikorita
+ * ground from Lv5 on Route 29 reached Lv15 with four moves and came out of the
+ * battle holding [POISONPOWDER, GROWL, RAZOR LEAF, REFLECT] where it had gone
+ * in holding [TACKLE, GROWL, RAZOR LEAF, REFLECT]. Tackle was not chosen away;
+ * it was at the top of the list when a stray A landed.
+ *
+ * WHAT IS NOT YET PROVEN, and it should be said here rather than discovered:
+ * this guard has never been seen firing on a cartridge. The run after it was
+ * added took the same Chikorita over Lv15 with its four moves intact -- but the
+ * decline logged nothing, so something else preserved them and it is not known
+ * what. The likeliest explanation is timing: the level-up and the end of the
+ * battle land within a few frames of each other, and if `!s.inBattle` is true
+ * first this loop returns before the box is ever looked at. Which would make
+ * the box's fate depend on whatever presses next, and that is exactly the kind
+ * of accident this guard exists to stop relying on -- so it stays, on the
+ * strength of the signature being measured and the behaviour being tested, and
+ * the next person to grind something past four moves should watch the log.
+ */
+export function learnMoveBox(s, engine) {
+  const box = engine && engine.learnMove;
+  if (!box || !s.windowOpen) return false;
+  return s.inBattle && s.menuItems === box.items && s.menuTop === box.top;
+}
+
 export function menuIsLive(s) {
   const [x, y] = s.menu;
   if (s.menuItems !== BATTLE_MENU_ITEMS || s.menuTop !== BATTLE_MENU_TOP) {
@@ -151,6 +190,38 @@ export function withBattle(Base) {
   }
 
   /** Pick a move with PP left. The move menu is a wrapping vertical list. */
+  /**
+   * The hardest-hitting move that can actually be used, by slot index.
+   *
+   * The mirror of what `chip` does, and it existed only in that direction: the
+   * catch path reads the move table to find the *gentlest* attack, because
+   * knocking out the thing you are catching wastes the ball. Winning a battle
+   * wants the opposite, and had nothing -- `chooseMove` fell back to
+   * `usable[0]`, which is slot order, and slot order is not a strategy.
+   *
+   * Measured, grinding a Chikorita on Route 29. Its slots are Tackle, Growl,
+   * Razor Leaf, Reflect. Sixty-four battles in, Tackle's PP was gone, so slot
+   * order handed back **Growl** -- a move that lowers Attack and takes no HP off
+   * anything -- while Razor Leaf sat in slot three at 25 PP. The battle could
+   * not end, `fightBattle` returned 'stuck' forty turns later, five of those in
+   * a row tripped the stall detector, and the grind gave up at 3 HP out of 36
+   * holding a 55-power move it had never tried.
+   *
+   * Falls back to `usable[0]` when nothing does damage, which is the honest
+   * answer: with only status moves left there is no winning move to prefer, and
+   * `grind` treats that as a reason to go and heal.
+   */
+  strongest(usable, mon) {
+    const power = (i) => {
+      const info = this.rom && this.rom.move(mon.moves[i]);
+      return info ? info.power : 0;
+    };
+    const hitters = usable.filter((i) => power(i) > 0);
+    if (!hitters.length) return usable[0];
+    return hitters.reduce((best, i) => (power(i) > power(best) ? i : best),
+                          hitters[0]);
+  }
+
   async chooseMove(mon, prefer = null) {
     const usable = [];
     for (let i = 0; i < mon.moves.length; i++) {
@@ -317,8 +388,9 @@ export function withBattle(Base) {
         inMoves = await this.snap();
       }
       if (inMoves.inBattle && inMoves.menu[1] >= 1) {
-        const picked =
-          await this.chooseMove(onField(inMoves) || { moves: [], pp: [] });
+        const picked = await this.chooseMove(
+          onField(inMoves) || { moves: [], pp: [] },
+          (usable, mon) => this.strongest(usable, mon));
         if (picked === null) continue;      // could not aim; take the turn again
       }
       // Turn resolution is text; press through it until the battle ends or the
@@ -327,6 +399,19 @@ export function withBattle(Base) {
         const s = await this.snap();
         if (!s.inBattle) return this._outcome();
         if (i > 3 && menuIsLive(s)) break;
+        // One thing in here is a question rather than text, and A is the wrong
+        // answer to it. Declining is the policy, and it is a policy rather than
+        // an omission: the pilot cannot know which of four moves you value, a
+        // declined move can be taught by hand afterwards and a deleted one
+        // cannot, and `chip` reasons about this very move list to pick the
+        // gentlest attack when catching something -- so a set that changes
+        // underneath it breaks the one piece of reasoning this app does about
+        // moves.
+        if (learnMoveBox(s, this.state && this.state.e)) {
+          this.say('declined a new move — the four it has are kept');
+          await this.answerNo();
+          continue;
+        }
         await this.push('A', 4, 6);
         await this.pump();
       }

@@ -1,15 +1,22 @@
 // Battle decisions. Every test here corresponds to something that was once
 // wrong in a way no static check could see.
 import { FakeGameBoy, fakeRom, romReading, symbols, test, worldRam } from '../harness.mjs';
-import { onField } from '../../gen2/battle.js';
+import { learnMoveBox, onField } from '../../gen2/battle.js';
 import { GameState } from '../../gen2/state.js';
+import { gen2 } from '../../gen2/engine.js';
 import { Tasks } from '../../gen2/tasks.js';
 
-function pilot({ wram = null, onPress = null } = {}) {
+/**
+ * `rom` is explicit because two tests need it to be something other than the
+ * default: one drives the real move-table reader, and one passes null to check
+ * what happens on a cartridge whose moves cannot be read at all.
+ */
+function pilot({ wram = null, onPress = null, rom = undefined } = {}) {
   const sym = symbols();
   const state = new GameState(sym);
   const gb = new FakeGameBoy({ wram: wram || worldRam(sym, {}), onPress });
-  const tasks = new Tasks(gb, state, () => {}, fakeRom());
+  const tasks = new Tasks(gb, state, () => {},
+                          rom === undefined ? fakeRom() : rom);
   return { sym, state, gb, tasks };
 }
 
@@ -287,4 +294,131 @@ test('a pack that never opened is told apart by the menu, not by the pocket', as
     battleMode: 1, menu: [1, 1], menuItems: 5, menuTop: 1, curPocket: 0, curItem: 18,
   }));
   t.false(Tasks.menuIsLive(packOpen), 'and this is the pack, which is what we wanted');
+});
+
+// --- winning a battle, rather than taking the first move in the list --------
+
+test('a grind swings with the hardest move it can, not the first one',
+     async (t) => {
+  // Measured on the cartridge. A Chikorita's slots are Tackle, Growl, Razor
+  // Leaf, Reflect. Sixty-four battles in, Tackle's PP was gone -- so slot order
+  // handed back Growl, which takes no HP off anything, while Razor Leaf sat in
+  // slot three at 25 PP. The battle could not end, five in a row tripped the
+  // stall detector, and the grind gave up at 3 HP out of 36.
+  const rom = romReading({
+    33:  { id: 33, name: 'TACKLE', power: 35, effect: 0, pp: 35 },
+    45:  { id: 45, name: 'GROWL', power: 0, effect: 18, pp: 40 },
+    75:  { id: 75, name: 'RAZOR LEAF', power: 55, effect: 0, pp: 25 },
+    115: { id: 115, name: 'REFLECT', power: 0, effect: 66, pp: 20 },
+  });
+  const { tasks } = pilot({ rom });
+  const chikorita = { moves: [33, 45, 75, 115], pp: [0, 3, 25, 20] };
+
+  // Slot order would say 1 (Growl). Power says 2 (Razor Leaf).
+  t.eq(tasks.strongest([1, 2, 3], chikorita), 2,
+       'Razor Leaf, which is the only thing here that can end a battle');
+
+  const full = { moves: [33, 45, 75, 115], pp: [35, 40, 25, 20] };
+  t.eq(tasks.strongest([0, 1, 2, 3], full), 2, 'and it beats Tackle on power');
+});
+
+test('with nothing that does damage it takes what there is, and says so',
+     async (t) => {
+  // The honest fallback: with only status moves left there is no winning move
+  // to prefer, and `grind` reads that as a reason to go and heal rather than
+  // as a move to make.
+  const rom = romReading({
+    45:  { id: 45, name: 'GROWL', power: 0, effect: 18, pp: 40 },
+    115: { id: 115, name: 'REFLECT', power: 0, effect: 66, pp: 20 },
+  });
+  const { tasks } = pilot({ rom });
+  const statusOnly = { moves: [45, 115, 0, 0], pp: [3, 20, 0, 0] };
+  t.eq(tasks.strongest([0, 1], statusOnly), 0, 'the first usable one');
+});
+
+test('a move the cartridge cannot be read for is still swung', async (t) => {
+  // "I cannot tell how hard this hits" is not a reason to stand there. A hack
+  // that renumbered its move table reads as power 0 for everything, and the
+  // fallback keeps the pilot fighting instead of refusing to.
+  const { tasks } = pilot({ rom: null });
+  const mon = { moves: [33, 45, 75, 115], pp: [0, 3, 25, 20] };
+  t.eq(tasks.strongest([1, 2, 3], mon), 1,
+       'no move table, so no preference — the first usable slot');
+});
+
+test('fightBattle actually asks for the hardest move, not just could', async (t) => {
+  // The wiring, not the function. A first draft of these tests exercised
+  // `strongest` on its own and passed with the argument removed from
+  // `fightBattle` entirely -- which is the same shape as the ReferenceError
+  // that once reached the deployed app: "the tests exercised the static
+  // directly rather than any of its callers".
+  const rom = romReading({
+    33: { id: 33, name: 'TACKLE', power: 35, effect: 0, pp: 35 },
+    45: { id: 45, name: 'GROWL', power: 0, effect: 18, pp: 40 },
+    75: { id: 75, name: 'RAZOR LEAF', power: 55, effect: 0, pp: 25 },
+  });
+  const { sym, tasks } = pilot({ rom });
+  const party = [{ slot: 0, species: 152, level: 13, hp: 36, maxHp: 36,
+                   moves: [33, 45, 75, 0], pp: [0, 3, 25, 0] }];
+  const inBattle = { party, inBattle: true, menu: [1, 1], menuItems: 34,
+                     menuTop: 12, worldLoaded: true, windowOpen: true,
+                     enemy: { species: 16, level: 3, hp: 10, maxHp: 10 },
+                     active: { hp: 36, maxHp: 36 } };
+
+  let asked = null, turns = 0;
+  tasks.coverFaint = async () => null;
+  tasks.awaitBattleMenu = async () => inBattle;
+  tasks.chooseAction = async () => {};
+  tasks.step = async () => {};
+  tasks.pump = async () => {};
+  tasks.snap = async () => (turns > 0 ? { ...inBattle, inBattle: false } : inBattle);
+  tasks.chooseMove = async (mon, prefer) => {
+    asked = prefer ? prefer([1, 2], mon) : 'no preference was passed';
+    turns++;
+    return 0;
+  };
+  await tasks.fightBattle(2);
+  t.eq(asked, 2, 'Razor Leaf — so a preference was passed, and it was this one');
+});
+
+
+// --- the one question the battle loop must not answer with A ----------------
+
+test('the delete-a-move box is told apart from everything else drawn',
+     async (t) => {
+  // Measured by grinding a Chikorita from Lv5 on Route 29 and recording every
+  // snapshot the battle loop took. At the instant its moveset went from
+  // [TACKLE, GROWL, RAZOR LEAF, REFLECT] to [POISONPOWDER, GROWL, RAZOR LEAF,
+  // REFLECT] the box read items=2, top=7, cursor (1,1), still in battle.
+  const box = (over) => ({ windowOpen: true, inBattle: true, menuItems: 2,
+                           menuTop: 7, menu: [1, 1], ...over });
+  t.true(learnMoveBox(box(), gen2), 'two items at row seven, in a battle');
+
+  // The three other things that get drawn during a battle, none of which is a
+  // question: the battle menu, the pack, and the pack mid-throw -- which is
+  // also two items, and is the reason the row matters rather than the count.
+  t.false(learnMoveBox(box({ menuItems: 34, menuTop: 12 }), gen2),
+          'the battle menu is not it');
+  t.false(learnMoveBox(box({ menuItems: 5, menuTop: 1 }), gen2),
+          'nor the pack');
+  t.false(learnMoveBox(box({ menuTop: 0 }), gen2),
+          'nor the pack mid-throw, which is two items at row zero');
+
+  t.false(learnMoveBox(box({ windowOpen: false }), gen2),
+          'and a stale signature with no window up is not a box');
+  t.false(learnMoveBox(box({ inBattle: false }), gen2),
+          'nor anything outside a battle');
+  t.false(learnMoveBox(box(), null),
+          'a cartridge whose engine says nothing about it is never matched');
+});
+
+test('a cartridge that moved the box is matched where it moved it', async (t) => {
+  // The reason this reads the engine off the instance rather than off a module
+  // constant at import time -- which is what its neighbours in this file still
+  // do, and what the first audit pass fixed in state.js.
+  const moved = { ...gen2, learnMove: { items: 3, top: 9 } };
+  const at = (items, top) => ({ windowOpen: true, inBattle: true,
+                                menuItems: items, menuTop: top, menu: [1, 1] });
+  t.true(learnMoveBox(at(3, 9), moved), 'the profile it was given');
+  t.false(learnMoveBox(at(2, 7), moved), 'and not the stock one');
 });

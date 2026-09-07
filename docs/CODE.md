@@ -894,7 +894,67 @@ eight kilobytes a full snapshot copies, which is worth keeping distinct.
 
 ## 6. Battles
 
-<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 8e02405a29e0 -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 2f3d35c081cb -->
+
+### Which move, and which question
+
+**Winning a battle picks the hardest move that can be used; catching something
+picks the gentlest.** The second half existed from the start, for a reason worth
+repeating — a Poké Ball's odds depend on how much HP is left, so hitting with
+slot one knocks out the very thing you are trying to catch. The first half did
+not exist at all. `chooseMove` fell back to `usable[0]`, which is slot order,
+and slot order is not a strategy.
+
+Measured. A Chikorita's slots are Tackle, Growl, Razor Leaf, Reflect. Sixty-four
+battles into a grind Tackle's PP was gone, so slot order handed back **Growl** —
+which lowers Attack and takes no HP off anything — while Razor Leaf sat in slot
+three at 25 PP. The battle could not end, `fightBattle` returned `stuck` forty
+turns later, five of those in a row tripped the stall detector, and the grind
+gave up at 3 HP out of 36 holding a 55-power move it had never tried.
+
+**And "out of PP" now means out of PP that can win.** The old test asked whether
+any move had PP; Growl at 3 PP answered yes, so the grind never went to heal and
+kept swinging a move that cannot end a fight. A move the cartridge cannot be
+read for counts as usable, because *I cannot tell* is not a reason to walk away
+from a fight.
+
+| | before | after |
+| --- | --- | --- |
+| Chikorita, Lv5 → Lv16, Route 29 | 64 battles, 59 won, **stalled at Lv13** | 122 battles, **122 won**, reached Lv16 in 155s |
+
+**One thing during turn resolution is a question rather than text.** A Pokémon
+with four moves that levels into a fifth is asked *delete an older move to make
+room?* — a two-row YES/NO box with YES under the cursor — inside a loop that
+presses A up to a hundred and twenty times. Measured: the same Chikorita reached
+Lv15 and came out of the battle holding `[POISONPOWDER, GROWL, RAZOR LEAF,
+REFLECT]` where it went in holding `[TACKLE, ...]`. Tackle was not chosen away;
+it was top of the list when a stray A landed.
+
+`learnMoveBox` tells that box from everything else drawn in a battle, on a
+signature read off the cartridge at the instant the moveset changed: two items
+at border row 7. The battle menu is thirty-four at row 12, the pack five at row
+1, and the pack mid-throw is *also two items* — at row 0, which is why the row
+is what distinguishes them rather than the count. It reads the engine off the
+instance rather than a module constant, so a title that moved the box is matched
+where it moved it.
+
+The policy is **decline**, and it is a policy rather than an omission: the pilot
+cannot know which of four moves you value, a declined move can be taught by hand
+afterwards and a deleted one cannot, and `chip` reasons about this very move list
+to pick the gentlest attack — so a set that changes underneath it breaks the one
+piece of reasoning this app does about moves.
+
+**What is not proven**, and it is written into the code as well as here: the
+guard has never been *seen* firing on a cartridge. The run after it was added
+took the same Chikorita over Lv15 with its four moves intact, and the decline
+logged nothing — so something else preserved them and it is not known what. The
+likeliest explanation is timing: the level-up and the end of the battle land
+within a few frames of each other, and if `!s.inBattle` is true first the loop
+returns before the box is looked at. Which would make the box's fate depend on
+whatever presses next, and that is the sort of accident the guard exists to stop
+relying on. It stays on the strength of a measured signature and a tested
+behaviour; the next person to grind something past four moves should watch the
+log.
 
 ### Is it our turn?
 
@@ -1154,7 +1214,7 @@ fainted.
 
 ## 7. Catching something
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ 844b9b15e6d8 -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ bb1a075777da -->
 
 Catching is the most involved loop, because a Poké Ball's odds turn on how much
 HP is left. Throwing at a full-health target is mostly throwing balls away.
@@ -1240,7 +1300,7 @@ precedes it defaults to yes, which is what we want; the nickname box does not.
 
 ## 7a. Three that act on where you already are
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ 03dbded57d8d -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ b6a67d56dfb3 -->
 
 Grind, hunt and catch all go *looking* for something. These three do the obvious
 thing with the situation you are already in, and take no parameters:
@@ -1302,7 +1362,7 @@ running the thing.
 
 ## 7b. Saving, and getting the save out
 
-<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 8e02405a29e0 -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 2f3d35c081cb -->
 
 ```mermaid
 flowchart TD

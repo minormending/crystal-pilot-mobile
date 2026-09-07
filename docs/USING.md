@@ -280,6 +280,23 @@ A map with no grass says nothing about levels at all, rather than guessing: *no
 wild Pokémon appear here* and *they are Lv2–3* are different answers and only one
 of them is about levels.
 
+**It swings the hardest move it has, and heals when nothing left can win.** The
+pilot reads your cartridge's move table, so it knows Razor Leaf hits harder than
+Tackle and that Growl hits nothing at all. It used to take whichever move was
+first in the list with PP left — which, once the first one ran dry, meant
+grinding with Growl: measured, five battles in a row going nowhere and a party
+at 3 HP out of 36, with a 55-power move untouched in slot three. And "out of PP"
+now means out of PP that can actually win, so a Pokémon left with only Growl and
+Reflect goes to a Center instead of standing there.
+
+**A new move at a level-up is declined.** A Pokémon that already knows four
+moves and levels into a fifth is asked whether to delete an older one, with
+*yes* under the cursor — and the pilot presses a lot of buttons. Measured: a
+Chikorita reached Lv15 and came out of the battle with Tackle replaced by
+Poisonpowder, which nobody chose. The pilot now says no. It cannot know which of
+your four moves you want, a declined move can be taught by hand later, and a
+deleted one cannot.
+
 **A knockout is healed and carried on from.** Grinding a Pokémon well above the
 local wilds means it will eventually go down, and the pilot is handed a way to
 heal and a budget of twelve trips. It used to use neither here: it reported *the
@@ -574,7 +591,7 @@ deployed, which is not the question you are asking when a bug you saw fixed is
 still in front of you. `tools/check-app` asserts that number matches the service
 worker's cache name, because a version display that lies is worse than none.
 
-<!-- covers: sw.js @ 3b290ae2e495 -->
+<!-- covers: sw.js @ 74271da46ff9 -->
 
 The worker fetches **network first, falling back to the cache**. That is the
 opposite of the usual offline-first advice, on purpose.

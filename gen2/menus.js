@@ -99,6 +99,26 @@ export function withMenus(Base) {
    * and the A behind it answers yes, which is the exact failure being avoided.
    */
   async declineNickname(tries = 14) {
+    return this.answerNo(tries);
+  }
+
+  /**
+   * Answer whatever YES/NO box is on screen with NO.
+   *
+   * This was the body of `declineNickname`, and nothing about it was ever about
+   * nicknames: Gen 2 draws one two-row box for every yes-or-no question, YES on
+   * row 1 and NO on row 2, and this drives the cursor to the second row and
+   * presses it. Lifted out under its own name because a second caller arrived
+   * -- the box offering to delete a move to make room for a new one -- and
+   * naming it after the first question it was asked would have been the reason
+   * somebody wrote a second copy.
+   *
+   * Driven against the live cursor rather than blind, and that is the whole
+   * lesson in it: the box is not interactive the instant it appears, so a blind
+   * DOWN is swallowed and the A behind it answers YES -- which is the exact
+   * failure being avoided.
+   */
+  async answerNo(tries = 14) {
     await this.step(24);
     for (let i = 0; i < tries; i++) {
       const s = await this.snap();

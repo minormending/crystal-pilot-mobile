@@ -471,9 +471,20 @@ export function withJobs(Base) {
       // forces Struggle, which hurts the thing being trained, and a grind that
       // fought on took eighty-odd turns of getting nowhere. A Center restores
       // PP along with health.
-      const dry = mon.pp && mon.moves &&
-        !mon.pp.some((pp, i) => mon.moves[i] && pp > 0);
-      if (dry) this.say('out of PP');
+      // Out of PP means out of PP *that can win*, not out of PP altogether.
+      // Measured: a Chikorita with Growl at 3 PP and everything else dry read
+      // as fine by the old test, so the grind kept fighting with a move that
+      // takes no HP off anything -- five battles going nowhere and a party at
+      // 3 HP out of 36, when a trip to a Center would have restored the lot.
+      // A move the cartridge cannot be read for counts as usable, because "I
+      // cannot tell" is not a reason to walk away from a fight.
+      const canWin = (i) => {
+        if (!mon.moves[i] || !(mon.pp[i] > 0)) return false;
+        const info = this.rom && this.rom.move(mon.moves[i]);
+        return !info || info.power > 0;
+      };
+      const dry = mon.pp && mon.moves && !mon.moves.some((_, i) => canWin(i));
+      if (dry) this.say('nothing left that can win a battle');
       // Not while a battle is still up. fightBattle can come back 'stuck' with
       // one on screen, and this branch sits above the one that fights -- so it
       // preempted it and sent the pilot walking to a Pokemon Center out of a

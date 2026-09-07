@@ -85,6 +85,15 @@ export const gen2 = {
   // the pack mid-throw is 2 at row 0. The cursor alone cannot tell them apart.
   battleAction: { fight: 1, pack: 3, run: 4 },
   battleMenu: { items: 34, top: 12 },
+  // "<MON> wants to learn <MOVE>. But it already knows four moves. Delete an
+  // older move to make room?" -- a two-item YES/NO box, and YES is where the
+  // cursor starts. Measured by grinding a Chikorita from Lv5 on Route 29 and
+  // watching every snapshot the battle loop took: at the instant its moveset
+  // went from [TACKLE, GROWL, RAZOR LEAF, REFLECT] to [POISONPOWDER, GROWL,
+  // RAZOR LEAF, REFLECT] the box read items=2, top=7, cursor (1,1). The pack
+  // mid-throw is also two items but sits at row 0, and the battle menu is
+  // thirty-four at row 12, so the row is what tells them apart.
+  learnMove: { items: 2, top: 7 },
   ballPocket: 1,
 
   // --- the intro's NAME menu ----------------------------------------------

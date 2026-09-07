@@ -1,5 +1,5 @@
 // Stopping a job, and the one table that says what a capture outcome means.
-import { FakeGameBoy, fakeRom, symbols, test, worldRam } from '../harness.mjs';
+import { FakeGameBoy, fakeRom, romReading, symbols, test, worldRam } from '../harness.mjs';
 import { GameState } from '../../gen2/state.js';
 import { Cancelled, TaskBase } from '../../gbcore/taskbase.js';
 import { Tasks } from '../../gen2/tasks.js';
@@ -9,7 +9,10 @@ function pilot(opts = {}) {
   const sym = symbols();
   const state = new GameState(sym);
   const gb = new FakeGameBoy({ wram: worldRam(sym, opts.world || {}), ...opts });
-  return { sym, state, gb, tasks: new Tasks(gb, state, () => {}, fakeRom()) };
+  // `rom` is explicit for the tests that need the real move-table reader rather
+  // than the stub: whether a move can win a battle is a power reading.
+  const rom = opts.rom === undefined ? fakeRom() : opts.rom;
+  return { sym, state, gb, tasks: new Tasks(gb, state, () => {}, rom) };
 }
 
 test('Stop lands inside a primitive, not after it finishes', async (t) => {
@@ -199,4 +202,48 @@ test('a grind does not walk to a Center out of a battle it has not left', async 
   t.eq(trips, 0, 'it never tried to walk out of the battle');
   t.gte(fights, 1, 'it fought instead');
   t.contains(r.message, 'went nowhere', 'and reports the stall it actually had');
+});
+
+test('out of PP means out of PP that can win a battle', async (t) => {
+  // Measured on the cartridge: a Chikorita with Growl at 3 PP and everything
+  // else dry read as fine by the old test -- "some move has PP" -- so the grind
+  // kept fighting with a move that takes no HP off anything. Five battles going
+  // nowhere and a party at 3 HP out of 36, when a trip to a Center would have
+  // restored the lot.
+  const rom = romReading({
+    33: { id: 33, name: 'TACKLE', power: 35, effect: 0, pp: 35 },
+    45: { id: 45, name: 'GROWL', power: 0, effect: 18, pp: 40 },
+  });
+  const { tasks } = pilot({ rom });
+  // Full HP, so only the PP half of the heal test can be what fires.
+  const mon = { species: 152, level: 13, hp: 36, maxHp: 36,
+                moves: [33, 45, 0, 0], pp: [0, 3, 0, 0] };
+  tasks.snap = async () => ({ party: [mon], inBattle: false, worldLoaded: true });
+  tasks._findFight = async () => true;
+  let fights = 0, trips = 0;
+  tasks.fightBattle = async () => { fights++; return 'won'; };
+  const r = await tasks.grind(0, 20, { heal: async () => {
+    trips++; mon.pp = [35, 40, 0, 0]; mon.level = 20; return true;
+  } });
+  t.eq(trips, 1, 'it went to heal rather than swinging Growl at things');
+  t.eq(fights, 0, 'and did not fight first');
+  t.true(r.ok, 'then carried on');
+});
+
+test('a status move with PP is not mistaken for a way to win', async (t) => {
+  // The other direction: something that *can* win keeps the grind fighting.
+  const rom = romReading({
+    33: { id: 33, name: 'TACKLE', power: 35, effect: 0, pp: 35 },
+    45: { id: 45, name: 'GROWL', power: 0, effect: 18, pp: 40 },
+  });
+  const { tasks } = pilot({ rom });
+  const mon = { species: 152, level: 13, hp: 36, maxHp: 36,
+                moves: [33, 45, 0, 0], pp: [20, 3, 0, 0] };
+  tasks.snap = async () => ({ party: [mon], inBattle: false, worldLoaded: true });
+  tasks._findFight = async () => true;
+  let fights = 0, trips = 0;
+  tasks.fightBattle = async () => { fights++; mon.level = 20; return 'won'; };
+  await tasks.grind(0, 20, { heal: async () => { trips++; return true; } });
+  t.eq(trips, 0, 'Tackle has PP, so there is nothing to go to a Center for');
+  t.eq(fights, 1, 'it fought');
 });
