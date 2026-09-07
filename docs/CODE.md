@@ -894,7 +894,7 @@ eight kilobytes a full snapshot copies, which is worth keeping distinct.
 
 ## 6. Battles
 
-<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 2f3d35c081cb -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 9ab2a734121c -->
 
 ### Which move, and which question
 
@@ -944,17 +944,44 @@ afterwards and a deleted one cannot, and `chip` reasons about this very move lis
 to pick the gentlest attack — so a set that changes underneath it breaks the one
 piece of reasoning this app does about moves.
 
-**What is not proven**, and it is written into the code as well as here: the
-guard has never been *seen* firing on a cartridge. The run after it was added
-took the same Chikorita over Lv15 with its four moves intact, and the decline
-logged nothing — so something else preserved them and it is not known what. The
-likeliest explanation is timing: the level-up and the end of the battle land
-within a few frames of each other, and if `!s.inBattle` is true first the loop
-returns before the box is looked at. Which would make the box's fate depend on
-whatever presses next, and that is the sort of accident the guard exists to stop
-relying on. It stays on the strength of a measured signature and a tested
-behaviour; the next person to grind something past four moves should watch the
-log.
+**Declining takes two answers, and the first version only gave one.** Gen 2 asks
+twice: *delete an older move to make room?* and then, on a no, *give up on
+learning it?* — and **the second one wants YES**. Say no to both and they loop,
+because no to the second means *carry on learning it* and puts the first back on
+screen.
+
+Measured, grinding the same Chikorita to Lv15: the guard fired **four times**,
+the cursor walking 1, 2, 1, 2, 1 — and the moveset still came out as
+`[POISONPOWDER, GROWL, RAZOR LEAF, REFLECT]`, because once the loop had gone
+round enough times a stray A from the turn presses landed on the delete prompt.
+Firing was not the same as working.
+
+So the answers are asymmetric and the order carries the meaning: NO closes the
+door, YES accepts closing it. Both boxes carry the same signature — they are one
+widget asked twice — so `declineNewMove` does not try to tell them apart by
+looking. It relies on the sequence: `answerNo` returns true only after pressing A
+on the NO row, so a box still up after that is the second question.
+
+| | before | after |
+| --- | --- | --- |
+| Chikorita over Lv15 with four moves | `[POISONPOWDER, GROWL, RAZOR LEAF, REFLECT]` | `[TACKLE, GROWL, RAZOR LEAF, REFLECT]` |
+
+**And evolution is allowed and said out loud.** It is the last item in the list
+of things this job had no policy for. Letting it happen is what somebody
+grinding expects and cancelling would be the surprising choice — but it went by
+in silence, and a rename mid-job reads as the pilot having lost track of what it
+is training. Measured: `#152` became `#153` at Lv16 and nothing mentioned it.
+Now the log says *CHIKORITA evolved into BAYLEEF* where it happens, and
+`stats.evolved` comes back with the rest.
+
+The end-to-end run: **Lv5 to Lv17 in 192 seconds, 159 battles, 158 won, one
+knockout healed through, one evolution — and all four original moves still in
+place.**
+
+One loose end, recorded rather than smoothed: in that run the decline's own log
+line was not captured, though it was captured in the run before. The outcome is
+unambiguous — the moves survived where they previously did not — but the
+mechanism's evidence spans two runs rather than one.
 
 ### Is it our turn?
 
@@ -1214,7 +1241,7 @@ fainted.
 
 ## 7. Catching something
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ bb1a075777da -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ 47a3f69b25ad -->
 
 Catching is the most involved loop, because a Poké Ball's odds turn on how much
 HP is left. Throwing at a full-health target is mostly throwing balls away.
@@ -1300,7 +1327,7 @@ precedes it defaults to yes, which is what we want; the nickname box does not.
 
 ## 7a. Three that act on where you already are
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ b6a67d56dfb3 -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ edd086937b58 -->
 
 Grind, hunt and catch all go *looking* for something. These three do the obvious
 thing with the situation you are already in, and take no parameters:
@@ -1362,7 +1389,7 @@ running the thing.
 
 ## 7b. Saving, and getting the save out
 
-<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 2f3d35c081cb -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 9ab2a734121c -->
 
 ```mermaid
 flowchart TD

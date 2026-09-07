@@ -422,3 +422,55 @@ test('a cartridge that moved the box is matched where it moved it', async (t) =>
   t.true(learnMoveBox(at(3, 9), moved), 'the profile it was given');
   t.false(learnMoveBox(at(2, 7), moved), 'and not the stock one');
 });
+
+test('turning down a new move takes two answers, in the right order',
+     async (t) => {
+  // The model is the measured game. Gen 2 asks "delete an older move?" and
+  // then, on a no, "give up on learning it?" -- and the second wants YES. Say
+  // no to both and they loop: no to the second means carry on learning it, and
+  // puts the first back on screen. Measured as four declines in a row with the
+  // cursor walking 1, 2, 1, 2, 1, and the move replaced anyway once a stray A
+  // from the turn presses landed on the delete prompt.
+  const { tasks } = pilot();
+  const game = { box: 'delete', cursor: 0, deleted: false, loops: 0 };
+  tasks.step = async () => { if (game.cursor === 0) game.cursor = 1; };
+  tasks.snap = async () => ({
+    inBattle: true, windowOpen: game.box !== 'closed',
+    menuItems: 2, menuTop: 7, menu: [1, game.cursor], party: [], worldLoaded: true,
+  });
+  tasks.push = async (button) => {
+    if (game.box === 'closed') return;
+    if (button === 'DOWN') { game.cursor = 2; return; }
+    if (button === 'UP') { game.cursor = 1; return; }
+    if (button !== 'A') return;
+    if (game.box === 'delete') {
+      if (game.cursor === 1) { game.deleted = true; game.box = 'closed'; }
+      else { game.box = 'confirm'; game.cursor = 1; }
+    } else if (game.box === 'confirm') {
+      if (game.cursor === 1) game.box = 'closed';
+      else { game.box = 'delete'; game.cursor = 1; game.loops++; }
+    }
+  };
+
+  t.true(await tasks.declineNewMove(), 'it reports having dealt with the box');
+  t.eq(game.box, 'closed', 'and the box is gone');
+  t.false(game.deleted, 'with nothing deleted, which is the whole point');
+  t.eq(game.loops, 0, 'and without going round the two questions even once');
+});
+
+test('a box that will not close is reported rather than pressed at for ever',
+     async (t) => {
+  // Everything in this file is bounded, for the reason the suite's own timeout
+  // exists: a routine that cannot finish cannot fail, it hangs.
+  const { tasks } = pilot();
+  let presses = 0;
+  tasks.step = async () => {};
+  tasks.snap = async () => ({ inBattle: true, windowOpen: true, menuItems: 2,
+                              menuTop: 7, menu: [1, 2], party: [], worldLoaded: true });
+  tasks.push = async () => { presses++; };
+  t.false(await tasks.declineNewMove(), 'it gives up and says so');
+  // Three passes at the second question, each of which walks the cursor for up
+  // to fourteen tries, plus the one that answered the first. The number is not
+  // the point -- that it is a number at all is.
+  t.true(presses <= 60, `bounded at ${presses} presses`);
+});

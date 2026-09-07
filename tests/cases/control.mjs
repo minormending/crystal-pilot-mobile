@@ -247,3 +247,62 @@ test('a status move with PP is not mistaken for a way to win', async (t) => {
   t.eq(trips, 0, 'Tackle has PP, so there is nothing to go to a Center for');
   t.eq(fights, 1, 'it fought');
 });
+
+test('an evolution is reported, not slipped past', async (t) => {
+  // Measured: a Chikorita ground to Lv16 came back as #153 -- Bayleef -- and
+  // nothing said so, while every line after it used the new name. Letting it
+  // evolve is the policy; saying nothing about it was not a policy at all.
+  const rom = { speciesName: (id) => ({ 152: 'CHIKORITA', 153: 'BAYLEEF' })[id]
+                                     || `#${id}`,
+                itemName: () => 'POKé BALL', move: () => ({ power: 40 }),
+                isChipMove: () => true };
+  const { tasks } = pilot({ rom });
+  const said = [];
+  tasks.say = (m) => said.push(m);
+  const mon = { species: 152, level: 15, hp: 40, maxHp: 40,
+                moves: [33, 0, 0, 0], pp: [30, 0, 0, 0] };
+  tasks.snap = async () => ({ party: [mon], inBattle: false, worldLoaded: true });
+  tasks._findFight = async () => true;
+  let fights = 0;
+  tasks.fightBattle = async () => {
+    fights++;
+    if (fights === 1) { mon.level = 16; mon.species = 153; }
+    else mon.level = 20;
+    return 'won';
+  };
+  const r = await tasks.grind(0, 20, {});
+  t.true(said.some((m) => m === 'CHIKORITA evolved into BAYLEEF'),
+         'named both ends of it, in the log where it happened');
+  t.eq(r.stats.evolved, 1, 'and counted');
+  t.true(r.ok, 'and carried on to the target');
+});
+
+test('a cartridge whose species cannot be named still reports the change',
+     async (t) => {
+  const { tasks } = pilot({ rom: null });
+  const said = [];
+  tasks.say = (m) => said.push(m);
+  const mon = { species: 152, level: 15, hp: 40, maxHp: 40,
+                moves: [33, 0, 0, 0], pp: [30, 0, 0, 0] };
+  tasks.snap = async () => ({ party: [mon], inBattle: false, worldLoaded: true });
+  tasks._findFight = async () => true;
+  tasks.fightBattle = async () => { mon.species = 153; mon.level = 20; return 'won'; };
+  await tasks.grind(0, 20, {});
+  t.true(said.some((m) => m === '#152 evolved into #153'),
+         'the numbers, which is all a nameless cartridge has');
+});
+
+test('a species that does not change is not announced every battle', async (t) => {
+  const { tasks } = pilot();
+  const said = [];
+  tasks.say = (m) => said.push(m);
+  const mon = { species: 155, level: 15, hp: 40, maxHp: 40,
+                moves: [33, 0, 0, 0], pp: [30, 0, 0, 0] };
+  tasks.snap = async () => ({ party: [mon], inBattle: false, worldLoaded: true });
+  tasks._findFight = async () => true;
+  let fights = 0;
+  tasks.fightBattle = async () => { if (++fights >= 3) mon.level = 20; return 'won'; };
+  const r = await tasks.grind(0, 20, {});
+  t.false(said.some((m) => /evolved/.test(m)), 'nothing evolved, so nothing is said');
+  t.eq(r.stats.evolved, 0, 'and the count stays at zero');
+});

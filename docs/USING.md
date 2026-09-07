@@ -297,6 +297,22 @@ Poisonpowder, which nobody chose. The pilot now says no. It cannot know which of
 your four moves you want, a declined move can be taught by hand later, and a
 deleted one cannot.
 
+Saying no takes **two** answers, which is the part that took two goes to get
+right: the game then asks whether to *give up on learning it*, and that one
+wants yes. Answering no to both loops between them, and a stray press
+eventually lands on the delete prompt anyway — measured, four declines in a row
+and the move replaced regardless.
+
+**Evolution is allowed, and said out loud.** Grinding past an evolution level
+evolves your Pokémon, which is what you would expect and what the game does.
+What it used to do silently, it now reports — *CHIKORITA evolved into BAYLEEF* —
+because every line after that point uses the new name, and a rename nobody
+mentions reads as the pilot losing track of what it is training.
+
+Measured end to end: **Lv5 to Lv17 in 192 seconds, 159 battles, 158 won, one
+knockout healed through, one evolution, and all four original moves still in
+place.**
+
 **A knockout is healed and carried on from.** Grinding a Pokémon well above the
 local wilds means it will eventually go down, and the pilot is handed a way to
 heal and a budget of twelve trips. It used to use neither here: it reported *the
@@ -591,7 +607,7 @@ deployed, which is not the question you are asking when a bug you saw fixed is
 still in front of you. `tools/check-app` asserts that number matches the service
 worker's cache name, because a version display that lies is worse than none.
 
-<!-- covers: sw.js @ 74271da46ff9 -->
+<!-- covers: sw.js @ 217c230b91eb -->
 
 The worker fetches **network first, falling back to the cache**. That is the
 opposite of the usual offline-first advice, on purpose.

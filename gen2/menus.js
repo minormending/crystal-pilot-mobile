@@ -103,6 +103,28 @@ export function withMenus(Base) {
   }
 
   /**
+   * Answer whatever YES/NO box is on screen with YES.
+   *
+   * The cursor starts on YES, so this looks like it could just press A -- and
+   * that is the mistake `answerNo` was written to avoid: the box is not
+   * interactive the instant it appears, and a press that arrives early is
+   * swallowed. So this waits for the cursor to be somewhere real, moves it up if
+   * something has already moved it down, and only then presses.
+   */
+  async answerYes(tries = 14) {
+    await this.step(24);
+    for (let i = 0; i < tries; i++) {
+      const s = await this.snap();
+      if (!s.windowOpen) return false;
+      const row = s.menu[1];
+      if (row === 1) { await this.push('A', 6, 10); return true; }
+      if (row === 0) { await this.step(6); continue; }
+      await this.push('UP', 4, 6);
+    }
+    return false;
+  }
+
+  /**
    * Answer whatever YES/NO box is on screen with NO.
    *
    * This was the body of `declineNickname`, and nothing about it was ever about

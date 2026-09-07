@@ -54,17 +54,9 @@ const BATTLE_MENU_ITEMS = gen2.battleMenu.items,
  * in holding [TACKLE, GROWL, RAZOR LEAF, REFLECT]. Tackle was not chosen away;
  * it was at the top of the list when a stray A landed.
  *
- * WHAT IS NOT YET PROVEN, and it should be said here rather than discovered:
- * this guard has never been seen firing on a cartridge. The run after it was
- * added took the same Chikorita over Lv15 with its four moves intact -- but the
- * decline logged nothing, so something else preserved them and it is not known
- * what. The likeliest explanation is timing: the level-up and the end of the
- * battle land within a few frames of each other, and if `!s.inBattle` is true
- * first this loop returns before the box is ever looked at. Which would make
- * the box's fate depend on whatever presses next, and that is exactly the kind
- * of accident this guard exists to stop relying on -- so it stays, on the
- * strength of the signature being measured and the behaviour being tested, and
- * the next person to grind something past four moves should watch the log.
+ * It has since been seen firing, and firing was not enough: it went round the
+ * two questions four times and the move was replaced anyway. See
+ * `declineNewMove`, which is where that half lives.
  */
 export function learnMoveBox(s, engine) {
   const box = engine && engine.learnMove;
@@ -190,6 +182,43 @@ export function withBattle(Base) {
   }
 
   /** Pick a move with PP left. The move menu is a wrapping vertical list. */
+  /**
+   * Turn down a new move, which takes two answers rather than one.
+   *
+   * The first version of this pressed NO and stopped, and it was wrong in a way
+   * only the cartridge shows. Gen 2 asks twice: *delete an older move to make
+   * room?* and then, when you say no, *give up on learning it?* -- and the
+   * second one wants **YES**. Say no to both and they loop, because no to the
+   * second is "carry on learning it" and puts the first back on screen.
+   *
+   * Measured, grinding a Chikorita to Lv15: four declines in a row, the cursor
+   * walking 1, 2, 1, 2, 1 -- and then `[POISONPOWDER, GROWL, RAZOR LEAF,
+   * REFLECT]`, because once the loop had gone round enough times a stray A from
+   * the turn-resolution presses landed on the delete prompt. The guard fired
+   * every time and changed nothing.
+   *
+   * So the answers are asymmetric, and the order matters: NO closes the door,
+   * YES accepts closing it. Both boxes carry the same signature -- they are one
+   * widget asked twice -- so this cannot tell them apart by looking, and does
+   * not try. It relies on the sequence instead: `answerNo` returns true only
+   * after it has pressed A on the NO row, so a box still up after that is the
+   * second question and not the first.
+   */
+  async declineNewMove() {
+    this.say('declining a new move — the four it has are kept');
+    if (!await this.answerNo()) return false;
+    await this.step(SETTLE_FRAMES);
+    // Bounded, because everything in this file is: a box that will not go away
+    // is a stall to report rather than a thing to press at for ever.
+    for (let i = 0; i < 3; i++) {
+      const s = await this.snap();
+      if (!learnMoveBox(s, this.state && this.state.e)) return true;
+      await this.answerYes();
+      await this.step(SETTLE_FRAMES);
+    }
+    return false;
+  }
+
   /**
    * The hardest-hitting move that can actually be used, by slot index.
    *
@@ -408,8 +437,7 @@ export function withBattle(Base) {
         // underneath it breaks the one piece of reasoning this app does about
         // moves.
         if (learnMoveBox(s, this.state && this.state.e)) {
-          this.say('declined a new move — the four it has are kept');
-          await this.answerNo();
+          await this.declineNewMove();
           continue;
         }
         await this.push('A', 4, 6);

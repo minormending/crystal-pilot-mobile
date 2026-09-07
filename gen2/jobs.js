@@ -443,20 +443,30 @@ export function withJobs(Base) {
    * Grind one party member to a level.
    *
    * Smaller than the desktop task, and the list of what is missing is shorter
-   * than it was: there is no evolution or learn-move policy, which means a
-   * Pokemon with four moves that levels into a fifth is at the mercy of whatever
-   * the battle loop presses. Center trips *are* here -- the caller passes a way
-   * to heal -- and so is recovering from a knockout, which is the same trip.
+   * than it was, and is now empty. Center trips are here -- the caller passes a
+   * way to heal -- and so is recovering from a knockout, which is the same trip.
+   * A fifth move offered at a level-up is declined rather than left to whatever
+   * the battle loop presses at it. And evolution is allowed and *reported*,
+   * which is the whole of the policy: it is what somebody grinding expects, and
+   * a rename nobody mentions reads as the pilot having lost track of what it is
+   * training.
    */
   async grind(slot, toLevel, { maxBattles = 200, healBelow = 0.25,
                               heal = null, regrass = null } = {}) {
     const started = Date.now();
-    const stats = { battles: 0, won: 0, levels: 0, knockouts: 0 };
+    const stats = { battles: 0, won: 0, levels: 0, knockouts: 0, evolved: 0 };
     let stuckRun = 0, heals = 0;
     let s = await this.snap();
     const mon0 = s.party[slot];
     if (!mon0) return { ok: false, message: `party slot ${slot + 1} is empty`, stats };
     const startLevel = mon0.level;
+    // The species it started as. Evolution is the one thing a grind changes
+    // about a Pokemon that is not a number going up, and it went by in silence:
+    // measured, a Chikorita ground to Lv16 came back as #153 and nothing said
+    // so. Letting it evolve is the policy -- it is what somebody grinding
+    // expects, and cancelling would be the surprising choice -- but a policy
+    // that is never mentioned is indistinguishable from an accident.
+    let wasSpecies = mon0.species;
     if (mon0.level >= toLevel) {
       return { ok: true, message: `already Lv${mon0.level}`, stats };
     }
@@ -573,6 +583,16 @@ export function withJobs(Base) {
           };
         }
         continue;
+      }
+      // Said where it happens rather than only in the summary, because the
+      // name in every line after this one changes and an unexplained rename
+      // mid-job reads as the pilot having lost track of what it is training.
+      if (mon.species !== wasSpecies) {
+        const before = this.rom ? this.rom.speciesName(wasSpecies) : `#${wasSpecies}`;
+        const after = this.rom ? this.rom.speciesName(mon.species) : `#${mon.species}`;
+        this.say(`${before} evolved into ${after}`);
+        stats.evolved = (stats.evolved || 0) + 1;
+        wasSpecies = mon.species;
       }
       this.say(`battle ${stats.battles}: ${outcome}`);
       // Battles that end without resolving mean the pilot is not driving the
