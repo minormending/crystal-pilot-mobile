@@ -45,6 +45,10 @@ let travelPlaces = [];
 // anything in it -- a row that waits on a choice has to be drawn for the choice
 // to be makeable, and the picker is drawn with the row.
 let huntable = 0;
+// And what levels it gives, as { low, high } or null. Read from the same table
+// and at the same moment, because the two answers change together: a new map or
+// a new hour is a new list and a new range.
+let wilds = null;
 let ballId = null;
 // Frames advanced per animation frame while nobody is driving. The steps are
 // powers of two because that is how it reads: 1x, 2x, 4x... and the last one is
@@ -1452,7 +1456,7 @@ function paintJobs(s) {
   // nobody has described has no such walk.
   const ctx = { rom: romdata, target, huntWanted, ballId, savedThisSession,
                 healPlace, canFetch: typeof boot.eggErrand === 'function',
-                places: travelPlaces, travelTo, huntable,
+                places: travelPlaces, travelTo, huntable, wilds,
                 engine: state.e };
   const rows = describeRows(s, ctx);
   const offers = describeOffers(s, ctx);
@@ -1826,6 +1830,7 @@ async function refreshSpecies(s) {
   speciesKey = key;
   const here = romdata.wildOn(s.map[0], s.map[1], tod);
   huntable = here.length;
+  wilds = romdata.wildLevels(s.map[0], s.map[1], tod);
   const list = $('#species');
   list.textContent = '';
   if (!here.length) {

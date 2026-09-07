@@ -21,11 +21,12 @@
  *   places            named maps reachable from here, [{ key, name, legs }]
  *   travelTo          the map key chosen to walk to, or null
  *   huntable          how many species appear here at this hour
+ *   wilds             the levels the grass gives here, { low, high } or null
  */
 export function describeRows(s, ctx = {}) {
   const { rom = null, target = 5, huntWanted = null, ballId = null,
           savedThisSession = false, healPlace = null,
-          places = [], travelTo = null,
+          places = [], travelTo = null, wilds = null,
           // The cartridge's own numbers. A party of six and a trainer battle of
           // 2 are Gen 2's, not this module's, and reading them from an import
           // meant the stock values reached here even when a title had changed
@@ -61,10 +62,23 @@ export function describeRows(s, ctx = {}) {
 
   return {
     grind: {
-      text: lead ? `${leadName} → Lv${target}` : 'no party yet',
+      // The range the grass gives, where the cartridge has one to give. It was
+      // sitting unread in the encounter table the whole time -- a slot is two
+      // bytes, level then species, and the species reader stepped over the
+      // first of them. Worth saying because of what it explains: measured on
+      // Route 29, which produces Lv2 to Lv3, a Lv15 Pokemon aimed at Lv20 won
+      // thirty-two of thirty-five battles for two levels and a knockout. The
+      // app offered Lv20 as a preset and had nothing to say about that.
+      text: !lead ? 'no party yet'
+        : wilds ? `${leadName} → Lv${target} · here: Lv${range(wilds)}`
+        : `${leadName} → Lv${target}`,
       enabled: !!lead && afoot,
       // The level presets are meaningless with nothing to level.
       levels: !!lead,
+      // Every battle here is against something weaker than the thing being
+      // trained. A fact about two numbers rather than a formula about
+      // experience, which is why it is stated and not calculated.
+      outlevelled: !!(lead && wilds && lead.level > wilds.high),
     },
     hunt: {
       text: huntWanted ? `${huntWanted} · here now` : 'pick something below',
@@ -130,6 +144,11 @@ export function describeRows(s, ctx = {}) {
       places,
     },
   };
+}
+
+/** "2-3", or just "4" where the grass gives only one level. */
+function range({ low, high }) {
+  return low === high ? String(low) : `${low}\u2013${high}`;
 }
 
 /** "one map away", "three maps away" -- a cost somebody can feel. */
@@ -231,6 +250,12 @@ export function describeOffers(s, ctx = {}) {
   // above, which is where that is now fixed rather than papered over here.
   if (afoot && !ctx.huntWanted && (ctx.huntable || 0) > 0) {
     hint.push('pick something below to hunt or catch');
+  }
+  // Advice rather than state, so it goes here and the range itself stays in the
+  // row. Only where a grind is actually on offer: on a map with no grass the
+  // range is unknown rather than unfavourable, and there is nothing to advise.
+  if (afoot && rows.grind.outlevelled && offered.includes('grind')) {
+    hint.push('grinding here will be slow — everything is below your lead');
   }
   // Only when the row is drawn and waiting on a choice. A cartridge with no
   // named places has no row and no hint -- there is nothing to do about it from

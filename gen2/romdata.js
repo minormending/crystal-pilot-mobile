@@ -241,4 +241,57 @@ export class RomData {
     }
     return [];
   }
+
+  /**
+   * What levels the grass here produces, as `{ low, high }` or null.
+   *
+   * The level has been sitting in front of `wildOn` the whole time and gone
+   * unread: a slot is two bytes, level then species, and that method reaches
+   * past the first to get at the second. Reading it costs one more byte per
+   * slot and answers a question the app could not previously ask.
+   *
+   * Which matters because of what it prevents. Route 29 produces Lv2 to Lv4,
+   * and a grind aimed at Lv20 standing on it wins nearly every battle for
+   * almost no experience -- measured, 32 wins out of 35 battles for two levels,
+   * and a knockout. The app offered Lv20 as a preset with nothing to say about
+   * it. Now the row can.
+   *
+   * Null rather than a guess when the map has no table, because "no wild
+   * Pokemon appear here" and "they are Lv2 to Lv4" are different answers and
+   * only one of them is about levels.
+   */
+  wildLevels(group, number, timeOfDay = null) {
+    const { blocks: blockCount, slotsPerBlock, headerBytes } = this.e.encounter;
+    const entryBytes = headerBytes + slotsPerBlock * blockCount * 2;
+    for (const table of this.grass) {
+      let addr = table.addr;
+      for (let guard = 0; guard < 512; guard++) {
+        const g = this.gb.romByte(table.bank, addr);
+        if (g === TABLE_END) break;
+        const n = this.gb.romByte(table.bank, addr + 1);
+        if (g === group && n === number) {
+          const blocks = timeOfDay === null
+            ? [...Array(blockCount).keys()]
+            : [Math.max(0, Math.min(blockCount - 1, timeOfDay))];
+          let low = Infinity, high = 0;
+          for (const block of blocks) {
+            for (let sl = 0; sl < slotsPerBlock; sl++) {
+              const slot = block * slotsPerBlock + sl;
+              const at = addr + headerBytes + slot * 2;
+              // A slot with no species is padding; its level byte means
+              // nothing, and believing it would widen the range for free.
+              if (!this.gb.romByte(table.bank, at + 1)) continue;
+              const level = this.gb.romByte(table.bank, at);
+              if (!level) continue;
+              if (level < low) low = level;
+              if (level > high) high = level;
+            }
+          }
+          return high ? { low, high } : null;
+        }
+        addr += entryBytes;
+      }
+    }
+    return null;
+  }
 }

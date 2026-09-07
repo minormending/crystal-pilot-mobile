@@ -125,6 +125,66 @@ test('a grind that keeps needing a Center gives up rather than pacing', async (t
   t.true(trips <= 13, `bounded at ${trips} trips`);
 });
 
+test('a knockout is healed and carried on from, not given up on', async (t) => {
+  // Measured on the real cartridge three runs running: a grind on Route 29 past
+  // about Lv12 fights wild Pokemon worth almost no experience, so a knockout
+  // there is ordinary. Each run reported "the whole party fainted" and handed
+  // back a dead party -- with twelve unused heals in hand, having been given a
+  // way to heal.
+  const { tasks } = pilot();
+  // Full HP to start with, so the low-HP branch at the top of the loop stays
+  // out of it and only the knockout path can heal.
+  const mon = { species: 155, level: 12, hp: 40, maxHp: 40,
+                moves: [33, 0, 0, 0], pp: [30, 0, 0, 0] };
+  tasks.snap = async () => ({ party: [mon], inBattle: false, worldLoaded: true });
+  tasks._findFight = async () => true;
+  let fights = 0, trips = 0;
+  tasks.fightBattle = async () => {
+    fights++;
+    if (fights <= 2) { mon.hp = 0; return 'lost'; }
+    mon.level = 20;                       // the third battle gets there
+    return 'won';
+  };
+  const r = await tasks.grind(0, 20, { heal: async () => {
+    trips++; mon.hp = mon.maxHp; return true;
+  } });
+  t.eq(trips, 2, 'it healed after each knockout');
+  t.eq(r.stats.knockouts, 2, 'and counted them, because they cost money');
+  t.true(r.ok, 'and reached the target it was sent for');
+});
+
+test('a knockout with no way to heal still stops, and says so', async (t) => {
+  const { tasks } = pilot();
+  const mon = { species: 155, level: 12, hp: 40, maxHp: 40,
+                moves: [33, 0, 0, 0], pp: [30, 0, 0, 0] };
+  tasks.snap = async () => ({ party: [mon], inBattle: false, worldLoaded: true });
+  tasks._findFight = async () => true;
+  tasks.fightBattle = async () => 'lost';
+  const r = await tasks.grind(0, 20, {});
+  t.false(r.ok, 'nothing to be done');
+  t.contains(r.message, 'whole party fainted', 'and it is named as the thing it is');
+  t.false(r.message.includes('trips to heal'), 'without blaming a budget it never had');
+});
+
+test('knockouts share the heal budget, because it is the same trip', async (t) => {
+  // The bound exists because healing counts no battles: nothing in that branch
+  // advances, so an unbounded version paces to a Center for ever.
+  const { tasks } = pilot();
+  const mon = { species: 155, level: 12, hp: 40, maxHp: 40,
+                moves: [33, 0, 0, 0], pp: [30, 0, 0, 0] };
+  tasks.snap = async () => ({ party: [mon], inBattle: false, worldLoaded: true });
+  tasks._findFight = async () => true;
+  tasks.fightBattle = async () => 'lost';
+  let trips = 0;
+  const r = await tasks.grind(0, 20, { heal: async () => {
+    if (++trips > 40) throw new Error(`heal called ${trips} times: not bounded`);
+    return true;
+  } });
+  t.false(r.ok, 'it gives up eventually');
+  t.true(trips <= 13, `bounded at ${trips} trips`);
+  t.contains(r.message, 'trips to heal', 'and says the budget is what ran out');
+});
+
 test('a grind does not walk to a Center out of a battle it has not left', async (t) => {
   // fightBattle can come back 'stuck' with a battle still on screen, and the
   // heal branch sits above the one that fights -- so it preempted it, nav.step

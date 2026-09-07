@@ -313,6 +313,19 @@ the grass starved five battles in while standing on a route covered in it. Both
 needed map knowledge that `tasks.js` should not have, and passing a function in
 was cheaper than moving the boundary.
 
+**And `heal` covers a knockout too, which it did not.** Grinding a Pokémon well
+above the local wilds means it will eventually go down, and the job used to
+report *the whole party fainted* and return — holding a heal callback and a
+twelve-trip budget it spent none of. Measured, three runs in a row on Route 29
+ended exactly that way. The reason attached to that return was itself wrong: the
+comment said the game had already moved the player to a Pokémon Center, and the
+player was standing on Route 29 with 0 HP.
+
+Knockouts now draw on the same budget as a low-HP trip, because it is the same
+trip and the bound exists for the same reason — healing counts no battles, so
+nothing in that branch advances and an unbounded version paces for ever. The
+count comes back in `stats.knockouts`, since each one costs half your money.
+
 </details>
 
 ---
@@ -468,7 +481,7 @@ and in `bootstrap.js`, with nothing able to notice if they drifted.
 
 ### `romdata.js` — what the cartridge knows
 
-<!-- covers: gen2/romdata.js @ 1a2a14d5d215 -->
+<!-- covers: gen2/romdata.js @ 9c3ac70486d5 -->
 
 Species names, item names, wild-encounter tables, move power. All read out of
 the ROM, not shipped as a copy, so they cannot drift from the build being driven.
@@ -482,7 +495,14 @@ the ROM, not shipped as a copy, so they cannot drift from the build being driven
   back as `LTRA BALL`, `GREAT BALL` as `AT BALL`. `itemName()` walks the
   terminators.
 - `JohtoGrassWildMons` — per map: group, number, three rates, then **three
-  blocks of seven** `(level, species)` pairs for morning, day and night.
+  blocks of seven** `(level, species)` pairs for morning, day and night. Both
+  halves of that pair are read now: `wildOn` gives the species, commonest first,
+  and `wildLevels` gives `{ low, high }`. The level byte went unread for
+  sixteen versions while the species reader stepped straight over it — and it is
+  the number that decides whether a grind is a minute or an afternoon. Measured
+  against the cartridge: Route 29 gives Lv2–3, Route 30 Lv4–5, and a map with no
+  table gives `null` rather than a range, because *nothing appears here* and
+  *they are Lv2–3* are different answers.
   Time-of-day matters: Route 29 trades Pidgey and Sentret for Hoothoot after
   dark, and offering a species that cannot appear sends a hunt after something
   that was never there.
@@ -874,7 +894,7 @@ eight kilobytes a full snapshot copies, which is worth keeping distinct.
 
 ## 6. Battles
 
-<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 19fa4e92b8b2 -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 8e02405a29e0 -->
 
 ### Is it our turn?
 
@@ -1134,7 +1154,7 @@ fainted.
 
 ## 7. Catching something
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ 7503879c9eff -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ 844b9b15e6d8 -->
 
 Catching is the most involved loop, because a Poké Ball's odds turn on how much
 HP is left. Throwing at a full-health target is mostly throwing balls away.
@@ -1220,7 +1240,7 @@ precedes it defaults to yes, which is what we want; the nickname box does not.
 
 ## 7a. Three that act on where you already are
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ 544f34236597 -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ 03dbded57d8d -->
 
 Grind, hunt and catch all go *looking* for something. These three do the obvious
 thing with the situation you are already in, and take no parameters:
@@ -1282,7 +1302,7 @@ running the thing.
 
 ## 7b. Saving, and getting the save out
 
-<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 19fa4e92b8b2 -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 8e02405a29e0 -->
 
 ```mermaid
 flowchart TD
@@ -1807,7 +1827,7 @@ This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ 7fb33ea4e0b3 -->
+<!-- covers: app/main.js index.html @ 34b43a90ba1c -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -2302,7 +2322,7 @@ seconds by a page whose loop was supposedly running.
 
 ### One thing at a time
 
-<!-- covers: app/main.js @ 6fd247e5d2eb -->
+<!-- covers: app/main.js @ b8fa3aa8e6a9 -->
 
 One Game Boy, one joypad, one canvas — so a great deal of this app is about
 making sure two things are never driving them at once. There are three claims,
@@ -2877,7 +2897,7 @@ they have been installed.
 
 ### Watching the other device's screen
 
-<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ 9afc48c79a9e -->
+<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ bac7d5d91d5f -->
 
 One device shows its screen; the other watches it, and plays it if the first
 one says so. The picture goes straight between them over WebRTC and never

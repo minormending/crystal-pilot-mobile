@@ -258,6 +258,41 @@ on rather than assuming, because a bootstrap that drifts off course ends up
 mashing A at a wall. About a minute for the two presses together, and the point
 of it is that everything else needs a party to be worth running.
 
+## Grinding, and what the grass here can give
+
+Pick a level, press Go, and the pilot fights wild Pokémon until the lead reaches
+it. The presets are `+2`, `+5`, `Lv10` and `Lv20`, and the two relative ones are
+relative to the lead's own level at the moment you press them.
+
+**The row says what the grass here actually produces** — *CYNDAQUIL Lv15 → Lv20
+· here: Lv2–3* — because that is the number that decides whether the job is a
+minute or an afternoon. It is read out of your ROM's encounter table, which
+stores a level beside every species and had never been read for it.
+
+Route 29 gives **Lv2–3**. Route 30 gives **Lv4–5**. So a Lv15 Pokémon aimed at
+Lv20 on Route 29 is fighting things worth almost nothing: measured, thirty-two
+wins out of thirty-five battles bought two levels and ended in a knockout. When
+your lead is above everything the map offers, the hint says so — *grinding here
+will be slow — everything is below your lead*. It is not a refusal. It is the
+fact, stated before you spend the afternoon rather than after.
+
+A map with no grass says nothing about levels at all, rather than guessing: *no
+wild Pokémon appear here* and *they are Lv2–3* are different answers and only one
+of them is about levels.
+
+**A knockout is healed and carried on from.** Grinding a Pokémon well above the
+local wilds means it will eventually go down, and the pilot is handed a way to
+heal and a budget of twelve trips. It used to use neither here: it reported *the
+whole party fainted* and handed the job back, three runs in a row, with all
+twelve trips unspent. Now it walks to a Center, comes back and keeps going, and
+stops only when there is no way to heal or the budget is gone. The count of
+knockouts comes back with the other numbers, because each one costs half your
+money.
+
+That give-up had a reason attached and the reason was wrong. The code said the
+game had already moved you to a Pokémon Center — measured, it had not: the
+player was standing on Route 29 with a fainted Pokémon and 0 HP.
+
 ## Hunting
 
 Pick a species and the pilot walks the grass until it turns up, running from
@@ -539,7 +574,7 @@ deployed, which is not the question you are asking when a bug you saw fixed is
 still in front of you. `tools/check-app` asserts that number matches the service
 worker's cache name, because a version display that lies is worse than none.
 
-<!-- covers: sw.js @ acbff8c5fa8e -->
+<!-- covers: sw.js @ 3b290ae2e495 -->
 
 The worker fetches **network first, falling back to the cache**. That is the
 opposite of the usual offline-first advice, on purpose.

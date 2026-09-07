@@ -547,3 +547,39 @@ test('the hint offers a place only while one is worth picking', async (t) => {
             .hint.includes('a place to walk to'),
           'and silent once one is chosen');
 });
+
+// --- what the grass here gives ----------------------------------------------
+
+test('the grind row names the levels the grass actually gives', async (t) => {
+  // Measured on the cartridge: Route 29 produces Lv2–3, Route 30 Lv4–5. The
+  // level byte was sitting unread in the encounter table -- a slot is two bytes,
+  // level then species, and the species reader stepped over the first.
+  const party = { party: [{ hp: 40, maxHp: 40, species: CYNDAQUIL, level: 15 }] };
+  t.contains(look(party, { target: 20, wilds: { low: 2, high: 3 } }).grind.text,
+             'here: Lv2–3', 'a range reads as a range');
+  t.contains(look(party, { target: 20, wilds: { low: 7, high: 7 } }).grind.text,
+             'here: Lv7', 'and one level reads as one level');
+  t.false(look(party, { target: 20, wilds: null }).grind.text.includes('here:'),
+          'a map with no grass says nothing about levels rather than guessing');
+});
+
+test('a lead above everything here is told the grind will be slow', async (t) => {
+  // The measured failure this exists for: a Lv15 Pokémon aimed at Lv20 on
+  // Route 29 won 32 of 35 battles for two levels and a knockout, and the app
+  // offered Lv20 as a preset with nothing to say about it.
+  const high = { party: [{ hp: 40, maxHp: 40, species: CYNDAQUIL, level: 15 }] };
+  const low = { party: [{ hp: 20, maxHp: 20, species: CYNDAQUIL, level: 3 }] };
+  const wilds = { low: 2, high: 3 };
+
+  t.true(look(high, { target: 20, wilds }).grind.outlevelled,
+         'Lv15 against Lv2–3 is above all of it');
+  t.contains(offers(high, { target: 20, wilds, huntable: 4 }).hint, 'will be slow',
+             'and the hint says so, because that is advice rather than state');
+
+  t.false(look(low, { target: 10, wilds }).grind.outlevelled,
+          'Lv3 against Lv2–3 is not');
+  t.false(offers(low, { target: 10, wilds, huntable: 4 }).hint.includes('slow'),
+          'so nothing is said');
+  t.false(offers(high, { target: 20, wilds: null, huntable: 0 }).hint.includes('slow'),
+          'and a map with no grass is unknown rather than unfavourable');
+});

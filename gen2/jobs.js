@@ -442,14 +442,16 @@ export function withJobs(Base) {
   /**
    * Grind one party member to a level.
    *
-   * Deliberately smaller than the desktop task: no Pokemon Center trips, no
-   * evolution or learn-move policy. It exists to show the loop runs on a phone,
-   * and it stops rather than pretending when HP runs low.
+   * Smaller than the desktop task, and the list of what is missing is shorter
+   * than it was: there is no evolution or learn-move policy, which means a
+   * Pokemon with four moves that levels into a fifth is at the mercy of whatever
+   * the battle loop presses. Center trips *are* here -- the caller passes a way
+   * to heal -- and so is recovering from a knockout, which is the same trip.
    */
   async grind(slot, toLevel, { maxBattles = 200, healBelow = 0.25,
                               heal = null, regrass = null } = {}) {
     const started = Date.now();
-    const stats = { battles: 0, won: 0, levels: 0 };
+    const stats = { battles: 0, won: 0, levels: 0, knockouts: 0 };
     let stuckRun = 0, heals = 0;
     let s = await this.snap();
     const mon0 = s.party[slot];
@@ -518,15 +520,48 @@ export function withJobs(Base) {
       stats.battles++;
       if (outcome === 'won') stats.won++;
       if (outcome === 'lost') {
-        // Said rather than broken out of. Falling through to the summary
-        // reported "stopped at Lv13 (wanted Lv15)", which is true and leaves
-        // out the only part that needs acting on: the party is down, the game
-        // has moved you to a Pokemon Center, and half your money is gone.
-        return {
-          ok: false,
-          message: `the whole party fainted at Lv${mon.level}`,
-          stats: { ...stats, levels: mon.level - startLevel },
-        };
+        // Healed and carried on, where there is a way to heal and budget left.
+        //
+        // This used to return, on the reasoning that a knockout is the one
+        // thing that needs saying rather than folding into a summary. Half of
+        // that stands -- it is still said -- and the other half was a claim
+        // about the cartridge that measurement did not support. The comment
+        // read "the game has moved you to a Pokemon Center, and half your money
+        // is gone", and after three grinds that ended this way the player was
+        // standing on Route 29 with a fainted Pokemon and 0 HP. Not at a
+        // Center. So the reason for giving up was wrong.
+        //
+        // And giving up was expensive. This job is handed a way to heal and a
+        // budget of MAX_HEALS trips, and used neither here: three runs in a row
+        // reported a knockout and handed back a dead party, each time with
+        // twelve unused heals in hand. Grinding on Route 29 past about Lv12
+        // means wild Pokemon worth almost no experience, so a knockout there is
+        // ordinary rather than exceptional -- measured, 32 wins out of 35
+        // battles and two levels before one.
+        //
+        // Counted against the same budget as a low-HP trip, because it is the
+        // same trip and the bound exists for the same reason: nothing here
+        // advances while walking to a Center, so an unbounded version paces for
+        // ever.
+        stats.knockouts = (stats.knockouts || 0) + 1;
+        if (!heal || ++heals > MAX_HEALS) {
+          return {
+            ok: false,
+            message: `the whole party fainted at Lv${mon.level}`
+                     + (heal ? ` after ${MAX_HEALS} trips to heal` : ''),
+            stats: { ...stats, levels: mon.level - startLevel },
+          };
+        }
+        this.say(`knocked out at Lv${mon.level} — healing and carrying on`);
+        if (!await heal()) {
+          return {
+            ok: false,
+            message: `the whole party fainted at Lv${mon.level}, and healing `
+                     + 'did not work',
+            stats: { ...stats, levels: mon.level - startLevel },
+          };
+        }
+        continue;
       }
       this.say(`battle ${stats.battles}: ${outcome}`);
       // Battles that end without resolving mean the pilot is not driving the
