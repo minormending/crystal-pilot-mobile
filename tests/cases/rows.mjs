@@ -9,7 +9,7 @@ import { GameState } from '../../gen2/state.js';
 import { readCode } from '../../gbcore/room.js';
 import { describeHandoff, describeOffers, describeParty, describeReplaced,
          describeRoom, describeScreen, joinFailure, describeRows, describeSlot,
-         betterGrind,
+         betterGrind, betterHour, hoursLine, otherHour,
          describeUndo } from '../../app/rows.js';
 
 const sym = symbols();
@@ -641,4 +641,118 @@ test('the hint names where to go rather than only that here is slow',
   const fine = offers(lead(3), { target: 10, wilds: here, places: JOHTO,
                                  huntable: 4 }).hint;
   t.false(fine.includes('slow'), 'nothing is wrong, so nothing is said');
+});
+
+// The same patch of grass at three hours, indexed by wTimeOfDay the way
+// `wildHours` returns it. Route 29's real shape, plus one map whose night block
+// is worth waiting for -- because Route 29's is not, which is the honest thing
+// about this feature and the reason it says nothing there.
+const R29_HOURS = [
+  { species: ['SENTRET', 'PIDGEY', 'RATTATA'], levels: { low: 2, high: 4 } },
+  { species: ['SENTRET', 'PIDGEY', 'RATTATA'], levels: { low: 2, high: 4 } },
+  { species: ['HOOTHOOT', 'RATTATA'], levels: { low: 2, high: 4 } },
+];
+const NIGHT_PAYS = [
+  { species: ['PIDGEY'], levels: { low: 2, high: 4 } },
+  { species: ['PIDGEY'], levels: { low: 2, high: 4 } },
+  { species: ['GASTLY', 'HOOTHOOT'], levels: { low: 6, high: 9 } },
+];
+
+test('a better hour is the grass under your feet, later', async (t) => {
+  // The cheapest fix there is: no route, no legs, nothing to go wrong.
+  t.eq(betterHour(NIGHT_PAYS, 6, 1).name, 'after dark', 'a Lv6 lead should wait');
+  t.eq(betterHour(NIGHT_PAYS, 6, 1).wilds, { low: 6, high: 9 },
+       'and it carries what that hour gives');
+  t.eq(betterHour(NIGHT_PAYS, 10, 1), null,
+       'a Lv10 lead outgrows every hour here, so there is nothing to wait for');
+  t.eq(betterHour(R29_HOURS, 6, 1), null,
+       'and Route 29 is the same all day, which is why it says nothing');
+});
+
+test('an hour has to beat this hour, not only the lead', async (t) => {
+  // Caught by measuring rather than by reading. Crystal's three blocks carry
+  // the *same* levels and swap only the species -- Route 30 is Lv3-4 three
+  // times over -- so a rule that asked only "does this hour pay the lead"
+  // answered "come back in the morning" while standing in an identical
+  // afternoon. The app's caller was already asking about a lead the grass here
+  // does not pay, so it never saw this; the rule was right by a precondition
+  // nobody had written down.
+  t.eq(betterHour(R29_HOURS, 4, 1), null,
+       'every hour here tops out at Lv4, so no hour is an improvement');
+  t.eq(betterHour(R29_HOURS, 2, 1), null, 'and the same below the ceiling');
+  t.eq(betterHour(NIGHT_PAYS, 4, 1).name, 'after dark',
+       'while a night that really is higher is still named');
+});
+
+test('the hour it already is is never the advice', async (t) => {
+  // "Come back at a time that is now" is worse than silence.
+  t.eq(betterHour(NIGHT_PAYS, 6, 2), null, 'standing here after dark, nothing to say');
+  t.eq(betterHour(null, 6, 1), null, 'asked before the table is read');
+  // Not knowing the hour has to be a refusal. With no `now` every block is a
+  // candidate, this one included, so the advice would eventually be "come back
+  // at a time that is now".
+  t.eq(betterHour(NIGHT_PAYS, 6, null), null, 'and one where the clock is unread');
+});
+
+test('waiting is advised before walking', async (t) => {
+  // The ordering is the feature. A map that pays is two maps of walking; an
+  // hour that pays is standing still, so it wins however near the map is.
+  const lead = (level) => ({ party: [{ hp: 40, maxHp: 40,
+                                       species: CYNDAQUIL, level }] });
+  const both = offers(lead(6), { target: 20, wilds: { low: 2, high: 4 },
+                                 places: JOHTO, hours: NIGHT_PAYS, hourNow: 1,
+                                 huntable: 4 }).hint;
+  t.contains(both, 'Lv6–9 after dark', 'the hour is named');
+  t.false(both.includes('Route'), 'and the walk is not offered instead');
+
+  // With no better hour, the walk comes back -- so this adds a preference and
+  // does not replace the answer underneath it.
+  const walk = offers(lead(6), { target: 20, wilds: { low: 2, high: 4 },
+                                 places: JOHTO, hours: R29_HOURS, hourNow: 1,
+                                 huntable: 4 }).hint;
+  t.contains(walk, 'Route 31', 'the place is named again');
+
+  // And a cartridge whose table was never read behaves as it did before the
+  // feature existed, which is the shape every one of these additions takes.
+  const blind = offers(lead(6), { target: 20, wilds: { low: 2, high: 4 },
+                                  places: JOHTO, huntable: 4 }).hint;
+  t.contains(blind, 'Route 31', 'no hours, same answer as before');
+});
+
+test('a quarry that is not here now is somewhere in the day, not nowhere',
+     async (t) => {
+  t.eq(otherHour(R29_HOURS, 'HOOTHOOT', 1).name, 'after dark',
+       'picked at night, asked at noon');
+  t.eq(otherHour(R29_HOURS, 'PIDGEY', 2).name, 'in the morning',
+       'and the first hour that has it is the one named');
+  t.eq(otherHour(R29_HOURS, 'MEWTWO', 1), null,
+       'something this grass never gives is not a matter of waiting');
+  t.eq(otherHour(R29_HOURS, null, 1), null, 'nothing chosen, nothing to explain');
+  t.eq(otherHour(null, 'PIDGEY', 1), null, 'and no table means no answer');
+});
+
+test('the other hours are only mentioned where they differ', async (t) => {
+  t.contains(hoursLine(R29_HOURS, 1), 'HOOTHOOT after dark',
+             'the species the day does not have');
+  // Commonest first inside an hour, hours in clock order -- both inherited from
+  // what `wildHours` hands over, rather than re-sorted here into an order that
+  // would carry less.
+  t.eq(hoursLine(R29_HOURS, 2), 'also here: SENTRET in the morning, '
+       + 'PIDGEY in the morning', 'and it reads both ways round the clock');
+  const flat = [{ species: ['PIDGEY'], levels: { low: 2, high: 3 } },
+                { species: ['PIDGEY'], levels: { low: 2, high: 3 } },
+                { species: ['PIDGEY'], levels: { low: 2, high: 3 } }];
+  t.eq(hoursLine(flat, 1), '', 'a patch that never changes says nothing');
+  t.eq(hoursLine(null, 1), '', 'and neither does one nobody has read');
+});
+
+test('a long list of other hours is counted rather than recited', async (t) => {
+  const many = [
+    { species: ['PIDGEY'], levels: { low: 2, high: 3 } },
+    { species: ['PIDGEY'], levels: { low: 2, high: 3 } },
+    { species: ['GASTLY', 'HOOTHOOT', 'ZUBAT', 'DROWZEE'], levels: { low: 6, high: 9 } },
+  ];
+  const said = hoursLine(many, 1);
+  t.contains(said, 'and 2 more', 'two named, the rest counted');
+  t.false(said.includes('DROWZEE'), 'because a line is a line');
 });

@@ -175,6 +175,106 @@ export function betterGrind(places, level) {
   }, worth[0]);
 }
 
+/**
+ * The three hours by name, indexed by wTimeOfDay.
+ *
+ * "After dark" rather than "at night" because the app is telling somebody when
+ * to come back, and the boundary is what they need -- the clock in the game is
+ * the real one, so this is advice about their evening.
+ */
+const HOURS = ['in the morning', 'during the day', 'after dark'];
+
+/** What an hour is called, or null for an hour a cartridge does not have. */
+function hourName(block) {
+  return HOURS[block] || null;
+}
+
+/**
+ * A better hour for the grass you are already standing on, or null.
+ *
+ * `wildHours` reads all three blocks of the encounter table; the app has only
+ * ever asked about one of them, the hour it is now. This is what the other two
+ * are for, and it outranks `betterGrind` for a reason that needs no model:
+ * waiting costs no walking. Route 29 tops out at Lv4 by day and Lv4 after
+ * dark, so it says nothing there -- but a patch whose night block is four
+ * levels higher turns "walk three maps" into "come back this evening".
+ *
+ * The highest ceiling wins rather than the soonest hour, because the clock is
+ * the real one and this app cannot see how far off either is. Null when no
+ * other hour would pay, and null for the hour it already is -- advising
+ * somebody to wait for now is worse than saying nothing.
+ *
+ * Which is also why not knowing the hour is a refusal rather than a free pass:
+ * without it every block is a candidate, including the one you are standing in,
+ * so the advice would sooner or later be "come back at a time that is now".
+ *
+ * An hour also has to beat *this* hour, and not only the lead. Measured on the
+ * real cartridge, which is where this was caught: Crystal's three blocks carry
+ * the same levels and swap only the species, so `wildHours(26, 1)` is Lv3-4
+ * three times over -- and a rule that asked "does this hour pay the lead"
+ * answered yes for the morning while standing in an identical afternoon. The
+ * app's only caller had already established that here does not pay, so it was
+ * right by a precondition it never stated. Stating it in here is the fix, and
+ * the second caller is the reason.
+ */
+export function betterHour(hours, level, now) {
+  if (!Array.isArray(hours) || typeof now !== 'number') return null;
+  const here = hours[now] && hours[now].levels ? hours[now].levels.high : 0;
+  let best = null;
+  hours.forEach((hour, block) => {
+    if (block === now || !hour || !hour.levels) return;
+    if (hour.levels.high < level || hour.levels.high <= here) return;
+    if (!best || hour.levels.high > best.wilds.high) {
+      best = { block, name: hourName(block), wilds: hour.levels };
+    }
+  });
+  return best;
+}
+
+/**
+ * Which hour here holds a species that is not here now, or null.
+ *
+ * The list of things to hunt is rebuilt whenever the map or the hour changes,
+ * and a quarry that no longer lives here is dropped -- silently, which is the
+ * problem. Pick HOOTHOOT at night, come back at noon, and the chip is gone
+ * with nothing said about why. It is not gone: it is six hours away.
+ */
+export function otherHour(hours, name, now) {
+  if (!Array.isArray(hours) || !name) return null;
+  for (let block = 0; block < hours.length; block++) {
+    if (block === now || !hours[block]) continue;
+    if (hours[block].species.includes(name)) {
+      return { block, name: hourName(block) };
+    }
+  }
+  return null;
+}
+
+/**
+ * What the other hours add here, as a sentence, or ''.
+ *
+ * Said only where the species differ, because on most maps they do not and a
+ * line saying "the same four, all day" is noise. Names them when there are few
+ * enough to name.
+ */
+export function hoursLine(hours, now) {
+  if (!Array.isArray(hours) || !hours[now]) return '';
+  const mine = new Set(hours[now].species);
+  const extra = [];
+  hours.forEach((hour, block) => {
+    if (block === now || !hour) return;
+    for (const name of hour.species) {
+      if (!mine.has(name) && !extra.some((e) => e.name === name)) {
+        extra.push({ name, block });
+      }
+    }
+  });
+  if (!extra.length) return '';
+  const words = extra.slice(0, 2).map((e) => `${e.name} ${hourName(e.block)}`);
+  const rest = extra.length - words.length;
+  return `also here: ${words.join(', ')}${rest ? ` and ${rest} more` : ''}`;
+}
+
 /** "2-3", or just "4" where the grass gives only one level. */
 function range({ low, high }) {
   return low === high ? String(low) : `${low}\u2013${high}`;
@@ -288,12 +388,25 @@ export function describeOffers(s, ctx = {}) {
     // them know of somewhere. Naming the place is the whole value: "this will be
     // slow" is a complaint, and "Route 30 gives Lv4-5, two maps away" is
     // something to do about it.
+    // Waiting before walking. The grass under your feet at another hour is the
+    // cheapest fix there is -- no route, no legs, nothing to go wrong -- so an
+    // hour that pays outranks a map that pays, however near the map is.
     const lead = s.party[0];
-    const better = lead ? betterGrind(ctx.places, lead.level) : null;
-    hint.push(better
-      ? `slow here — ${better.name} gives Lv${range(better.wilds)}, `
-        + legsWord(better.legs)
-      : 'grinding here will be slow — everything is below your lead');
+    const hour = lead ? betterHour(ctx.hours, lead.level, ctx.hourNow) : null;
+    if (hour) {
+      hint.push(`slow here — this grass gives Lv${range(hour.wilds)} ${hour.name}`);
+    } else {
+      // Computed here rather than above, so the preference lives in exactly one
+      // place. Guarding the *call* as well reads as thrift and is worse than
+      // that: it makes the ordering true twice, and a mutation that inverts
+      // either copy is cancelled by the other -- which is how this was found,
+      // by a mutation that should have broken a test and did not.
+      const better = lead ? betterGrind(ctx.places, lead.level) : null;
+      hint.push(better
+        ? `slow here — ${better.name} gives Lv${range(better.wilds)}, `
+          + legsWord(better.legs)
+        : 'grinding here will be slow — everything is below your lead');
+    }
   }
   // Only when the row is drawn and waiting on a choice. A cartridge with no
   // named places has no row and no hint -- there is nothing to do about it from

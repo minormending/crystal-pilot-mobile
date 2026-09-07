@@ -4,10 +4,11 @@ import { GameBoy } from '../gbcore/gb.js';
 import { Symbols, sharedNames } from '../gen2/symbols.js';
 import { describeHandoff, describeOffers, describeParty, describeReplaced,
          describeRoom, describeRows, describeScreen, describeSlot,
-         describeTitle, describeUndo, joinFailure } from './rows.js';
+         describeTitle, describeUndo, hoursLine, joinFailure,
+         otherHour } from './rows.js';
 import { VERSION } from '../gbcore/version.js';
-import { forgetKept, keepBattery, keepRom, keepSym, keptMeta, readOpts, recall,
-         sanitise, writeOpts } from '../gbcore/remember.js';
+import { adoptable, forgetKept, keepBattery, keepRom, keepSym, keptMeta,
+         readOpts, recall, sanitise, writeOpts } from '../gbcore/remember.js';
 import { chosenName, needsOffer, openRoom, wasSharing } from '../gbcore/room.js';
 import { createHost, createWatcher } from '../gbcore/stream.js';
 import { Cancelled } from '../gbcore/taskbase.js';
@@ -49,6 +50,12 @@ let huntable = 0;
 // and at the same moment, because the two answers change together: a new map or
 // a new hour is a new list and a new range.
 let wilds = null;
+// And all three hours of the same table, plus which one it is now. The two
+// above are this hour's slice of exactly these bytes; keeping the whole thing
+// is what lets the app answer "would waiting fix it", which is the only advice
+// that costs no walking.
+let hours = null;
+let hourNow = null;
 let ballId = null;
 // Frames advanced per animation frame while nobody is driving. The steps are
 // powers of two because that is how it reads: 1x, 2x, 4x... and the last one is
@@ -1457,6 +1464,7 @@ function paintJobs(s) {
   const ctx = { rom: romdata, target, huntWanted, ballId, savedThisSession,
                 healPlace, canFetch: typeof boot.eggErrand === 'function',
                 places: travelPlaces, travelTo, huntable, wilds,
+                hours, hourNow,
                 engine: state.e };
   const rows = describeRows(s, ctx);
   const offers = describeOffers(s, ctx);
@@ -1831,11 +1839,21 @@ async function refreshSpecies(s) {
   const here = romdata.wildOn(s.map[0], s.map[1], tod);
   huntable = here.length;
   wilds = romdata.wildLevels(s.map[0], s.map[1], tod);
+  hours = romdata.wildHours(s.map[0], s.map[1]);
+  hourNow = tod;
   const list = $('#species');
   list.textContent = '';
   if (!here.length) {
-    list.innerHTML = '<span class="seen">nothing wild appears here — ' +
-                     'stand on a route with grass</span>';
+    // "Stand on a route with grass" is the right thing to say on a map with no
+    // encounter table, and the wrong thing to say to somebody standing on grass
+    // at an hour that happens to be empty -- so where the other hours know
+    // better, they answer instead. Crystal cannot produce that state: every
+    // block of every entry is full. A hack with a day-only route can, which is
+    // the whole reason this app reads the table rather than shipping one.
+    const later = hoursLine(hours, tod);
+    list.innerHTML = `<span class="seen">${later
+      ? `nothing wild appears here at this hour — ${later}`
+      : 'nothing wild appears here — stand on a route with grass'}</span>`;
     huntWanted = null;
     return;
   }
@@ -1850,8 +1868,13 @@ async function refreshSpecies(s) {
     };
     list.appendChild(b);
   }
-  // Whatever was being hunted may not live here.
-  if (huntWanted && !here.includes(huntWanted)) huntWanted = null;
+  // Whatever was being hunted may not live here -- and where it is not here
+  // *at this hour*, say so instead of just dropping it. The chip disappearing
+  // on its own, as the clock crosses a boundary, is the one change to this list
+  // nobody made and nothing explained.
+  const gone = huntWanted && !here.includes(huntWanted) ? huntWanted : null;
+  const lost = gone ? otherHour(hours, gone, tod) : null;
+  if (gone) huntWanted = null;
   // Last session's quarry, but only where it can actually be found and only
   // when nothing is chosen -- so this restores a choice and never overrides
   // one. The list is rebuilt whenever the map or the hour changes, which is
@@ -1859,12 +1882,29 @@ async function refreshSpecies(s) {
   if (!huntWanted && wanted.hunt && here.includes(wanted.hunt)) {
     huntWanted = wanted.hunt;
   }
+  // One line under the chips, and only where the hours actually differ. On most
+  // maps they do not, and "the same four all day" is a line about nothing.
+  const said = lost ? `${gone} is here ${lost.name}, not now`
+                    : hoursLine(hours, tod);
+  if (said) {
+    const note = document.createElement('span');
+    note.className = 'seen';
+    note.textContent = said;
+    list.appendChild(note);
+  }
   markSpecies(list);
 }
 
-/** One source for which button is lit: whatever `huntWanted` says. */
+/**
+ * One source for which button is lit: whatever `huntWanted` says.
+ *
+ * Buttons, not children. It walked every child while every child was a chip,
+ * and the hours line is now a `<span>` in the same list -- so it was being
+ * offered the lit class on the strength of its text, which is a thing this
+ * function should never have been deciding about anything but a chip.
+ */
 function markSpecies(list) {
-  for (const b of list.children) {
+  for (const b of list.querySelectorAll('button')) {
     b.classList.toggle('on', b.textContent === huntWanted);
   }
 }
@@ -2221,6 +2261,24 @@ async function walkToTap(tx, ty) {
     } else {
       setStatus(`gave up at ${where}`, 'bad');
     }
+  } catch (e) {
+    // A `finally` and no `catch` was the whole of the error handling here, and
+    // this is the only other place in the app that drives the emulator for
+    // somebody. `runTask` has said for versions why that is not enough --
+    // *a task that dies silently looks indistinguishable from one still
+    // working* -- and had the catch to go with it; this one restored the flag,
+    // the pad and the buttons and let the error go nowhere. The click handler
+    // does not await the call, so a bad read or a settle that throws mid-walk
+    // became an unhandled rejection: the walk stops, the marker clears, and
+    // the status line still holds whatever it said before the tap.
+    //
+    // Exactly the shape found in `Join` three audits ago -- a `finally`
+    // without a `catch` on the one path nobody presses twice.
+    if (e instanceof Cancelled) {
+      setStatus('stopped', 'ok');
+    } else {
+      setStatus(`the walk stopped: ${e && e.message ? e.message : e}`, 'bad');
+    }
   } finally {
     // The marker outlives the walk by a moment, because arriving is worth
     // seeing -- but only when we arrived. A goal is a tile on one map, so after
@@ -2484,16 +2542,13 @@ function saveOption(patch) {
  */
 function adoptOptions(raw) {
   const clean = sanitise(raw, LIMITS);
-  // An empty group is not a choice anybody made. A room nobody has written to
-  // answers with one, and adopting it would clear this device's options at the
-  // moment it joined -- which is exactly what happened the first time this ran.
-  if (clean.speed === null && clean.grind === null && clean.hunt === null) return;
-  // And an older group loses. Both devices stamp what they chose when they
-  // chose it, so this is the same comparison the room's own merge makes,
-  // repeated here because onChange also fires for this device's own writes.
-  if (clean.at < wanted.at) return;
-  if (clean.speed === wanted.speed && clean.grind === wanted.grind
-      && clean.hunt === wanted.hunt) return;
+  // Empty, older, or the same: three refusals, and all three are in
+  // `adoptable` rather than here. They were three conditions over a
+  // hand-written list of fields, and `travel` arrived four versions after the
+  // list -- so a destination chosen on the tablet was published, delivered,
+  // and refused at the door, twice over: as an empty group when it was the only
+  // choice made, and as no change when it was not.
+  if (!adoptable(clean, wanted)) return;
   wanted = clean;
   // The room is this device's memory now too, so a reload keeps what arrived,
   // and it keeps *their* stamp rather than taking a new one here.

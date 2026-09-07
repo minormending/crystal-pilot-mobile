@@ -46,7 +46,20 @@ function gathered(pc) {
 }
 
 const send = (channel, msg) => {
-  if (channel && channel.readyState === 'open') channel.send(JSON.stringify(msg));
+  if (!channel || channel.readyState !== 'open') return;
+  // `send` throws rather than returning false, and the readyState read above is
+  // a moment old -- a channel that starts closing in between raises
+  // InvalidStateError. Dropped, because dropping is already what this function
+  // does before the channel opens, and because of where the throw would land:
+  // `tell` is called from `tellInput`, which runs inside a `finally` on the
+  // walk path, and an exception thrown from a `finally` replaces the error that
+  // was already on its way out.
+  //
+  // Not observed -- this is the half of the app that has never run on two real
+  // devices -- so it is written down as hardening rather than as a measurement.
+  try {
+    channel.send(JSON.stringify(msg));
+  } catch (e) { /* the other end is going away; the next press will say so */ }
 };
 
 /**
