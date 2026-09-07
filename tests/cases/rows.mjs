@@ -9,6 +9,7 @@ import { GameState } from '../../gen2/state.js';
 import { readCode } from '../../gbcore/room.js';
 import { describeHandoff, describeOffers, describeParty, describeReplaced,
          describeRoom, describeScreen, joinFailure, describeRows, describeSlot,
+         betterGrind,
          describeUndo } from '../../app/rows.js';
 
 const sym = symbols();
@@ -582,4 +583,62 @@ test('a lead above everything here is told the grind will be slow', async (t) =>
           'so nothing is said');
   t.false(offers(high, { target: 20, wilds: null, huntable: 0 }).hint.includes('slow'),
           'and a map with no grass is unknown rather than unfavourable');
+});
+
+// --- somewhere better to grind ----------------------------------------------
+
+// The real numbers, measured off the cartridge: Route 29 gives Lv2–3, Route 30
+// Lv4–5, and Elm's lab has no grass at all.
+const JOHTO = [
+  { key: 24 * 256 + 3, name: 'Route 29', legs: 1, wilds: { low: 2, high: 3 } },
+  { key: 26 * 256 + 2, name: 'Route 30', legs: 2, wilds: { low: 4, high: 5 } },
+  { key: 26 * 256 + 3, name: 'Route 31', legs: 3, wilds: { low: 5, high: 8 } },
+  { key: 24 * 256 + 5, name: "Elm's lab", legs: 1, wilds: null },
+];
+
+test('a better place to grind is the nearest one whose grass pays', async (t) => {
+  // One fact about two numbers, not a model of experience: a place is worth
+  // walking to when its grass tops out at or above the level being trained.
+  t.eq(betterGrind(JOHTO, 3).name, 'Route 29', 'Lv3 is still paid here');
+  t.eq(betterGrind(JOHTO, 5).name, 'Route 30',
+       'Lv5 needs Route 30, and two legs beat three');
+  t.eq(betterGrind(JOHTO, 7).name, 'Route 31',
+       'Lv7 outgrows Route 30, so the further one wins on its ceiling');
+  t.eq(betterGrind(JOHTO, 15), null,
+       'and nothing reachable pays a Lv15 lead, which has to read as silence');
+});
+
+test('a map with no grass is never suggested', async (t) => {
+  const indoors = [{ key: 1, name: "Elm's lab", legs: 1, wilds: null }];
+  t.eq(betterGrind(indoors, 5), null, 'no table means no answer, not a guess');
+  t.eq(betterGrind([], 5), null, 'and nowhere reachable means the same');
+  t.eq(betterGrind(null, 5), null, 'as does having asked before the list exists');
+});
+
+test('the hint names where to go rather than only that here is slow',
+     async (t) => {
+  // The two previous passes meeting: one read the level beside every species,
+  // the other built the list of reachable named maps. Neither alone answers the
+  // question a slow grind actually raises.
+  const lead = (level) => ({ party: [{ hp: 40, maxHp: 40,
+                                       species: CYNDAQUIL, level }] });
+  const here = { low: 2, high: 3 };
+
+  const said = offers(lead(6), { target: 20, wilds: here, places: JOHTO,
+                                 huntable: 4 }).hint;
+  t.contains(said, 'Route 31', 'it names the place');
+  t.contains(said, 'Lv5–8', 'and what that place gives');
+  t.contains(said, 'three maps away', 'and what the walk costs');
+
+  // Nothing better reachable: the older, vaguer line, because there is nothing
+  // to do about it from here and pretending otherwise would be worse.
+  const stuck = offers(lead(20), { target: 30, wilds: here, places: JOHTO,
+                                   huntable: 4 }).hint;
+  t.contains(stuck, 'everything is below your lead', 'it says only what it knows');
+  t.false(stuck.includes('Route'), 'and names nowhere');
+
+  // And a lead the grass here still pays gets no advice at all.
+  const fine = offers(lead(3), { target: 10, wilds: here, places: JOHTO,
+                                 huntable: 4 }).hint;
+  t.false(fine.includes('slow'), 'nothing is wrong, so nothing is said');
 });

@@ -1890,6 +1890,16 @@ async function refreshPlaces(s) {
   if (String(here) === placesKey) return;
   placesKey = String(here);
   travelPlaces = boot.placesFrom(here);
+  // What the grass gives at each of them, so the grind hint can name somewhere
+  // better than here rather than only complaining about here. Composed at this
+  // layer on purpose: `placesFrom` is the map graph's answer and `wildLevels` is
+  // the cartridge's, and this is the only place that holds both.
+  if (romdata) {
+    const tod = (await gb.readBytes(symbols.addr('wTimeOfDay'), 1))[0];
+    for (const place of travelPlaces) {
+      place.wilds = romdata.wildLevels(place.key >> 8, place.key & 0xff, tod);
+    }
+  }
   const list = $('#places');
   list.textContent = '';
   for (const place of travelPlaces) {

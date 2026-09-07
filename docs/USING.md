@@ -280,6 +280,19 @@ A map with no grass says nothing about levels at all, rather than guessing: *no
 wild Pokémon appear here* and *they are Lv2–3* are different answers and only one
 of them is about levels.
 
+**And when here is slow, it says where to go instead** — *slow here — Route 31
+gives Lv4–5, three maps away*. That line is two things the app already knew
+meeting for the first time: the levels each map's grass gives, read out of your
+ROM, and the list of named maps the walk can reach from where you stand. A place
+is worth naming when its grass tops out at or above the level being trained,
+because that is the difference between a battle that pays and one that does not;
+among those, the shortest walk wins. Measured on Route 29 with a Lv5 lead:
+Route 30 gives Lv3–4 and is two maps away, Route 31 gives Lv4–5 and is three —
+and Route 31 is the one named, because Lv4 is not enough for a Lv5 Pokémon.
+
+When nothing reachable would be better it says only that, and names nowhere.
+Pretending otherwise would be worse than saying less.
+
 **It swings the hardest move it has, and heals when nothing left can win.** The
 pilot reads your cartridge's move table, so it knows Razor Leaf hits harder than
 Tackle and that Growl hits nothing at all. It used to take whichever move was
@@ -607,7 +620,7 @@ deployed, which is not the question you are asking when a bug you saw fixed is
 still in front of you. `tools/check-app` asserts that number matches the service
 worker's cache name, because a version display that lies is worse than none.
 
-<!-- covers: sw.js @ 217c230b91eb -->
+<!-- covers: sw.js @ c1825db192e9 -->
 
 The worker fetches **network first, falling back to the cache**. That is the
 opposite of the usual offline-first advice, on purpose.

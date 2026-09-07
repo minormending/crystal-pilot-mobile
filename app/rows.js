@@ -146,6 +146,35 @@ export function describeRows(s, ctx = {}) {
   };
 }
 
+/**
+ * Somewhere reachable whose grass is worth more than the grass here.
+ *
+ * This is the two previous passes meeting. One of them read the level beside
+ * every species, so the app knows Route 29 gives Lv2-3 and Route 30 gives
+ * Lv4-5. The other built the list of named maps the graph can reach from where
+ * you stand. Neither alone answers the question a grind actually raises, which
+ * is *then where should I go instead*.
+ *
+ * "Better" is one fact about two numbers, deliberately, and not a model of
+ * experience: a place is worth walking to when its grass tops out at or above
+ * the level being trained, because that is the difference between a battle that
+ * pays and one that does not. Among those, the fewest legs wins -- a Center
+ * three maps away is not an improvement on a slow grind -- and a tie goes to
+ * the higher ceiling.
+ *
+ * Null when nothing reachable is better, which is the common case late on and
+ * has to read as silence rather than as a recommendation to stay put.
+ */
+export function betterGrind(places, level) {
+  const worth = (places || []).filter(
+    (pl) => pl.wilds && pl.wilds.high >= level);
+  if (!worth.length) return null;
+  return worth.reduce((best, pl) => {
+    if (pl.legs !== best.legs) return pl.legs < best.legs ? pl : best;
+    return pl.wilds.high > best.wilds.high ? pl : best;
+  }, worth[0]);
+}
+
 /** "2-3", or just "4" where the grass gives only one level. */
 function range({ low, high }) {
   return low === high ? String(low) : `${low}\u2013${high}`;
@@ -255,7 +284,16 @@ export function describeOffers(s, ctx = {}) {
   // row. Only where a grind is actually on offer: on a map with no grass the
   // range is unknown rather than unfavourable, and there is nothing to advise.
   if (afoot && rows.grind.outlevelled && offered.includes('grind')) {
-    hint.push('grinding here will be slow — everything is below your lead');
+    // And where to go instead, when the graph and the encounter tables between
+    // them know of somewhere. Naming the place is the whole value: "this will be
+    // slow" is a complaint, and "Route 30 gives Lv4-5, two maps away" is
+    // something to do about it.
+    const lead = s.party[0];
+    const better = lead ? betterGrind(ctx.places, lead.level) : null;
+    hint.push(better
+      ? `slow here — ${better.name} gives Lv${range(better.wilds)}, `
+        + legsWord(better.legs)
+      : 'grinding here will be slow — everything is below your lead');
   }
   // Only when the row is drawn and waiting on a choice. A cartridge with no
   // named places has no row and no hint -- there is nothing to do about it from

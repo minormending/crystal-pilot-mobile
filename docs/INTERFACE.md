@@ -137,6 +137,14 @@ for the *no* balls case, which is why the empty bag worked and the full one did
 not. Travel walked into the same trap the day it was added, which is how it was
 found.
 
+**The quiet line can now answer the question it raises.** *Grinding here will be
+slow* is a complaint; *slow here — Route 31 gives Lv4–5, three maps away* is
+something to do about it. Both halves of that sentence come from the cartridge —
+the level range from its encounter tables, the distance from its map graph — and
+`rows.js` gets them handed to it, because it has never known what appears where.
+When nothing reachable is better it falls back to the shorter line and names
+nowhere, since a recommendation that does not exist is worse than an admission.
+
 One quiet line survives the cull. It says what would *add* to the list, and only
 when there is something to do about it — *most jobs need a Pokémon with you*,
 *pick something below to hunt or catch*, *or a place to walk to*. That last
@@ -496,4 +504,4 @@ So this page carries a marker naming the files it describes and the hash they
 had when it was last read against them. `tools/docs-check` reports it when they
 move, and the pre-commit hook blocks on that report.
 
-<!-- covers: index.html app/main.js app/rows.js @ 56db99895f84 -->
+<!-- covers: index.html app/main.js app/rows.js @ 6a858e685b1c -->
