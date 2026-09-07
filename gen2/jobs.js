@@ -467,6 +467,25 @@ export function withJobs(Base) {
     // expects, and cancelling would be the surprising choice -- but a policy
     // that is never mentioned is indistinguishable from an accident.
     let wasSpecies = mon0.species;
+    /**
+     * Say it, once, the first time a snapshot shows a different species.
+     *
+     * Called with a *fresh* snapshot rather than after the fight, and that is
+     * the fix: the old check read the snapshot taken at the top of the
+     * iteration, which is the party as it was *before* the battle that did the
+     * evolving. So it reported a battle late -- and the level break sits above
+     * it, so an evolution in the battle that reached the target was never
+     * reported at all. Which is the likeliest battle for it to happen in: the
+     * one that gains the last level.
+     */
+    const noteEvolution = (mon) => {
+      if (!mon || mon.species === wasSpecies) return;
+      const before = this.rom ? this.rom.speciesName(wasSpecies) : `#${wasSpecies}`;
+      const after = this.rom ? this.rom.speciesName(mon.species) : `#${mon.species}`;
+      this.say(`${before} evolved into ${after}`);
+      stats.evolved = (stats.evolved || 0) + 1;
+      wasSpecies = mon.species;
+    };
     if (mon0.level >= toLevel) {
       return { ok: true, message: `already Lv${mon0.level}`, stats };
     }
@@ -475,6 +494,9 @@ export function withJobs(Base) {
     while (stats.battles < maxBattles && !this.cancelled) {
       s = await this.snap();
       const mon = s.party[slot];
+      // Above both breaks, because this snapshot is the first sight of what the
+      // previous battle did and either break can be the loop's last act.
+      noteEvolution(mon);
       if (!mon) break;
       if (mon.level >= toLevel) break;
       // Out of PP is as much a reason to go to a Center as low HP: the game
@@ -584,16 +606,6 @@ export function withJobs(Base) {
         }
         continue;
       }
-      // Said where it happens rather than only in the summary, because the
-      // name in every line after this one changes and an unexplained rename
-      // mid-job reads as the pilot having lost track of what it is training.
-      if (mon.species !== wasSpecies) {
-        const before = this.rom ? this.rom.speciesName(wasSpecies) : `#${wasSpecies}`;
-        const after = this.rom ? this.rom.speciesName(mon.species) : `#${mon.species}`;
-        this.say(`${before} evolved into ${after}`);
-        stats.evolved = (stats.evolved || 0) + 1;
-        wasSpecies = mon.species;
-      }
       this.say(`battle ${stats.battles}: ${outcome}`);
       // Battles that end without resolving mean the pilot is not driving the
       // fight any more -- something is on screen it does not understand. A few
@@ -611,6 +623,10 @@ export function withJobs(Base) {
 
     s = await this.snap();
     const mon = s.party[slot];
+    // The loop's own condition -- the battle budget, or a cancel -- exits
+    // without taking another snapshot, so the last battle's evolution is first
+    // visible here.
+    noteEvolution(mon);
     stats.levels = mon ? mon.level - startLevel : 0;
     stats.seconds = ((Date.now() - started) / 1000).toFixed(1);
     const reached = mon && mon.level >= toLevel;
