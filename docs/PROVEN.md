@@ -414,6 +414,9 @@ exactly why nothing failed.
 | 17 | a knockout ended the grind, with twelve unused heals in hand | grinding past the local wilds | **grinding for real, to Lv15** |
 | 17 | and the reason given for stopping was a claim the cartridge does not support | the same | grinding for real |
 | 17 | the level beside every species had gone unread for sixteen versions | reading the table | grinding for real |
+| 18 | the grind swung whatever was first in the list, not what could win | Tackle running dry | **grinding it again, further** |
+| 18 | and "out of PP" counted a move that takes no HP off anything | Growl at 3 PP | grinding it again |
+| 18 | a level-up replaced a move nobody chose | four moves and a fifth offered | grinding it again |
 
 Five things in that table are worth more than the individual rows.
 
@@ -424,12 +427,12 @@ device, a second cartridge, a second Pokémon. What it measures is how much of
 the world you have to *arrange*, not how much you have to own: the fifth pass
 needed no hardware at all, only a party with a corpse in slot one.
 
-**Exactly one of the forty-nine was caught by a check**, and only after the fix
+**Two of the fifty-two were caught by a check**, and only after the fix
 had decided what to look for: the wiring group named the four modules still
 importing constants that had just been deleted. One more was caught by a *test*,
 and only because the test hung — the obvious `continue` for the party prompt
 advanced nothing in a loop bounded by balls thrown. That is the honest weight to
-give this repository's seventeen check groups and 197 tests: they hold a fix
+give this repository's seventeen check groups and 205 tests: they hold a fix
 down, and they catch the fix that is itself wrong. They do not find the fault.
 
 **Measuring also rules things out, which is half of what it is for.** The
@@ -764,6 +767,81 @@ grind starves the timer queue. A `setInterval` sampling the party got **six
 samples in forty seconds** while the loop ran, because the loop awaits only
 already-resolved promises — exactly the limitation `taskbase.js` documents for
 its own watchdog, met from the other side.
+
+**The eighteenth pass finished what the seventeenth could not, by grinding the
+same thing further.** The seventeenth set out to build a learn-move policy and
+could not reach the state that needs one: Route 29 gives Lv2–3, so a Cyndaquil
+crawls to Lv19. The way through was to pick a different starter. Chikorita's
+slots fill at Lv12 and its fifth move comes at **Lv15**, four levels sooner.
+
+Getting there took three runs and each one found something, because the road to
+a measurement is made of the same code the measurement is about.
+
+| | before | after |
+| --- | --- | --- |
+| Chikorita, Lv5 → Lv16, Route 29 | 64 battles, 59 won, **stalled at Lv13** | 122 battles, **122 won**, 0 knockouts, Lv16 in 155s |
+
+**All three defects are one confusion: slot order is not a strategy.**
+
+`chooseMove` fell back to `usable[0]`. The catch path has read the move table
+since it was written, to find the *gentlest* attack — knocking out what you are
+catching wastes the ball — and the winning direction had nothing at all.
+Chikorita's slots are Tackle, Growl, Razor Leaf, Reflect. Sixty-four battles in,
+Tackle was dry, so slot order handed back **Growl**, which takes no HP off
+anything, while Razor Leaf sat in slot three at 25 PP.
+
+And `dry` asked whether *any* move had PP. Growl at 3 PP answered yes, so the
+grind never went to heal and kept swinging a move that cannot end a fight — five
+battles going nowhere, a party at 3 HP out of 36, and a trip to a Center that
+would have restored the lot.
+
+**Then the thing the pass came for.** With four moves and a fifth offered, the
+game asks *delete an older move?* — a two-row YES/NO box with YES under the
+cursor — inside a loop that presses A up to a hundred and twenty times.
+Measured: the Chikorita reached Lv15 and came out of the battle holding
+`[POISONPOWDER, GROWL, RAZOR LEAF, REFLECT]` where it went in holding
+`[TACKLE, …]`. **Tackle was not chosen away. It was top of the list when a stray
+A landed.**
+
+```mermaid
+flowchart LR
+    A["a battle ends,<br/>the lead levels up"] --> B{"already knows<br/>four moves?"}
+    B -- no --> L["it just learns it"]
+    B -- yes --> Q["<b>delete an older move?</b><br/>two items, border row 7<br/>YES under the cursor"]
+    Q --> C["<b>before:</b> A takes YES,<br/>the list opens, the next A<br/>deletes whatever is on top"]
+    Q --> D["<b>now:</b> the cursor is driven<br/>to NO and pressed"]
+```
+
+The signature came off the cartridge at the instant the moveset changed, which
+is the only place it could honestly come from: **two items at border row 7**. The
+battle menu is thirty-four at row 12, the pack five at row 1, and the pack
+mid-throw is *also two items* — at row 0. So the row separates them, not the
+count.
+
+**And the policy is a decision rather than a default.** Decline, because the
+pilot cannot know which of four moves you value, a declined move can be taught by
+hand and a deleted one cannot, and `chip` reasons about this very list to pick
+the gentlest attack — a set that changes underneath it breaks the one piece of
+reasoning this app does about moves.
+
+**What this pass did not manage**, and it is written into the code as well as
+here: the guard has never been *seen* firing. The run after adding it took the
+same Chikorita over Lv15 with all four moves intact and logged no decline — so
+something else preserved them and it is not known what. The likeliest
+explanation is timing: the level-up and the end of the battle land within a few
+frames, and if `!s.inBattle` is true first the loop returns before the box is
+looked at, leaving its fate to whatever presses next. Which is exactly the
+accident the guard exists to stop relying on. It stays on a measured signature
+and a tested behaviour, and the next person to grind past four moves should watch
+the log.
+
+Two notes on the tests, both about this repository catching itself. The first
+draft exercised `strongest` alone and **passed with the argument removed from
+`fightBattle` entirely** — the same shape as the ReferenceError that once reached
+the deployed app, where the tests exercised the static directly rather than any
+of its callers. And the `exports` group added two passes ago failed on
+`learnMoveBox` having no reader outside its own module, which is how it came to
+be tested rather than quietly un-exported.
 
 **The two worst were silent data loss**, and both were doors the app opens by
 itself. Every door a *person* opens was already locked and had been for
