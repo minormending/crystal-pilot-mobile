@@ -101,16 +101,6 @@ export class RomData {
     return name;
   }
 
-  /** Every species id that has a name, as name -> id, for looking one up. */
-  speciesIndex() {
-    if (!this._index) {
-      this._index = new Map();
-      for (let id = 1; id <= this.e.speciesCount; id++) {
-        this._index.set(this.speciesName(id), id);
-      }
-    }
-    return this._index;
-  }
 
   /**
    * Item name for a 1-based item id.
@@ -189,16 +179,6 @@ export class RomData {
     return !this.e.lethalEffects.includes(m.effect);
   }
 
-  /** Normalised name -> id, so a ball can be found by what it is called. */
-  itemIndex(limit = 60) {
-    if (!this._itemIndex) {
-      this._itemIndex = new Map();
-      for (let id = 1; id <= limit; id++) {
-        this._itemIndex.set(normalise(this.itemName(id)), id);
-      }
-    }
-    return this._itemIndex;
-  }
 
   /**
    * What appears in the grass on a map, commonest first.

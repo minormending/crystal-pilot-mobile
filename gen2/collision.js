@@ -181,12 +181,6 @@ export class CollisionMap {
     return false;
   }
 
-  /** Re-check the decode against the tile the player is standing on now. */
-  verify(wram) {
-    this.use(wram);
-    const px = b(wram, this.a.x), py = b(wram, this.a.y);
-    return this.collisionAt(px, py) === b(wram, this.a.playerTile);
-  }
 
   // --- classification --------------------------------------------------------
   isWall(coll) { return this.permission(coll) === WALL; }

@@ -481,7 +481,7 @@ and in `bootstrap.js`, with nothing able to notice if they drifted.
 
 ### `romdata.js` — what the cartridge knows
 
-<!-- covers: gen2/romdata.js @ 9c3ac70486d5 -->
+<!-- covers: gen2/romdata.js @ b020198ec0ba -->
 
 Species names, item names, wild-encounter tables, move power. All read out of
 the ROM, not shipped as a copy, so they cannot drift from the build being driven.
@@ -502,7 +502,20 @@ the ROM, not shipped as a copy, so they cannot drift from the build being driven
   the number that decides whether a grind is a minute or an afternoon. Measured
   against the cartridge: Route 29 gives Lv2–3, Route 30 Lv4–5, and a map with no
   table gives `null` rather than a range, because *nothing appears here* and
-  *they are Lv2–3* are different answers.
+  *they are Lv2–3* are different answers. The range moves with the hour, which is
+  the same reason `wildOn` takes a time of day: the same Route 30 read Lv3–4 at
+  one hour and Lv4–5 at another.
+
+Two methods left this file rather than joining it. `speciesIndex` and
+`itemIndex` built name→id maps and **nothing had ever called either**, in twenty
+versions — the app compares species by name throughout and finds the ball by
+scanning the pocket. Found by asking which methods have no caller, which is a
+question `check-app`'s exports group cannot ask: dynamic dispatch is real here
+(`this[h.reach]()` reaches `healAtElm` by string), so a check would have to
+false-positive on the title scripts to catch these. Deleted on the same grounds
+the group states — a second way to do a thing, sitting where the next person
+finds it by name, drifting because nothing exercises it. `normalise` stays,
+because the bag reader still uses it.
   Time-of-day matters: Route 29 trades Pidgey and Sentret for Hoothoot after
   dark, and offering a species that cannot appear sends a hunt after something
   that was never there.
@@ -538,7 +551,7 @@ the ROM, not shipped as a copy, so they cannot drift from the build being driven
 
 ### `collision.js` — what you can walk on
 
-<!-- covers: gen2/collision.js @ adf086cff308 -->
+<!-- covers: gen2/collision.js @ 9ac07137497a -->
 
 Decodes the loaded map into "can I stand on this tile", and does breadth-first
 pathfinding over the result. This is what turns walking from trial and error
@@ -643,7 +656,7 @@ Route 30's door to it at `(17,5)`.
 
 ## 4. Taking one step, and planning a walk
 
-<!-- covers: gen2/nav.js gen2/collision.js @ e54161ead38d -->
+<!-- covers: gen2/nav.js gen2/collision.js @ 5005e3758893 -->
 
 ### One step
 
@@ -1241,7 +1254,7 @@ fainted.
 
 ## 7. Catching something
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ 47a3f69b25ad -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ 1b8391706209 -->
 
 Catching is the most involved loop, because a Poké Ball's odds turn on how much
 HP is left. Throwing at a full-health target is mostly throwing balls away.
@@ -1914,7 +1927,7 @@ This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ 34b43a90ba1c -->
+<!-- covers: app/main.js index.html @ ff2d1dc37e3b -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -2409,7 +2422,7 @@ seconds by a page whose loop was supposedly running.
 
 ### One thing at a time
 
-<!-- covers: app/main.js @ b8fa3aa8e6a9 -->
+<!-- covers: app/main.js @ cccefe6b3064 -->
 
 One Game Boy, one joypad, one canvas — so a great deal of this app is about
 making sure two things are never driving them at once. There are three claims,
@@ -2984,7 +2997,7 @@ they have been installed.
 
 ### Watching the other device's screen
 
-<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ bac7d5d91d5f -->
+<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ 7645a3a508a2 -->
 
 One device shows its screen; the other watches it, and plays it if the first
 one says so. The picture goes straight between them over WebRTC and never
