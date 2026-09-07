@@ -419,6 +419,7 @@ exactly why nothing failed.
 | 18 | a level-up replaced a move nobody chose | four moves and a fifth offered | grinding it again |
 | 19 | the fix for that fired four times and changed nothing | the same grind, watched | **grinding it a third time** |
 | 19 | and an evolution renamed the thing being trained, in silence | grinding past Lv16 | grinding it a third time |
+| 20 | three methods nothing has ever called, in twenty versions | asking who calls what | **asking who calls what** |
 
 Five things in that table are worth more than the individual rows.
 
@@ -429,12 +430,12 @@ device, a second cartridge, a second Pokémon. What it measures is how much of
 the world you have to *arrange*, not how much you have to own: the fifth pass
 needed no hardware at all, only a party with a corpse in slot one.
 
-**Two of the fifty-four were caught by a check**, and only after the fix
+**Two of the fifty-five were caught by a check**, and only after the fix
 had decided what to look for: the wiring group named the four modules still
 importing constants that had just been deleted. One more was caught by a *test*,
 and only because the test hung — the obvious `continue` for the party prompt
 advanced nothing in a loop bounded by balls thrown. That is the honest weight to
-give this repository's seventeen check groups and 210 tests: they hold a fix
+give this repository's seventeen check groups and 213 tests: they hold a fix
 down, and they catch the fix that is itself wrong. They do not find the fault.
 
 **Measuring also rules things out, which is half of what it is for.** The
@@ -904,6 +905,53 @@ One loose end, recorded rather than smoothed: in the verifying run the decline's
 own log line was not captured, though it was captured in the run before. The
 outcome is unambiguous — the moves survived where they previously did not — but
 the mechanism's evidence spans two runs rather than one.
+
+**The twentieth pass asked a question the checks cannot ask: who calls this?**
+The `exports` group added in the sixteenth pass keeps every *export* honest, and
+methods are outside its reach for a reason worth stating — dynamic dispatch is
+real in this repository. `nearestHeal` reaches `healAtElm` through
+`this[h.reach]()`, and the title scripts are called by name out of a profile
+object, so a check strict enough to catch a dead method would report every one
+of those as dead too. So it was asked by hand, once, over every method in the
+four directories.
+
+Three answers, all of them twenty versions old:
+
+| | what it did | why nothing called it |
+| --- | --- | --- |
+| `RomData.speciesIndex` | name → id for all 251 species | the app compares species by name throughout |
+| `RomData.itemIndex` | name → id for the first 60 items | the ball is found by scanning the pocket |
+| `CollisionMap.verify` | re-check the decode against the player's tile | `calibrate` does that, and tries the candidate offsets rather than assuming one |
+
+Deleted on the grounds the exports group already states: an unused entry point is
+a second way to do a thing, sitting where the next person finds it by name and
+drifting from the way that is actually used because nothing exercises it. The
+sweep also nearly took `normalise` with them, which the bag reader still uses —
+a reminder that "nothing calls it" and "nothing calls its neighbours" are
+different findings.
+
+**And the feature that pass built is two earlier passes meeting.** The
+seventeenth read the level beside every species; the sixteenth built the list of
+named maps the graph can reach. Neither alone answers the question a slow grind
+raises, which is *then where should I go*.
+
+```mermaid
+flowchart LR
+    A["<b>17th pass</b><br/>the level beside<br/>every species"] --> C{"nearest place whose<br/>grass tops out at or<br/>above your lead"}
+    B["<b>16th pass</b><br/>named maps the<br/>graph can reach"] --> C
+    C -->|"found"| D["<i>slow here — Route 31 gives<br/>Lv4–5, three maps away</i>"]
+    C -->|"nothing pays"| E["<i>everything is below your lead</i><br/>and nowhere is named"]
+```
+
+Verified against the cartridge, and the interesting part is *which* place it
+named. Standing on Route 29 with a Lv5 lead: Route 30 is **nearer** — two maps
+against three — and it was passed over, because its Lv3–4 ceiling is not enough
+for a Lv5 Pokémon. Route 31's Lv4–5 is. At Lv8 nothing reachable pays and the
+answer is null, which reads as silence rather than as advice to stay.
+
+One measurement came free and is worth keeping: the same Route 30 read **Lv3–4
+at one hour and Lv4–5 at another**. `wildOn` has always taken a time of day
+because the species change after dark; the levels move with it too.
 
 **The two worst were silent data loss**, and both were doors the app opens by
 itself. Every door a *person* opens was already locked and had been for
