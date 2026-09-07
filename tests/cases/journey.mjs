@@ -131,3 +131,53 @@ test('a script that finishes is still reported as finished', async (t) => {
   j.scriptRunning = async () => false;
   t.true(await j.runScripts(), 'the quiet case is unchanged');
 });
+
+// --- where the interface can offer to walk ----------------------------------
+
+/** A Journey whose graph answers routesFrom, which is what placesFrom asks. */
+function traveller({ reachable = {}, names = null } = {}) {
+  const gb = new FakeGameBoy({ wram: worldRam(sym, {}) });
+  const world = {
+    routesFrom: (from, targets) => new Map(
+      [...targets].filter((k) => k !== from && k in reachable)
+        .map((k) => [k, new Array(reachable[k]).fill({ kind: 'edge' })])),
+  };
+  return new Journey(gb, new GameState(sym), null, null, { mapKey: async () => HOME },
+                     () => {}, world, names === null ? {} : { names });
+}
+
+test('the places offered are the named ones the graph can reach', async (t) => {
+  const j = traveller({
+    names: { [HOME]: 'here', [NEAR]: 'Cherrygrove City', [FAR]: 'Route 30', 9: 'Mahogany' },
+    reachable: { [NEAR]: 2, [FAR]: 1 },      // Mahogany is not reachable at all
+  });
+  const places = j.placesFrom(HOME);
+  t.eq(places.map((p) => p.name), ['Route 30', 'Cherrygrove City'],
+       'nearest first, and only what can be reached');
+  t.eq(places.map((p) => p.legs), [1, 2], 'with the cost that ordered them');
+  t.false(places.some((p) => p.key === HOME), 'never the map you are standing on');
+  t.false(places.some((p) => p.name === 'Mahogany'),
+          'and never a place the graph cannot get to');
+});
+
+test('a cartridge nobody has described offers nowhere, rather than numbers',
+     async (t) => {
+  // The same rule the scripted intro and the ball errand follow: a title that
+  // declares nothing does not get a row full of `map 26.4`.
+  const j = traveller({ names: null, reachable: { [NEAR]: 1 } });
+  t.eq(j.placesFrom(HOME), [], 'no names, no list');
+
+  // And a half-described one offers exactly what it wrote down.
+  const half = traveller({ names: { [NEAR]: 'the only place I named' },
+                           reachable: { [NEAR]: 1, [FAR]: 1 } });
+  t.eq(half.placesFrom(HOME).map((p) => p.name), ['the only place I named'],
+       'one name, one offer');
+});
+
+test('with no map graph there is nowhere to offer either', async (t) => {
+  const gb = new FakeGameBoy({ wram: worldRam(sym, {}) });
+  const j = new Journey(gb, new GameState(sym), null, null,
+                        { mapKey: async () => HOME }, () => {}, null,
+                        { names: { [NEAR]: 'Cherrygrove City' } });
+  t.eq(j.placesFrom(HOME), [], 'a title with names but no world knows no routes');
+});

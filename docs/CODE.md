@@ -580,10 +580,22 @@ Two more things the map alone will not tell you:
 
 ### `world.js` — which map adjoins which
 
-<!-- covers: gen2/world.js @ f0eda3b06009 -->
+<!-- covers: gen2/world.js @ d380cfe11648 -->
 
 The map graph, read out of the cartridge: edge connections *and* warps, so it can
 route out of a building rather than only across a route.
+
+`route(from, to)` gives the shortest list of exits to take; `routesFrom(from,
+targets)` answers the same question for several places at once, from **one**
+search. That distinction is not a micro-optimisation — the Travel row asks about
+every place the title has named, and the traversal used to live inside `route`,
+so ten destinations meant ten breadth-first walks over the same graph. `route` is
+now written in terms of `routesFrom` rather than beside it, because two copies of
+a graph traversal is two things to keep in step.
+
+`routesFrom` answers a `Map`, so an absent key means *not reachable* — and it
+never returns a route to the map you are standing on, because that is not a
+journey and `travelTo` already answers *arrived* for it.
 
 <details>
 <summary><b>Advanced detail:</b> lazily, because there is no map count in the ROM</summary>
@@ -709,7 +721,7 @@ point those coordinates mean somewhere else entirely.
 
 ## 5. Crossing to the next map
 
-<!-- covers: gen2/journey.js gen2/world.js @ 8c28c5123dd1 -->
+<!-- covers: gen2/journey.js gen2/world.js @ 60d5100dce5e -->
 
 A connection spans only part of a shared edge, so "walk west until something
 happens" does not work. `crossEdge()` closes the distance in stages, then tries
@@ -770,6 +782,27 @@ player's house look like a wall that could be reached but never opened.
 from the map it actually landed on. A leg that fails is retried up to three
 times — measured, the same leg failed on one run and worked on the next, so one
 refusal is not an answer.
+
+**And `placesFrom(here)` says where it is worth offering to go**, which is what
+the [Travel row](USING.md#travel-take-me-somewhere-else) is built from. It had
+none of this for fifteen versions: `travelTo` could cross the whole of Johto and
+the only thing that ever called it was healing and the ball errand, so the
+interface could walk you around the map you stood on and no further.
+
+Two rules, and both are about what this layer can honestly know.
+
+- **Only places the title has named.** The graph reaches everything walkable,
+  which on a real cartridge is hundreds of maps, and two hundred rows reading
+  `map 26.4` is a data dump rather than an offer. A title's `names` are exactly
+  the places somebody chose to write down.
+- **Only places the graph says are reachable**, asked in one search rather than
+  one per candidate. Offering a walk that cannot happen is worse than not
+  offering it, and the answer changes as you move: from inside a building the
+  only way out is the door.
+
+Sorted by legs, nearest first, ties keeping the order the title wrote them in.
+A cartridge nobody has described gets an empty list and no row — the rule the
+scripted intro and the errand already follow.
 
 ---
 
@@ -1187,7 +1220,7 @@ precedes it defaults to yes, which is what we want; the nickname box does not.
 
 ## 7a. Three that act on where you already are
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ c7ecff2ea019 -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ 544f34236597 -->
 
 Grind, hunt and catch all go *looking* for something. These three do the obvious
 thing with the situation you are already in, and take no parameters:
@@ -1475,7 +1508,7 @@ because that failure is only otherwise discovered by reaching for the undo.
 
 ## 8. The errands
 
-<!-- covers: titles/crystal.js gen2/journey.js @ 97a6f2ffed43 -->
+<!-- covers: titles/crystal.js gen2/journey.js @ 8e5d55305d17 -->
 
 Everything in this section is `crystal.js` — the only file in the app that names
 a Crystal map, a Crystal door or a Crystal NPC. What it stands on is
@@ -1774,7 +1807,7 @@ This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ eba2346bd624 -->
+<!-- covers: app/main.js index.html @ 0a53ba022637 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -2269,7 +2302,7 @@ seconds by a page whose loop was supposedly running.
 
 ### One thing at a time
 
-<!-- covers: app/main.js @ 3949c072ae63 -->
+<!-- covers: app/main.js @ 1e628da3d5da -->
 
 One Game Boy, one joypad, one canvas — so a great deal of this app is about
 making sure two things are never driving them at once. There are three claims,
@@ -2389,7 +2422,7 @@ game's own picture, not on a surface of ours.
 
 ### What it remembers
 
-<!-- covers: gbcore/remember.js @ 2e95dcff0be1 -->
+<!-- covers: gbcore/remember.js @ cbc3d7a56f82 -->
 
 The app forgets everything on a reload, and a reload is not rare: the Update
 button causes one deliberately, and a phone discards a background tab whenever
@@ -2844,7 +2877,7 @@ they have been installed.
 
 ### Watching the other device's screen
 
-<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ 1357c3bc8bbb -->
+<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ ece4a7e807b9 -->
 
 One device shows its screen; the other watches it, and plays it if the first
 one says so. The picture goes straight between them over WebRTC and never

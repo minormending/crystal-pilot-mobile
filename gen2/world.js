@@ -151,26 +151,48 @@ export class World {
   }
 
   /**
-   * Directions to walk from one map to another, or null if they do not join up
-   * by edges alone.
+   * The way from one map to another, or null if there is none.
    *
-   * Breadth-first over the connections, expanded as it goes.
+   * A route is a list of exits to take in order -- an edge to walk off, a warp
+   * to stand on -- and the first one found by breadth is the shortest by legs.
    */
   route(from, to, { maxMaps = 400 } = {}) {
     if (from === to) return [];
+    return this.routesFrom(from, [to], { maxMaps }).get(to) || null;
+  }
+
+  /**
+   * Routes to several places at once, from one search.
+   *
+   * `route` used to hold the traversal itself, and asking it about ten
+   * destinations meant ten breadth-first walks over the same graph. This is the
+   * same walk, stopping when every place asked about has been found -- so one
+   * target costs exactly what it did before, and ten cost one search instead of
+   * ten. `route` is written in terms of it rather than beside it, because two
+   * copies of a graph traversal is two things to keep in step.
+   *
+   * Answers a Map, so a caller can tell "not reachable" from "reachable at zero
+   * cost": an absent key is the first, and this never returns a route to the
+   * map you are standing on -- that is not a journey, and `travelTo` already
+   * says "arrived" for it.
+   */
+  routesFrom(from, targets, { maxMaps = 400 } = {}) {
+    const want = new Set([...targets].filter((k) => k !== from));
+    const found = new Map();
+    if (!want.size) return found;
     const seen = new Set([from]);
     const queue = [[from, []]];
     let head = 0;
-    while (head < queue.length && seen.size < maxMaps) {
+    while (head < queue.length && seen.size < maxMaps && found.size < want.size) {
       const [key, path] = queue[head++];
       for (const exit of this.exits(key)) {
         if (seen.has(exit.key)) continue;
         const next = path.concat(exit);
-        if (exit.key === to) return next;
+        if (want.has(exit.key)) found.set(exit.key, next);
         seen.add(exit.key);
         queue.push([exit.key, next]);
       }
     }
-    return null;
+    return found;
   }
 }

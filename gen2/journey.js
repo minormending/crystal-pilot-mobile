@@ -357,6 +357,45 @@ export class Journey {
     return { ok: false, message: 'too many legs' };
   }
 
+  /**
+   * The places worth offering to walk to, from wherever we are.
+   *
+   * `travelTo` has been able to do this since the third step and nothing ever
+   * asked it to: the interface could walk you across the map you were standing
+   * on and no further, while the machinery for crossing the whole of Johto sat
+   * behind Heal and the ball errand.
+   *
+   * Two decisions make the list worth showing, and both are about what this
+   * layer can honestly know.
+   *
+   * **Only places the title has named.** The graph reaches everything walkable,
+   * which on a real cartridge is hundreds of maps -- a list of `map 26.4` for
+   * two hundred rows is not an offer, it is a data dump. A title's `names` are
+   * exactly the places somebody chose to write down, so they are exactly the
+   * ones worth a button. A cartridge nobody has described gets no list, and the
+   * row is not drawn: the same rule the scripted intro and the errand follow.
+   *
+   * **Only places the graph says are reachable**, asked in one search rather
+   * than one per candidate -- see `World.routesFrom`. Offering a walk that
+   * cannot happen is worse than not offering it, and the answer changes as you
+   * move: from inside a building the only route out is the door, and from the
+   * far side of a one-way ledge there may be none.
+   *
+   * Sorted by legs, so the nearest is first and the button that leads is the
+   * one somebody probably wants. Ties keep the order the title wrote them in,
+   * which is the author's own idea of importance.
+   */
+  placesFrom(here) {
+    const names = (this.title && this.title.names) || null;
+    if (!names || !this.world) return [];
+    const keys = Object.keys(names).map(Number).filter((k) => Number.isFinite(k));
+    const found = this.world.routesFrom(here, keys);
+    return keys
+      .filter((k) => found.has(k))
+      .map((k) => ({ key: k, name: names[k], legs: found.get(k).length }))
+      .sort((a, b) => a.legs - b.legs);
+  }
+
   /** Stand on a tile that rolls for wild encounters. */
   async findGrass() {
     const grass = this.state.e.grassTiles;
