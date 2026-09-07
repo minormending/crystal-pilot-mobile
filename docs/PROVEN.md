@@ -411,6 +411,9 @@ exactly why nothing failed.
 | 16 | with balls in the bag and no species picked, Hunt and Catch were both unreachable | running the ball errand | **adding a caller** |
 | 16 | and the hint asked you to pick from a picker that was not on screen | standing indoors | adding a caller |
 | 16 | a destination chip found itself by its label, which is not its identity | a profile naming two maps alike | reading the new code cold |
+| 17 | a knockout ended the grind, with twelve unused heals in hand | grinding past the local wilds | **grinding for real, to Lv15** |
+| 17 | and the reason given for stopping was a claim the cartridge does not support | the same | grinding for real |
+| 17 | the level beside every species had gone unread for sixteen versions | reading the table | grinding for real |
 
 Five things in that table are worth more than the individual rows.
 
@@ -421,12 +424,12 @@ device, a second cartridge, a second Pokémon. What it measures is how much of
 the world you have to *arrange*, not how much you have to own: the fifth pass
 needed no hardware at all, only a party with a corpse in slot one.
 
-**Exactly one of the forty-six was caught by a check**, and only after the fix
+**Exactly one of the forty-nine was caught by a check**, and only after the fix
 had decided what to look for: the wiring group named the four modules still
 importing constants that had just been deleted. One more was caught by a *test*,
 and only because the test hung — the obvious `continue` for the party prompt
 advanced nothing in a loop bounded by balls thrown. That is the honest weight to
-give this repository's seventeen check groups and 192 tests: they hold a fix
+give this repository's seventeen check groups and 197 tests: they hold a fix
 down, and they catch the fix that is itself wrong. They do not find the fault.
 
 **Measuring also rules things out, which is half of what it is for.** The
@@ -702,6 +705,65 @@ layout is the part that can be wrong. 0% to 98%, and two of those tests pin
 behaviour nothing had ever checked: an unused warp slot is padding rather than a
 door to map 0.0, and asking only about the map you are standing on reads no ROM
 at all.
+
+**The seventeenth pass set out to fix something it could not measure, and that
+is the finding.** The target was the gap `jobs.js` admits to in its own
+docstring: no evolution or learn-move policy. A Pokémon with four moves that
+levels into a fifth is offered *delete an older move?* — a YES/NO box with YES
+preselected — inside a loop that presses A up to a hundred and twenty times. On
+the face of it, that silently deletes the first move.
+
+Building the fix needs the box's signature in memory, and this repository
+measures rather than guesses. Getting there means a Cyndaquil at Lv19, so:
+starter taken, out to Route 29, and grind.
+
+**It never got to Lv19, and the road there was full of defects.**
+
+| run | battles | won | levels | ended |
+| --- | --- | --- | --- | --- |
+| Lv5 → | 50 | 48 | 7 | *the whole party fainted at Lv12* |
+| Lv12 → | 25 | 24 | 1 | *the whole party fainted at Lv13* |
+| Lv13 → | 35 | 32 | 2 | *the whole party fainted at Lv15* |
+
+Three runs, winning ninety-two per cent of a hundred and ten battles, each
+ending with a dead party handed back — and each with **twelve unused trips to
+heal in hand**, having been given a way to heal. The job returned on a knockout
+rather than recovering, and the comment saying why made a claim about the
+cartridge: *the game has moved you to a Pokemon Center, and half your money is
+gone*. Measured immediately after: `map [24,3]`, Route 29, one Pokémon at 0 HP.
+Not at a Center.
+
+**And the number that explains all three runs was sitting unread in the ROM.**
+The encounter table stores `(level, species)` pairs; `wildOn` reaches past the
+level byte to get the species and has done since it was written. Route 29 gives
+**Lv2–3**. A Lv15 Pokémon aimed at Lv20 there is fighting things worth almost
+nothing, which is exactly what the middle run's twenty-four wins for one level
+look like — and the app offered `Lv20` as a preset with nothing to say about it.
+
+```mermaid
+flowchart TD
+    A["aim a Lv15 lead at Lv20<br/>on a route that gives Lv2–3"] --> B["win almost every battle"]
+    B --> C["gain almost nothing"]
+    C --> D["eventually go down"]
+    D --> E["<b>before:</b> stop, report a whiteout<br/>that did not happen,<br/>hand back a dead party"]
+    D --> F["<b>now:</b> heal on the same budget<br/>as a low-HP trip, carry on,<br/>count the knockout"]
+    A -.->|"and the row now says<br/><i>here: Lv2–3</i>"| G(["the fact, before the afternoon"])
+```
+
+Two of the three defects are therefore about the same thing from opposite ends:
+the job could not tell you the grind was hopeless, and could not survive being
+proved right. The third — the learn-move policy the pass went looking for — is
+**still not built**, and the honest reason is written into the docstring rather
+than out of it: measuring that box needs a Pokémon at Lv19, and Route 29 cannot
+deliver one. What the pass did establish is that `windowOpen && menuItems !== 34`
+never once occurred across a hundred and ten battles, which is a starting point
+for whoever measures it next.
+
+One more thing worth writing down, because it cost a wrong reading first: the
+grind starves the timer queue. A `setInterval` sampling the party got **six
+samples in forty seconds** while the loop ran, because the loop awaits only
+already-resolved promises — exactly the limitation `taskbase.js` documents for
+its own watchdog, met from the other side.
 
 **The two worst were silent data loss**, and both were doors the app opens by
 itself. Every door a *person* opens was already locked and had been for
