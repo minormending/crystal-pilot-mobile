@@ -26,7 +26,10 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..') + '/';
-const WATCHED = /^(gbcore|gen2|titles)\//;
+// sw.js is in here and app/main.js is not, and the difference is what can be
+// loaded without a browser: the worker evaluates in a `vm` context holding
+// fakes for the four globals it uses, and main.js needs a DOM.
+const WATCHED = /^(gbcore|gen2|titles)\/|^sw\.js$/;
 const dir = mkdtempSync(join(tmpdir(), 'cov-'));
 
 try {
