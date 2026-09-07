@@ -74,12 +74,32 @@ class Check {
   }
 }
 
+/**
+ * Deep equality, arrays and plain objects alike.
+ *
+ * Objects were compared by identity, which made `eq` unable to answer the
+ * question it was asked and made `ne` unable to fail: two identical `{ low, high }`
+ * were "different" every time, so a test asserting they differ passed while
+ * proving nothing. And the report was the tell -- `expected {"low":2,"high":4},
+ * got {"low":2,"high":4}`, the same text twice, because `show` could already
+ * print what `same` could not read.
+ *
+ * Class instances stay on identity. Two `Map`s with the same contents are not
+ * interchangeable to any code in this app, and walking their own enumerable
+ * keys -- of which they have none -- would call every pair of Maps equal.
+ */
 function same(a, b) {
   if (a === b) return true;
-  if (Array.isArray(a) && Array.isArray(b)) {
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  if (Array.isArray(a)) {
     return a.length === b.length && a.every((x, i) => same(x, b[i]));
   }
-  return false;
+  if (!a || !b || typeof a !== 'object' || typeof b !== 'object') return false;
+  if (Object.getPrototypeOf(a) !== Object.prototype
+      || Object.getPrototypeOf(b) !== Object.prototype) return false;
+  const keys = Object.keys(a);
+  return keys.length === Object.keys(b).length
+         && keys.every((k) => Object.hasOwn(b, k) && same(a[k], b[k]));
 }
 
 function show(v) {
