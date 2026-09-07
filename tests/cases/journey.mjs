@@ -174,6 +174,11 @@ test('a cartridge nobody has described offers nowhere, rather than numbers',
        'one name, one offer');
 });
 
+test('a title that names only where you stand offers nothing', async (t) => {
+  const j = traveller({ names: { [HOME]: 'here' }, reachable: { [NEAR]: 1 } });
+  t.eq(j.placesFrom(HOME), [], 'the one name it has is the map under your feet');
+});
+
 test('with no map graph there is nowhere to offer either', async (t) => {
   const gb = new FakeGameBoy({ wram: worldRam(sym, {}) });
   const j = new Journey(gb, new GameState(sym), null, null,

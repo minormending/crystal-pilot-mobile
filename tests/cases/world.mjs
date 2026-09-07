@@ -147,6 +147,31 @@ test('the map you are standing on is never a destination', async (t) => {
   t.true(found.has(R29), 'and the real one still comes back');
 });
 
+test('asking only about where you are walks no graph at all', async (t) => {
+  // Reachable, and not a curiosity: a title that names one map, and the player
+  // standing on it. Without the guard this walks to its 400-map cap looking for
+  // a destination that was removed from the list before the search began.
+  const { world, reads } = johto();
+  const before = reads.count;
+  const found = world.routesFrom(BARK, [BARK]);
+  t.eq(found.size, 0, 'nothing to route to');
+  t.eq(reads.count, before, 'and not one byte of ROM read finding that out');
+});
+
+test('an unused warp slot is not a door to map 0.0', async (t) => {
+  // Real cartridges leave warp slots blank, and the count covers them. A slot
+  // whose group or number reads zero is padding, not a door -- believed, it
+  // becomes an exit to a map that does not exist, and the graph would route
+  // journeys through it.
+  const { world } = cartridge(new Map([
+    [BARK, { warps: [[4, 3, LAB], [0, 0, 0], [6, 3, CHERRY]] }],
+    [LAB, {}], [CHERRY, {}],
+  ]));
+  const doors = world.warps(24, 1);
+  t.eq(doors.length, 2, 'two real doors out of three slots');
+  t.eq(doors.map((w) => w.key), [LAB, CHERRY], 'and the blank one is gone');
+});
+
 test('a map the cartridge does not have reads as nothing, not as a crash',
      async (t) => {
   const { world } = johto();

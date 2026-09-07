@@ -1890,6 +1890,18 @@ async function refreshPlaces(s) {
   for (const place of travelPlaces) {
     const b = document.createElement('button');
     b.textContent = place.name;
+    // The key, not the label, because the label is not the identity. A profile
+    // is data somebody writes, and two maps sharing a name is an ordinary thing
+    // to write -- two Pokémon Centers, the halves of a long route. Matching the
+    // chip by its text then fails silently in the worst direction: `find` on
+    // the name returns the *first* place with it, whose key is not the chosen
+    // one, so *neither* chip lights and the selection becomes invisible while
+    // remaining in force.
+    //
+    // The species picker above gets away with matching on text because
+    // `wildOn` builds its list through a Map keyed by name, so those names are
+    // unique by construction. Map names are not.
+    b.dataset.place = String(place.key);
     b.onclick = () => {
       travelTo = place.key;
       saveOption({ travel: place.key });
@@ -1914,8 +1926,7 @@ async function refreshPlaces(s) {
 
 function markPlaces() {
   for (const b of $('#places').children) {
-    const place = travelPlaces.find((pl) => pl.name === b.textContent);
-    b.classList.toggle('on', !!place && place.key === travelTo);
+    b.classList.toggle('on', b.dataset.place === String(travelTo));
   }
 }
 
