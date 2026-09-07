@@ -417,6 +417,8 @@ exactly why nothing failed.
 | 18 | the grind swung whatever was first in the list, not what could win | Tackle running dry | **grinding it again, further** |
 | 18 | and "out of PP" counted a move that takes no HP off anything | Growl at 3 PP | grinding it again |
 | 18 | a level-up replaced a move nobody chose | four moves and a fifth offered | grinding it again |
+| 19 | the fix for that fired four times and changed nothing | the same grind, watched | **grinding it a third time** |
+| 19 | and an evolution renamed the thing being trained, in silence | grinding past Lv16 | grinding it a third time |
 
 Five things in that table are worth more than the individual rows.
 
@@ -427,12 +429,12 @@ device, a second cartridge, a second Pokémon. What it measures is how much of
 the world you have to *arrange*, not how much you have to own: the fifth pass
 needed no hardware at all, only a party with a corpse in slot one.
 
-**Two of the fifty-two were caught by a check**, and only after the fix
+**Two of the fifty-four were caught by a check**, and only after the fix
 had decided what to look for: the wiring group named the four modules still
 importing constants that had just been deleted. One more was caught by a *test*,
 and only because the test hung — the obvious `continue` for the party prompt
 advanced nothing in a loop bounded by balls thrown. That is the honest weight to
-give this repository's seventeen check groups and 205 tests: they hold a fix
+give this repository's seventeen check groups and 210 tests: they hold a fix
 down, and they catch the fix that is itself wrong. They do not find the fault.
 
 **Measuring also rules things out, which is half of what it is for.** The
@@ -842,6 +844,66 @@ the deployed app, where the tests exercised the static directly rather than any
 of its callers. And the `exports` group added two passes ago failed on
 `learnMoveBox` having no reader outside its own module, which is how it came to
 be tested rather than quietly un-exported.
+
+**The nineteenth pass audited the eighteenth's fix, and the fix was wrong.**
+Which is the most useful thing in this log, because it is the one shape none of
+the nineteen methods had produced before: not code that was never right, but code
+that had *just been made* right and was not.
+
+The eighteenth pass shipped a guard that declines the fifth move, and admitted
+it had never been seen firing. So this pass went and watched.
+
+**It fired four times and changed nothing.** Gen 2 asks *two* questions, not one:
+*delete an older move to make room?* and then, on a no, *give up on learning it?*
+— and the second one wants **YES**. Answering no to both loops, because no to the
+second means *carry on learning it* and puts the first back on screen. The log
+shows the cursor walking 1, 2, 1, 2, 1 across four declines, and then the moveset
+coming out as `[POISONPOWDER, GROWL, RAZOR LEAF, REFLECT]` anyway: once the loop
+had gone round enough times, a stray A from the turn presses landed on the delete
+prompt.
+
+```mermaid
+flowchart TD
+    Q1["<b>delete an older move?</b>"] -->|NO| Q2["<b>give up on learning it?</b>"]
+    Q2 -->|"NO — <i>what the fix did</i>"| Q1
+    Q2 -->|"YES — <i>what it needed</i>"| DONE(["nothing replaced"])
+    Q1 -->|"YES, or a stray A"| GONE(["whatever is top of<br/>the list is deleted"])
+```
+
+**Firing was not the same as working**, and only a cartridge could have said so.
+The answers are asymmetric and the order carries the meaning — and both boxes
+have the same signature, because they are one widget asked twice, so the routine
+relies on the sequence rather than on looking.
+
+| | before | after |
+| --- | --- | --- |
+| Chikorita over Lv15 with four moves | `[POISONPOWDER, GROWL, RAZOR LEAF, REFLECT]` | `[TACKLE, GROWL, RAZOR LEAF, REFLECT]` |
+
+**The second finding closes the docstring's list.** `jobs.js` had said for
+nineteen versions that the grind has no evolution policy, and the measurement is
+what a missing policy looks like: `#152` became `#153` at Lv16 and nothing
+mentioned it, while every line after that used the new name. Letting it evolve is
+right — it is what somebody grinding expects, and cancelling would be the
+surprising choice — but a policy nobody states is indistinguishable from an
+accident, so it is stated, and reported: *CHIKORITA evolved into BAYLEEF*.
+
+The end-to-end run, which is the first time this job has been watched all the way
+through a level range that changes a Pokémon: **Lv5 to Lv17 in 192 seconds, 159
+battles, 158 won, one knockout healed through, one evolution, and all four
+original moves still in place.**
+
+**And the same test gap appeared twice running, which is worth more than either
+defect.** In the eighteenth pass the mutation removing the fix's argument from
+`fightBattle` broke nothing, because the tests exercised the piece rather than
+the caller. In this one, swapping `answerYes` back to `answerNo` broke nothing,
+for the same reason. Both are now covered, and the second test models the game
+rather than the function: two boxes, a cursor that is not live on the first
+frame, and a loop back to the first question if the second is answered no.
+
+One loose end, recorded rather than smoothed: in the verifying run the decline's
+own log line was not captured, though it was captured in the run before. The
+outcome is unambiguous — the moves survived where they previously did not — but
+the mechanism's evidence spans two runs rather than one.
 
 **The two worst were silent data loss**, and both were doors the app opens by
 itself. Every door a *person* opens was already locked and had been for
