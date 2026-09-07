@@ -28,7 +28,7 @@ flowchart LR
 
 Every step of that is the first time it has been watched on a cartridge since
 the battle and job code was rewritten, and one of them failed the first time
-round — see [the eleventh pass](#eleven-audits-and-how-each-defect-was-actually-found).
+round — see [the eleventh pass](#twenty-one-audits-and-how-each-defect-was-actually-found).
 
 Proven, and visible in [the screenshot on the front page](../README.md):
 
@@ -332,7 +332,7 @@ second, which is there so the core's own waits finish, not to run a game.
   candidates and returned true standing three tiles clear of any. It checks the
   tile underfoot now.
 
-## Eleven audits, and how each defect was actually found
+## Twenty-one audits, and how each defect was actually found
 
 Everything above was watched happening. This section was the exception, and the
 exception was the point of it: after the ROM-hack work shipped, eleven passes
@@ -420,6 +420,12 @@ exactly why nothing failed.
 | 19 | the fix for that fired four times and changed nothing | the same grind, watched | **grinding it a third time** |
 | 19 | and an evolution renamed the thing being trained, in silence | grinding past Lv16 | grinding it a third time |
 | 20 | three methods nothing has ever called, in twenty versions | asking who calls what | **asking who calls what** |
+| 21 | `wildOn` believed a padding slot `wildLevels` skipped, and offered a species called `#0` | a half-filled block, which Crystal has none of | **writing a cartridge Crystal is not** |
+| 21 | the harness could not compare two objects, so `t.ne` on a pair could never fail | asking it to | writing a cartridge Crystal is not |
+| 21 | a destination chosen on one device was refused at the other's door, twice | two devices and Travel | **a field the deciders never learned** |
+| 21 | the grind reported an evolution a battle late, and never when it ended the job | evolving on the last level | a field the deciders never learned |
+| 21 | tap-to-walk had a `finally` and no `catch`, so it died in silence | a bad read mid-walk | a field the deciders never learned |
+| 21 | and my own new advice named an hour no better than this one | measuring it on Crystal | measuring the fix |
 
 Five things in that table are worth more than the individual rows.
 
@@ -430,12 +436,12 @@ device, a second cartridge, a second Pokémon. What it measures is how much of
 the world you have to *arrange*, not how much you have to own: the fifth pass
 needed no hardware at all, only a party with a corpse in slot one.
 
-**Two of the fifty-five were caught by a check**, and only after the fix
+**Two of the sixty-one were caught by a check**, and only after the fix
 had decided what to look for: the wiring group named the four modules still
 importing constants that had just been deleted. One more was caught by a *test*,
 and only because the test hung — the obvious `continue` for the party prompt
 advanced nothing in a loop bounded by balls thrown. That is the honest weight to
-give this repository's seventeen check groups and 213 tests: they hold a fix
+give this repository's seventeen check groups and 240 tests: they hold a fix
 down, and they catch the fix that is itself wrong. They do not find the fault.
 
 **Measuring also rules things out, which is half of what it is for.** The
@@ -949,9 +955,18 @@ against three — and it was passed over, because its Lv3–4 ceiling is not eno
 for a Lv5 Pokémon. Route 31's Lv4–5 is. At Lv8 nothing reachable pays and the
 answer is null, which reads as silence rather than as advice to stay.
 
-One measurement came free and is worth keeping: the same Route 30 read **Lv3–4
-at one hour and Lv4–5 at another**. `wildOn` has always taken a time of day
-because the species change after dark; the levels move with it too.
+One measurement came free and was **wrong**, which the pass after it caught: the
+same Route 30 was recorded as reading Lv3–4 at one hour and Lv4–5 at another.
+It does not. `wildHours` reads all three blocks in one call, and all three of
+Route 30's read Lv3–4 — as do all three of Route 29's at Lv2–3 and all three of
+Route 31's at Lv4–5. Only the *species* change after dark, which is the reason
+`wildOn` takes a time of day and the whole of it. What the earlier note actually
+compared was two maps: 26.1 is Route 30 and 26.2 is Route 31, and Lv3–4 against
+Lv4–5 is exactly that pair. The table above it is unaffected and was right —
+it names the same two maps and the same two ranges — so the claim that failed is
+the one derived from a single number read twice, without the second map's name
+beside it. Kept here rather than deleted: a measurement is only as good as the
+label on it, and this one had the wrong label for one version.
 
 **The two worst were silent data loss**, and both were doors the app opens by
 itself. Every door a *person* opens was already locked and had been for
@@ -1057,6 +1072,107 @@ hunting for the one you picked stopped at the other; Route 35 and Route 36 both
 carry the pair. Nothing about it needs a hack, a second device or an unusual
 situation — only a route with both on it, and a person who wanted a particular
 one.
+
+### A twenty-first pass: a cartridge Crystal is not
+
+Every reading in this document until now came off one ROM, and the app is built
+for many. So this pass wrote a cartridge by hand — not a mock of the reader, the
+**bytes**: map group, map number, three encounter rates, three blocks of seven
+`(level, species)` pairs, terminated at `$FF`, exactly as
+`data/wild/johto_grass.asm` lays them out. A patch of grass then becomes any
+shape you like, *including shapes Crystal has none of*, and that is the whole
+value.
+
+```mermaid
+flowchart LR
+    C["one real cartridge<br/>every block full"] --> A["wildOn skips nothing<br/>wildLevels skips padding"]
+    A --> Q["agree on every map,<br/>for twenty versions"]
+    H["a hand-written table<br/>three real slots, four padding"] --> D["wildOn: PIDGEY, #0<br/>wildLevels: Lv3–4"]
+    D --> F["<b>a species that is<br/>pickable and unfindable</b>"]
+```
+
+`#0` is what `speciesName(0)` returns, so a block with three real slots and four
+padding ones offered a fourth thing to hunt: a chip somebody can tap, a quarry
+the grass will never produce, and `huntable > 0` putting Hunt on the offers list
+for a map with almost nothing in it. Both readers walk the same bytes and
+disagreed about which of them count. They share one `_grassAt` and one `_slots`
+now, so the disagreement has nowhere to live.
+
+**The instrument found a second defect in itself.** Writing those tests meant
+comparing `{ low, high }` against `{ low, high }`, and the harness could not:
+`same` walked arrays deeply and fell back to `a === b`. The report was the tell —
+*expected {"low":2,"high":4}, got {"low":2,"high":4}*, the same text twice,
+because `show` could already print what `same` could not read. `t.eq` failing on
+a correct value is a nuisance; **`t.ne` was the real fault**, because it could
+therefore never fail on two plain objects. A test asserting that two ranges
+differ passed while proving nothing, and would have gone on passing.
+
+### And it settled a measurement recorded one pass earlier
+
+`wildHours(group, number)` reads all three blocks at once, which the feature
+needed and the twentieth pass's own claim did not survive:
+
+| | morning | day | after dark |
+| --- | --- | --- | --- |
+| Route 29 (24.3) | Lv2–3 | Lv2–3 | Lv2–3 |
+| Route 30 (26.1) | Lv3–4 | Lv3–4 | Lv3–4 |
+| Route 31 (26.2) | Lv4–5 | Lv4–5 | Lv4–5 |
+| species, all three | *swap completely after dark* | | |
+
+The levels do not move with the hour. What the earlier note compared was two
+maps: 26.1 is Route 30 and 26.2 is Route 31, and the Lv3–4-against-Lv4–5 it
+quoted is exactly that pair. The table it sat under was right and named both
+maps; the claim that failed is the one derived from a single number read twice
+without the second map's name beside it. **A measurement is only as good as the
+label on it.**
+
+Which then caught a third defect, in this pass's own new code. `betterHour`
+asked whether another hour paid the lead — and on a cartridge where all three
+hours are identical, the answer for an outlevelled lead is yes, so it advised
+*come back in the morning* while standing in an indistinguishable afternoon. The
+app's only caller had already established that here does not pay, so it was
+right by a precondition it never stated. The precondition is stated now, which
+is the fix and the reason: the second caller is always the one that finds this
+out.
+
+### The other three were a field three deciders never learned
+
+```mermaid
+flowchart TD
+    T["<b>travel</b> — added in pass 19"] --> W["the writer: saveOption"]
+    T --> S["the sanitiser: sanitise"]
+    T --> K["the stored key list: OPT_KEYS"]
+    T -.->|"never"| A["the two questions adoptOptions asks"]
+    A --> R["<i>an empty group nobody made</i><br/><i>no change worth applying</i>"]
+    R --> X["<b>refused at the door, twice</b>"]
+```
+
+A destination chosen on the tablet was stamped, published, merged by the room
+and delivered to the phone — and thrown away there, by two conditions written
+over a hand-written list of three fields. Nothing failed and nothing logged; the
+chip on the other device simply never lit. The questions are asked over
+`CHOICES` now, derived from the stored key list, and they were moved out of
+`main.js` into `adoptable` so that a test can reach them, which is the same move
+`needsOffer` made three passes earlier and for the same stated reason.
+
+The grind's evolution line had the same shape one layer in. It was added the
+pass before and reads the snapshot taken at the *top* of the loop — the party as
+it was **before** the battle that did the evolving — so it came out a battle
+late, and the level break sits above it. An evolution in the battle that reached
+the target was therefore never reported at all, which is the likeliest battle
+for one. Three exits now, one check each: the level break, the empty slot, and
+the loop's own condition running out. `grind` also has a test file for the first
+time, in twenty-one versions, which is an odd gap for the one job people leave
+running.
+
+And tap-to-walk had a `finally` and no `catch`. It is one of exactly two things
+in this app that drive the emulator for somebody, and the other one — `runTask`
+— has said for versions why that is not enough: *a task that dies silently looks
+indistinguishable from one still working.* Measured both ways on the same
+injected throw: before, the call rejected out of a click handler nobody awaits
+and the status line still held what it said before the tap; after, it reads *the
+walk stopped: bad WRAM read* and the dot goes red. Which is precisely the shape
+the third pass found in `Join`, in the other half of the app.
 
 ## The part that had to be redesigned
 

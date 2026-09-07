@@ -145,6 +145,24 @@ the level range from its encounter tables, the distance from its map graph — a
 When nothing reachable is better it falls back to the shorter line and names
 nowhere, since a recommendation that does not exist is worse than an admission.
 
+**And it prefers waiting to walking.** `wildHours` reads all three blocks of the
+encounter table rather than only the hour it is now, so there is a third answer
+available — *this grass gives Lv6–9 after dark* — and it outranks the walk
+however near the walk is, because waiting costs no route, no legs and nothing to
+go wrong. Two things about that are worth stating plainly. An hour has to beat
+*this* hour and not only your lead, which was caught by measurement and not by
+reading: Crystal's three blocks carry the **same levels** and swap only the
+species, so a rule that asked "does this hour pay the lead" answered *come back
+in the morning* while standing in an identical afternoon. And with the rule
+right, **it never fires on Crystal at all** — every hour of every route here is
+level-identical, which is the honest thing about this half of the feature and the
+reason the walk is still the answer on this cartridge.
+
+What does earn its place on Crystal is the *species* half, one line under the
+chips: *also here: HOOTHOOT after dark*, and, when the clock has just taken your
+quarry away, *PIDGEY is here in the morning, not now*. That chip vanishing on its
+own was the one change to the picker nobody made and nothing explained.
+
 One quiet line survives the cull. It says what would *add* to the list, and only
 when there is something to do about it — *most jobs need a Pokémon with you*,
 *pick something below to hunt or catch*, *or a place to walk to*. That last

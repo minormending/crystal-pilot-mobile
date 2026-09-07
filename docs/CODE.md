@@ -481,7 +481,7 @@ and in `bootstrap.js`, with nothing able to notice if they drifted.
 
 ### `romdata.js` — what the cartridge knows
 
-<!-- covers: gen2/romdata.js @ b020198ec0ba -->
+<!-- covers: gen2/romdata.js @ 2ca4118cb9f9 -->
 
 Species names, item names, wild-encounter tables, move power. All read out of
 the ROM, not shipped as a copy, so they cannot drift from the build being driven.
@@ -500,11 +500,24 @@ the ROM, not shipped as a copy, so they cannot drift from the build being driven
   and `wildLevels` gives `{ low, high }`. The level byte went unread for
   sixteen versions while the species reader stepped straight over it — and it is
   the number that decides whether a grind is a minute or an afternoon. Measured
-  against the cartridge: Route 29 gives Lv2–3, Route 30 Lv4–5, and a map with no
-  table gives `null` rather than a range, because *nothing appears here* and
-  *they are Lv2–3* are different answers. The range moves with the hour, which is
-  the same reason `wildOn` takes a time of day: the same Route 30 read Lv3–4 at
-  one hour and Lv4–5 at another.
+  against the cartridge: Route 29 gives Lv2–3, Route 30 Lv3–4, Route 31 Lv4–5,
+  and a map with no table gives `null` rather than a range, because *nothing
+  appears here* and *they are Lv2–3* are different answers.
+  `wildHours(group, number)` reads all three blocks at once, which is what the
+  hour advice is built on — and it settled a claim recorded here for one version
+  and **wrong**: the range does *not* move with the hour. Measured, all three
+  blocks of Route 29 read Lv2–3, all three of Route 30 read Lv3–4 and all three
+  of Route 31 read Lv4–5, while the *species* swap completely after dark. The
+  earlier note compared two maps and called it two hours: 26.1 is Route 30 and
+  26.2 is Route 31, and the Lv3–4-against-Lv4–5 it quoted is exactly that pair.
+  All three readers share one `_grassAt` for the table scan and one `_slots` for
+  a block, which is not tidying: a slot with no species is padding, and its
+  level byte means nothing. `wildLevels` knew that and `wildOn` did not, so a
+  block with three real slots and four padding ones offered **a species called
+  `#0`** — pickable, never findable, and enough to put Hunt on the offers list
+  and a range on a map with almost nothing in it. Crystal's blocks are all full,
+  so it took a hack-shaped test to see; dropping the slot in one place fixes it
+  for all three.
 
 Two methods left this file rather than joining it. `speciesIndex` and
 `itemIndex` built name→id maps and **nothing had ever called either**, in twenty
@@ -987,6 +1000,27 @@ is training. Measured: `#152` became `#153` at Lv16 and nothing mentioned it.
 Now the log says *CHIKORITA evolved into BAYLEEF* where it happens, and
 `stats.evolved` comes back with the rest.
 
+**"Where it happens" took a second pass to be true.** The check read `mon` — the
+snapshot taken at the *top* of the iteration, which is the party as it was
+before the battle that did the evolving — so the line came out one battle late.
+And the level break sits above it:
+
+```
+while (battles < max) {
+  s = await snap()            // first sight of what the last battle did
+  if (mon.level >= toLevel) break   ← the job ends here
+  ...fight...
+  if (mon.species !== wasSpecies)   ← never reached on the last battle
+```
+
+So an evolution in the battle that *reached the target* was never reported at
+all — and that is the likeliest battle for one, being the one that gains the
+last level. `noteEvolution` is called with a fresh snapshot instead, above both
+breaks and again on the closing read, which is where the loop's own exits land:
+the battle budget running out, and a Stop. Three tests, one per exit, and the
+job now has a test file at all — `grind` had none in twenty-one versions, which
+is an odd place for the one job people leave running.
+
 The end-to-end run: **Lv5 to Lv17 in 192 seconds, 159 battles, 158 won, one
 knockout healed through, one evolution — and all four original moves still in
 place.**
@@ -1254,7 +1288,7 @@ fainted.
 
 ## 7. Catching something
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ 1b8391706209 -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ 0c2f64ee6d3d -->
 
 Catching is the most involved loop, because a Poké Ball's odds turn on how much
 HP is left. Throwing at a full-health target is mostly throwing balls away.
@@ -2248,6 +2282,40 @@ health" is the good state, and a line explaining the absence of an offer nobody
 wanted is exactly the noise this replaces. Measured in the bedroom of a new
 game, where one job of six can run: the card went from 603px to 260px.
 
+**A second quiet line sits under the chips, and it is about the clock.** The
+species picker is rebuilt whenever the map *or the hour* changes, because
+`wildOn` takes a time of day and Route 29 trades Pidgey and Sentret for Hoothoot
+after dark. What that meant in practice is a chip vanishing on its own, as the
+game's clock crossed a boundary, with nothing said: the quarry was dropped
+silently, and it is the one change to that list nobody made. `wildHours` reads
+all three blocks, so the line can be specific about it.
+
+| the state | what it says |
+| --- | --- |
+| your quarry is not here at this hour | *PIDGEY is here in the morning, not now* |
+| the hours differ and nothing was chosen | *also here: HOOTHOOT after dark* |
+| more than two others | two named, then *and 3 more* |
+| the hours are the same | nothing at all |
+| nothing here now, something later | *nothing wild appears here at this hour — …* |
+
+Measured on the cartridge, standing on Route 29 in the morning: the chips read
+`HOPPIP PIDGEY SENTRET RATTATA` and the line read *also here: HOOTHOOT after
+dark*. Faking the one byte the app reads for the hour — `wTimeOfDay`, and
+nothing else — the chips became `HOOTHOOT RATTATA` and the line became *PIDGEY
+is here in the morning, not now*, which is the exact silent drop it was built
+for.
+
+The last row of that table is a hack-only state and is marked as one in the
+code: every block of every entry in Crystal is full, so *nothing appears here*
+and *nothing appears here yet* cannot come apart on this cartridge. On a hack
+with a day-only route they can, and *stand on a route with grass* is a poor
+thing to say to somebody standing on one.
+
+`markSpecies` had to be told the difference too. It walked `list.children` and
+lit whichever child's text matched the quarry, which was fine while every child
+was a chip; the hours line is a `<span>` in the same list, and was being offered
+the lit class on the strength of its text. It walks the buttons now.
+
 **What a row says is decided somewhere it can be tested.** `rows.js` takes the
 game state and the handful of choices the person has made, and returns text and
 an enabled flag for each row; `main.js` applies that to the DOM and nothing
@@ -2481,6 +2549,21 @@ right rather than merely cheap — everything it reads is module state and `gb` 
 a `const`, so the loop started for the first cartridge is already correct for
 the second.
 
+**And a `finally` is not error handling.** `runTask` and `walkToTap` are the
+only two things in this app that drive the emulator on somebody's behalf.
+`runTask` catches: a `Cancelled` becomes *stopped*, anything else becomes a
+status line, and its own comment says why — *a task that dies silently looks
+indistinguishable from one still working*. `walkToTap` had the `finally` and no
+`catch`. So a bad work-RAM read or a `settle` that threw mid-walk restored the
+flag, the pad and the buttons correctly and then let the error go nowhere: the
+click handler does not await the call, so it became an unhandled rejection, the
+marker cleared, and the status line still held whatever it said before the tap.
+Measured both ways on the same injected throw — before, the call rejected and
+the line was untouched; after, the line reads *the walk stopped: bad WRAM read*
+and the dot goes red. Which is the shape found in `Join` three audits earlier,
+in the other half of the app: a `finally` without a `catch`, on a path nobody
+presses twice.
+
 <details>
 <summary><b>Advanced detail:</b> Stop, and the button that could not be
 pressed</summary>
@@ -2547,7 +2630,8 @@ game's own picture, not on a surface of ours.
 The app forgets everything on a reload, and a reload is not rare: the Update
 button causes one deliberately, and a phone discards a background tab whenever
 it likes. Three choices survive it, in one JSON object under one localStorage
-key — the speed step, which grind preset was tapped, and what was being hunted.
+key — the speed step, which grind preset was tapped, what was being hunted, and
+where Travel was pointed.
 
 Two rules do all the work, and both come from the same place: what comes back
 is a *suggestion*, written by an older build of this app on a phone whose owner
@@ -2578,6 +2662,26 @@ this hour, and only when nothing is selected — so it restores a choice and
 never overrides one. `refreshSpecies` already had the first half of that rule,
 because a species you walked away from was being offered when it could not
 appear.
+
+**`adoptable(clean, mine)` is the door a group from another device comes
+through**, and it lives here rather than in `main.js` because of what happened
+when it did not. Three refusals, each a state that actually occurred: an *empty*
+group is not a choice anybody made — a room nobody has written to answers with
+one, and adopting it cleared this device's options the moment it joined; an
+*older* group loses, because the change callback fires for this device's own
+writes too, so arriving is not the same as being newest; and a group that says
+the same thing is not news.
+
+All three used to be asked in `main.js` about a list of fields written out by
+hand — speed, grind, hunt. **`travel` arrived four versions after that list**,
+and was added to the stored keys, to `sanitise` and to the writer, and to
+neither of those two lines. So a destination chosen on the tablet was published,
+delivered, and refused at the door twice over: as an empty group when it was the
+only thing chosen, and as no change when it was not. Nothing failed and nothing
+logged; the chip on the other device simply never lit. The questions are now
+asked over `CHOICES`, derived from the stored key list, so the next option
+cannot be forgotten in the same place — and they are asked somewhere a test can
+reach, which is the other half of the fix.
 
 Storage throws rather than returning null — private windows, cleared site data
 — and in Node there is no `localStorage` binding at all, so reading it is a
@@ -2723,7 +2827,7 @@ recorded at all, so the kept battery was restored into whatever ROM was picked
 next; and `pickKey` was *the only record, if there is exactly one*, which wrote
 this cartridge's save into the previous cartridge's record. Both failed
 silently, and both were on the paths nobody presses — see
-[Eleven audits](PROVEN.md#eleven-audits-and-how-each-defect-was-actually-found)
+[Twenty-one audits](PROVEN.md#twenty-one-audits-and-how-each-defect-was-actually-found)
 for why that is not a coincidence.
 
 `patchMeta` merges fields into the `meta` record, and it used to do that as a
@@ -3031,6 +3135,17 @@ an offer stamped later than the last one it answered, the host accepts an answer
 stamped later than the last one it accepted, and the host offers when the ask is
 newer than the ask it last offered to. `needsOffer` is that last one, and it is
 the branch that got it wrong first — see below.
+
+**Nothing on this path may throw at its caller**, and `send` was one line short
+of that. It checks `channel.readyState === 'open'` and then calls
+`channel.send`, which throws rather than returning false — and the readyState it
+checked is a moment old, so a channel that begins closing in between raises
+`InvalidStateError`. Where that lands is the reason it matters: `tell` is called
+from `tellInput`, which runs inside a `finally` on the walk path, and an
+exception thrown from a `finally` replaces the error already on its way out.
+Dropped instead, which is what this function already does before the channel
+opens. Written down as hardening rather than as a measurement — it has not been
+seen, and this is the half of the app that has never run on two real devices.
 
 <details>
 <summary><b>Advanced detail:</b> the second press of Watch, and why it did

@@ -181,6 +181,63 @@ export class RomData {
 
 
   /**
+   * The grass entry for a map, as `{ table, addr }`, or null.
+   *
+   * Three readers now want the same scan -- what appears, what levels it
+   * gives, and what the other hours hold -- and the scan is the part with the
+   * arithmetic in it: an entry is `headerBytes` plus two bytes per slot per
+   * block, and getting that stride wrong reads a neighbouring map's block
+   * without failing. One copy, so the three cannot disagree about where a map
+   * is.
+   */
+  _grassAt(group, number) {
+    const { blocks, slotsPerBlock, headerBytes } = this.e.encounter;
+    const entryBytes = headerBytes + slotsPerBlock * blocks * 2;
+    for (const table of this.grass) {
+      let addr = table.addr;
+      // Scan the table; each map's block is a fixed size, ending at $FF.
+      for (let guard = 0; guard < 512; guard++) {
+        const g = this.gb.romByte(table.bank, addr);
+        if (g === TABLE_END) break;
+        if (g === group && this.gb.romByte(table.bank, addr + 1) === number) {
+          return { table, addr };
+        }
+        addr += entryBytes;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * One block of an entry as `[{ level, name }]`, padding dropped.
+   *
+   * A slot with no species is padding, and its level byte means nothing.
+   * `wildLevels` knew that and `wildOn` did not, which is how a half-filled
+   * block came to offer a species called `#0`: dropping it in one place is the
+   * fix for both.
+   */
+  _slots({ table, addr }, block) {
+    const { slotsPerBlock, headerBytes } = this.e.encounter;
+    const out = [];
+    for (let s = 0; s < slotsPerBlock; s++) {
+      const at = addr + headerBytes + (block * slotsPerBlock + s) * 2;
+      const id = this.gb.romByte(table.bank, at + 1);
+      if (!id) continue;
+      out.push({ level: this.gb.romByte(table.bank, at), name: this.speciesName(id) });
+    }
+    return out;
+  }
+
+  /** Which blocks a time of day asks for: one, clamped, or all of them. */
+  _blocksFor(timeOfDay) {
+    const { blocks } = this.e.encounter;
+    if (timeOfDay === null || timeOfDay === undefined) {
+      return [...Array(blocks).keys()];
+    }
+    return [Math.max(0, Math.min(blocks - 1, timeOfDay))];
+  }
+
+  /**
    * What appears in the grass on a map, commonest first.
    *
    * `timeOfDay` is wTimeOfDay: 0 morning, 1 day, 2 night. It matters -- Route
@@ -189,46 +246,26 @@ export class RomData {
    * never there.
    */
   wildOn(group, number, timeOfDay = null) {
-    const { blocks: blockCount, slotsPerBlock, headerBytes } = this.e.encounter;
-    const entryBytes = headerBytes + slotsPerBlock * blockCount * 2;
-    for (const table of this.grass) {
-      let addr = table.addr;
-      // Scan the table; each map's block is a fixed size, ending at $FF.
-      for (let guard = 0; guard < 512; guard++) {
-        const g = this.gb.romByte(table.bank, addr);
-        if (g === TABLE_END) break;
-        const n = this.gb.romByte(table.bank, addr + 1);
-        if (g === group && n === number) {
-          const counts = new Map();
-          const all = [...Array(blockCount).keys()];
-          const blocks = timeOfDay === null
-            ? all : [Math.max(0, Math.min(blockCount - 1, timeOfDay))];
-          for (const block of blocks) {
-            for (let s = 0; s < slotsPerBlock; s++) {
-              const slot = block * slotsPerBlock + s;
-              const id = this.gb.romByte(table.bank,
-                                         addr + headerBytes + slot * 2 + 1);
-              const name = this.speciesName(id);
-              counts.set(name, (counts.get(name) || 0) + 1);
-            }
-          }
-          return [...counts.entries()]
-            .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-            .map(([name]) => name);
-        }
-        addr += entryBytes;
+    const entry = this._grassAt(group, number);
+    if (!entry) return [];
+    const counts = new Map();
+    for (const block of this._blocksFor(timeOfDay)) {
+      for (const { name } of this._slots(entry, block)) {
+        counts.set(name, (counts.get(name) || 0) + 1);
       }
     }
-    return [];
+    return [...counts.entries()]
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .map(([name]) => name);
   }
 
   /**
    * What levels the grass here produces, as `{ low, high }` or null.
    *
-   * The level has been sitting in front of `wildOn` the whole time and gone
-   * unread: a slot is two bytes, level then species, and that method reaches
-   * past the first to get at the second. Reading it costs one more byte per
-   * slot and answers a question the app could not previously ask.
+   * The level has been sitting in front of `wildOn` and gone unread: a slot is
+   * two bytes, level then species, and that method reaches past the first to
+   * get at the second. Reading it costs one more byte per slot and answers a
+   * question the app could not previously ask.
    *
    * Which matters because of what it prevents. Route 29 produces Lv2 to Lv4,
    * and a grind aimed at Lv20 standing on it wins nearly every battle for
@@ -241,37 +278,51 @@ export class RomData {
    * only one of them is about levels.
    */
   wildLevels(group, number, timeOfDay = null) {
-    const { blocks: blockCount, slotsPerBlock, headerBytes } = this.e.encounter;
-    const entryBytes = headerBytes + slotsPerBlock * blockCount * 2;
-    for (const table of this.grass) {
-      let addr = table.addr;
-      for (let guard = 0; guard < 512; guard++) {
-        const g = this.gb.romByte(table.bank, addr);
-        if (g === TABLE_END) break;
-        const n = this.gb.romByte(table.bank, addr + 1);
-        if (g === group && n === number) {
-          const blocks = timeOfDay === null
-            ? [...Array(blockCount).keys()]
-            : [Math.max(0, Math.min(blockCount - 1, timeOfDay))];
-          let low = Infinity, high = 0;
-          for (const block of blocks) {
-            for (let sl = 0; sl < slotsPerBlock; sl++) {
-              const slot = block * slotsPerBlock + sl;
-              const at = addr + headerBytes + slot * 2;
-              // A slot with no species is padding; its level byte means
-              // nothing, and believing it would widen the range for free.
-              if (!this.gb.romByte(table.bank, at + 1)) continue;
-              const level = this.gb.romByte(table.bank, at);
-              if (!level) continue;
-              if (level < low) low = level;
-              if (level > high) high = level;
-            }
-          }
-          return high ? { low, high } : null;
-        }
-        addr += entryBytes;
+    const entry = this._grassAt(group, number);
+    if (!entry) return null;
+    let low = Infinity, high = 0;
+    for (const block of this._blocksFor(timeOfDay)) {
+      for (const { level } of this._slots(entry, block)) {
+        if (!level) continue;
+        if (level < low) low = level;
+        if (level > high) high = level;
       }
     }
-    return null;
+    return high ? { low, high } : null;
+  }
+
+  /**
+   * Every hour of the same patch of grass: `[{ species, levels }]`, or null.
+   *
+   * Both readers above take a time of day and the app has only ever passed
+   * them one -- the hour it is now -- so what the app knows about this grass is
+   * a third of what the cartridge told it. The other two thirds answer a
+   * question neither of them can: not "is this slow" but "would waiting fix
+   * it", which is the cheapest answer there is, because it costs no walking.
+   *
+   * Indexed by wTimeOfDay, so `hours[2]` is after dark whatever the block
+   * count -- a hack with two blocks gets two entries and nothing pretends
+   * otherwise.
+   */
+  wildHours(group, number) {
+    const entry = this._grassAt(group, number);
+    if (!entry) return null;
+    return this._blocksFor(null).map((block) => {
+      const slots = this._slots(entry, block);
+      const counts = new Map();
+      let low = Infinity, high = 0;
+      for (const { name, level } of slots) {
+        counts.set(name, (counts.get(name) || 0) + 1);
+        if (!level) continue;
+        if (level < low) low = level;
+        if (level > high) high = level;
+      }
+      return {
+        species: [...counts.entries()]
+          .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+          .map(([name]) => name),
+        levels: high ? { low, high } : null,
+      };
+    });
   }
 }

@@ -117,7 +117,7 @@ section gives. Everything by hand runs against a local build.
 
 ```mermaid
 flowchart BT
-    C["the app"] --> T["./run-tests<br/>213 behaviour tests"]
+    C["the app"] --> T["./run-tests<br/>240 behaviour tests"]
     C --> A["tools/check-app<br/>17 groups"]
     C --> D["tools/docs-check<br/>25 tracked sections"]
     C --> V["tools/coverage<br/>what the suite never runs"]
@@ -154,6 +154,30 @@ did run*. That is the shape a guard which cannot fire has — the eleventh pass
 found one of those by accident, and this is what looking for them on purpose
 costs. Most of what it prints is ordinary untested defensiveness; the value is
 that the list is short enough to read.
+
+Two modules came off the bottom of the list by being given a fake cartridge
+rather than a stub. `romdata.js`'s grass readers went from untested to 88%
+because the encounter table's layout is written out by hand in
+`tests/cases/wilds.mjs` — map group, map number, three rates, three blocks of
+seven `(level, species)` pairs — so a patch of grass is a `Map` of bytes and can
+be any shape you like, **including shapes Crystal has none of**. That is what
+caught `wildOn` believing a padding slot: a half-filled block does not exist on
+this cartridge, and the disagreement between two readers of the same bytes was
+invisible until one was written. `grind` went the same way in
+`tests/cases/grind.mjs`, where the script is one party state per *battle
+fought* — getting that wrong is why those tests were briefly wrong about how
+many battles a three-level climb takes.
+
+**And the harness could not compare two objects.** `same` walked arrays deeply
+and fell back to `a === b` for everything else, so `t.eq({low:2,high:4},
+{low:2,high:4})` failed — reporting *expected {"low":2,"high":4}, got
+{"low":2,"high":4}*, the same text twice, because `show` could already print
+what `same` could not read. The worse half is `t.ne`, which could therefore
+never fail on two plain objects: a test asserting that two ranges differ passed
+while proving nothing. Plain objects compare by key now; class instances stay on
+identity, because two `Map`s with the same contents are not interchangeable to
+anything in this app and walking their own enumerable keys — of which they have
+none — would call every pair of Maps equal.
 
 Two limits worth knowing before reading the number. `saves.js` is bound to
 IndexedDB and cannot run in this harness at all, so its figure will not move

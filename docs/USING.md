@@ -269,7 +269,7 @@ relative to the lead's own level at the moment you press them.
 minute or an afternoon. It is read out of your ROM's encounter table, which
 stores a level beside every species and had never been read for it.
 
-Route 29 gives **Lv2–3**. Route 30 gives **Lv4–5**. So a Lv15 Pokémon aimed at
+Route 29 gives **Lv2–3**, Route 30 **Lv3–4**, Route 31 **Lv4–5**. So a Lv15 Pokémon aimed at
 Lv20 on Route 29 is fighting things worth almost nothing: measured, thirty-two
 wins out of thirty-five battles bought two levels and ended in a knockout. When
 your lead is above everything the map offers, the hint says so — *grinding here
@@ -292,6 +292,20 @@ and Route 31 is the one named, because Lv4 is not enough for a Lv5 Pokémon.
 
 When nothing reachable would be better it says only that, and names nowhere.
 Pretending otherwise would be worse than saying less.
+
+**It would rather you waited than walked.** The encounter table has three
+blocks — morning, day and after dark — and the pilot now reads all three rather
+than only the hour it is. Where another hour of the grass *under your feet* tops
+out higher, that is the line you get: *slow here — this grass gives Lv6–9 after
+dark*, and it comes ahead of any walk, however short, because waiting costs
+nothing to get to.
+
+On Crystal you will never see it, and that is worth knowing rather than
+discovering. Measured on the cartridge: all three blocks of Route 29 give Lv2–3,
+all three of Route 30 give Lv3–4, and all three of Route 31 give Lv4–5. **Only
+the species change after dark, not the levels.** So on this game the walk is
+still the answer; the line is there for a hack whose night grass is stronger, and
+it is the same reading either way.
 
 **It swings the hardest move it has, and heals when nothing left can win.** The
 pilot reads your cartridge's move table, so it knows Razor Leaf hits harder than
@@ -354,6 +368,27 @@ after dark, entry for entry.
 
 Grass only, deliberately. The pilot walks; it does not surf, so a route's water
 table is full of Pokémon it could pace the grass all day without meeting.
+
+### The clock takes chips away, and now it says so
+
+The list is rebuilt whenever the map changes **or the hour does**, because those
+are the two moments *is it here?* has a new answer. Which meant a chip could
+vanish on its own: pick HOOTHOOT on Route 29 at night, come back at noon, and it
+is simply gone. Nothing was wrong and nothing was said, and it is the one change
+to that list nobody made.
+
+There is a line under the chips for it now. It reads *PIDGEY is here in the
+morning, not now* when the clock has just taken your quarry, and *also here:
+HOOTHOOT after dark* when it has not — two named, then *and 3 more* if the grass
+has that much in it, and nothing at all where the hours are the same, which on
+most maps they are not. The clock is the game's own, which is the real one, so
+this is advice about your evening rather than something the pilot can hurry
+along.
+
+Measured on Route 29 in the morning: the chips read HOPPIP, PIDGEY, SENTRET,
+RATTATA with *also here: HOOTHOOT after dark* below them; after dark they read
+HOOTHOOT, RATTATA, and with PIDGEY still chosen the line read *PIDGEY is here in
+the morning, not now*.
 
 **NIDORAN♀ and NIDORAN♂ are two chips, not one.** They read the same until the
 character decoder learned the rest of the cartridge's alphabet — both came back
