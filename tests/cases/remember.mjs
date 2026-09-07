@@ -6,7 +6,7 @@
 // and a bad value here is not a wrong preference, it is `SPEEDS[9]` coming
 // back undefined and the idle loop stepping the emulator undefined frames.
 import { test } from '../harness.mjs';
-import { readOpts, sanitise, writeOpts } from '../../gbcore/remember.js';
+import { adoptable, readOpts, sanitise, writeOpts } from '../../gbcore/remember.js';
 
 const LIMITS = { speeds: 5, grinds: ['+2', '+5', '10', '20'] };
 
@@ -115,4 +115,48 @@ test('a record that is not JSON is replaced rather than believed', async (t) => 
   t.eq(got.speed, null, 'unparseable means nothing remembered');
   writeOpts({ speed: 2 }, st);
   t.eq(readOpts(LIMITS, st).speed, 2, 'and the next choice overwrites it');
+});
+
+// --- taking another device's choices ----------------------------------------
+
+const NOTHING = { speed: null, grind: null, hunt: null, travel: null, at: 0 };
+const group = (over) => ({ ...NOTHING, ...over });
+
+test('an empty group is not a choice anybody made', async (t) => {
+  // A room nobody has written to answers with one, and adopting it cleared this
+  // device's options at the moment it joined. That happened.
+  t.false(adoptable(group({ at: 9 }), group({ speed: 2, at: 1 })),
+          'nothing chosen, nothing to take');
+  t.false(adoptable(null, group({ speed: 2 })), 'and nothing at all is the same');
+});
+
+test('an older group loses, whatever it says', async (t) => {
+  // The change callback fires for this device's own writes too, so arriving is
+  // not the same as being newest.
+  t.false(adoptable(group({ speed: 1, at: 5 }), group({ speed: 4, at: 9 })),
+          'their choice is older than ours');
+  t.true(adoptable(group({ speed: 1, at: 9 }), group({ speed: 4, at: 5 })),
+         'and the other way round it is taken');
+  t.true(adoptable(group({ speed: 1, at: 5 }), group({ speed: 4, at: 5 })),
+         'a tie is taken, because the room has already picked a winner by then');
+});
+
+test('a group that says the same thing is not news', async (t) => {
+  t.false(adoptable(group({ speed: 2, grind: '+3', at: 9 }),
+                    group({ speed: 2, grind: '+3', at: 1 })),
+          'identical, so nothing to apply');
+});
+
+test('a destination is a choice, which it was not for four versions',
+     async (t) => {
+  // The defect. Both questions were asked over a hand-written list of speed,
+  // grind and hunt; `travel` was added to the stored keys, the sanitiser and
+  // the writer, and to neither of these. So a destination chosen on the tablet
+  // was published, delivered, and refused at the door -- twice: as an empty
+  // group when it was the only thing chosen, and as no change when it was not.
+  t.true(adoptable(group({ travel: 26 * 256 + 1, at: 9 }), group({ at: 1 })),
+         'a destination on its own is a group worth taking');
+  t.true(adoptable(group({ speed: 2, travel: 26 * 256 + 1, at: 9 }),
+                   group({ speed: 2, travel: null, at: 1 })),
+         'and a group that differs only in where to go has changed');
 });

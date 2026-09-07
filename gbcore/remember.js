@@ -32,6 +32,19 @@ const OPTS_KEY = 'crystal-pilot-opts';
 // this device's choices against another device's, and a stamp invented at load
 // time would make every reload look like a fresh decision.
 const OPT_KEYS = ['speed', 'grind', 'hunt', 'travel', 'at'];
+/**
+ * The keys that are somebody's *choice*, which is every one of them but `at`.
+ *
+ * `adoptable` below asks two questions about the whole set -- did anybody
+ * choose anything, and is any of it different from what we have -- and it used
+ * to ask them about a list written out by hand. `travel` arrived four versions
+ * after that list and was added here, to `sanitise` and to the writer, and
+ * nowhere else: a destination chosen on the tablet reached the room, arrived at
+ * the phone, and was thrown away as an empty group nobody made. Derived from
+ * the stored list now, so the next option cannot be forgotten in the same
+ * place.
+ */
+const CHOICES = OPT_KEYS.filter((k) => k !== 'at');
 
 function store(given) {
   if (given) return given;
@@ -83,6 +96,30 @@ export function sanitise(raw, { speeds = 0, grinds = [] } = {}) {
     out.travel = raw.travel;
   }
   return out;
+}
+
+/**
+ * Should a group of options that arrived from elsewhere be taken?
+ *
+ * Three refusals, and every one of them is a state that actually happened.
+ *
+ * An **empty group** is not a choice anybody made: a room nobody has written to
+ * answers with one, and adopting it cleared this device's options at the moment
+ * it joined. An **older group** loses, because the change callback also fires
+ * for this device's own writes, so the newest write has to win by its stamp
+ * rather than by arriving. And a group that **matches** is not news.
+ *
+ * It lives here rather than in `main.js` for the reason the defect gives: it
+ * asked those questions about a hand-written list of three fields, `travel`
+ * arrived four versions later, and nothing failed -- a destination chosen on
+ * one device was published, delivered, and refused at the door. Asked over
+ * `CHOICES`, and asked somewhere a test can reach.
+ */
+export function adoptable(clean, mine) {
+  if (!clean || !mine) return false;
+  if (CHOICES.every((k) => clean[k] === null)) return false;
+  if ((clean.at || 0) < (mine.at || 0)) return false;
+  return !CHOICES.every((k) => clean[k] === mine[k]);
 }
 
 /** The remembered options, or nulls -- never a throw and never a surprise. */

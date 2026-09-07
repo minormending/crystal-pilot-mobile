@@ -2625,7 +2625,7 @@ game's own picture, not on a surface of ours.
 
 ### What it remembers
 
-<!-- covers: gbcore/remember.js @ cbc3d7a56f82 -->
+<!-- covers: gbcore/remember.js @ 3715fb205bcc -->
 
 The app forgets everything on a reload, and a reload is not rare: the Update
 button causes one deliberately, and a phone discards a background tab whenever
