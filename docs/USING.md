@@ -508,6 +508,8 @@ deployed, which is not the question you are asking when a bug you saw fixed is
 still in front of you. `tools/check-app` asserts that number matches the service
 worker's cache name, because a version display that lies is worse than none.
 
+<!-- covers: sw.js @ 9d6170bcd6dc -->
+
 The worker fetches **network first, falling back to the cache**. That is the
 opposite of the usual offline-first advice, on purpose.
 
@@ -539,3 +541,19 @@ the network comes back, because the poison is now the offline copy. Those
 answers arrive *redirected*, which is what separates them from a real reply. A
 500 or a 404 falls back to the cache for the same reason: a known-good copy of
 a shell file beats a broken deploy.
+
+**And it gets out of the way when it cannot help.** There is exactly one way a
+service worker can leave an app worse off than not having one, and this file had
+it: `caches.open` can reject — a private window, an origin whose site data the
+browser has been told to block, a device out of quota — and that line sat outside
+the error handling. So the whole response rejected and *every shell file failed
+to load*, on a device where, with no worker registered at all, the app would have
+worked perfectly. It now hands the request straight to the network in that case,
+which is exactly what would have happened if the file had never been installed.
+
+None of the above had a single test until v141, which is the uncomfortable part:
+5KB of decisions that only show themselves on a bad network, two of them fixes
+that had to be found by reading. The worker is now driven in a `vm` context
+holding fakes for the four globals it uses — so the code under test is the
+deployed file byte for byte — and each of those behaviours is pinned by a test
+that fails when the guard it names is removed.

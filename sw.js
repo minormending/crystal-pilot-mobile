@@ -5,7 +5,7 @@
 // in IndexedDB on the device by app/remember.js, so a reload does not send you
 // looking for them -- which is a different thing from being cached, and is
 // thrown away by Forget in the settings card.
-const CACHE = 'crystal-pilot-v140';
+const CACHE = 'crystal-pilot-v141';
 const SHELL = [
   './', './index.html', './manifest.webmanifest', './icon.svg',
   './vendor/wasmboy.umd.js',
@@ -70,7 +70,22 @@ self.addEventListener('fetch', (e) => {
   // starve the app of anything it needs.
   if (!SHELL_PATHS.has(url.pathname)) return;
   e.respondWith((async () => {
-    const c = await caches.open(CACHE);
+    // Nothing this worker does may leave the app worse off than not having it,
+    // and there is exactly one way it could: `caches.open` can reject. A
+    // private window, an origin whose site data the browser has been told to
+    // block, a device out of quota -- and this line sat outside the try, so the
+    // whole respondWith rejected and *every shell file* failed to load. On a
+    // device where, with no worker registered at all, the app would have worked.
+    //
+    // With no cache there is nothing to fall back to, so the honest thing is to
+    // get out of the way: hand the request to the network, which is exactly
+    // what would have happened if this file had never been installed.
+    let c = null;
+    try {
+      c = await caches.open(CACHE);
+    } catch (err) {
+      return fetch(e.request);
+    }
     try {
       const fresh = await fetch(e.request);
       // `ok` is not enough on its own. A captive portal -- hotel wifi, an
@@ -89,8 +104,12 @@ self.addEventListener('fetch', (e) => {
       return hit || fresh;
     } catch (err) {
       // Offline. Scoped to this version's cache so a leftover older one cannot
-      // answer for it.
-      const hit = await c.match(e.request);
+      // answer for it -- and read inside its own guard, because storage that
+      // was there a moment ago can be evicted, and a failure to read the
+      // fallback must not replace the network error that explains what is
+      // actually wrong.
+      let hit = null;
+      try { hit = await c.match(e.request); } catch (e2) { hit = null; }
       if (hit) return hit;
       throw err;
     }
