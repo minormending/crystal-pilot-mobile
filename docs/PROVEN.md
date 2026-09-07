@@ -408,6 +408,9 @@ exactly why nothing failed.
 | 14 | a second way to load a slot, without the refusal the first one has | nothing — that was the trouble | measuring what never runs |
 | 15 | the worker broke the app outright wherever storage was unavailable | a private window | **testing the offline promise** |
 | 15 | Join re-enabled a button nothing had disabled, so a double tap joined twice | tapping twice | testing the offline promise |
+| 16 | with balls in the bag and no species picked, Hunt and Catch were both unreachable | running the ball errand | **adding a caller** |
+| 16 | and the hint asked you to pick from a picker that was not on screen | standing indoors | adding a caller |
+| 16 | a destination chip found itself by its label, which is not its identity | a profile naming two maps alike | reading the new code cold |
 
 Five things in that table are worth more than the individual rows.
 
@@ -418,12 +421,12 @@ device, a second cartridge, a second Pokémon. What it measures is how much of
 the world you have to *arrange*, not how much you have to own: the fifth pass
 needed no hardware at all, only a party with a corpse in slot one.
 
-**Exactly one of the forty-three was caught by a check**, and only after the fix
+**Exactly one of the forty-six was caught by a check**, and only after the fix
 had decided what to look for: the wiring group named the four modules still
 importing constants that had just been deleted. One more was caught by a *test*,
 and only because the test hung — the obvious `continue` for the party prompt
 advanced nothing in a loop bounded by balls thrown. That is the honest weight to
-give this repository's seventeen check groups and 175 tests: they hold a fix
+give this repository's seventeen check groups and 192 tests: they hold a fix
 down, and they catch the fix that is itself wrong. They do not find the fault.
 
 **Measuring also rules things out, which is half of what it is for.** The
@@ -650,6 +653,55 @@ it. That is what made it invisible: the function reads as though the press were
 guarded, and `Share` a few lines above genuinely is. Measured with a double tap
 on a code that does not exist: two joins ran and the room answered twice. One
 now.
+
+**The sixteenth pass found its defects by adding a caller.** Not an audit
+method anybody plans, and the most reliable one in this log: the Travel row
+needed the offers list to draw a row that was waiting to be chosen for, and the
+offers list could not do it.
+
+The pickers under that list — the species chips, the level presets, the
+destinations — are drawn only when the row that reads them is *on* the list. So a
+row that appears only once a choice has been made can never be chosen for. Travel
+hit that on the day it was written, and the same wall had been standing in front
+of Hunt and Catch since the list was built:
+
+```mermaid
+flowchart LR
+    B["Poké Balls in the bag,<br/>no species picked"] --> R["rank = {grind}<br/>Hunt and Catch not drawn"]
+    R --> P["#pick is drawn only with<br/>Hunt or Catch on the list"]
+    P --> H["hint still reads<br/><i>pick something below</i>"]
+    H --> N["nothing below"]
+    N -.->|"and no way back"| B
+```
+
+**Measured, and it is the state the ball errand leaves you in.** Catch had a
+version of the missing rule already — it keeps its place when the only thing
+missing is the balls, because the errand that fetches them lives in that row —
+which is exactly why an *empty* bag worked and a full one did not. A row now
+earns its place while it waits on a choice that can be made here, and the second
+half of the same finding is that the hint used to say *pick something below to
+hunt or catch* indoors, where the picker holds "nothing wild appears here".
+
+The third defect is in the new code, found by reading it back cold an hour after
+writing it. A destination chip looked itself up by its own label, and a label is
+not an identity: a profile is data somebody writes, and two maps sharing a name
+is ordinary — two Pokémon Centers, the halves of a long route. Then `find` on the
+name returns the *first* place with it, whose key is not the chosen one, so
+**neither** chip lights while the selection stays in force. Not reachable on
+Crystal, whose ten names are distinct; reachable by anyone writing the eleventh.
+The species picker above it gets away with the same trick only because `wildOn`
+builds its list through a Map keyed by name.
+
+**And the feature paid for the module it leaned on.** `world.js` had no tests and
+was not loaded by the suite at all, which is an awkward place for the module
+every journey is planned against — so `routesFrom` could not be written on top of
+`route` until there were. It needs no cartridge: a fake ROM answering `romByte`
+is a map of any shape, and the fixture writes out the real layout from
+`constants/map_data_constants.asm` rather than stubbing it, because the byte
+layout is the part that can be wrong. 0% to 98%, and two of those tests pin
+behaviour nothing had ever checked: an unused warp slot is padding rather than a
+door to map 0.0, and asking only about the map you are standing on reads no ROM
+at all.
 
 **The two worst were silent data loss**, and both were doors the app opens by
 itself. Every door a *person* opens was already locked and had been for
