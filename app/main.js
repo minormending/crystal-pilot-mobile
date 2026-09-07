@@ -2523,6 +2523,19 @@ $('#rename').onclick = () => {
  * is testing.
  */
 async function joinWith(btn, input) {
+  // Disabled here, and the `finally` below has always put it back -- which is
+  // what made the omission hard to see: the function reads as though the press
+  // were already guarded. Share, ten lines up, does disable its own button
+  // first; Join re-enabled one that nothing had ever turned off.
+  //
+  // The join is two network round trips, a read of the room and a subscribe to
+  // it, so the window is wide open. Measured with a double tap on a code that
+  // does not exist: two joins ran and the room answered twice, the second
+  // attach unsubscribing the first's listener on its way past. It settles,
+  // which is why nothing ever looked wrong -- but a button that takes a network
+  // trip must not be pressable twice, and this one believed it was not.
+  if (btn.disabled) return;
+  btn.disabled = true;
   try {
     const r = await ensureRoom();
     if (!r) { progress('sharing needs a connection'); return; }
