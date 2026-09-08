@@ -4,6 +4,12 @@ import { gen2 } from './engine.js';
 
 const b = GameBoy.byteAt, w = GameBoy.wordAt;
 
+// How many kinds of thing one pocket is believed to hold. A bound against a
+// garbage count byte walking a reader through work RAM, not a claim about the
+// cartridge -- so it lives here rather than in the engine profile, which says
+// in its own header that this app's caution is not a fact about the machine.
+const POCKET_KINDS = 20;
+
 // Collision values that roll for a wild encounter (COLL_LONG_GRASS $14,
 // COLL_TALL_GRASS $18, and the two unused mirrors the engine still treats
 // as grass).
@@ -76,6 +82,8 @@ export class GameState {
       menuItems: symbols.addr('wMenuDataItems'),
       numBalls: symbols.addr('wNumBalls'),
       balls: symbols.addr('wBalls'),
+      numItems: symbols.addr('wNumItems'),
+      items: symbols.addr('wItems'),
       curPocket: symbols.addr('wCurPocket'),
       curItem: symbols.addr('wCurItem'),
       windowStack: symbols.addr('wWindowStackSize'),
@@ -156,6 +164,7 @@ export class GameState {
       },
       party: this.party(wram),
       balls: this.balls(wram),
+      items: this.items(wram),
       curPocket: b(wram, a.curPocket),
       curItem: b(wram, a.curItem),
       windowOpen: b(wram, a.windowStack) > 0,
@@ -170,20 +179,42 @@ export class GameState {
   }
 
   /**
-   * The BALL pocket, as [id, quantity] pairs.
+   * One pocket of the bag, as [id, quantity] pairs.
    *
-   * wNumBalls counts the *kinds* of ball carried, not how many balls: the
-   * quantity is the second byte of each entry.
+   * The count byte counts the *kinds* carried, not how many of them: the
+   * quantity is the second byte of each entry. `POCKET_KINDS` is a sanity bound
+   * rather than a fact about the cartridge -- a garbage count must not send this
+   * walking through work RAM -- which is why it is here and not in the engine
+   * profile, next to that profile's own note about what it refuses to hold.
    */
-  balls(wram) {
-    const n = Math.min(b(wram, this.a.numBalls), 20);
+  _pocket(wram, countAt, listAt) {
+    const n = Math.min(b(wram, countAt), POCKET_KINDS);
     const out = [];
     for (let i = 0; i < n; i++) {
-      const id = b(wram, this.a.balls + i * 2);
+      const id = b(wram, listAt + i * 2);
       if (id === 0 || id === 0xff) break;
-      out.push([id, b(wram, this.a.balls + i * 2 + 1)]);
+      out.push([id, b(wram, listAt + i * 2 + 1)]);
     }
     return out;
+  }
+
+  /** The BALL pocket, as [id, quantity] pairs. */
+  balls(wram) {
+    return this._pocket(wram, this.a.numBalls, this.a.balls);
+  }
+
+  /**
+   * The ITEM pocket, the same shape.
+   *
+   * Read for the first time in twenty-two versions, and the pocket next door
+   * had been read since the beginning. What it costs not to have it: `pickUp`
+   * decided whether it had picked something up by looking at the *balls*, so
+   * taking a BERRY off a tree on Route 30 reported "the ball would not go in
+   * the bag" with the berry visibly in the pocket. Measured twice, on two
+   * trees, before this existed.
+   */
+  items(wram) {
+    return this._pocket(wram, this.a.numItems, this.a.items);
   }
 
   party(wram) {
