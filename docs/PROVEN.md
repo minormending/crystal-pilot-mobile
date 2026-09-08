@@ -336,7 +336,7 @@ second, which is there so the core's own waits finish, not to run a game.
   candidates and returned true standing three tiles clear of any. It checks the
   tile underfoot now.
 
-## Thirty audits, and how each defect was actually found
+## Thirty-one audits, and how each defect was actually found
 
 Everything above was watched happening. This section was the exception, and the
 exception was the point of it: after the ROM-hack work shipped, eleven passes
@@ -472,6 +472,9 @@ exactly why nothing failed.
 | 30 | `restock` read only the ITEM pocket, so `want` meant *buy this many* for a ball | asking it for balls | asking it for balls |
 | 30 | `watchThrow` could not see a catch that went to the box, so the app refused to try | a party of six | **filling the party** |
 | 30 | and the nickname question after a boxed catch was never answered | the same | filling the party |
+| 31 | `heal()` had one town baked into it, so a second Center was a second copy | naming a second Center | **naming a city** |
+| 31 | a route was shortest by legs and gave up on a leg the walk could not take | naming a city the short way runs through Route 46 | naming a city |
+| 31 | `restock` used `marts[0]`, so it walked back to Cherrygrove past a nearer Mart | standing in the new city | naming a city |
 
 Five things in that table are worth more than the individual rows.
 
@@ -482,14 +485,14 @@ device, a second cartridge, a second Pokémon. What it measures is how much of
 the world you have to *arrange*, not how much you have to own: the fifth pass
 needed no hardware at all, only a party with a corpse in slot one.
 
-**Three of the one hundred and three were caught by a check**, and only after the fix
+**Three of the hundred and six were caught by a check**, and only after the fix
 had decided what to look for: the wiring group named the four modules still
 importing constants that had just been deleted, and the symbol group refused a
 new address that had not been added to the list that travels between devices.
 One more was caught by a *test*, and only because the test hung — the obvious
 `continue` for the party prompt advanced nothing in a loop bounded by balls
 thrown. That is the honest weight to give this repository's seventeen check
-groups and 420 tests: they hold a fix down, and they catch the fix that is
+groups and 433 tests: they hold a fix down, and they catch the fix that is
 itself wrong. They do not find the fault.
 
 **Measuring also rules things out, which is half of what it is for.** The
@@ -2048,6 +2051,76 @@ from. Nothing, twice. So the claim stands, with the caveat it deserves: **that
 menu is in the ROM and this pass did not find what reaches it.** The bedroom
 PC's six rows are items, decoration and mail; Cherrygrove's Center has no bg
 events at all. Somewhere later in the game, presumably.
+
+### A thirty-first pass: naming a city, and the three defects it woke up
+
+The map graph has always reached most of Johto. A flood over its exits from
+Route 31 finds sixty-odd maps in five legs, and every feature in this app was
+limited to the ten maps somebody had **named**: Travel offers what the title
+names, Heal walks to what it lists, Shop goes where it says there is a counter.
+
+So the feature was Violet City, its Center and its Mart — read off the
+cartridge rather than a walkthrough. Group 10's maps were scanned for the nurse
+sprite standing at (3,1) behind her counter and for a clerk at (1,3), and Violet
+City's own warp list says which door leads to each: 10.5 is the city, 10.10 its
+Center through the door at (31,25), 10.6 its Mart through (9,17).
+
+Three things had to change, and two of them were defects that had been waiting
+for somebody to ask.
+
+**A healer had one town baked into it.** `heal()` checked it was standing on
+Cherrygrove City, went through Cherrygrove's door to Cherrygrove's Center, and
+left via Cherrygrove — so a second Center meant a second copy of all of it. The
+four became fields of the healer entry and `healAtCenter` reads them.
+`nearestHeal` hands the entry to the procedure, which is the one-line change
+that lets one procedure serve every Center in the game.
+
+**A route did not know a leg could be impossible.** Route 29's connection
+struct says there is a map to the north, and there is — Route 46 — but the pilot
+cannot get up there. Naming Violet made that the shortest way to it *by legs*:
+
+```
+heading up
+trying up again
+trying up again
+could not leave Route 29 going UP
+```
+
+on a town four ordinary legs away through Cherrygrove. Shortest-by-legs knows
+nothing about a leg being hard and nothing in the connection data says so, so a
+leg that will not go is written down and the route asked again without it. It
+terminates because the set only grows. Measured after the fix:
+
+```
+up will not go — trying another way
+heading left · heading up · heading up
+won a trainer battle · won a trainer battle
+through to Violet City
+```
+
+**And a mart list had the same defect the healer list just lost.** `restock`
+used `marts[0]`. Measured in the town this pass had just named: standing in
+Violet City with a Mart across the street, the pilot walked back to Cherrygrove
+for a potion — *bought 3 for 900* from map 26.4, four legs away. `nearestHeal`'s
+body became `nearestPlace(list, from, mapOf)` and both features call it. **The
+extraction was the fix**, which is the second time in three passes that moving a
+primitive to its second caller *was* the repair rather than the tidy-up.
+
+Verified in Violet, all four halves of it:
+
+| | measured |
+| --- | --- |
+| travel | *arrived* at 10.5, having refused UP out of Route 29 and gone round |
+| heal | *healed one Pokémon at Violet City*, HP 10/24 → 24/24 |
+| the cost model | `nearestHeal` from Violet City costs 0 |
+| shop | *bought 2, then could not afford another — 293 left*, POTION ×1 → ×3, and **no window and no script** on the way out |
+
+One transient worth naming: the first attempt to reach Violet's Mart reported
+*could not get into Violet's Mart*, and the retry walked in. The pilot enters
+Violet City at the east gate and the Mart's door is forty-one steps west, which
+is a long walk inside `through`'s eight tries. The door and the map data are
+right — `through([9,17], 10.6)` returns true and lands in 10.6 — so this is a
+budget that is marginal on a city rather than a coordinate that is wrong.
 
 ## The part that had to be redesigned
 

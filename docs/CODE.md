@@ -107,7 +107,7 @@ of the subtleties in sections 6 and 7.
 
 ## 2. The shape of it
 
-<!-- covers-api: app/main.js gen2/journey.js titles/crystal.js gen2/tasks.js gen2/nav.js gen2/world.js gen2/collision.js gen2/state.js gen2/romdata.js gen2/symbols.js gbcore/gb.js @ dd85b7b8e4cc -->
+<!-- covers-api: app/main.js gen2/journey.js titles/crystal.js gen2/tasks.js gen2/nav.js gen2/world.js gen2/collision.js gen2/state.js gen2/romdata.js gen2/symbols.js gbcore/gb.js @ ee70003738fb -->
 
 Twenty-eight modules, in four directories, and the directories are the design:
 **an import may point down this list and never up.**
@@ -886,7 +886,7 @@ Two more things the map alone will not tell you:
 
 ### `world.js` — which map adjoins which
 
-<!-- covers: gen2/world.js @ d380cfe11648 -->
+<!-- covers: gen2/world.js @ 6d214a1e2071 -->
 
 The map graph, read out of the cartridge: edge connections *and* warps, so it can
 route out of a building rather than only across a route.
@@ -1034,7 +1034,7 @@ point those coordinates mean somewhere else entirely.
 
 ## 5. Crossing to the next map
 
-<!-- covers: gen2/journey.js gen2/world.js @ 02e88bcb06e9 -->
+<!-- covers: gen2/journey.js gen2/world.js @ 930dcf225799 -->
 
 A connection spans only part of a shared edge, so "walk west until something
 happens" does not work. `crossEdge()` closes the distance in stages, then tries
@@ -1797,7 +1797,7 @@ flowchart TD
 
 ## 7a. Five that act on where you already are
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ 3d3ccd97ab32 -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ 2d0f690e67cd -->
 
 Grind, hunt and catch all go *looking* for something. These five do the obvious
 thing with the situation you are already in, and take no parameters:
@@ -2068,7 +2068,7 @@ said *trainer battle: lost* **seven times**. One loss, reported seven ways.
 
 ## 7d. The counter, and the money it takes
 
-<!-- covers: gen2/menus.js gen2/state.js titles/crystal.js @ 2a41aa35737a -->
+<!-- covers: gen2/menus.js gen2/state.js titles/crystal.js @ 0f69d03f7597 -->
 
 Everything the pilot could do until now used what it found. **Shop** walks to a
 mart and buys, which is the first thing it does that spends rather than
@@ -2419,7 +2419,7 @@ because that failure is only otherwise discovered by reaching for the undo.
 
 ## 8. The errands
 
-<!-- covers: titles/crystal.js gen2/journey.js @ bb6d76b4d5aa -->
+<!-- covers: titles/crystal.js gen2/journey.js @ 9cd5c5a19312 -->
 
 Everything in this section is `crystal.js` — the only file in the app that names
 a Crystal map, a Crystal door or a Crystal NPC. What it stands on is
@@ -2748,6 +2748,90 @@ the bag" rather than "did we gain any".
 </details>
 
 ---
+
+## 8a. Naming a city is a feature
+
+<!-- covers: titles/crystal.js gen2/world.js @ a79e5c7be233 -->
+
+The map graph has always reached most of Johto. A flood over its exits from
+Route 31 finds sixty-odd maps in five legs — and every feature in this app was
+limited to the ten maps somebody had **named**. Travel offers what the title
+names; Heal walks to what it lists; Shop goes where it says there is a counter.
+
+So Violet City, its Center and its Mart — found by reading the cartridge rather
+than a walkthrough. Group 10's maps were scanned for the nurse sprite standing
+at (3,1) behind her counter and for a clerk at (1,3), and Violet City's own warp
+list says which door leads to each:
+
+| map | is | reached by |
+| --- | --- | --- |
+| 10.5 | Violet City | one leg west of Route 31 |
+| 10.10 | its Pokémon Center | the door at (31,25) |
+| 10.6 | its Mart | the door at (9,17) |
+
+<details>
+<summary><b>Advanced detail:</b> the three things that had to change first</summary>
+
+**A healer became a place.** `heal()` was Cherrygrove's — the map it checked
+for, the door it went through, the Center it expected and the town it left by
+were all constants in the body — so a second Center would have been a second
+copy of all of it. The four are fields of the healer entry now:
+
+```js
+{ map: VIOLET_CITY, reach: 'healAtCenter',
+  inside: VIOLET_POKECENTER, door: [31, 25], nurse: NURSE }
+```
+
+and `nearestHeal` hands the entry to the procedure, which is the one-line change
+that lets one procedure serve every Center in the game. It also makes a Center
+cheap to *describe*: `crystal-early`, the profile that exists to show what a
+half-described cartridge looks like, now declares its healer as three
+coordinates rather than inheriting a method that only worked in one town. The
+contract checks the new fields, and only on an entry that brought any of them —
+Elm's machine is the one healer that is not a Center and carries its own places.
+
+**A route learned that a leg can be impossible.** This was a real defect and
+naming Violet exposed it. Route 29's connection struct says there is a map to
+the north, and there is — Route 46 — but the pilot cannot get up there. Naming
+Violet City made that the shortest way to it *by legs*, so the walk planned UP
+out of Route 29, `crossEdge` refused three times, and `travelTo` gave up:
+
+```
+could not leave Route 29 going UP
+```
+
+on a town four ordinary legs away through Cherrygrove. **Shortest-by-legs knows
+nothing about a leg being hard, and nothing in the connection data says so
+either.** So `World.route` and `routesFrom` take an `avoid` set of legs — named
+by their two maps, which is what a failure knows: it tried to get from here to
+there and could not, and a warp has no direction at all — and `travelTo`
+collects them. It terminates because the set only grows: every failure removes
+an edge from a finite graph, and when none is left the message says so *and how
+many were refused*, which is a different thing from there being no route at all.
+
+Measured on the cartridge:
+
+```
+trying up again
+trying up again
+up will not go — trying another way
+heading left · heading up · heading up
+won a trainer battle · won a trainer battle
+through to Violet City
+```
+
+**And one cost model instead of two.** `restock` used `marts[0]`, so standing in
+Violet City with a Mart across the street the pilot walked back to Cherrygrove
+for a potion. The same defect `heal()` had, in the other feature that keeps a
+list of places — so `nearestHeal`'s body became `nearestPlace(list, from,
+mapOf)` and both call it. **The extraction was the fix.**
+
+Priced in *tiles*, not legs, because a leg is not a unit of anything: a route
+crossing is fifty tiles and a door is one. A further leg costs the title's
+`legCost` and the **first** one costs the real distance to the edge it leaves
+by, which is the only leg it can measure.
+
+</details>
 
 ## 9. The interface
 

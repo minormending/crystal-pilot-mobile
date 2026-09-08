@@ -590,6 +590,25 @@ Two things worth knowing before you press it:
 - **Losing costs you.** A whiteout takes half your money and sends you to the
   last Pokémon Center. Heal first if the row above this one is offering to.
 
+## How far the pilot can go
+
+Violet City is on the list now, with its Pokémon Center and its Mart — so
+everything above works over a bigger map. Travel offers it; Heal walks to
+whichever Center is nearer, which from Route 31 is Violet's and from Route 29 is
+Cherrygrove's; Shop goes to the nearer counter.
+
+None of that needed new machinery. The pilot's map graph has always reached most
+of Johto — from Route 31 it finds sixty-odd maps within five legs — and what
+limits it is which places have been **named**. Naming one is a handful of
+coordinates read off the cartridge, which is what the profile in `titles/` is
+for.
+
+**If a walk says *up will not go — trying another way*, that is the pilot
+working.** Route 29's map data says there is a route to the north, and there is,
+but you cannot get up there from where the pilot stands — so it writes that leg
+off and asks for a different way round. Before this it gave up and told you it
+could not leave Route 29.
+
 ## Travel: take me somewhere else
 
 Tap to walk moves you around the map you are standing on. **Travel** walks you
@@ -918,7 +937,7 @@ deployed, which is not the question you are asking when a bug you saw fixed is
 still in front of you. `tools/check-app` asserts that number matches the service
 worker's cache name, because a version display that lies is worse than none.
 
-<!-- covers: sw.js @ a186120602f5 -->
+<!-- covers: sw.js @ 8a19fe8e35be -->
 
 The worker fetches **network first, falling back to the cache**. That is the
 opposite of the usual offline-first advice, on purpose.

@@ -117,7 +117,7 @@ section gives. Everything by hand runs against a local build.
 
 ```mermaid
 flowchart BT
-    C["the app"] --> T["./run-tests<br/>420 behaviour tests"]
+    C["the app"] --> T["./run-tests<br/>433 behaviour tests"]
     C --> A["tools/check-app<br/>17 groups"]
     C --> D["tools/docs-check<br/>27 tracked sections"]
     C --> V["tools/coverage<br/>what the suite never runs"]
@@ -126,7 +126,7 @@ flowchart BT
     T -.-> V
     M -.->|"13 of 15 caught"| R(["the suite is load-bearing"])
     K -.->|"17 of 17 bite"| R2(["the groups are awake"])
-    V -.->|"62%, and where"| R3(["the gaps are known"])
+    V -.->|"63%, and where"| R3(["the gaps are known"])
 ```
 
 ### What the tests never run
