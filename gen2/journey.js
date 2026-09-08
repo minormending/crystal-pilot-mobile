@@ -1069,7 +1069,8 @@ export class Journey {
     // byte and the same sight range as one who has not, measured by beating
     // one and reading both.
     return { ok: false, won: false, prize: 0, message: reached
-      ? 'stood in front of them and no battle started — already beaten?'
+      ? await this.tasks.saying(
+        'stood in front of them and no battle started — already beaten?')
       : 'could not get to anyone here' };
   }
 
