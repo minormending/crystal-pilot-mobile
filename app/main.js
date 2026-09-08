@@ -1634,6 +1634,12 @@ function paintJobs(s) {
   // Catch shows one of two buttons, so the accent has to go to whichever one
   // is actually on the screen.
   const leadsWithCatch = offers.rank.catch === 1;
+  // Clear rides on the Duel row the way the ball errand rides on Catch: one
+  // row, two buttons, and its own enable -- hidden rather than greyed where
+  // there is nobody else on the map to clear, because a second button that
+  // does what the first does is a choice nobody can make well.
+  $('#clear').classList.toggle('hide', !rows.duel.clearable);
+  $('#clear').disabled = !rows.duel.clearable;
   $('#errand').classList.toggle('hide', !rows.catch.needsBalls || !ctx.canFetch);
   $('#errand').classList.toggle('primary', leadsWithCatch && rows.catch.needsBalls);
   $('#catch').classList.toggle('hide', rows.catch.needsBalls);
@@ -2611,6 +2617,22 @@ $('#duel').onclick = async () => {
   const res = await runTask('#duel', 'looking for a battle',
                             () => boot.duelHere());
   progress(res && res.won && res.prize ? `¥${res.prize} richer` : '');
+};
+
+/**
+ * Fight everybody on this map, not just the one in front of you.
+ *
+ * The primitive a Gym needs, and useful before there is one: Route 32 carries
+ * eight trainers, and clearing a route is how a party gets levels without
+ * standing in grass. The stats line rather than a sentence, because what
+ * somebody wants afterwards is how many and how much.
+ */
+$('#clear').onclick = async () => {
+  if (!boot) return;
+  const res = await runTask('#duel', 'taking on the map',
+                            () => boot.clearHere());
+  progress(res && res.stats
+    ? Object.entries(res.stats).map(([k, v]) => `${k}=${v}`).join('  ') : '');
 };
 
 /**

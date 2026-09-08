@@ -73,6 +73,11 @@ const MAX_REFUSALS = 20;
 // hard way.
 const DUEL_TRIES = 6, DUEL_START_TAPS = 40, DUEL_TURNS = 60;
 
+// Rounds `clearHere` allows beyond the number of trainers the map placed. Not
+// nought, because a trainer can decline once and answer the next time -- and
+// not large, because every wasted round is a walk across a map.
+const CLEAR_SLACK = 3;
+
 // Reaching the nickname question: how many presses to spend getting there, and
 // how long to let the screen settle between them. The text ahead of it is two
 // pages, so a handful is plenty -- and each poll is cheap because it is a read
@@ -193,7 +198,12 @@ export class Journey {
    * walk over and over.
    */
   reopen(badges) {
-    if (badges === null || badges === undefined) return 0;
+    // No early return for a null count, and that is deliberate rather than an
+    // omission. `null > 0` and `undefined > 0` are both false, so the
+    // comparison below already refuses to expire anything when the cartridge
+    // cannot say -- and `tools/mutate` proved the guard was unreachable by
+    // surviving every mutation of it. A line nothing can distinguish is a
+    // second way to say one thing, which is what the checks here exist to stop.
     let gone = 0;
     for (const [leg, at] of [...this.shut]) {
       if (at.badges !== null && at.badges !== undefined && badges > at.badges) {
@@ -1620,7 +1630,7 @@ export class Journey {
    * duel from every other way a battle can end -- the same rule as the shop,
    * where money is the evidence of a purchase.
    */
-  async duelHere({ tries = DUEL_TRIES } = {}) {
+  async duelHere({ tries = DUEL_TRIES, spent = null } = {}) {
     let reached = 0;
     // Trainers that have been stood in front of and would not fight. Measured,
     // and it is the difference between this working and not: standing at (3,28)
@@ -1633,9 +1643,13 @@ export class Journey {
     // structs carry no id that survives a walk out of range and back. A trainer
     // who moves after refusing therefore gets asked once more, which is the
     // safe way for this to be wrong.
-    const spent = new Set();
+    // Handed in by a caller that is fighting more than one, because Gen 2
+    // leaves a beaten trainer on the map for ever -- same sprite, same type
+    // byte, same sight range -- so a second call with a fresh set walks back to
+    // the one it just beat and spends every attempt asking again.
+    spent = spent || new Set();
     for (let attempt = 0; attempt < tries; attempt++) {
-      if (this.stopped) return { ok: false, message: 'stopped' };
+      if (this.stopped) return { ok: false, outcome: 'stopped', message: 'stopped' };
       // Above the walk rather than below it, because this is how most duels
       // actually begin: a trainer with a sight range opens the battle itself
       // the moment you cross their line, which on the way to one of them is
@@ -1653,7 +1667,9 @@ export class Journey {
       const here = this.collision.trainers(wram)
         .filter((o) => !spent.has(o.x + ',' + o.y));
       if (!here.length) {
-        return { ok: false, won: false, prize: 0, message: reached
+        return { ok: false, won: false, prize: 0,
+          outcome: reached ? 'beaten' : 'none',
+          message: reached
           ? 'stood in front of them and no battle started — already beaten?'
           : 'nobody near enough to fight' };
       }
@@ -1666,7 +1682,16 @@ export class Journey {
       reached++;
       await this.nav.step(from.face);
       const met = await this._awaitDuel();
-      if (met) return this._fightDuel(met);
+      if (met) {
+        // **Written down before the battle, not only after a refusal.** A
+        // trainer who has been fought is as spent as one who declined -- Gen 2
+        // leaves both standing there with the same sight range -- and marking
+        // only the refusals meant a caller working through a map came back to
+        // the one it had just beaten every round. Found by `clearHere`'s own
+        // test: three trainers, six wins, and every approach to the same tile.
+        spent.add(pick.x + ',' + pick.y);
+        return this._fightDuel(met);
+      }
       // Reached, asked, and nothing came of it. Written down before the next
       // attempt so the one after this tries somebody else.
       spent.add(pick.x + ',' + pick.y);
@@ -1677,10 +1702,125 @@ export class Journey {
     // leaves them on the map for ever once they have lost, with the same type
     // byte and the same sight range as one who has not, measured by beating
     // one and reading both.
-    return { ok: false, won: false, prize: 0, message: reached
+    return { ok: false, won: false, prize: 0,
+      outcome: reached ? 'beaten' : 'unreachable',
+      message: reached
       ? await this.tasks.saying(
         'stood in front of them and no battle started — already beaten?')
       : 'could not get to anyone here' };
+  }
+
+  /**
+   * Fight everybody on this map, one after another.
+   *
+   * **The primitive a Gym needs.** The pilot has been stopped on Route 32 for
+   * three passes by a man who wants Falkner beaten first, and beating Falkner
+   * means walking into a building and fighting everyone in it. `duelHere`
+   * fights *one*; this is the loop, and the loop is where all the awkwardness
+   * lives. It is useful on its own long before there is a Gym feature: Route 32
+   * carries eight trainers, and clearing a route is how a party gets levels
+   * without standing in grass.
+   *
+   * Four rules, each of which is a way the naive loop goes wrong:
+   *
+   * **One spent set for the whole job.** Gen 2 leaves a beaten trainer on the
+   * map for ever, with the same sprite and the same sight range, so a loop that
+   * called `duelHere` afresh each time would walk back to the one it had just
+   * beaten and spend every attempt asking. Handed down, so the loop makes
+   * progress.
+   *
+   * **The bag between rounds, and only the bag.** A walk to a Center in the
+   * middle of this is a walk *out* of the map the job is about, and the pilot
+   * would come back to fight the next one at whatever HP the trip left it. So
+   * whoever is hurt is mended out of the pocket, which costs no steps, and
+   * anything the bag cannot fix stops the job with the Heal row saying what it
+   * would do about it.
+   *
+   * **A loss ends it.** Losing wipes the party and hands back control at the
+   * last Center, which is not this map -- so the next round would be fought
+   * from the wrong place by nobody fit. Reported as what it is rather than
+   * retried.
+   *
+   * **Bounded by who is actually placed here.** The map's own object list says
+   * how many trainers it holds, so the budget is that plus slack rather than a
+   * number somebody picked. A map whose list cannot be read gets the slack
+   * alone, which is the safe way for the bound to be wrong.
+   */
+  async clearHere({ slack = CLEAR_SLACK } = {}) {
+    const spent = new Set();
+    const stats = { fought: 0, won: 0, prize: 0 };
+    const wram = await this.settled();
+    const placed = wram ? this.collision.trainers(wram).length : 0;
+    const rounds = placed + slack;
+    let stoppedBy = null;
+    for (let round = 0; round < rounds; round++) {
+      if (this.stopped) { stoppedBy = 'stopped'; break; }
+      // Mended before the next one rather than after the last, because the
+      // reason to mend is the battle that has not happened yet.
+      const before = await this.snap();
+      if (before.party.some((m) => m.hp === 0)) {
+        stoppedBy = 'fainted';
+        break;
+      }
+      if (before.party.some((m) => m.hp < m.maxHp)) await this.healFromBag(before);
+      const r = await this.duelHere({ spent });
+      if (r.outcome === 'won') {
+        stats.fought++;
+        stats.won++;
+        stats.prize += r.prize || 0;
+        this.say(r.message);
+        continue;
+      }
+      if (r.outcome === 'lost' || r.outcome === 'fled') {
+        stats.fought++;
+        stoppedBy = r.outcome;
+        break;
+      }
+      if (r.outcome === 'stopped') { stoppedBy = 'stopped'; break; }
+      // 'none', 'beaten' and 'unreachable' all mean the same thing to this
+      // loop: there is nobody left it can get to. Kept apart in the message
+      // because they are different things to go and look at.
+      //
+      // No `|| 'none'` fallback: every path out of `duelHere` names an outcome,
+      // and `tools/mutate` proved the fallback unreachable by surviving.
+      stoppedBy = r.outcome;
+      break;
+    }
+    const cleared = stoppedBy === 'none' || stoppedBy === 'beaten';
+    return {
+      ok: stats.won > 0 || cleared,
+      stats: { ...stats, at: this.where(await this.mapKey()) },
+      message: this._clearedMessage(stats, stoppedBy, placed),
+    };
+  }
+
+  /** What `clearHere` has to say for itself. */
+  _clearedMessage(stats, stoppedBy, placed) {
+    const beat = stats.won === 1 ? 'beat one trainer'
+      : `beat ${stats.won} trainers`;
+    const money = stats.prize ? `, ¥${stats.prize}` : '';
+    if (stoppedBy === 'fainted') {
+      return stats.won
+        ? `${beat}${money} — stopping, nobody fit to send out`
+        : 'nobody fit to send out';
+    }
+    if (stoppedBy === 'lost' || stoppedBy === 'fled') {
+      return stats.won ? `${beat}${money} — then lost one`
+                       : `lost the ${stats.fought === 1 ? 'first' : 'last'} one`;
+    }
+    if (stoppedBy === 'stopped') {
+      return stats.won ? `${beat}${money} — stopped` : 'stopped';
+    }
+    if (stoppedBy === 'unreachable') {
+      return stats.won ? `${beat}${money} — cannot get to anyone else`
+                       : 'could not get to anyone here';
+    }
+    if (!stats.won) return 'nobody here wants a battle';
+    // Cleared. Worth saying against the map's own total, because "beat three"
+    // and "beat the three that were here" are different claims.
+    return placed && stats.won >= placed
+      ? `${beat}${money} — everyone on this map`
+      : `${beat}${money}`;
   }
 
   /** Press until the battle the trainer owes us turns up. */
@@ -1704,10 +1844,16 @@ export class Journey {
     // and a line that lists six is not a line.
     const grew = lead && was && lead.level > was.level
       ? ` — Lv${was.level} to Lv${lead.level}` : '';
+    // **`outcome` rather than the message.** A caller fighting several of these
+    // has to tell a loss from an empty map, and the only difference used to be
+    // the wording -- so re-wording a sentence would have quietly changed what
+    // the caller above it did. `fightBattle`'s own answer is passed straight
+    // out, which is the one place that already knows.
     if (how !== 'won') {
-      return { ok: false, won: false, prize, message: `the battle ${how}` };
+      return { ok: false, won: false, prize, outcome: how,
+               message: `the battle ${how}` };
     }
-    return { ok: true, won: true, prize,
+    return { ok: true, won: true, prize, outcome: 'won',
              message: prize ? `won the battle, ¥${prize}${grew}`
                             : `won the battle${grew}` };
   }

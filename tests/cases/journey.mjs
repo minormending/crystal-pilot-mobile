@@ -643,10 +643,16 @@ test('a cartridge whose title lists no cures cures nothing', async (t) => {
  */
 function dueller({ trainers = () => [], at = [5, 5], starts = true,
                    outcome = 'won', prize = 300, walkFails = () => null,
-                   open = () => true, battle = null } = {}) {
+                   open = () => true, battle = null,
+                   // `hp` is the lead's, mutable, so the loop that clears a
+                   // map can be watched mending it and stopping when it
+                   // cannot. `bag` is what mending costs: a function, because
+                   // whether it works is the thing under test.
+                   hp = 20, bag = null, hurtPerFight = 0 } = {}) {
   const sym = symbols();
   const log = [];
   let money = 1000, inBattle = !!battle, mode = battle || 0, level = 5;
+  let lead = hp;
   const gb = new FakeGameBoy({ wram: worldRam(sym, {}) });
   const collision = {
     off: 0,
@@ -674,14 +680,21 @@ function dueller({ trainers = () => [], at = [5, 5], starts = true,
   j.settled = async () => gb.wram;
   j.snap = async () => ({
     inBattle, battleMode: mode, money,
-    party: [{ hp: 20, maxHp: 20, level }], balls: [], items: [],
+    party: [{ hp: lead, maxHp: 20, level }], balls: [], items: [],
   });
+  j.healFromBag = async () => {
+    log.push('bag');
+    if (!bag) return { ok: false, message: 'nothing in the bag' };
+    lead = 20;
+    return { ok: true, message: 'mended out of the bag' };
+  };
   j.tasks = {
     flee: async () => { log.push('flee'); inBattle = false; mode = 0; return true; },
     fightBattle: async (turns, opts) => {
       log.push(`fight ${turns} heals=${opts && opts.heals ? opts.heals.join() : 'none'}`);
       inBattle = false; mode = 0;
       if (outcome === 'won') { money += prize; level += 1; }
+      lead = Math.max(0, lead - hurtPerFight);
       return outcome;
     },
   };
@@ -693,6 +706,138 @@ function dueller({ trainers = () => [], at = [5, 5], starts = true,
   };
   return j;
 }
+
+// --- clearing a whole map ---------------------------------------------------
+//
+// The primitive a Gym needs. `duelHere` fights one; this is the loop, and the
+// loop is where all four of the awkward things live.
+
+/** Trainers that stop answering once beaten, the way Gen 2 does not. */
+function crowd(n) {
+  const all = [];
+  for (let i = 0; i < n; i++) all.push({ x: 9, y: 9 + i, sprite: 39 });
+  return () => all;
+}
+
+test('everybody on the map is fought, one after another', async (t) => {
+  const j = dueller({ trainers: crowd(3), prize: 100 });
+  const r = await j.clearHere();
+  t.true(r.ok, `it worked: ${r.message}`);
+  t.eq(r.stats.won, 3, 'three beaten');
+  t.eq(r.stats.prize, 300, 'and the money added up');
+  t.contains(r.message, 'everyone on this map',
+             'said against the map’s own total');
+});
+
+test('one trainer is one trainer, and the map is only claimed when known',
+     async (t) => {
+  // Two claims in one sentence, and both can be wrong quietly. The plural is
+  // ordinary care. "everyone on this map" is a *claim*, and it may only be made
+  // against the map's own object list -- so a snapshot that will not decode
+  // means the count is unknown, and an unknown count is not a clear sweep.
+  const one = dueller({ trainers: crowd(1), prize: 50 });
+  const r1 = await one.clearHere();
+  t.contains(r1.message, 'beat one trainer', 'singular');
+  t.contains(r1.message, 'everyone on this map', 'and the map was countable');
+
+  // Not settled *yet*, which is the real shape of this: `clearHere` counts the
+  // map once on the way in, and coming through a door the decode has not
+  // settled -- the same window `crossEdge` measures its edge openings after.
+  // So the count is unknown and the fighting still works.
+  const blind = dueller({ trainers: crowd(2), prize: 50 });
+  const real = blind.settled;
+  let first = true;
+  blind.settled = async () => {
+    if (first) { first = false; return null; }
+    return real.call(blind);
+  };
+  const r2 = await blind.clearHere();
+  t.eq(r2.stats.won, 2, 'both fought, because the trainers still spawn');
+  t.contains(r2.message, 'beat 2 trainers', 'plural, and counted');
+  t.false(r2.message.includes('everyone'),
+          `no claim about the map it could not read: ${r2.message}`);
+});
+
+test('a beaten trainer is not walked back to', async (t) => {
+  // **The rule the whole loop turns on.** Gen 2 leaves a beaten trainer on the
+  // map for ever -- same sprite, same type byte, same sight range -- so a loop
+  // that called `duelHere` afresh each round would walk back to the one it had
+  // just beaten and spend every attempt asking it again. One spent set for the
+  // job, handed down.
+  //
+  // Measured here as the number of walks: three trainers is three approaches,
+  // not three times six attempts.
+  const j = dueller({ trainers: crowd(3) });
+  await j.clearHere();
+  const walks = j.log.filter((l) => l.startsWith('walk'));
+  const places = new Set(walks);
+  t.eq(places.size, walks.length,
+       `no tile approached twice: ${JSON.stringify(walks)}`);
+});
+
+test('the bag mends between rounds, and the walk to a Center does not',
+     async (t) => {
+  // A walk to a Center in the middle of this is a walk *out* of the map the job
+  // is about, and the pilot would come back to fight the next one at whatever
+  // HP the trip left it. So the pocket, which costs no steps.
+  const j = dueller({ trainers: crowd(3), hurtPerFight: 6, bag: true });
+  const r = await j.clearHere();
+  t.eq(r.stats.won, 3, 'all three, because the bag kept up');
+  t.true(j.log.filter((l) => l === 'bag').length >= 2,
+         'the bag was reached for between rounds');
+});
+
+test('a party the bag cannot mend stops the job rather than fighting on',
+     async (t) => {
+  // Nothing in the pocket and somebody at nought: the next round would be
+  // fought by nobody fit, and the Heal row above this one is what to do about
+  // it. Reported with what was won, because two beaten trainers are still two.
+  const j = dueller({ trainers: crowd(4), hurtPerFight: 20, bag: null });
+  const r = await j.clearHere();
+  t.eq(r.stats.won, 1, 'one, and then the lead was out');
+  t.contains(r.message, 'nobody fit', 'and it says why it stopped');
+});
+
+test('a loss ends the job where a refusal would not', async (t) => {
+  // Losing wipes the party and hands control back at the last Center, which is
+  // not this map -- so the next round would be fought from the wrong place by
+  // nobody fit. Not retried.
+  const j = dueller({ trainers: crowd(4), outcome: 'lost' });
+  const r = await j.clearHere();
+  t.eq(r.stats.won, 0, 'nothing won');
+  t.eq(r.stats.fought, 1, 'and it stopped after the one');
+  t.contains(r.message, 'lost', 'saying so');
+});
+
+test('an empty map is not a failure, it is an empty map', async (t) => {
+  const j = dueller({ trainers: () => [] });
+  const r = await j.clearHere();
+  t.true(r.ok, 'nothing went wrong');
+  t.contains(r.message, 'nobody here', 'and it says what it found');
+});
+
+test('the rounds are bounded by who the map actually placed', async (t) => {
+  // Not a number somebody picked: the map's own object list says how many
+  // trainers it holds, so a trainer who declines twice cannot spin the loop.
+  // Three placed plus the slack, and every round costs an approach.
+  const j = dueller({ trainers: crowd(3), starts: false });
+  const r = await j.clearHere();
+  // Three placed, none of whom will fight, which on a cartridge means three
+  // already beaten -- so there is nobody left, and that is not a failure.
+  t.true(r.ok, `nothing left to fight: ${r.message}`);
+  t.eq(r.stats.won, 0, 'and nothing was won');
+  const walks = j.log.filter((l) => l.startsWith('walk')).length;
+  t.true(walks <= 3 * 6 + 1, `bounded, not runaway: ${walks} walks`);
+  t.true(walks >= 3, `and it did ask all three: ${walks} walks`);
+});
+
+test('Stop ends the clearing between rounds', async (t) => {
+  const j = dueller({ trainers: crowd(4) });
+  j.tasks.cancelled = true;
+  const r = await j.clearHere();
+  t.eq(r.stats.won, 0, 'nothing fought');
+  t.contains(r.message, 'stopped', 'and it says so');
+});
 
 test('a trainer already in front of us is fought without walking anywhere',
      async (t) => {

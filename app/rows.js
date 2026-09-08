@@ -260,6 +260,15 @@ export function describeRows(s, ctx = {}) {
         : !fit.length ? 'nobody fit to send out'
         : `${countWord(trainers.length)} nearby · ${money} in hand`,
       enabled: afoot && trainers.length > 0 && fit.length > 0,
+      // **Clear is offered where there is more than one to clear.** One trainer
+      // in front of you is what Fight is for, and a second button that does the
+      // same thing as the first is a choice nobody can make well. Counted off
+      // the map's own list rather than who is spawned, because that is what the
+      // job will work through -- Gen 2 only loads an object when you are close
+      // enough to draw it, so "nearby" is a fact about where you stand and
+      // "on this map" is a fact about the map.
+      clearable: afoot && fit.length > 0 && (trainersOnMap || 0) > 1
+                 && trainers.length > 0,
       count: trainers.length,
       onMap: trainersOnMap,
     },
