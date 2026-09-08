@@ -27,6 +27,7 @@ export function describeRows(s, ctx = {}) {
   const { rom = null, target = 5, huntWanted = null, ballId = null,
           savedThisSession = false, healPlace = null,
           places = [], travelTo = null, wilds = null, takeables = [],
+          bagHeal = null,
           // The cartridge's own numbers. A party of six and a trainer battle of
           // 2 are Gen 2's, not this module's, and reading them from an import
           // meant the stock values reached here even when a title had changed
@@ -44,6 +45,9 @@ export function describeRows(s, ctx = {}) {
   const foe = s.inBattle ? name(s.enemy.species) : null;
   const trainer = s.battleMode === trainerBattle;
   const hurt = s.party.filter((m) => m.hp < m.maxHp);
+  // Fainted, separately from hurt. A Potion does nothing for a Pokémon at 0 HP
+  // in Gen 2, so a party with one in it needs the walk whatever the bag holds.
+  const down = s.party.filter((m) => m.hp === 0);
 
   // Saving drives the START menu, and that menu does not open in a battle or
   // mid-script.
@@ -123,12 +127,25 @@ export function describeRows(s, ctx = {}) {
       enabled: canCatchHere,
     },
     heal: {
+      // What it will *do*, and the bag comes first because it is free. The walk
+      // is priced in tiles -- 31 against 53 from the east end of Route 29 --
+      // and a POTION already in the pocket costs none of them. Named rather
+      // than counted: "one hurt · a POTION in the bag" says both what is wrong
+      // and what will be spent on it.
+      //
+      // A fainted party is the exception and says so, because a Potion does
+      // nothing for a Pokémon at 0 HP in Gen 2 -- so the walk is the answer
+      // whatever the bag holds, and offering the bag would be a promise it
+      // cannot keep.
       text: s.inBattle ? 'finish the battle first'
         : !s.party.length ? 'no party yet'
-        : hurt.length
-          ? `${hurt.length} hurt · nearest is ${healPlace || 'a Center'}`
-          : 'everyone is at full health',
+        : !hurt.length ? 'everyone is at full health'
+        : bagHeal && !down.length
+          ? `${hurt.length} hurt · ${bagHeal} in the bag`
+          : `${hurt.length} hurt · nearest is ${healPlace || 'a Center'}`,
       enabled: afoot && hurt.length > 0,
+      // Said so the row can be tested on the decision rather than the wording.
+      fromBag: !!(bagHeal && !down.length),
     },
     // Walking somewhere else, which the pilot could always do and was never
     // asked to. `places` is what the journey says is reachable and named from

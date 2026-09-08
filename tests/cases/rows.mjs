@@ -792,3 +792,43 @@ test('Take is offered only where there is something to take', async (t) => {
             .offered.includes('take'),
           'nor in a battle, where nothing on the map can be walked to');
 });
+
+// --- the Heal row, and the bag ----------------------------------------------
+
+test('the Heal row names what it will spend, and prefers the bag', async (t) => {
+  // The walk is priced in tiles -- 31 against 53 from the east end of Route 29
+  // -- and a POTION already in the pocket costs none of them. So the row says
+  // which it will be before it is pressed, the way it already named the nearer
+  // Center.
+  const hurt = { party: [{ hp: 10, maxHp: 40, species: CYNDAQUIL, level: 5 }] };
+  const withBag = look(hurt, { bagHeal: 'POTION', healPlace: "Elm's lab" });
+  t.true(withBag.heal.fromBag, 'the bag is the answer');
+  t.contains(withBag.heal.text, 'POTION in the bag', 'and it is named');
+
+  const without = look(hurt, { healPlace: "Elm's lab" });
+  t.false(without.heal.fromBag, 'with nothing in the bag it is the walk');
+  t.contains(without.heal.text, "nearest is Elm's lab", 'and the walk is named');
+});
+
+test('a fainted party is a Centre’s job whatever the bag holds', async (t) => {
+  // A Potion does nothing for a Pokémon at 0 HP in Gen 2, so offering the bag
+  // would be a promise the row cannot keep.
+  const r = look({ party: [{ hp: 0, maxHp: 40, species: CYNDAQUIL, level: 5 }] },
+                 { bagHeal: 'POTION', healPlace: 'Cherrygrove City' });
+  t.false(r.heal.fromBag, 'the bag is not offered');
+  t.contains(r.heal.text, 'nearest is Cherrygrove City', 'the walk is');
+});
+
+test('one hurt and one fainted still needs the walk', async (t) => {
+  const r = look({ party: [{ hp: 10, maxHp: 40, species: CYNDAQUIL, level: 5 },
+                           { hp: 0, maxHp: 30, species: CYNDAQUIL, level: 4 }] },
+                 { bagHeal: 'POTION', healPlace: "Elm's lab" });
+  t.false(r.heal.fromBag, 'because the walk mends both and the bag mends one');
+});
+
+test('a full-health party says nothing about the bag', async (t) => {
+  const r = look({ party: [{ hp: 40, maxHp: 40, species: CYNDAQUIL, level: 5 }] },
+                 { bagHeal: 'POTION' });
+  t.contains(r.heal.text, 'full health', 'the good state, and it is the good state');
+  t.false(r.heal.enabled, 'and nothing to press');
+});

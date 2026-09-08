@@ -548,4 +548,4 @@ So this page carries a marker naming the files it describes and the hash they
 had when it was last read against them. `tools/docs-check` reports it when they
 move, and the pre-commit hook blocks on that report.
 
-<!-- covers: index.html app/main.js app/rows.js @ 06a2ce42d2cd -->
+<!-- covers: index.html app/main.js app/rows.js @ 6b7739583f70 -->

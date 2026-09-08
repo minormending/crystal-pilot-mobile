@@ -12,6 +12,7 @@ import { adoptable, forgetKept, keepBattery, keepRom, keepSym, keptMeta,
 import { chosenName, needsOffer, openRoom, wasSharing } from '../gbcore/room.js';
 import { createHost, createWatcher } from '../gbcore/stream.js';
 import { Cancelled } from '../gbcore/taskbase.js';
+import { cheapestHeal } from '../gen2/journey.js';
 import { REPLACED_SLOT, Saves, SLOT_IDS, UNDO_SLOT } from '../gbcore/saves.js';
 import { GameState } from '../gen2/state.js';
 import { Tasks } from '../gen2/tasks.js';
@@ -62,6 +63,10 @@ let hourNow = null;
 // destinations, this changes without the map changing, because taking a ball is
 // what changes it.
 let takeables = [];
+// The cheapest thing in the bag that would mend somebody, by name, or null. Read
+// from the same snapshot as everything else in a refresh, because the bag
+// changes as the pilot spends it.
+let bagHeal = null;
 let ballId = null;
 // Frames advanced per animation frame while nobody is driving. The steps are
 // powers of two because that is how it reads: 1x, 2x, 4x... and the last one is
@@ -1471,7 +1476,7 @@ function paintJobs(s) {
   const ctx = { rom: romdata, target, huntWanted, ballId, savedThisSession,
                 healPlace, canFetch: typeof boot.eggErrand === 'function',
                 places: travelPlaces, travelTo, huntable, wilds,
-                hours, hourNow, takeables,
+                hours, hourNow, takeables, bagHeal,
                 engine: state.e };
   const rows = describeRows(s, ctx);
   const offers = describeOffers(s, ctx);
@@ -1567,6 +1572,12 @@ async function refresh() {
   // *taken*, which happens on the map you are standing on.
   takeables = collision && s.worldLoaded && s.wram
     ? collision.takeables(s.wram) : [];
+  // Named in the Heal row before the row is pressed, the same way the nearer
+  // Center is -- so the choice the pilot would make is visible rather than
+  // discovered in the log afterwards.
+  const pick = romdata && title
+    ? cheapestHeal(s.items, title.heals, romdata) : null;
+  bagHeal = pick ? pick.name : null;
   // Remembered so the relative presets have something to be relative to.
   lastLead = s.party.length ? s.party[0].level : null;
   // Options that arrived from another device while a job was running.
