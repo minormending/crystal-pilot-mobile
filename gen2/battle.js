@@ -818,14 +818,16 @@ export function withBattle(Base) {
     let s = await this._openBattlePack();
     if (!s) {
       await this._backToBattleMenu();
-      return { ok: false, gained: 0, message: 'the pack never opened' };
+      return { ok: false, gained: 0,
+               message: await this.saying('the pack never opened') };
     }
     for (let i = 0; i < 8 && s.curPocket !== e.itemPocket; i++) {
       s = await this._packMoved('RIGHT', (x) => x.curPocket);
     }
     if (s.curPocket !== e.itemPocket) {
       await this._backToBattleMenu();
-      return { ok: false, gained: 0, message: 'could not reach the ITEMS pocket' };
+      return { ok: false, gained: 0,
+               message: await this.saying('could not reach the ITEMS pocket') };
     }
     for (let i = 0; i < 24 && s.curItem !== itemId; i++) {
       if (s.curItem === CANCEL_ITEM) {
@@ -847,7 +849,8 @@ export function withBattle(Base) {
     await this.step(SETTLE_PACK);
     if (!this._isBox(await this.snap(), e.battlePack && e.battlePack.use)) {
       await this._backToBattleMenu();
-      return { ok: false, gained: 0, message: 'the USE box never appeared' };
+      return { ok: false, gained: 0,
+               message: await this.saying('the USE box never appeared') };
     }
     await this.push('A', 6, 10);
     await this.step(SETTLE_PACK);

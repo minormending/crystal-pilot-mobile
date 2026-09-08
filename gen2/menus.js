@@ -284,7 +284,8 @@ export function withMenus(Base) {
     }
     if (s.curPocket !== this.state.e.itemPocket) {
       await this.closeMenus();
-      return { ok: false, message: 'could not reach the ITEMS pocket' };
+      return { ok: false,
+               message: await this.saying('could not reach the ITEMS pocket') };
     }
     // DOWN past the last entry lands on CANCEL and stays there, so an overshoot
     // is walked back rather than pressed through -- the same shape `throwBall`
@@ -317,7 +318,7 @@ export function withMenus(Base) {
     // are the two rows under it and TOSS throws the item away.
     if (!await this._driveMenuCursor(1, 4)) {
       await this.closeMenus();
-      return { ok: false, message: 'could not reach USE' };
+      return { ok: false, message: await this.saying('could not reach USE') };
     }
     await this.push('A', 6, 10);
     if (!await this._awaitBox(e.partyPick)) {
@@ -456,7 +457,8 @@ export function withMenus(Base) {
     // than assumed, because SELL is the row under it.
     if (!await this._driveMenuCursor(1, 3)) {
       await this.closeMenus();
-      return { ok: false, bought: 0, spent: 0, message: 'could not reach BUY' };
+      return { ok: false, bought: 0, spent: 0,
+               message: await this.saying('could not reach BUY') };
     }
     await this.push('A', 6, 10);
     if (!await this._awaitBox(e.list)) {

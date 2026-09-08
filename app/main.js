@@ -1409,9 +1409,16 @@ function watchSaying(on) {
   // stuck on -- a box it cannot identify, a question nobody can see, a walk
   // refusing a tile. A job flying through battles shows nothing here and should:
   // the pilot's own line is the informative one then, and it is right above.
-  let prev = null, held = 0, shown = null;
+  let prev = null, held = 0, shown = null, reading = false;
   sayingTimer = setInterval(async () => {
     if (!tasks || !gb.rom) return;
+    // One reading at a time. The callback is async and the interval does not
+    // wait for it, so a read that outlives its quarter-second -- which is
+    // exactly what happens under a task driving frames flat out -- would
+    // overlap the next one and both would count towards the dwell. Two
+    // readings of the same frame are not a line that held still.
+    if (reading) return;
+    reading = true;
     try {
       const sc = await tasks.screen();
       const { text } = describeSaying(sc ? sc.lines() : []);
@@ -1423,6 +1430,8 @@ function watchSaying(on) {
     } catch (e) {
       // A read that lands mid-frame is not worth reporting: the next one is a
       // quarter of a second away.
+    } finally {
+      reading = false;
     }
   }, SAYING_POLL_MS);
 }

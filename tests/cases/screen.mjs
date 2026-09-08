@@ -107,3 +107,42 @@ test('the harness paints what the reader reads', async (t) => {
   paintScreen(wram, sym, ['ABZ abz 09'], gen2);
   t.eq(screenLines(wram, AT)[0].trim(), 'ABZ abz 09', 'there and back');
 });
+
+// --- putting the screen on the end of a failure -----------------------------
+
+test('a failure that expected a box says what turned up instead', async (t) => {
+  // "The USE box never appeared" says what the pilot expected. It does not say
+  // what was there, and that is the difference between a report somebody can
+  // act on and one they can only re-run. Measured while driving the bedroom PC:
+  // three probes failed to identify a box by its shape, and one look at its
+  // words -- "CHRIS turned on the PC" -- settled it.
+  const { Tasks } = await import('../../gen2/tasks.js');
+  const { FakeGameBoy, fakeRom } = await import('../harness.mjs');
+  const state = new GameState(sym);
+  const gb = new FakeGameBoy({ wram: showing(['CHRIS turned on', 'the PC.']) });
+  const tasks = new Tasks(gb, state, () => {}, fakeRom());
+  t.eq(await tasks.saying('the USE box never appeared'),
+       'the USE box never appeared — the screen says: CHRIS turned on / the PC.',
+       'the message, and the screen behind it');
+});
+
+test('a message is unchanged where the screen cannot be read', async (t) => {
+  // So a caller can wrap every failure without asking first.
+  const { Tasks } = await import('../../gen2/tasks.js');
+  const { FakeGameBoy, fakeRom } = await import('../harness.mjs');
+  const bare = { has: (n) => n !== 'wTilemap' && sym.has(n),
+                 addr: (n) => sym.addr(n), bank: (n) => sym.bank(n) };
+  const gb = new FakeGameBoy({ wram: showing(['CHRIS turned on']) });
+  const tasks = new Tasks(gb, new GameState(bare), () => {}, fakeRom());
+  t.eq(await tasks.saying('the pack never opened'), 'the pack never opened',
+       'no clause appended');
+});
+
+test('an empty screen adds nothing either', async (t) => {
+  const { Tasks } = await import('../../gen2/tasks.js');
+  const { FakeGameBoy, fakeRom } = await import('../harness.mjs');
+  const gb = new FakeGameBoy({ wram: showing([]) });
+  const tasks = new Tasks(gb, new GameState(sym), () => {}, fakeRom());
+  t.eq(await tasks.saying('could not reach BUY'), 'could not reach BUY',
+       'an overworld says nothing, so nothing is added');
+});
