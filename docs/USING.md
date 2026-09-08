@@ -1010,8 +1010,10 @@ rather than pressing into it.
 ## Saving, and getting the save off the phone
 
 The pilot saves the game the way a person does — `START → SAVE → YES` — and
-`Download .sav` hands you the battery save as a file. Together those are what
-lets a phone session leave the tab.
+the `Export` row hands you the battery save as a file. Together those are what
+lets a phone session leave the tab. That row says whether the file it would give
+you is `up to date` or `not this session`, because a `.sav` is only as new as
+the last time the game itself was saved: the answer is the row above it.
 
 Saving is not done by writing SRAM, for two reasons. It cannot be: this core is
 readable but not writable. And it should not be: a save the game did not make
@@ -1040,8 +1042,11 @@ played a new game to Route 29 with a Lv5 Cyndaquil, saved, and the resulting
 Route 29, `CYNDAQUIL Lv5 20/20`, Tackle and Leer. Two emulators, two
 implementations, one save file.
 
-`Load a .sav` brings one back the other way, so the desktop and the phone share
-a game in both directions.
+`Import` brings one back the other way, so the desktop and the phone share a
+game in both directions. The two rows sit together with their arrows pointing
+opposite ways, which is the only thing that distinguishes them: they used to be
+called *Download .sav* and *Load a .sav*, which to somebody skimming is the same
+shape twice.
 
 ## Slots, and undoing a job
 
@@ -1180,7 +1185,7 @@ deployed, which is not the question you are asking when a bug you saw fixed is
 still in front of you. `tools/check-app` asserts that number matches the service
 worker's cache name, because a version display that lies is worse than none.
 
-<!-- covers: sw.js @ 7b353cf4807c -->
+<!-- covers: sw.js @ ef12ca6cad56 -->
 
 The worker fetches **network first, falling back to the cache**. That is the
 opposite of the usual offline-first advice, on purpose.

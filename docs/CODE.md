@@ -46,6 +46,7 @@ and the code disagree, the code is right and the section is a bug — see
 8. [The errands](#8-the-errands)
 9. [The interface](#9-the-interface)
    · [One thing at a time](#one-thing-at-a-time)
+   · [The settings and the save card](#the-settings-and-the-save-card)
    · [Colour](#colour) · [What it remembers](#what-it-remembers)
    · [Sharing between your own devices](#sharing-between-your-own-devices)
    · [Handing the save over](#handing-the-save-over)
@@ -3474,7 +3475,7 @@ This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ 98d0189a42b7 -->
+<!-- covers: app/main.js index.html @ c611f51a7bd2 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -4023,7 +4024,7 @@ seconds by a page whose loop was supposedly running.
 
 ### One thing at a time
 
-<!-- covers: app/main.js @ a27eb8b8ac48 -->
+<!-- covers: app/main.js @ 4948f6912a55 -->
 
 One Game Boy, one joypad, one canvas — so a great deal of this app is about
 making sure two things are never driving them at once. There are three claims,
@@ -4142,12 +4143,128 @@ before a step is taken, so a stopped walk does not move at all.
 
 </details>
 
+### The settings and the save card
+
+<!-- covers: index.html app/main.js @ c611f51a7bd2 -->
+
+The pilot's own list got a glyph column, shorter names and a slot to fill in
+v165. These two cards did not, and reading them found that they had a different
+problem: the settings sheet is **eighteen words long**, so nothing there is
+unread because there is too much of it. What was wrong was that the controls did
+not say what they did.
+
+**A cycling button that printed its own state.** `Colour` was one button reading
+`auto`, and pressing it went to light, then dark, then back. Nothing about it
+said there were three states, which three they were, or which way round — the
+only way to find out was to press it three times and watch the page. It is a
+segment group now, all three on the row, the one in force `aria-pressed`. Pico
+already knows this shape, so joining the corners and lapping the borders is its
+code, not ours; what is written here is that a control *on a row* neither fills
+the width nor leaves a 1rem gap under itself.
+
+**A field nobody asked a question.** Underneath *Devices: not sharing* sat an
+unlabelled text box with `K7M2P` in it as a placeholder — which is exactly what
+a room code looks like, so the row read as a code somebody had already entered,
+with a Join button beside it that would fail. The two ways in are two buttons on
+the Devices row now, and the box appears under whichever one you press, indented
+by the width of the glyph column so it reads as belonging to the row above, and
+labelled. `joinWanted` is the flag, and `describeRoom().joining` still decides
+whether either button is offered at all.
+
+**A negative fact with nothing to do about it.** `Files: re-picked each session`
+was drawn beside a hidden Forget button, in the one place a person opens *in
+order to change something*. The row appears now only when something is kept —
+which is when it has both a fact and a button — and the behaviour it was
+explaining is a sentence in *How this works* with the other explanations.
+
+The save card took the v165 treatment as written. Every row there carried the
+verb twice: *Save the game* beside a button saying Save, *Undo the last job*
+beside one saying Undo, so the row was read twice to learn one thing. The name
+is the noun now — `Game save`, `Export`, `Import`, `Last job` — and the button is
+the only verb. Export and Import are drawn as a pair with the arrows pointing
+opposite ways, because the direction a `.sav` travels was carried by nothing but
+*Download* and *Load*, which to a skimming reader is the same shape twice.
+
+`Export` also stopped describing itself and started saying something only it
+knows: whether the file it would hand you has this session in it (`up to date`)
+or not (`not this session`). It does **not** say "the older save", because a
+battery nobody has saved to holds no save at all, and a row asserting an older
+one exists would be wrong in exactly the way this repository keeps getting
+caught by.
+
+<details>
+<summary><b>Advanced detail:</b> three defects that were invisible to every check</summary>
+
+All three are the same shape: a declaration that is written, is correct, and
+never applies. Nothing errors, the page renders, and what you get is simply not
+what the rule says.
+
+**Two disclosure markers on every `details` in the app.** Pico draws a chevron
+on every `summary` as a floated `::after` at the right edge of the row; this
+stylesheet drew a `›` as a `::before` beside the text. So *About slots* had an
+affordance next to the words and a second one three hundred pixels away, and
+only the far one moved when the block opened. It shipped in v161 and survived
+four passes of looking at those cards, because two markers is not obviously
+wrong — it reads as a design somebody chose. Pico's is the better of the two
+(it rotates, and it transitions), so ours went and the vendor's was stopped
+floating.
+
+**`.slots{display:block}`, dead since the day it was written.** It sat with the
+save-card rules; `.param{display:flex}` sat two hundred lines further down with
+the parameter rows; the one element in the app carrying `slots` carries `param`
+too. Equal specificity, later in the file, so `.param` won — and *SLOTS* spent
+its whole life beside the **middle** row of three, reading as that row's name.
+`.param.slots` fixes it.
+
+**A state line four words too long.** `nothing from this session yet` reached the
+phone as *nothing from this sessi…*, because a `jstate` is one nowrap line with
+an ellipsis: the right shape for a row and the wrong shape for a sentence. The
+half that mattered was the half that was cut.
+
+Two of these are now checked and one is now instrumented:
+
+* **`markers`** reads the vendor sheet for pseudo-elements it draws with, and
+  fails if this stylesheet draws on either pseudo of the same element without
+  switching the vendor's off. Replacing a vendor marker is still allowed;
+  duplicating one is not.
+* **`deadcss`** reports any single-class rule whose property is overridden on
+  every element that could carry it. Only where it is certainly dead: the class
+  is in the markup, every carrier also carries the winner, `!important` is
+  accounted for, and neither rule is inside an at-rule. Classes the app names in
+  JavaScript are excluded on **both** sides, and the second half is the one that
+  matters — a winner the app takes off again is not a winner. `.runlog{display}`
+  is beaten by `.hide` on the one element that carries both, and is exactly what
+  that element is for the rest of the time.
+* **`DEV.clipped()`** lists every visible leaf whose text is cut off,
+  `scrollWidth > clientWidth`. It needs the real layout at the real width, which
+  is why it is a console call on a phone-sized viewport and not a check in
+  `tools/`. Run once on a loaded game it found a second clipped line nobody had
+  reported: the Gym row's `FALKNER · Violet City · one map away`, 33px over, and
+  the fact it lost was the one nothing else on the card says. Two facts now, not
+  three — the Travel row above is already counting legs.
+
+The first drafts of both checks were blunt, and `tools/check-checks` said so.
+`deadcss` built its exclusion list from every quoted word in the app, and an
+IndexedDB store three layers down happens to be called `slots` — so the one
+defect the group was written for was the one thing it skipped. `markers` asked
+whether the rule body mentioned `none` at all, and the rule that stops Pico's
+chevron floating says `float:none` — so the group read our own fix as the marker
+having been removed, and had nothing left to complain about. A group switched
+off by the very edit it is meant to police is worse than no group.
+
+</details>
+
 ### Colour
 
 Two palettes, named by the job each colour does — `--action` for filled controls
 that carry a label, `--accent` only where no text sits on it, `--mark` for where
 you tapped, `--raise` for anything pressable. Dark is the base; light is a real
-second palette, not an inversion. The control is three-state: auto, light, dark.
+second palette, not an inversion. The control is three-state — auto, light,
+dark — and all three states are on the row: it was one button that printed the
+state it was in and cycled on press, so nothing about it said there were three,
+which they were, or which way round. `role="group"` is Pico's own segmented
+idiom, and `aria-pressed` is both what paints the chosen one and what a screen
+reader reads.
 
 <details>
 <summary><b>Advanced detail:</b> what the role split fixed</summary>
@@ -4656,7 +4773,7 @@ they have been installed.
 
 ### Watching the other device's screen
 
-<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ ca8654d3f97c -->
+<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ 8e652551ce4c -->
 
 One device shows its screen; the other watches it, and plays it if the first
 one says so. The picture goes straight between them over WebRTC and never
@@ -5269,7 +5386,7 @@ about that code did not.
 
 ### The other checks
 
-<!-- covers: tools/check-app @ 48360c29596c -->
+<!-- covers: tools/check-app @ e86331e1136a -->
 
 `tools/check-app` runs everything that can be verified without a ROM:
 
@@ -5297,12 +5414,24 @@ tools/check-app contrast     # or one group
 | `symbols` | every symbol the app looks up is one it can hand to another device |
 | `listeners` | a `document` or `window` listener is added once, or removed again |
 | `exports` | nothing is exported that nothing outside the module reads |
+| `doclinks` | every `](#anchor)` in `docs/` lands on a heading that exists |
+| `markers` | nothing here draws an affordance the vendor stylesheet already draws |
+| `deadcss` | no single-class rule is overridden on every element that could carry it |
 
 Half of that table was missing until the marker above was added: six groups had
 been written and never listed, so the document described five checks while
 eleven ran, and the twelfth arrived later with the symbol digest. Nothing noticed, because no section had claimed to cover
 `tools/check-app` — which is the exact failure `docs-check` exists to catch,
 one file away from the prose explaining it.
+
+The last two are the newest and they watch the same thing from two sides: a
+declaration that is written, is correct, and never applies. `markers` came from
+finding *two* disclosure markers on every `details` in the app — Pico draws one
+on every `summary` and this stylesheet drew another — and `deadcss` from
+`.slots{display:block}`, which had never once applied because
+`.param{display:flex}` sits later in the same sheet at the same specificity.
+Both are argued out in [the settings and the save
+card](#the-settings-and-the-save-card).
 
 CI (`.github/workflows/checks.yml`) runs `check-app`, the behaviour tests and
 `docs-check` on every push. There is deliberately no emulator in CI: driving

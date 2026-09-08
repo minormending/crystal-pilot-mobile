@@ -856,6 +856,97 @@ the collapsed paragraph was counted as visible and the improvement looked like
 then re-measured against the pre-pass build on the same origin rather than
 trusted from memory.
 
+## The other two screens, where the problem was not the words
+
+The pilot's list had 279 words and the fix was to remove 100 of them. The
+settings sheet has **eighteen**, and measuring it first is what stopped this
+pass from doing the wrong thing to it: there is no reading burden on a card with
+eighteen words on it. What was wrong was that its controls did not say what they
+did.
+
+So this pass costs words on one screen and saves them on the other, which is the
+honest way round for what it fixed.
+
+| | before | after |
+| --- | --- | --- |
+| save card, words | 50 | **42** |
+| save card, characters | 255 | **222** |
+| settings, words *(files kept)* | 18 | 20 |
+| settings, words *(first visit)* | 15 | **13** |
+
+Measured with `checkVisibility()` on the same origin, the same cartridge and the
+same place in the game, against the pre-pass build served out of a gitignored
+copy so that the two readings share an IndexedDB — a v165 build in a
+subdirectory resumed the same Route 32 game the v166 build did.
+
+**And the instrument could not see the thing that was actually wrong.** The
+settings defect was a text box with `K7M2P` in it as a placeholder, sitting
+unlabelled under *not sharing* — which is exactly what a room code looks like, so
+the row read as a code somebody had already entered. A placeholder is an
+attribute, not a text node: it is read by every person who opens that sheet and
+counted by no word counter. Words are a proxy for reading burden, and a proxy is
+not the thing.
+
+### What changed, and why each one
+
+**The colour control shows its three states instead of printing one of them.**
+It was a single button reading `auto` that cycled on press. Nothing about it said
+there were three states, which three, or which way round — the only way to find
+out what it did was to press it three times and watch the page. Three segments
+cost two words and one row's width, and answer all of that at rest. `role="group"`
+is Pico's own segmented idiom, so the joined corners and the lapped borders are
+its code.
+
+**The code box is behind the button that asks for it.** Two ways into a room, two
+buttons on the Devices row — *Join* and *Share* — and the box appears under
+whichever you press, indented by the width of the glyph column so it reads as
+belonging to the row above, and labelled `CODE`.
+
+**The Files row appears when it has something to say.** `Files: re-picked each
+session` beside a hidden Forget button is a negative fact with no action next to
+it, in the one place a person opens *in order to change something*. It is drawn
+now only when files are kept — a fact and a button — and the behaviour it was
+explaining is one sentence in *How this works*.
+
+**Every save-card row said its verb twice.** *Save the game* beside a button
+saying Save; *Undo the last job* beside one saying Undo. The name is the noun now
+— `Game save`, `Export`, `Import`, `Last job` — and the button is the only verb.
+Export and Import are a pair with the arrows pointing opposite ways, because the
+direction a `.sav` travels was carried by nothing but *Download* and *Load*,
+which to a skimming reader is the same shape twice.
+
+**A slot row says its number, not the word.** *Slot* was printed four times on
+that card — once as the group's label and once on each of three rows — and the
+label is the one that has to say it. The word moved into the buttons' accessible
+names instead, which is where it was actually missing: three buttons all called
+*Keep* are three identical announcements to anybody not looking at the screen.
+
+### Three things that were written, correct, and dead
+
+Reading these two cards closely found three defects of the same shape — a
+declaration that never applies. Nothing errors, the page renders, and what you
+get is not what the rule says.
+
+* **Two disclosure markers on every `details` in the app.** Pico draws a chevron
+  on every `summary`, floated to the right edge; this stylesheet drew a `›`
+  beside the text. *About slots* had an affordance next to the words and a second
+  one three hundred pixels away, and only the far one moved when the block
+  opened. Shipped in v161, survived four passes of looking at those cards,
+  because two markers reads as a design somebody chose.
+* **`.slots{display:block}`** sat with the save-card rules and lost to
+  `.param{display:flex}` two hundred lines further down — equal specificity,
+  later in the file. *SLOTS* had spent its whole life beside the **middle** row
+  of three, reading as that row's name.
+* **`nothing from this session yet`** arrived on the phone as *nothing from this
+  sessi…*, because a `jstate` is one nowrap line with an ellipsis. The half that
+  mattered was the half that was cut.
+
+Two are now checked (`markers`, `deadcss`) and one is instrumented
+(`DEV.clipped()`), and the instrument immediately found a fourth: the Gym row's
+`FALKNER · Violet City · one map away`, 33px past the end, losing the fact
+nothing else on the card carries. The reasoning for all four is in
+[docs/CODE.md](CODE.md#the-settings-and-the-save-card).
+
 ## Keeping this page honest
 
 This is the page that went stale. It described a column-flex layout that
@@ -867,4 +958,4 @@ So this page carries a marker naming the files it describes and the hash they
 had when it was last read against them. `tools/docs-check` reports it when they
 move, and the pre-commit hook blocks on that report.
 
-<!-- covers: index.html app/main.js app/rows.js @ 1da965d74047 -->
+<!-- covers: index.html app/main.js app/rows.js @ d7f87f521447 -->

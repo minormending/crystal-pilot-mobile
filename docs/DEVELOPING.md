@@ -16,7 +16,7 @@ what CI checks and what the pre-commit hook blocks on.
 flowchart LR
     E[an edit] --> H{{".githooks/pre-commit"}}
     H --> T["./run-tests<br/>143 behaviour tests"]
-    H --> C["tools/check-app<br/>17 groups"]
+    H --> C["tools/check-app<br/>20 groups"]
     H --> D["tools/docs-check<br/>25 tracked sections"]
     T --> OK[commit]
     C --> OK
@@ -118,7 +118,7 @@ section gives. Everything by hand runs against a local build.
 ```mermaid
 flowchart BT
     C["the app"] --> T["./run-tests<br/>511 behaviour tests"]
-    C --> A["tools/check-app<br/>18 groups"]
+    C --> A["tools/check-app<br/>20 groups"]
     C --> D["tools/docs-check<br/>31 tracked sections"]
     C --> V["tools/coverage<br/>what the suite never runs"]
     T --> M["tools/mutate<br/>break a line, see who notices"]
@@ -287,7 +287,7 @@ is wrong, not the check. It is not in the pre-commit hook: it runs `check-app`
 about fifty times, which is the wrong price for every commit and the right
 one for the commit that changes a check.
 
-`tools/check-app` is eighteen groups, each one a class of mistake that parses
+`tools/check-app` is twenty groups, each one a class of mistake that parses
 fine and is wrong at run time:
 
 | group | asserts |
@@ -308,6 +308,8 @@ fine and is wrong at run time:
 | `docshape` | section 2's architecture diagram draws, counts and tables all 27 modules |
 | `names` | every capitalised name a module uses is one it can see |
 | `doclinks` | every `](#anchor)` in `docs/` lands on a heading that exists |
+| `markers` | nothing here draws an affordance the vendor stylesheet already draws — replacing Pico's chevron is fine, having two is not |
+| `deadcss` | no single-class rule is overridden on every element that could carry it, which is how `.slots{display:block}` lost to `.param{display:flex}` |
 
 `tools/docs-check` is the other half, and it checks the prose rather than the
 code: a documentation section opts in with a marker naming the files it covers
@@ -361,6 +363,7 @@ await DEV.at()            // where, who, how hurt — always a fresh read
 await DEV.watch(b => b.clearHere(), 60)   // run a job, collect what it said
 await DEV.patch()         // re-import the modules onto the live objects
 await DEV.grid(9)         // the collision map around the player, as a picture
+DEV.clipped()             // every visible line whose text is cut off
 ```
 
 Not part of the app: nothing imports it, `?dev=1` does not load it, and the
@@ -369,6 +372,15 @@ the cartridge is the only method here that can refuse an assumption the code and
 its tests share — the thirty-fourth pass turned on exactly that — and it cost
 six fiddly steps every time, two of which are easy to get wrong in ways that
 read as the app being broken:
+
+`DEV.clipped()` is the newest and the cheapest: `scrollWidth > clientWidth` on
+every visible leaf. A `jstate` is one nowrap line with an ellipsis — the right
+shape for a row and the wrong shape for a sentence — so a string written four
+words too long reaches the phone with the half that mattered missing, and reads
+as a bug in whatever wrote it. It needs the real layout at the real width, which
+is why it is a console call on a phone-sized viewport rather than a check in
+`tools/`. Its first run on a loaded game found a clipped line nobody had
+reported.
 
 * **A page reload loses the running game.** The emulator library persists a
   cartridge only when something asks it to, and its own store held *no record at

@@ -339,14 +339,14 @@ second, which is there so the core's own waits finish, not to run a game.
 ## The audits, and how each defect was actually found
 
 Everything above was watched happening. This section was the exception, and the
-exception was the point of it: after the ROM-hack work shipped, **thirty-eight**
-passes went looking for defects in code that already worked, and found **150** —
-a handful of them created by a fix on the way, which are in the table in italics
+exception was the point of it: after the ROM-hack work shipped, **forty** passes
+went looking for defects in code that already worked, and found **164** — a
+handful of them created by a fix on the way, which are in the table in italics
 because they are a different kind of thing. None of them announced itself.
 
-**Reading found twenty-two**, more than any other single method, which is why it
-comes first in the table and why it is worth doing before touching the game. But
-the interesting number is the tail: the remaining hundred and twenty-eight were
+**Reading found twenty-three**, more than any other single method, which is why
+it comes first in the table and why it is worth doing before touching the game.
+But the interesting number is the tail: the remaining hundred and forty-one were
 found almost as many different ways, and almost every entry in that column is a sentence rather than
 a category — *measuring the fix*, *asking a second tile*, *feeding it the wrong
 thing*, *writing a cartridge Crystal is not*, *a test, before the cartridge*,
@@ -528,6 +528,20 @@ exactly why nothing failed.
 | 38 | *and the check then read no hex from a block of `var()`, reporting "both themes" while reading one twice* | *—* | *fixing the duplication* |
 | 38 | the offers ranking was invisible whenever the lead row's action was disabled | Catch leading with "pick something below" | reading the DOM |
 | 38 | a new disabled-button rule made the pad's keys read as missing | any key with no game loaded | a screenshot |
+| 39 | the word-count instrument called a closed `<details>` visible, so a hundred-word cut measured as thirteen | any collapsed block | re-measuring against the pre-pass build |
+| 40 | two disclosure markers on every `details` in the app — ours beside the text, Pico's floated three hundred pixels away | *About slots*, in either theme | reading the computed styles |
+| 40 | `.slots{display:block}` had never once applied: `.param{display:flex}` wins on source order | the save card's slot label, beside the *middle* row of three | a screenshot |
+| 40 | the Gym row's three facts lost the third to the ellipsis, and it was the one nothing else carries | a Gym one map away, on a 375px phone | **a new instrument** — `DEV.clipped()` |
+| 40 | *a rewritten Export state was four words too long and arrived clipped* | *the Export row, same phone* | *the same instrument, minutes later* |
+| 40 | the room code box was an unlabelled field whose placeholder is code-shaped, so the row read as already filled in | Settings, not sharing | reading the sheet |
+| 40 | the Files row was a negative fact with a hidden button beside it, in the one place opened to change something | Settings, nothing kept | the same |
+| 40 | the Screen row was in the markup unhidden, so a first frame offered to show a screen into a room that did not exist | the first frame, before `paintScreen` | reading the markup |
+| 40 | `DEV.keep` wrote its note to `{note}`, which nothing paints, so slots the tool filled showed only a time | three slots reading `13:54`, `12:59` and nothing else | looking at the card the tool had filled |
+| 40 | two diagrams in `DEVELOPING.md` disagreed about how many check groups there are | — | reading |
+| 40 | *`deadcss`'s first draft built its exclusion list from every quoted word in the app, and an IndexedDB store is called `slots` — so it skipped the one defect it was written for* | *—* | *`tools/check-checks`* |
+| 40 | *`markers`' first draft asked whether a rule mentioned `none` at all, and the rule that stops Pico's chevron floating says `float:none`* | *—* | *the same* |
+| 40 | *every button in this sheet is `flex:1 1 auto`, so three segments measured 325px and the group wrapped onto a line of its own* | *the colour row at 375px* | *a screenshot* |
+| 40 | *Pico gives inputs `width:100%`, which is the flex basis — so on a row that can wrap, the code box took its label and its button a line each* | *Settings, after pressing Join* | *a screenshot* |
 
 Five things in that table are worth more than the individual rows.
 
@@ -2697,6 +2711,83 @@ and one of *those* was nearly misdiagnosed, because the first attempt to measure
 both themes mutated the theme attribute and read the computed style in the same
 call, returning each theme one step out of phase and looking exactly like an
 inverted palette. Measuring one theme per call, both were right.
+
+### A thirty-ninth and fortieth pass: measuring before cutting
+
+Asked to reduce the text, then asked to do the same for the settings and the
+save card. The second half of that is where the interesting thing happened,
+because **the settings sheet turned out to have eighteen words on it**. There was
+nothing to cut. Measuring first is what stopped the pass from trimming a screen
+whose problem was somewhere else entirely.
+
+What was wrong with it was that its controls did not say what they did:
+
+* `Colour` was one button printing the state it was in and cycling on press.
+  Nothing about it said there were three states, which three, or which way
+  round; the only way to learn what the control did was to press it three times
+  and watch the page.
+* Under *Devices: not sharing* sat an unlabelled text box with `K7M2P` in it as
+  a placeholder — which is exactly what a room code looks like, so the row read
+  as a code somebody had already entered, with a Join beside it that would fail.
+* `Files: re-picked each session` was a negative fact with a hidden button next
+  to it, in the one screen a person opens *in order to change something*.
+
+**And the word counter could not see any of that.** A placeholder is an
+attribute, not a text node. It is read by every person who opens the sheet and
+counted by no instrument here. Words are a proxy for reading burden, and the
+defect that mattered most was invisible to the proxy — which is the same lesson
+the pass before had already learnt the hard way, when `offsetParent !== null`
+called a collapsed `<details>` visible and a hundred-word cut measured as
+thirteen.
+
+**Three defects of one shape: written, correct, and dead.** Reading these two
+cards closely found a declaration that never applies, three times over.
+
+Pico draws a chevron on every `summary`, floated to the right edge of the row.
+This stylesheet drew a `›` beside the text. So every `details` in the app had
+**two disclosure markers**, one next to the words and one three hundred pixels
+away, and only the far one moved when the block opened. It shipped in v161 and
+survived four passes of looking at those cards, because two markers is not
+obviously wrong — it reads as a design somebody chose.
+
+`.slots{display:block}` sat with the save-card rules and lost to
+`.param{display:flex}` two hundred lines further down the same sheet: equal
+specificity, later in the file. *SLOTS* had spent its whole life beside the
+**middle** row of three, reading as that row's name.
+
+And a rewritten state line was four words too long, so it arrived on the phone
+as *nothing from this sessi…* — a `jstate` being one nowrap line with an
+ellipsis, which is the right shape for a row and the wrong shape for a sentence.
+
+**Two became checks; one became an instrument, and the instrument found a
+fourth.** `markers` reads the vendor sheet for the pseudo-elements it draws with
+and refuses a second marker on the same element. `deadcss` reports any
+single-class rule overridden on every element that could carry it. `DEV.clipped()`
+lists every visible leaf whose text is cut off — `scrollWidth > clientWidth`,
+which needs the real layout at the real width, so it is a console call rather
+than a check. Its first run on a loaded game found the Gym row's
+`FALKNER · Violet City · one map away` running 33px past the end and losing the
+fact nothing else on the card carries.
+
+**Both checks were blunt on their first draft, and `tools/check-checks` said
+so.** `deadcss` built its exclusion list from every quoted word in the app, and
+an IndexedDB store three layers down happens to be called `slots` — so the one
+defect the group existed for was the one thing it skipped. `markers` asked
+whether a rule body mentioned `none` at all, and the rule that stops Pico's
+chevron floating says `float:none` — so the group read the fix as the marker
+having been removed and had nothing left to complain about. **A group switched
+off by the very edit it is meant to police is worse than no group**, and this
+pass wrote two of them in one sitting.
+
+**The method note.** Two screenshots, one computed-style read, one new
+instrument, and one tool used against its own output — `DEV.keep` had been
+writing its slot note into a field nothing paints, which was only visible by
+looking at the card the tool had filled. The self-inflicted count is high (five
+of fifteen) and all five came from the same place: this sheet's own base rules
+meeting Pico's. Every button here is `flex:1 1 auto`, which is right for a pad
+key and wrong for a segment; every input is `width:100%`, which is the flex
+*basis*, so the moment a row was allowed to wrap the code box took its label and
+its button a line each.
 
 ## The part that had to be redesigned
 
