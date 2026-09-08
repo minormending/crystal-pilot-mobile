@@ -117,7 +117,7 @@ section gives. Everything by hand runs against a local build.
 
 ```mermaid
 flowchart BT
-    C["the app"] --> T["./run-tests<br/>445 behaviour tests"]
+    C["the app"] --> T["./run-tests<br/>450 behaviour tests"]
     C --> A["tools/check-app<br/>17 groups"]
     C --> D["tools/docs-check<br/>27 tracked sections"]
     C --> V["tools/coverage<br/>what the suite never runs"]

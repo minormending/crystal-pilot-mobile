@@ -41,6 +41,12 @@ const OFFER_LEGS = 6, OFFER_MOST = 24;
 // and three legs is about as far as that is worth going.
 const DISCOVER_LEGS = 3;
 
+// How many wild encounters one walk to a door will fight or flee before giving
+// up. Generous, because each one costs an escape and the walk carries on from
+// where it stopped: Route 32 is ninety tiles of grass and the Center's door is
+// ninety-six steps from its north end.
+const THROUGH_BATTLES = 40;
+
 // How many refused legs one walk will write off before giving up. The `avoid`
 // set already terminates over a finite graph; this is the bound for a graph
 // nobody has seen, and it is generous because a refusal costs one crossing
@@ -353,7 +359,15 @@ export class Journey {
    * ends early with the text still up.
    */
   async through(goal, expect, tries = 8) {
-    for (let i = 0; i < tries; i++) {
+    // **A battle is not a try.** It is progress-neutral and not a failure: the
+    // walk got partway and something jumped out, and asking again from where it
+    // stopped converges. Counting it made the budget a function of the grass
+    // rather than of the door -- measured the pass discovered places can be far
+    // away, the Pokemon Center on Route 32 is ninety-six steps down a
+    // ninety-tile route, and eight tries never got near it. `travelTo` learned
+    // the same thing about a refused leg one pass earlier.
+    let fought = 0;
+    for (let i = 0; i < tries && fought < THROUGH_BATTLES;) {
       if (this.stopped) return false;
       const from = await this.mapKey();
       if (from === expect) return true;
@@ -377,9 +391,10 @@ export class Journey {
       // way is dealt with rather than counted as the door being unreachable.
       await this.escapeBattle();
       const res = await this.nav.walkTo(this.collision, goal, this.longWalk);
-      if (res.stopped === 'battle') continue;
+      if (res.stopped === 'battle') { fought++; continue; }
+      i++;
       if (await this.mapKey() === expect) return true;
-      if (res.stopped === 'refused' || res.stopped === 'battle') {
+      if (res.stopped === 'refused') {
         await this.runScripts();
         continue;
       }

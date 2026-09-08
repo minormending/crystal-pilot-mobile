@@ -590,6 +590,30 @@ Two things worth knowing before you press it:
 - **Losing costs you.** A whiteout takes half your money and sends you to the
   last Pokémon Center. Heal first if the row above this one is offering to.
 
+## It finds the Centers and the Marts itself
+
+Heal used to walk to one of the two Pokémon Centers written into this app, and
+Shop to one of the two Marts. Neither is a list any more: the pilot looks through
+every door within three legs of where it stands and recognises what is behind
+it. A Center is the room with the nurse behind her counter; a Mart is the room
+with a clerk at the corner of his.
+
+So from Violet City it finds Centers in **Route 32, Azalea Town, Ecruteak City
+and Goldenrod City** and Marts in Azalea and Ecruteak, and it has never been
+told about any of them. Heal goes to the nearest; Shop goes to the nearest
+counter.
+
+Two consequences worth knowing:
+
+- **Elm's computer is still a special case**, and always will be. It is a
+  healer no rule can recognise, and it is the only one you have before the
+  Pokédex — so it stays written down, and a written-down place always wins over
+  a found one.
+- **The rule is deliberately narrow.** Thirteen of the game's twenty-six shop
+  counters are department-store floors and kiosks laid out differently, and the
+  pilot does not claim those. A wrong guess would walk it into a stranger's
+  front room, which is worse than not offering.
+
 ## The pilot knows what everywhere is called
 
 Travel used to offer the handful of places somebody had written into this app —

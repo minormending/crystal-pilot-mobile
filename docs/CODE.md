@@ -886,7 +886,7 @@ Two more things the map alone will not tell you:
 
 ### `world.js` — which map adjoins which
 
-<!-- covers: gen2/world.js @ 64685a832ab4 -->
+<!-- covers: gen2/world.js @ 443101fa3b7f -->
 
 The map graph, read out of the cartridge: edge connections *and* warps, so it can
 route out of a building rather than only across a route.
@@ -1034,7 +1034,7 @@ point those coordinates mean somewhere else entirely.
 
 ## 5. Crossing to the next map
 
-<!-- covers: gen2/journey.js gen2/world.js @ da86e163d1a1 -->
+<!-- covers: gen2/journey.js gen2/world.js @ d9a0ec779bf1 -->
 
 A connection spans only part of a shared edge, so "walk west until something
 happens" does not work. `crossEdge()` closes the distance in stages, then tries
@@ -1095,6 +1095,21 @@ ground, was handed the default by omission. It has a name now, and the five
 share it. Running out of steps is worth naming for what it looks like from
 outside: a walk cut short reports the same `stopped` as a tile that refused, so
 the wrong budget reads as the map being in the way.
+
+**A battle is not a try.** `through()` walks to a doorway and re-asks, up to
+eight times. Every wild encounter used to spend one of those eight — and a
+battle is progress-neutral rather than a failure: the walk got partway, something
+jumped out, and asking again from where it stopped converges. Counting it made
+the budget a function of the *grass* rather than of the distance, which nothing
+noticed while every door the pilot knew about was in a town somebody had
+described. The first door it ever **found** for itself was Route 32's Pokémon
+Center, ninety-six steps down ninety tiles of grass, and the eight tries were
+gone long before the door. Battles have their own allowance now — forty — and
+only a walk that came back for some other reason spends a try. The allowance is
+what keeps *not counted* from meaning *forever*, and it is the same shape as the
+[refused leg](#travelling-further-than-one-map) that stopped spending the walk
+budget one pass earlier: two counters, because two different things were being
+counted as one.
 
 </details>
 
@@ -1797,7 +1812,7 @@ flowchart TD
 
 ## 7a. Five that act on where you already are
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ fed4210d4bd2 -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ 20eec6e665cc -->
 
 Grind, hunt and catch all go *looking* for something. These five do the obvious
 thing with the situation you are already in, and take no parameters:
@@ -2419,7 +2434,7 @@ because that failure is only otherwise discovered by reaching for the undo.
 
 ## 8. The errands
 
-<!-- covers: titles/crystal.js gen2/journey.js @ f2d01b0be593 -->
+<!-- covers: titles/crystal.js gen2/journey.js @ c1afb552b921 -->
 
 Everything in this section is `crystal.js` — the only file in the app that names
 a Crystal map, a Crystal door or a Crystal NPC. What it stands on is
@@ -2749,9 +2764,79 @@ the bag" rather than "did we gain any".
 
 ---
 
-## 8a. Asking the cartridge what its places are called
+## 8a. Finding the Centers and the Marts in the cartridge
 
-<!-- covers: gen2/romdata.js gen2/world.js @ e18266e8baeb -->
+<!-- covers: gen2/world.js gen2/journey.js @ d9a0ec779bf1 -->
+
+The last thing in this app that had to be written out by hand. A title said
+where the Centers and the Marts were, so the pilot healed in the two towns
+somebody had described and nowhere else — and the cartridge has always known.
+
+```mermaid
+flowchart LR
+    HERE["the map you are on"] --> WARPS["its warps<br/><i>world.warps</i>"]
+    WARPS --> DOOR["a door, and what is behind it"]
+    DOOR --> OBJ["world.objectsOn<br/><i>the ROM's object list</i>"]
+    OBJ --> SIG{"nurse at (3,1)?<br/>clerk at (1,3)?"}
+    SIG -- yes --> ENTRY["an entry in the shape<br/>a title declares"]
+    SIG -- no --> SKIP["somebody's front room"]
+    ENTRY --> USE["healAtCenter · restock"]
+```
+
+**`world.objectsOn` is the reader that makes it possible**: the same event block
+`warps` already walks, read further along. Which makes it the one reader here
+that can look at a map **it is not standing on** — `collision.placedObjects`
+reads work RAM, so it only ever knows the map that is loaded, and that is
+exactly the limitation this lifts. The pilot needs to know which door has a
+nurse behind it *before* it walks through.
+
+Every size in that block is measured against work RAM rather than read off a
+macro: the object list parsed out of the ROM matches `wMapObjects` entry for
+entry on Elm's lab, Cherrygrove's Center and Route 30 — sprites, tiles and types
+alike, which is a stronger check than reading the macro would be.
+
+The signatures are the engine profile's, measured across the whole ROM rather
+than on the two maps the app already knew:
+
+| | of maps carrying the sprite | at the standard tile |
+| --- | --- | --- |
+| the nurse | 23 | **21 at (3,1)** |
+| a clerk | 26 | **13 at (1,3)** |
+
+The other thirteen clerks are department-store floors and kiosks, which this
+rule does not claim. Narrow on purpose: **a wrong match walks the pilot into a
+stranger's front room**, and a missed one costs nothing but the town the title
+named anyway.
+
+A counter is a *wall*, so the signature carries how to reach it as well as where
+it stands — measured in Cherrygrove, the clerk sits at (1,3) and the only tile
+you can talk to him from is (3,3) facing LEFT, two away across a corner.
+
+Discovered entries come out in **exactly the shape a title declares**, which is
+what lets `healAtCenter` and `restock` drive one without knowing it was
+discovered — and is the payoff for [making a healer a
+place](#8c-naming-a-city-is-a-feature) two passes ago. The title's own come
+first and win a tie: Elm's computer is a healer no signature will ever
+recognise, and it is the only one available before the Pokédex.
+
+Measured on the cartridge. From Violet City the pilot finds Centers in ROUTE 32,
+AZALEA TOWN, ECRUTEAK CITY and GOLDENROD CITY, and Marts in Azalea and Ecruteak
+— none of which any title has ever heard of.
+
+**And the first door it found broke the walk that goes through doors.** Standing
+on Route 32, `healerList` offered `ROUTE 32 [found]` and `nearestHeal` put it at
+zero legs — both right — and the heal failed twice over. The door is at (11,73)
+on a map ninety tiles tall and the pilot arrives at its north end: ninety-six
+steps of grass, which spent every one of `through`'s eight tries on wild
+encounters. A declared place is somewhere a person thought to write down, and
+people write down towns; a *found* place is wherever the cartridge put it. So
+this feature is what turned [a budget measured on
+rooms](#5-crossing-to-the-next-map) into a bug — the discovery was never wrong,
+and neither were the coordinates.
+
+## 8b. Asking the cartridge what its places are called
+
+<!-- covers: gen2/romdata.js gen2/world.js @ 7dfc1c5711ff -->
 
 The one table that **retires** hand-written data rather than adding to it. A map
 used to be called whatever the title profile said, and everything else was
@@ -2820,13 +2905,13 @@ Two things the tests caught that the cartridge would have caught later:
 Reachable here means *the graph can get there*, not *the pilot can walk it* —
 Route 46 is on the list and the pilot cannot get up there. That is honest rather
 than optimistic: Travel tries, and [routes around a leg that will not
-go](#8b-naming-a-city-is-a-feature).
+go](#8c-naming-a-city-is-a-feature).
 
 </details>
 
-## 8b. Naming a city is a feature
+## 8c. Naming a city is a feature
 
-<!-- covers: titles/crystal.js gen2/world.js @ 80a0ff8efd54 -->
+<!-- covers: titles/crystal.js gen2/world.js @ 71033aac418e -->
 
 The map graph has always reached most of Johto. A flood over its exits from
 Route 31 finds sixty-odd maps in five legs — and every feature in this app was
@@ -2914,7 +2999,7 @@ This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ 9157aae25e86 -->
+<!-- covers: app/main.js index.html @ e552a7832888 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -3443,7 +3528,7 @@ seconds by a page whose loop was supposedly running.
 
 ### One thing at a time
 
-<!-- covers: app/main.js @ b9bc965869d6 -->
+<!-- covers: app/main.js @ 3df5029ed821 -->
 
 One Game Boy, one joypad, one canvas — so a great deal of this app is about
 making sure two things are never driving them at once. There are three claims,
@@ -4076,7 +4161,7 @@ they have been installed.
 
 ### Watching the other device's screen
 
-<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ 18b1682423ed -->
+<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ d4f88b1147e2 -->
 
 One device shows its screen; the other watches it, and plays it if the first
 one says so. The picture goes straight between them over WebRTC and never

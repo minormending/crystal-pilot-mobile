@@ -907,8 +907,13 @@ test('Stop ends the pressing before the party grows', async (t) => {
 
 // --- a window in the way is not a door that will not open -------------------
 
-/** A Journey at a doorway, with something on screen. */
-function atADoor({ windowOpen = true, closes = true } = {}) {
+/**
+ * A Journey at a doorway, with something on screen.
+ *
+ * `battles` is how many wild encounters interrupt the walk before it arrives,
+ * which is what a long walk through grass actually looks like.
+ */
+function atADoor({ windowOpen = true, closes = true, battles = 0 } = {}) {
   const sym = symbols();
   const wram = worldRam(sym, {});
   const at = (n) => sym.addr(n) - 0xc000;
@@ -920,7 +925,12 @@ function atADoor({ windowOpen = true, closes = true } = {}) {
   const j = new Journey(new FakeGameBoy({ wram }), new GameState(sym), null,
                         collision, {
     mapKey: async () => here,
-    walkTo: async () => { log.push('walk'); here = 2; return { stopped: null }; },
+    walkTo: async () => {
+      log.push('walk');
+      if (battles > 0) { battles--; return { stopped: 'battle' }; }
+      here = 2;
+      return { stopped: null };
+    },
     step: async () => ({ blocked: false }),
   }, () => {}, null, {});
   j.said = [];
@@ -955,6 +965,31 @@ test('a walk closes what is on screen before blaming the door', async (t) => {
   t.true(j.log.indexOf('closeConversation') < j.log.indexOf('walk'),
          'before a step was taken');
   t.contains(j.said.join(' '), 'closing what is on screen', 'and it said so');
+});
+
+test('a wild encounter does not spend one of the door\'s tries', async (t) => {
+  // Measured on the cartridge the pass a Pokémon Center could be *discovered*
+  // rather than declared: Route 32's Center is ninety-six steps down ninety
+  // tiles of grass, and `through`'s eight tries were gone long before the door.
+  // A battle is progress-neutral -- the walk got partway and something jumped
+  // out -- so counting it made the budget a function of the grass rather than
+  // of the distance. Twelve encounters is an ordinary walk down that route.
+  const j = atADoor({ windowOpen: false, battles: 12 });
+  t.true(await j.through([2, 7], 2, 2), 'it still got through');
+  t.eq(j.log.filter((l) => l === 'walk').length, 13,
+       'thirteen walks on a budget of two tries');
+});
+
+test('the encounters a door will sit through are still bounded', async (t) => {
+  // The other half of the same change: not counting battles must not mean
+  // walking forever. Five hundred encounters and *then* the door is a route
+  // that has stopped being a walk, and the answer has to be no rather than
+  // eventually -- so the arrival is put out of reach of the allowance on
+  // purpose, and a lost bound shows up as a `true` here instead of as a suite
+  // that never finishes.
+  const j = atADoor({ windowOpen: false, battles: 500 });
+  t.false(await j.through([2, 7], 2), 'it gave up');
+  t.true(j.log.length <= 41, `it stopped after the allowance, not ${j.log.length}`);
 });
 
 test('nothing on screen means nothing to close', async (t) => {
