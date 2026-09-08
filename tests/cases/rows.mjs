@@ -10,7 +10,8 @@ import { readCode } from '../../gbcore/room.js';
 import { describeHandoff, describeOffers, describeParty, describeReplaced,
          describeRoom, describeScreen, joinFailure, describeRows, describeSlot,
          betterGrind, betterHour, hoursLine, otherHour,
-         describeUndo, describeSaying } from '../../app/rows.js';
+         describeUndo, describeSaying, describeAuto,
+         describeTitle } from '../../app/rows.js';
 
 const sym = symbols();
 const state = new GameState(sym);
@@ -1132,4 +1133,226 @@ test('room in the party needs no phrase at all', async (t) => {
                 enemy: { species: PIDGEY } };
   t.true(look(one, { ballId: POKE_BALL, canBox: false }).here.enabled,
          'five slots free, nothing to read');
+});
+
+// --- running the list -------------------------------------------------------
+//
+// The runner has no ranking of its own: it takes the front of the list the
+// screen is showing. So what is worth testing is exactly the four things it
+// adds -- which rows it will never take on its own, that it refuses a row
+// still waiting on a choice, that it stops rather than repeating a job that
+// changed nothing, and that it never chooses itself.
+
+const autoFor = (world, ctx = {}, opts = {}) => {
+  const s = state.read(worldRam(sym, world));
+  const c = { rom, ...ctx };
+  return describeAuto(describeOffers(s, c), describeRows(s, c), opts);
+};
+
+test('the runner takes the front of the list, and says which row that is',
+     async (t) => {
+  // Grind, and not Heal: a party that is *hurt* does not put Heal first --
+  // only a fainted one does, and the ranking says so two hundred lines above.
+  // Worth writing the test around, because it is the whole claim: the runner
+  // has no ranking of its own and takes whatever the screen is showing.
+  const world = { party: [{ species: CYNDAQUIL, level: 5, hp: 8, maxHp: 20 }] };
+  const ctx = { bagHeal: { id: 17, name: 'POTION', count: 3 } };
+  const list = offers(world, ctx);
+  const rows = look(world, ctx);
+  const a = autoFor(world, ctx);
+  // The front of the list *among the rows it could press*. Not simply
+  // `offered[0]`: with no Poké Balls the row wearing the accent is Catch,
+  // whose own button is greyed and whose action is the ball errand beside it.
+  // A runner that pressed a disabled button would be doing something a person
+  // cannot, and the row says which one it starts with so the difference is on
+  // screen rather than a surprise.
+  const pressable = list.offered.filter(
+    (k) => rows[k].enabled && !rows[k].needs && !['travel', 'hunt'].includes(k));
+  t.eq(a.key, pressable[0], 'the front of what it can press');
+  t.eq(a.key, 'grind', 'which here is Grind, hurt party and all');
+  t.contains(a.text, 'Grind', 'named on the row before it is pressed');
+  t.true(a.enabled, 'and it can be pressed');
+});
+
+test('a place is a choice, so Travel is never taken on its own', async (t) => {
+  // Travel alone on the list: a party at full health with nowhere else to be.
+  // The row is offered to a person and refused to the runner, which is the
+  // one asymmetry in here.
+  const world = { party: [{ species: CYNDAQUIL, level: 5, hp: 20, maxHp: 20 }] };
+  const ctx = { places: [{ key: '3.1', name: 'ROUTE 30', legs: 1 }] };
+  const list = offers(world, ctx);
+  t.true(list.offered.includes('travel'), 'a person is offered it');
+  const a = autoFor(world, ctx);
+  t.ne(a.key, 'travel', 'the runner is not');
+});
+
+test('Hunt is never taken on its own, because it ends inside a battle',
+     async (t) => {
+  // A remembered species clears `needs`, so this is not the picker rule doing
+  // the work -- it is the rule about where a step is allowed to finish.
+  const world = { party: [{ species: CYNDAQUIL, level: 5, hp: 20, maxHp: 20 }],
+                  map: [3, 1] };
+  const ctx = { huntWanted: 'PIDGEY', huntable: 2,
+                wilds: [{ species: PIDGEY, low: 2, high: 3 }] };
+  const a = autoFor(world, ctx);
+  t.ne(a.key, 'hunt', 'not on its own');
+});
+
+test('a row still waiting on a choice is not taken either', async (t) => {
+  // Catch with balls and no species picked keeps its place on the list -- that
+  // ranking rule is load-bearing and tested above -- and carries `needs`. The
+  // runner cannot fill a slot, so it must not press the row that has one.
+  const world = { party: [{ species: CYNDAQUIL, level: 5, hp: 20, maxHp: 20 }],
+                  items: [[POKE_BALL, 5]], map: [3, 1] };
+  const ctx = { ballId: POKE_BALL, huntable: 2,
+                wilds: [{ species: PIDGEY, low: 2, high: 3 }] };
+  const list = offers(world, ctx);
+  t.true(list.offered.includes('catch'), 'the row is on the list');
+  const a = autoFor(world, ctx);
+  t.ne(a.key, 'catch', 'and the runner leaves it alone');
+});
+
+test('a job that ran and changed nothing stops the sequence', async (t) => {
+  // The loop that must end. `changed` is the caller's evidence -- a signature
+  // of the map, the money, the badges, the party and the bag -- and a job that
+  // reports success while all of that stands still did nothing, whatever it
+  // said.
+  const world = { party: [{ species: CYNDAQUIL, level: 5, hp: 8, maxHp: 20 }] };
+  const ctx = { bagHeal: { id: 17, name: 'POTION', count: 3 } };
+  const again = autoFor(world, ctx, { last: 'grind', changed: true });
+  t.eq(again.key, 'grind', 'the same job twice is fine while something moves');
+  const stuck = autoFor(world, ctx, { last: 'grind', changed: false });
+  t.eq(stuck.key, null, 'and not once it stops moving');
+  t.contains(stuck.text, 'changed nothing', 'with the reason it stopped');
+});
+
+test('an empty list stops it rather than picking something', async (t) => {
+  const a = autoFor({});
+  t.eq(a.key, null, 'nothing to start');
+  t.false(a.enabled, 'so the row is not drawn');
+  t.contains(a.text, 'on its own', 'and says what kind of nothing');
+});
+
+test('the runner is never one of the jobs it can choose', async (t) => {
+  // It presses a row's button. Its own row is not in that table, and the day
+  // it is, one press would recurse.
+  const world = { party: [{ species: CYNDAQUIL, level: 5, hp: 8, maxHp: 20 }] };
+  const a = autoFor(world, { bagHeal: { id: 17, name: 'POTION', count: 3 } });
+  t.ne(a.key, 'auto', 'not itself');
+  t.true(['heal', 'grind', 'duel', 'gym', 'take', 'shop', 'catch'].includes(a.key),
+         'always one of the jobs with a button');
+});
+
+test('shopping is not offered with an empty party', async (t) => {
+  // Found by the runner: with no party, in the bedroom of a new game, Shop was
+  // the front of the list and it pressed it. Every mart is in another town, and
+  // the town the game starts you in is the one it will not let you leave
+  // without a Pokémon -- so the whole job is a walk into a roadblock.
+  const ctx = { marts: [{ key: '3.2', name: 'CHERRYGROVE CITY', legs: 2 }],
+                shopFor: '5 more potion' };
+  const empty = look({}, ctx);
+  t.false(empty.shop.enabled, 'nothing to send to the counter');
+  t.contains(empty.shop.text, 'without a Pok', 'and it says which');
+  const held = look({ party: [{ species: CYNDAQUIL, level: 5, hp: 20, maxHp: 20 }] },
+                    ctx);
+  t.true(held.shop.enabled, 'and with one along it is on again');
+  t.contains(held.shop.text, '5 more potion', 'saying what it would buy');
+});
+
+// --- the gaps the mutation tool found ---------------------------------------
+//
+// Every test below was written because `tools/mutate` moved a number or an
+// operator in rows.js and the suite went on passing. A surviving mutation is
+// not automatically a defect -- three of the ones in this file are genuinely
+// unobservable -- but each of these is a rule the app relies on with nothing
+// asserting it.
+
+test('a device already in a room is not offered a code box', async (t) => {
+  // `joining` gates two controls now: the Join button on the Devices row and
+  // the code row indented under it. A `joining: true` in any of these three
+  // states would put a text box asking for a code under a row saying it is
+  // already sharing.
+  t.false(describeRoom({ status: 'connecting', code: 'K7M2P' }).joining,
+          'mid-connect');
+  t.false(describeRoom({ status: 'synced', code: 'K7M2P' }).joining,
+          'connected');
+  t.false(describeRoom({ status: 'offline', code: 'K7M2P' }).joining,
+          'connected and offline');
+  t.false(describeRoom({ status: 'unavailable' }).joining,
+          'and not where sharing cannot work at all');
+  t.true(describeRoom({ status: 'local' }).joining,
+         'only where there is a room to join');
+});
+
+test('a profile with names but no healers is still worth a sentence',
+     async (t) => {
+  // Three conditions, and the middle one is the interesting case: somebody's
+  // half-finished title file. It names maps, so the header reads properly and
+  // the app looks complete -- and then Heal has nowhere to go. Worth saying
+  // differently from "no profile at all", because it is a file to go and
+  // finish rather than a cartridge nobody has described.
+  const full = describeTitle({ names: { '3.1': 'ROUTE 30' }, healers: [{}],
+                               drive: class { async run() {} } });
+  t.false(full.show, 'a cartridge the pilot knows says nothing');
+  const noHealers = describeTitle({ names: { '3.1': 'ROUTE 30' }, healers: [],
+                                    drive: class { async run() {} } });
+  t.true(noHealers.show, 'one with nowhere to heal does');
+  const noNames = describeTitle({ names: {}, healers: [{}] });
+  t.true(noNames.show, 'and so does one with no names');
+  t.ne(noHealers.text, noNames.text, 'and the two do not say the same thing');
+});
+
+test('the offer hint says two things at most', async (t) => {
+  // A third clause is a paragraph, and this is a line. Nothing asserted the
+  // cap, so a fourth hint added one day would have quietly made it one.
+  const world = { battleMode: 1, party: [], map: [3, 1],
+                  enemy: { species: PIDGEY, level: 3, hp: 15, maxHp: 15 } };
+  const list = offers(world, { trainers: [{ x: 1, y: 1, sprite: 39 }],
+                               trainersOnMap: 3 });
+  t.true(list.hint.split(' · ').length <= 2, 'at most two clauses');
+});
+
+test('a trainer on the map with nobody fit is said, and only then', async (t) => {
+  // The fix is a job that *is* on the list -- Heal, put first by the same
+  // fainted party -- and without the sentence the two offers read as
+  // unrelated.
+  const down = { party: [{ species: CYNDAQUIL, level: 5, hp: 0, maxHp: 20 }] };
+  const withTrainers = offers(down, { trainers: [{ x: 2, y: 2, sprite: 39 }],
+                                      trainersOnMap: 1 });
+  t.contains(withTrainers.hint, 'somebody fit', 'said where it is in the way');
+  const fit = { party: [{ species: CYNDAQUIL, level: 5, hp: 20, maxHp: 20 }] };
+  const ok = offers(fit, { trainers: [{ x: 2, y: 2, sprite: 39 }],
+                           trainersOnMap: 1 });
+  t.false(ok.hint.includes('somebody fit'), 'and not where it is not');
+});
+
+test('Travel earns its place on the list from having somewhere to go',
+     async (t) => {
+  // The row is drawn while it waits for a place to be picked -- which is the
+  // rule that makes the picker reachable at all -- and not drawn where the
+  // cartridge has named nowhere.
+  const world = { party: [{ species: CYNDAQUIL, level: 5, hp: 20, maxHp: 20 }] };
+  const somewhere = offers(world,
+    { places: [{ key: '3.1', name: 'ROUTE 30', legs: 1 }] });
+  t.true(somewhere.offered.includes('travel'), 'a named place puts it on');
+  const nowhere = offers(world, { places: [] });
+  t.false(nowhere.offered.includes('travel'), 'and none takes it off');
+});
+
+test('a replaced save with nothing in it offers nothing', async (t) => {
+  const none = describeReplaced(null);
+  t.false(none.show, 'no row');
+  t.false(none.enabled, 'and nothing to press');
+});
+
+test('a line exactly as long as the limit is not truncated', async (t) => {
+  // The boundary, which nothing asserted: `>` and `>=` behaved identically for
+  // every length the other tests use. One character either side of the limit is
+  // where an off-by-one in a truncation lives.
+  const max = 20;
+  const exact = 'x'.repeat(max);
+  t.eq(describeSaying([exact], { max }).text, exact, 'exactly the limit stands');
+  const over = 'x'.repeat(max + 1);
+  t.ne(describeSaying([over], { max }).text, over, 'one more is cut');
+  t.contains(describeSaying([over], { max }).text, '…', 'and says so');
 });

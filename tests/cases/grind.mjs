@@ -265,3 +265,74 @@ test('a trip to heal for PP is counted against the same budget as a faint',
   t.false(r.ok, 'it gives up');
   t.contains(r.message, 'trips to heal', 'having spent the budget');
 });
+
+// --- the bounds that make it terminate --------------------------------------
+//
+// `tools/mutate` put gen2/jobs.js at 35% -- the weakest module in the
+// repository, and the one people leave running. Every survivor below was a
+// number or an operator in a *termination bound*: the heal-trip budget, the
+// stuck-battle run, and the reset that makes it a run rather than a total.
+// Nothing asserted any of them, so all three could be moved with the suite
+// green.
+
+test('a grind gives up after its twelfth trip to heal, and says so',
+     async (t) => {
+  // Every battle a knockout, and a heal that always works: the only thing that
+  // can end this is the budget. Without it the job paces to a Center for ever,
+  // which is what an unbounded version measurably did.
+  const { tasks, said } = grinder(
+    [{ species: CHIKORITA, level: 5 }],
+    { outcomes: Array(40).fill('lost') });
+  let heals = 0;
+  const r = await tasks.grind(0, 20, { heal: async () => { heals += 1; return true; } });
+  t.false(r.ok, 'it stops rather than going round again');
+  t.eq(heals, 12, 'twelve trips, which is MAX_HEALS');
+  t.contains(r.message, '12 trips', 'and the message says how many');
+  t.contains(r.message, 'fainted', 'and why it was going');
+  t.true(said.length > 0, 'having said so as it went');
+});
+
+test('a grind with no way to heal stops at the first knockout', async (t) => {
+  // The same branch with `heal` absent, which is the case the row is allowed to
+  // offer on a cartridge with nowhere to heal.
+  const { tasks } = grinder([{ species: CHIKORITA, level: 5 }],
+                            { outcomes: ['lost'] });
+  const r = await tasks.grind(0, 20, {});
+  t.false(r.ok, 'no trip to make');
+  t.contains(r.message, 'fainted', 'and it says what happened');
+  t.false(r.message.includes('trips'), 'without claiming to have tried any');
+});
+
+test('a heal that fails ends the grind rather than looping on it', async (t) => {
+  const { tasks } = grinder([{ species: CHIKORITA, level: 5 }],
+                            { outcomes: ['lost'] });
+  const r = await tasks.grind(0, 20, { heal: async () => false });
+  t.false(r.ok, 'it does not carry on');
+  t.contains(r.message, 'healing did not work', 'saying which half failed');
+});
+
+test('five battles in a row going nowhere stops it', async (t) => {
+  // A stall rather than bad luck. Grinding on just burns the battle budget
+  // while nothing happens, and the person watching sees a busy dot.
+  const { tasks } = grinder([{ species: CHIKORITA, level: 5 }],
+                            { outcomes: Array(10).fill('stuck') });
+  const r = await tasks.grind(0, 20, { heal: async () => true });
+  t.false(r.ok, 'stopped');
+  t.contains(r.message, '5 battles in a row', 'naming the run');
+});
+
+test('a run of stuck battles is consecutive, not cumulative', async (t) => {
+  // The reset to zero is the whole difference, and it is the classic version of
+  // this bug: four stalls, a battle that works, four more stalls is not a
+  // stall. With the reset removed the job stops in the middle of a grind that
+  // is going fine.
+  const { tasks } = grinder(
+    [{ species: CHIKORITA, level: 5 }],
+    { outcomes: ['stuck', 'stuck', 'stuck', 'stuck', 'won',
+                 'stuck', 'stuck', 'stuck', 'stuck', 'won',
+                 ...Array(30).fill('won')] });
+  const r = await tasks.grind(0, 6, { heal: async () => true,
+                                      maxBattles: 40 });
+  t.true(r.stats.battles > 9, 'it fought past both runs of four');
+  t.false(String(r.message).includes('in a row'), 'without calling it a stall');
+});
