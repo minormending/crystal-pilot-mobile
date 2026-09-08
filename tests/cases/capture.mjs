@@ -263,3 +263,111 @@ test('a cartridge that has not said what a boxed catch says still refuses',
   const said = captureOutcome('full').say({}, () => '');
   t.contains(said, 'not said what the game calls', 'it names what is missing');
 });
+
+// --- catch_: the refusals, and the budget that ends it ----------------------
+//
+// `tools/mutate` put gen2/jobs.js at 38%, and `catch_` held sixty-two of the
+// survivors -- more than any other function in the repository. Every one of the
+// tests below covers a *refusal* or a *bound*: the two things this job does
+// that a person watching it work cannot see, because an unbounded loop looks
+// exactly like a slow one and a refusal that reports success looks exactly like
+// a job that had nothing to do.
+
+/** A pilot hunting the grass, with the encounter loop's primitives scripted. */
+function hunting({ species = [16], party = 1, balls = 10, maxParty = 6,
+                   findFight = async () => true, flee = async () => true,
+                   boxed = null } = {}) {
+  const sym = symbols();
+  const state = new GameState(sym);
+  const mons = [];
+  for (let i = 0; i < party; i++) {
+    mons.push({ species: 155, level: 14, hp: 40, maxHp: 44,
+                moves: [33, 0, 0, 0], pp: [35, 0, 0, 0] });
+  }
+  const gb = new FakeGameBoy();
+  const tasks = new Tasks(gb, state, () => {},
+                          fakeRom({ species: { 16: 'PIDGEY', 19: 'RATTATA',
+                                               155: 'CYNDAQUIL' } },
+                                  { 5: 'POKE BALL' }));
+  let met = 0;
+  tasks.snap = async () => state.read(worldRam(sym, {
+    battleMode: 1, party: mons, balls: balls > 0 ? [[POKE_BALL, balls]] : [],
+    enemy: { species: species[Math.min(met, species.length - 1)],
+             level: 3, hp: 15, maxHp: 15 },
+    active: { hp: 40, maxHp: 44 }, menuItems: 34, menuTop: 12, menu: [1, 1],
+  }));
+  tasks._findFight = findFight;
+  tasks.flee = async () => { met += 1; return flee(); };
+  tasks.step = async () => {};
+  tasks.closeMenus = async () => {};
+  tasks.settleText = async () => {};
+  tasks.state.e = { ...tasks.state.e, maxParty };
+  return { tasks, boxed };
+}
+
+test('a full party with no word for the box is a refusal, not a getaway',
+     async (t) => {
+  // The reason it refuses rather than trying: a catch and a getaway are told
+  // apart by what the screen says, and on a cartridge nobody has described the
+  // app does not know the phrase. So a successful catch would read as an
+  // escape, which is worse than not throwing.
+  const { tasks } = hunting({ party: 6, maxParty: 6 });
+  const r = await tasks.catch_('PIDGEY', POKE_BALL, {});
+  t.false(r.ok, 'it does not throw');
+  t.contains(r.message, 'party is full', 'and says which');
+  t.eq(r.stats.thrown, 0, 'having thrown nothing');
+});
+
+test('a full party with a phrase for the box goes ahead', async (t) => {
+  // The other half, so the refusal above is about the missing phrase rather
+  // than about the party.
+  const { tasks } = hunting({ party: 6, maxParty: 6 });
+  const r = await tasks.catch_('PIDGEY', POKE_BALL,
+                               { boxed: 'was sent to BILL', maxEncounters: 1 });
+  t.ne(r.message, undefined, 'it got as far as hunting');
+  t.false(String(r.message).includes('party is full'), 'no refusal');
+});
+
+test('no balls of that kind is a refusal before the first step', async (t) => {
+  const { tasks } = hunting({ balls: 0 });
+  const r = await tasks.catch_('PIDGEY', POKE_BALL, {});
+  t.false(r.ok, 'nothing to throw');
+  t.contains(r.message, 'no balls', 'and it says so');
+  t.eq(r.stats.encounters, 0, 'without walking the grass first');
+});
+
+test('the encounter budget ends a catch that never meets its target',
+     async (t) => {
+  // The loop that must end. Every encounter is the wrong species, so nothing
+  // but the budget can stop this -- and the count in the answer is what tells
+  // somebody they are on the wrong route.
+  const { tasks } = hunting({ species: [19] });
+  const r = await tasks.catch_('PIDGEY', POKE_BALL, { maxEncounters: 7 });
+  t.false(r.ok, 'it gives up');
+  t.eq(r.stats.encounters, 7, 'after exactly the budget');
+  t.eq(r.seen.get('RATTATA'), 7, 'and hands back what it did see');
+});
+
+test('a catch that cannot find a fight stops rather than pacing', async (t) => {
+  const { tasks } = hunting({ findFight: async () => false });
+  // Not in a battle, and nothing to find: the loop's first branch.
+  tasks.snap = async () => {
+    const sym2 = symbols();
+    return new GameState(sym2).read(worldRam(sym2, {
+      party: [{ species: 155, level: 14, hp: 40, maxHp: 44,
+                moves: [33, 0, 0, 0], pp: [35, 0, 0, 0] }],
+      balls: [[POKE_BALL, 5]],
+    }));
+  };
+  const r = await tasks.catch_('PIDGEY', POKE_BALL, { maxEncounters: 5 });
+  t.false(r.ok, 'stopped');
+  t.contains(r.message, 'standing in grass', 'with the thing to check');
+});
+
+test('a catch that cannot run from the wrong species says which one',
+     async (t) => {
+  const { tasks } = hunting({ species: [19], flee: async () => false });
+  const r = await tasks.catch_('PIDGEY', POKE_BALL, { maxEncounters: 5 });
+  t.false(r.ok, 'stopped');
+  t.contains(r.message, 'RATTATA', 'naming what it could not get away from');
+});
