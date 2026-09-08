@@ -18,6 +18,8 @@
  *   ballId            the ball to throw, or null when there are none
  *   savedThisSession  whether this tab has committed a save
  *   healPlace         where healing would go, worked out once per refresh
+ *   healShut          what the game said last time it turned the pilot back
+ *                     from that place, or null -- see `Journey.shut`
  *   places            named maps reachable from here, [{ key, name, legs }]
  *   travelTo          the map key chosen to walk to, or null
  *   huntable          how many species appear here at this hour
@@ -33,7 +35,7 @@ const SAYING_MAX = 46;
 
 export function describeRows(s, ctx = {}) {
   const { rom = null, target = 5, huntWanted = null, ballId = null,
-          savedThisSession = false, healPlace = null,
+          savedThisSession = false, healPlace = null, healShut = null,
           places = [], travelTo = null, wilds = null, takeables = [],
           bagHeal = null, bagCure = null, marts = false, shopFor = null,
           trainers = [], trainersOnMap = 0, canBox = false,
@@ -66,6 +68,12 @@ export function describeRows(s, ctx = {}) {
   // damage while you walk: a party that is *only* poisoned reads as perfectly
   // healthy on HP alone, which is what the app used to see.
   const ailing = s.party.filter((m) => m.hp > 0 && (m.status || []).length);
+  // **When the walk is the only answer left.** The bag comes first and is free,
+  // so a shut route matters only where the bag cannot help -- and a fainted
+  // party is exactly that case, whatever the bag holds. Kept as its own name
+  // because the heal row's text and its `enabled` both need it and they had
+  // drifted apart before over `down.length`.
+  const walkOnly = !bagHeal || down.length > 0;
   // Anyone who could actually be sent out. A duel is the one job that cannot
   // start without one: every other job either walks (and a fainted party still
   // walks) or refuses in a battle. `heal` reads `down` for the same party and
@@ -174,8 +182,19 @@ export function describeRows(s, ctx = {}) {
           ? `${ailWord(ailing)} · ${bagCure || healPlace || 'a Center'}`
         : bagHeal && !down.length
           ? `${hurt.length} hurt · ${bagHeal} in the bag`
+        // **The walk is the only way left and the game has already refused
+        // it.** `nearestHeal` skips a place the pilot was turned back from, so
+        // reaching here with `healShut` set means *every* healer is written
+        // off -- and *nearest is ROUTE 32* would be a promise this row knows
+        // cannot be kept. Named with the words that closed it, because those
+        // are what a person can act on: a badge opens these.
+        : walkOnly && healShut
+          ? `${hurt.length} hurt · ${healPlace || 'a Center'} — turned back: ${healShut}`
           : `${hurt.length} hurt · nearest is ${healPlace || 'a Center'}`,
-      enabled: afoot && (hurt.length > 0 || ailing.length > 0),
+      // A shut route does not disable the row while the bag can still answer,
+      // and a fainted party is exactly when it cannot.
+      enabled: afoot && (hurt.length > 0 || ailing.length > 0)
+               && !(walkOnly && healShut),
       // Said so the row can be tested on the decision rather than the wording.
       fromBag: !!(bagHeal && !down.length),
       ailing: ailing.length,

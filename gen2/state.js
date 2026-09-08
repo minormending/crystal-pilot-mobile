@@ -114,6 +114,10 @@ export class GameState {
       // whose symbol file does not name the tilemap keeps every feature that
       // drives a box by its shape, and loses only the ones that read its words.
       tilemap: symbols.has('wTilemap') ? symbols.addr('wTilemap') : null,
+      // Optional for the same reason, and it costs less than the tilemap does:
+      // without it a route the pilot was turned back from stays written off for
+      // the rest of the session instead of being re-tried once a badge is won.
+      badges: symbols.has('wJohtoBadges') ? symbols.addr('wJohtoBadges') : null,
       curPocket: symbols.addr('wCurPocket'),
       curItem: symbols.addr('wCurItem'),
       windowStack: symbols.addr('wWindowStackSize'),
@@ -206,7 +210,29 @@ export class GameState {
       // menu is 34 items with its box at row 12, the pack is 5 at row 1.
       menuItems: b(wram, a.menuItems),
       menuTop: b(wram, a.menuTop),
+      badges: this.badgeCount(wram),
     };
+  }
+
+  /**
+   * How many badges are in the case, or null on a cartridge that will not say.
+   *
+   * A count rather than a set, because the only question this app asks of a
+   * badge is *has something changed since a route turned me back* -- and the
+   * count answers that for every badge without a table mapping badges to
+   * routes, which is a thing no cartridge writes down.
+   *
+   * Null and zero are different answers and are kept apart: a cartridge with no
+   * `wJohtoBadges` in its symbol file cannot say, and a new game says none.
+   */
+  badgeCount(wram) {
+    if (this.a.badges === null) return null;
+    let n = 0;
+    for (let i = 0; i < (this.e.badgeBytes || 2); i++) {
+      let byte = b(wram, this.a.badges + i);
+      while (byte) { n += byte & 1; byte >>= 1; }
+    }
+    return n;
   }
 
   /**

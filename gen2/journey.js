@@ -149,6 +149,75 @@ export class Journey {
    */
   get stopped() { return !!(this.tasks && this.tasks.cancelled); }
 
+  /**
+   * Legs the game itself has refused, and what it said while refusing.
+   *
+   * **A route can be shut, and no map data says so.** Route 32's Pokemon Center
+   * is real, its door is real, and the ninety-six-step path to it is real; a man
+   * two tiles south of Violet turns the player back until Falkner is beaten, and
+   * that rule lives in a script. The pass before this one taught the walk to
+   * *quote* him. This is the pilot doing something about it: a leg that turned
+   * it back is written off, so the next question -- where is the nearest place I
+   * can heal? -- gets an answer it can act on instead of the same wall again.
+   *
+   * Keyed by leg rather than by destination, because *shut from here* is what
+   * was measured. The same Center may well be open from the south.
+   *
+   * Written off is not forgotten: each entry remembers the badge count at the
+   * time, and a badge is precisely the thing that opens one of these. Win one
+   * and every write-off is re-opened, because the pilot has no idea which badge
+   * opened which route and guessing would be worse than asking again.
+   */
+  get shut() {
+    if (!this._shut) this._shut = new Map();
+    return this._shut;
+  }
+
+  /** Write off a leg, with the words that closed it and the badges then held. */
+  shutLeg(from, to, said, badges) {
+    this.shut.set(World.leg(from, to), { said, badges });
+  }
+
+  /**
+   * Is this leg one the game has refused, given the badges held now?
+   *
+   * `badges` is null on a cartridge whose symbol file will not say, and then an
+   * entry never expires -- which is the safe way round. Believing a stale
+   * write-off costs one walk that would have worked; forgetting a real one
+   * costs the same walk over and over.
+   */
+  isShut(from, to, badges) {
+    const at = this.shut.get(World.leg(from, to));
+    if (!at) return false;
+    if (badges !== null && badges !== undefined
+        && at.badges !== null && at.badges !== undefined
+        && badges > at.badges) {
+      this.shut.delete(World.leg(from, to));
+      return false;
+    }
+    return true;
+  }
+
+  /**
+   * What the screen is saying, or '' when this cartridge cannot say.
+   *
+   * A cartridge whose symbol file does not name the tilemap has no words to
+   * read, and neither has a Journey driving nothing but a graph -- so both
+   * answer the same way, and every caller can append the result
+   * unconditionally. Which is the point: the two places that ask *did somebody
+   * just say no* should not each carry their own guard.
+   */
+  async wordsOnScreen(lines = 2) {
+    if (!this.tasks || !this.tasks.screenSaid) return '';
+    return await this.tasks.screenSaid(lines) || '';
+  }
+
+  /** What closed this leg, for a row that has to explain itself. */
+  shutSaid(from, to) {
+    const at = this.shut.get(World.leg(from, to));
+    return at ? at.said : null;
+  }
+
   /** The option bag every walk in here takes, so Stop reaches inside them. */
   get walkOpts() { return { cancelled: () => this.stopped }; }
 
@@ -416,11 +485,14 @@ export class Journey {
         // Falkner's badge. Eight identical attempts and *could not heal* is the
         // worst possible answer to that: it blames the pilot's own walking for
         // a rule of the game, and the screen said so in words the whole time.
-        const said = await this.tasks.screenSaid(2);
+        const said = await this.wordsOnScreen();
         await this.runScripts();
         if (said) {
           this.turnedBack = said;
           if (++turned >= THROUGH_TURNS) {
+            // Written off, so the *next* question gets a usable answer rather
+            // than this same wall. See `shut`.
+            this.shutLeg(from, expect, said, (await this.snap()).badges);
             this.say(`turned back: ${said}`);
             return false;
           }
@@ -566,6 +638,17 @@ export class Journey {
     // edge from a finite graph, and when none is left the answer is honestly
     // that there is no way.
     const avoid = new Set();
+    // **Seeded with what earlier walks already learned.** A leg the game itself
+    // refused -- a guard, a gate, a man who wants a badge first -- is refused
+    // again on the next press, and re-discovering that costs a walk across a
+    // route every time. `shut` only holds legs where something *said* no, and it
+    // re-opens every one of them the moment a badge is won, so this is a head
+    // start rather than a permanent belief.
+    const badges = (await this.snap()).badges;
+    for (const leg of this.shut.keys()) {
+      const [f, t] = leg.split('>').map(Number);
+      if (this.isShut(f, t, badges)) avoid.add(leg);
+    }
     // **A refused leg is not a leg walked**, and counting it as one is how the
     // first walk to a landmark-only place failed: DARK CAVE is two legs from
     // Route 29 through Route 46, the pilot cannot get up there, and every
@@ -636,7 +719,17 @@ export class Journey {
         // second when the user pressed the first blames the map for a decision
         // they made.
         if (this.stopped) return { ok: false, message: 'stopped' };
-        this.say(`${next.dir.toLowerCase()} will not go — trying another way`);
+        // The same rule the doorways follow: an edge that will not go *while
+        // something is on the screen* is somebody saying no, not a wall, and
+        // the words are the reason. Written off so the next press asks for a
+        // route without this leg in it rather than walking here again.
+        const said = await this.wordsOnScreen();
+        if (said) {
+          this.shutLeg(here, next.key, said, (await this.snap()).badges);
+          this.say(`turned back: ${said}`);
+        } else {
+          this.say(`${next.dir.toLowerCase()} will not go — trying another way`);
+        }
         avoid.add(World.leg(here, next.key));
         refused++;
         continue;
@@ -1570,8 +1663,17 @@ export class Journey {
 
     const legCost = this.title.legCost || 25;
     const wram = await this.settled();
+    // **The cheapest place is not the nearest one if the game will not let you
+    // in.** Standing on Route 32, the Center on Route 32 costs nothing and is
+    // shut; Violet City is one leg north and open. Asked before the distance,
+    // because a zero-cost answer used to short-circuit the whole search.
+    const badges = wram ? this.state.badgeCount(wram) : null;
+    const open = places.filter((p) => !this.isShut(from, mapOf(p), badges));
+    // Everything is shut, so there is nothing better to say than the last one
+    // and no cost -- the same answer this gives when it has no graph to ask.
+    if (!open.length) return { place: last, cost: undefined };
     let best = null, bestCost = Infinity;
-    for (const p of places) {
+    for (const p of open) {
       const there = mapOf(p);
       if (from === there) return { place: p, cost: 0 };
       const route = this.world.route(from, there);
@@ -1587,7 +1689,7 @@ export class Journey {
       if (cost < bestCost) { best = p; bestCost = cost; }
     }
     return best ? { place: best, cost: bestCost }
-                : { place: last, cost: undefined };
+                : { place: open[open.length - 1], cost: undefined };
   }
 
   async nearestHeal(from) {
@@ -1600,7 +1702,13 @@ export class Journey {
     // serve several places: `healAtCenter` reads the door and the nurse off it
     // rather than closing over one town's constants. A procedure that wants no
     // argument simply ignores it.
-    return { map: h.map, heal: () => this[h.reach](h), cost: picked.cost };
+    // **`shut` is the difference between "nearest" and "only one left".** When
+    // every healer is written off, the pick is the last one named at no
+    // priceable cost -- and a row that says *nearest is ROUTE 32* about a route
+    // the pilot has already been turned back from is making a promise it knows
+    // it cannot keep.
+    return { map: h.map, heal: () => this[h.reach](h), cost: picked.cost,
+             shut: this.shutSaid(from, h.map) };
   }
 
   /**

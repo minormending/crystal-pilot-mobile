@@ -819,6 +819,44 @@ test('a fainted party is a Centre’s job whatever the bag holds', async (t) => 
   t.contains(r.heal.text, 'nearest is Cherrygrove City', 'the walk is');
 });
 
+test('a Heal row with nowhere open says what turned the pilot back',
+     async (t) => {
+  // `nearestHeal` already skips a place the game refused, so a `healShut` that
+  // reaches this row means *every* healer is written off. Saying "nearest is
+  // ROUTE 32" then is a promise the row knows cannot be kept -- and the words
+  // are what a person can act on, because a badge is what opens these.
+  const hurt = { party: [{ hp: 10, maxHp: 40, species: CYNDAQUIL, level: 5 }] };
+  const r = look(hurt, { healPlace: 'ROUTE 32',
+                         healShut: "Wait up! / What's the hurry?" });
+  t.contains(r.heal.text, 'turned back', 'the row says so');
+  t.contains(r.heal.text, 'Wait up!', 'in the words the game used');
+  t.false(r.heal.enabled, 'and does not offer a walk it knows will fail');
+});
+
+test('a shut route does not take the bag away', async (t) => {
+  // The bag comes first and is free, so a route being shut is irrelevant while
+  // a POTION can answer -- and disabling the row would have taken a working
+  // heal away over a walk it was never going to do.
+  const hurt = { party: [{ hp: 10, maxHp: 40, species: CYNDAQUIL, level: 5 }] };
+  const r = look(hurt, { bagHeal: 'POTION', healPlace: 'ROUTE 32',
+                         healShut: 'somebody said no' });
+  t.true(r.heal.enabled, 'still offered');
+  t.true(r.heal.fromBag, 'out of the bag');
+  t.contains(r.heal.text, 'POTION in the bag', 'and it says so');
+});
+
+test('a fainted party with every route shut is refused, bag or no bag',
+     async (t) => {
+  // The two rules meeting: a Potion does nothing at 0 HP, so the walk is the
+  // only answer, and the walk is shut. This is the one case where the row has
+  // to admit it cannot help.
+  const r = look({ party: [{ hp: 0, maxHp: 40, species: CYNDAQUIL, level: 5 }] },
+                 { bagHeal: 'POTION', healPlace: 'ROUTE 32',
+                   healShut: 'a man with a rite of passage' });
+  t.false(r.heal.enabled, 'refused');
+  t.contains(r.heal.text, 'turned back', 'and it says why');
+});
+
 test('one hurt and one fainted still needs the walk', async (t) => {
   const r = look({ party: [{ hp: 10, maxHp: 40, species: CYNDAQUIL, level: 5 },
                            { hp: 0, maxHp: 30, species: CYNDAQUIL, level: 4 }] },

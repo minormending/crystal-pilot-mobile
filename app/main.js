@@ -195,7 +195,7 @@ let running = false, target = 5;
 // and answering it for you would be taking the interesting part.
 let bootStage = 'start';
 // Where healing would go from here, worked out once per refresh.
-let healPlace = null;
+let healPlace = null, healShut = null;
 let lastLead = null;   // the lead's level, for the relative grind presets
 // Whether this tab has committed a save. Only used for wording -- the
 // download checks the battery itself rather than trusting this.
@@ -1575,7 +1575,8 @@ function paintJobs(s) {
   // first Poké Balls is a scripted walk to particular places, and a cartridge
   // nobody has described has no such walk.
   const ctx = { rom: romdata, target, huntWanted, ballId, savedThisSession,
-                healPlace, canFetch: typeof boot.eggErrand === 'function',
+                healPlace, healShut,
+                canFetch: typeof boot.eggErrand === 'function',
                 places: travelPlaces, travelTo, huntable, wilds,
                 hours, hourNow, takeables, trainers, trainersOnMap,
                 canBox: !!boxedPhrase(),
@@ -1732,7 +1733,9 @@ async function refresh() {
     try {
       const pick = await boot.nearestHeal(s.map[0] * 256 + s.map[1]);
       healPlace = pick ? boot.where(pick.map) : null;
-    } catch (e) { healPlace = null; }
+      // Not just where, but whether the pilot has already been told no there.
+      healShut = pick ? pick.shut || null : null;
+    } catch (e) { healPlace = null; healShut = null; }
   }
   if (s.party.length && target <= s.party[0].level) {
     target = Math.min(100, s.party[0].level + 1);

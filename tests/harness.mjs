@@ -192,6 +192,11 @@ const WRAM_NAMES = [
   ['wMoney', 3],
   ['wCurPocket', 1], ['wCurItem', 1],
   ['wWindowStackSize', 1],
+  // Two bytes of badge flags. Optional in `state.js`, and present here so the
+  // *expiry* half of a written-off route can be tested: a badge is the thing
+  // that opens one, so a cartridge that will not say has entries that never
+  // expire, and that is a different behaviour worth being able to reach.
+  ['wJohtoBadges', 1], ['wKantoBadges', 1],
   // The map, so a CollisionMap can be built at all. wOverworldMapBlocks is the
   // real size -- a stride of mapWidth+6 over a tall map indexes a long way in.
   ['wOverworldMapBlocks', 0x510], ['wMapWidth', 1], ['wMapHeight', 1],
@@ -333,6 +338,9 @@ export function worldRam(sym, {
   enemy = null, active = null, balls = [], items = [], money = 0,
   curPocket = 0, curItem = 0,
   menuItems = 0, menuTop = 0, menuRight = 0,
+  // How many badges are in the case, as a count -- the bits are set from the
+  // bottom up, because which bit is which badge is not something this app reads.
+  badges = 0,
   // The map's size in *blocks*; a block is two tiles each way. `objects` are
   // MAPOBJECT entries, whose coordinates the cartridge stores four higher than
   // the map's own -- given here the way the game gives them, so a test that
@@ -376,6 +384,11 @@ export function worldRam(sym, {
   w8(wram, sym.addr('wMenuCursorY'), menu[1]);
   w8(wram, sym.addr('wBattleMenuCursorPosition'), battleCursor);
   w8(wram, sym.addr('wWindowStackSize'), windowStack);
+  // Bits from the bottom of the two bytes, eight per byte.
+  for (let i = 0; i < badges; i++) {
+    const at = sym.addr('wJohtoBadges') + (i >> 3);
+    wram[at - 0xc000] |= 1 << (i & 7);
+  }
   w8(wram, sym.addr('wMenuDataItems'), menuItems);
   w8(wram, sym.addr('wMenuBorderTopCoord'), menuTop);
   w8(wram, sym.addr('wMenuBorderRightCoord'), menuRight);

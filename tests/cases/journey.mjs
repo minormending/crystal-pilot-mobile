@@ -18,6 +18,9 @@ const HOME = 1, NEAR = 2, FAR = 3;
 /** A Journey with the map graph and the decode stubbed out. */
 function walker({ routes = {}, at = [5, 5], size = [60, 20], title = {},
                   world: game = { party: [{ hp: 4, maxHp: 20 }] } } = {}) {
+  // `game.badges` rides along in the same snapshot, because that is where the
+  // real one lives: a written-off route expires on a badge count, and the count
+  // is read out of the same work RAM as the party.
   const gb = new FakeGameBoy({ wram: worldRam(sym, game) });
   const collision = {
     off: 0,
@@ -1154,6 +1157,69 @@ test('a place under our feet costs nothing and wins outright', async (t) => {
 test('an empty list has no nearest anything', async (t) => {
   const j = walker({ title: {} });
   t.eq(await j.nearestPlace([], 1), null, 'nothing to choose between');
+});
+
+// --- a route the game itself refuses ----------------------------------------
+
+test('a place the game turned us back from is not offered again', async (t) => {
+  // The feature the pass before earned. Standing on Route 32 the Center *on*
+  // Route 32 costs nothing, and a man two tiles south turns the player back
+  // until Falkner is beaten -- so the cheapest answer was the one answer that
+  // could not work, and the pilot walked at it on every press.
+  //
+  // Written off by *leg*, because "shut from here" is what was measured: the
+  // same Center may well be open from the south.
+  const title = { legCost: 25, healers: [{ map: 2, reach: 'healAtFar' },
+                                         { map: 1, reach: 'healAtNear' }] };
+  const j = walker({ title, routes: { 2: [{ kind: 'warp' }] } });
+  const under = await j.nearestPlace(title.healers, 1);
+  t.eq(under.place.map, 1, 'under our feet, so it wins outright');
+  t.eq(under.cost, 0, 'at no cost');
+
+  j.shutLeg(1, 1, "Wait up! / What's the hurry?", 0);
+  const after = await j.nearestPlace(title.healers, 1);
+  t.eq(after.place.map, 2, 'now the one a leg away');
+  t.eq(after.cost, 0, 'priced by the route, not skipped');
+  t.eq(j.shutSaid(1, 1), "Wait up! / What's the hurry?",
+       'and the words are kept, for a row that has to explain itself');
+});
+
+test('a badge re-opens every route that was written off', async (t) => {
+  // Because the pilot has no idea which badge opened which route, and guessing
+  // would be worse than asking again. One walk that would have worked is the
+  // cost of being wrong this way round; the same wall on every press is the
+  // cost of being wrong the other.
+  const title = { legCost: 25, healers: [{ map: 2, reach: 'healAtFar' },
+                                         { map: 1, reach: 'healAtNear' }] };
+  const j = walker({ title, routes: { 2: [{ kind: 'warp' }] },
+                     world: { party: [{ hp: 4, maxHp: 20 }], badges: 1 } });
+  j.shutLeg(1, 1, 'a man with a rite of passage', 0);
+  t.false(j.isShut(1, 1, 1), 'one badge beats the none it was shut with');
+  const after = await j.nearestPlace(title.healers, 1);
+  t.eq(after.place.map, 1, 'so the near one is offered again');
+  t.eq(j.shut.size, 0, 'and the write-off is gone rather than merely ignored');
+});
+
+test('a cartridge that will not say how many badges keeps its write-offs',
+     async (t) => {
+  // The safe way round, and it is a real cartridge: `wJohtoBadges` is optional,
+  // like the tilemap. Believing a stale write-off costs one walk that would
+  // have worked. Forgetting a real one costs that walk on every press.
+  const j = walker({ title: {} });
+  j.shutLeg(1, 2, 'somebody said no', null);
+  t.true(j.isShut(1, 2, null), 'no count, so nothing to compare');
+  t.true(j.isShut(1, 2, 3), 'and a count now cannot expire what had none');
+});
+
+test('everything shut still gives an answer rather than nothing', async (t) => {
+  // `nearestHeal` returning null means *nowhere to heal that this build knows
+  // about*, which is a different and wronger sentence than "the way is shut".
+  const title = { legCost: 25, healers: [{ map: 2, reach: 'healAtFar' }] };
+  const j = walker({ title, routes: { 2: [{ kind: 'warp' }] } });
+  j.shutLeg(1, 2, 'no', 0);
+  const picked = await j.nearestPlace(title.healers, 1);
+  t.eq(picked.place.map, 2, 'the last one, named');
+  t.eq(picked.cost, undefined, 'with no cost, which is how it says it cannot price it');
 });
 
 // --- the cartridge names its own places -------------------------------------

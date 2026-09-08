@@ -134,6 +134,40 @@ test('money is three bytes, big-endian, plain binary', async (t) => {
   t.eq(read(300), 300, 'and the price of a potion');
 });
 
+test('badges are counted as bits, across both bytes', async (t) => {
+  // A count rather than a set, because the only question this app asks of a
+  // badge is *has anything changed since a route turned me back* -- and that is
+  // answerable without a table saying which badge opens which route, which is
+  // a thing no cartridge writes down.
+  //
+  // Bits, not bytes: eight Johto badges live in one byte, so anything counting
+  // bytes reads a full case as one and never expires a write-off again.
+  const sym = symbols();
+  const state = new GameState(sym);
+  const read = (badges) => state.read(worldRam(sym, { badges })).badges;
+  t.eq(read(0), 0, 'a new game has none');
+  t.eq(read(1), 1, 'Falkner');
+  t.eq(read(3), 3, 'three of them, still inside the first byte');
+  t.eq(read(8), 8, 'all of Johto, which fills that byte exactly');
+  t.eq(read(9), 9, 'and the ninth is in the next one');
+});
+
+test('a cartridge whose symbol file has no badges says so, and not zero',
+     async (t) => {
+  // Null and none are different answers and are kept apart on purpose: one
+  // means the pilot cannot tell, and a write-off that can never expire is the
+  // safe reading of that. Zero means a new game, where the next badge will.
+  const sym = symbols();
+  // The same shape the tilemap's absence is tested with: a symbol table that
+  // answers `has` with no rather than one that throws on `addr`.
+  const bare = { has: (n) => n !== 'wJohtoBadges' && sym.has(n),
+                 addr: (n) => sym.addr(n), bank: (n) => sym.bank(n) };
+  t.eq(new GameState(bare).read(worldRam(sym, { badges: 4 })).badges, null,
+       'it cannot say, which is not the same as none');
+  t.eq(new GameState(sym).read(worldRam(sym, { badges: 4 })).badges, 4,
+       'and one where the name is there');
+});
+
 test('an engine profile with fewer money bytes reads fewer', async (t) => {
   // The field exists so a hack that widened or narrowed the wallet says so
   // rather than being read at Crystal's width.

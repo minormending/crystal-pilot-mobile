@@ -212,6 +212,13 @@ export const gen2 = {
     cursor: 0xed,
   },
 
+  // How many bytes of badge flags there are. Two in Gen 2 -- `wJohtoBadges` at
+  // $d857 and `wKantoBadges` right after it -- one bit per badge, and the count
+  // is all this app wants: a badge is the thing that opens a route somebody has
+  // been turned back from, so *how many* is exactly the question, and *which*
+  // one opens *which* route is content no cartridge writes down.
+  badgeBytes: 2,
+
   // --- what the overworld rolls an encounter on ----------------------------
   // COLL_LONG_GRASS $14, COLL_TALL_GRASS $18, and the two unused mirrors the
   // engine still treats as grass.
