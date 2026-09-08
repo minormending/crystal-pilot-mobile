@@ -339,14 +339,14 @@ second, which is there so the core's own waits finish, not to run a game.
 ## The audits, and how each defect was actually found
 
 Everything above was watched happening. This section was the exception, and the
-exception was the point of it: after the ROM-hack work shipped, **thirty-six**
-passes went looking for defects in code that already worked, and found **137** —
+exception was the point of it: after the ROM-hack work shipped, **thirty-seven**
+passes went looking for defects in code that already worked, and found **144** —
 a handful of them created by a fix on the way, which are in the table in italics
 because they are a different kind of thing. None of them announced itself.
 
 **Reading found twenty-two**, more than any other single method, which is why it
 comes first in the table and why it is worth doing before touching the game. But
-the interesting number is the tail: the remaining hundred and fifteen were
+the interesting number is the tail: the remaining hundred and twenty-two were
 found almost as many different ways, and almost every entry in that column is a sentence rather than
 a category — *measuring the fix*, *asking a second tile*, *feeding it the wrong
 thing*, *writing a cartridge Crystal is not*, *a test, before the cartridge*,
@@ -515,6 +515,13 @@ exactly why nothing failed.
 | 36 | beating one of a map's three trainers reported as a finished job | Clear, inside a Gym | reading the sentence against the map |
 | 36 | *and a title claimed Falkner's badge opens Route 32, which it does not* | *Route 32, badge in hand* | *the thing it predicted not happening* |
 | 36 | a documented claim said the ROM has no map count, so walking every map is impossible | — | deriving one anyway |
+| 37 | every walk asked about the same unplayable battle, once per step | grinding on Route 31 with no PP left | playing the game |
+| 37 | having PP was read as being able to win, so forty turns went on a Caterpie | the same battle | reading what the moves do |
+| 37 | *a first guess at that blamed A-in-a-submenu — a real hazard, and not this one* | *any submenu during a battle* | *fixing it and finding nothing changed* |
+| 37 | a battle nothing can play was reported as a door problem | Travel, from that battle | reading the sentence |
+| 37 | `backToGrass` walked to the first grass written down, not the nearest | a grind starting on Route 32 | ninety-nine seconds and no battles |
+| 37 | `menuIsLive`'s four bounds could all be moved with the suite passing | the battle menu, at any cursor | **the mutation tool** |
+| 37 | the ring fake never called `escapeBattle`, though every real crossing does | — | a test that could not fail |
 
 Five things in that table are worth more than the individual rows.
 
@@ -2550,6 +2557,84 @@ tables 0x400 apart, which is not a multiple of nine, so no count was derivable,
 the reader stayed permissive, and the whole invariant went untested. *A fake laid
 out more conveniently than the thing it stands for is a fake that cannot fail* —
 which is the thirty-fourth pass's lesson about tests, one level down.
+
+### A thirty-seventh pass: the man wanted a word
+
+Four passes of machinery pointed at one sentence a man says two tiles south of
+Violet, and the reader that made it diagnosable is twelve lines.
+
+`world.coordEventsOn` reads a map's **trigger tiles**. Route 32 has two, and the
+first dumps as `00 08 12 00 ab 44 00 00` — scene 0, y 8, x 0x12. `0x44ab` in the
+symbol table is `Route32CooltrainerMStopsYouScene`, and its siblings are
+`.DontHaveZephyrBadge`, `.GiveMiracleSeed` and `.BagFull`.
+
+**So he does check the badge.** The [thirty-sixth
+pass](#a-thirty-sixth-pass-the-badge-and-the-claim-that-came-with-it) concluded
+he does not, on the strength of winning it and being turned back anyway, and
+that conclusion was half right in the least useful way: the *stopping* script
+only pushes you back north, and the half that checks anything runs when he is
+**spoken to**. He stands one tile east at (19,8). The pilot walked into him
+twice a pass for four passes and never said hello.
+
+Which generalises, and that is the feature: **a tile that runs a script usually
+belongs to somebody standing beside it.** Both walks now try talking to them
+once before writing a road off.
+
+Measured on the way: **a coord event's coordinates are raw and an object's are
+stored four higher** — three lines apart in the same file, and the kind of
+asymmetry that reads as obviously consistent and puts a trigger four tiles from
+where it is.
+
+### Two guesses at a stuck battle, and the first was wrong
+
+`trainer battle: stuck`, five times and counting, while a walk carried on
+calling `escapeBattle` — which runs at the top of every crossing stage, every
+edge attempt and every doorway try. `grind` bounds its own stuck run at five;
+the walks had no bound, because they could not tell a battle that was *lost*
+from one that could not be *played*. Both came back false.
+
+**First guess: A in a submenu.** `awaitBattleMenu` pressed A only, described as
+pushing through text — right for text, wrong for a submenu where A is a
+selection. That is a real hazard, and the fix stands, and it changed nothing
+here. Worth recording as a wrong guess rather than quietly folding it into the
+right one, because the pass before made exactly this mistake twice.
+
+**What it was.** Cyndaquil at Lv11 with TACKLE on 0 of 35, LEER and SMOKESCREEN
+full, and a Lv2 CATERPIE at 1 HP in a *trainer* battle — so no fleeing. Forty
+turns of lowering a Caterpie's defence, then 'stuck': true, and nothing anybody
+can act on.
+
+**Having PP is not having a move that can win.** `canStillWin` asks the second
+question, before the first swing rather than after forty, and the answer has its
+own word. A Pokémon Center restores PP as well as HP, so the grind treats it as
+a trip it already knew how to make.
+
+### And the third caller of the same defect
+
+`restock` walked from Violet back to Cherrygrove because it used `marts[0]`.
+`heal` picked the first healer written down. Both were fixed, three passes apart,
+by extracting one shared cost model — and `backToGrass` still walked its list in
+whatever order the title happened to write it. From Route 32 it set off for Route
+29 at five legs while Route 31 sat two away: **ninety-nine seconds, eighteen
+walking steps, `battles: 0`.**
+
+Three callers, three passes, the same defect. The mechanism was right every time
+and nothing pointed the next caller at it. That is the single most common shape
+in this table, and the honest reading is that extracting a mechanism does not
+finish the job — finding everybody who should be using it does.
+
+### What the tool found on its own
+
+`tools/mutate` turned up `menuIsLive`, whose four bounds — `x >= 1 && x <= 2 &&
+y >= 1 && y <= 2` — could each be moved with the suite passing. That is the
+guard telling the battle menu from the pack drawn over it, which is the
+confusion that once made a thrown ball look like a Pokémon breaking free.
+
+And a fake that could not fail, again: the ring walker never called
+`escapeBattle`, though every real crossing calls it at the top of every stage.
+The [thirty-sixth pass](#a-thirty-sixth-pass-the-badge-and-the-claim-that-came-with-it)
+found the same thing about map group spacing. **A fake is a claim about the
+thing it stands for, and it should be held to it.**
 
 ## The part that had to be redesigned
 
