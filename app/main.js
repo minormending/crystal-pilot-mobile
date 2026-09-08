@@ -70,6 +70,12 @@ let bagHeal = null;
 // null. Separate because a potion does not fix poison and the row has to say
 // which of the two it will reach for.
 let bagCure = null;
+// The pocket as the last refresh read it, so the Shop row can say how many
+// more of a thing to buy without taking a snapshot of its own.
+let lastItems = [];
+// How many of the cheapest heal the Shop row aims for. A number somebody will
+// want to change one day, which is why it has a name.
+const RESTOCK_TO = 5;
 let ballId = null;
 // Frames advanced per animation frame while nobody is driving. The steps are
 // powers of two because that is how it reads: 1x, 2x, 4x... and the last one is
@@ -1468,6 +1474,7 @@ const JOB_ROWS = {
   hunt: ['#huntstate', '#hunt', '#job-hunt'],
   catch: ['#catchstate', '#catch', '#job-catch'],
   heal: ['#healstate', '#heal', '#job-heal'],
+  shop: ['#shopstate', '#shop', '#job-shop'],
   take: ['#takestate', '#take', '#job-take'],
   travel: ['#travelstate', '#travel', '#job-travel'],
 };
@@ -1480,6 +1487,8 @@ function paintJobs(s) {
                 healPlace, canFetch: typeof boot.eggErrand === 'function',
                 places: travelPlaces, travelTo, huntable, wilds,
                 hours, hourNow, takeables, bagHeal, bagCure,
+                marts: !!(title && title.marts && title.marts.length),
+                shopFor: shopFor(),
                 engine: state.e };
   const rows = describeRows(s, ctx);
   const offers = describeOffers(s, ctx);
@@ -1584,6 +1593,7 @@ async function refresh() {
   // The cure for whatever the party is actually suffering from, rather than for
   // every status there is: a bag full of BURN HEAL says nothing useful to a
   // poisoned Pokémon.
+  lastItems = s.items || [];
   bagCure = null;
   if (romdata && title && title.cures) {
     const wrong = [...new Set(s.party.flatMap((m) => (m.hp ? m.status : []) || []))];
@@ -1931,6 +1941,27 @@ async function refreshSpecies(s) {
     list.appendChild(note);
   }
   markSpecies(list);
+}
+
+/**
+ * What the Shop row will buy, as a phrase, or null.
+ *
+ * The first *buyable* name on the title's healing list, and how many are already
+ * carried -- because "buy five potions" when you have four is one potion. The
+ * berries lead that list and no mart sells them, so they are skipped here: the
+ * shop asks for the cheapest thing a shop would actually have.
+ */
+function shopFor(want = RESTOCK_TO) {
+  const names = title && title.heals;
+  if (!romdata || !names || !names.length) return null;
+  const buyable = names.filter((n) => !n.includes('berry'));
+  if (!buyable.length) return null;
+  const id = romdata.itemIdOf(buyable[0]);
+  if (!id) return null;
+  const held = ((lastItems || []).find(([i]) => i === id) || [0, 0])[1];
+  return held >= want
+    ? `${want} ${buyable[0]} already`
+    : `${want - held} more ${buyable[0]}`;
 }
 
 /**
@@ -2424,6 +2455,24 @@ $('#take').onclick = async () => {
  * either way, because a route that stops halfway leaves you somewhere you did
  * not choose and the header alone does not say how you got there.
  */
+/**
+ * Go and buy more of the cheapest thing that heals.
+ *
+ * The whole walk is the job's -- travel to the town, in through the door, to the
+ * counter. What this adds is the count and the reporting: the money is what
+ * somebody wants to know afterwards, and it is the number a knockout takes half
+ * of.
+ */
+$('#shop').onclick = async () => {
+  if (!boot || !title || !title.heals) return;
+  const buyable = title.heals.filter((n) => !n.includes('berry'));
+  if (!buyable.length) return;
+  const res = await runTask('#shop', 'off to the shop',
+                            () => boot.restock(buyable, RESTOCK_TO));
+  progress(res && res.stats
+    ? Object.entries(res.stats).map(([k, v]) => `${k}=${v}`).join('  ') : '');
+};
+
 $('#travel').onclick = async () => {
   if (!boot || travelTo === null) return;
   const place = travelPlaces.find((pl) => pl.key === travelTo);

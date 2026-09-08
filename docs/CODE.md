@@ -852,7 +852,7 @@ point those coordinates mean somewhere else entirely.
 
 ## 5. Crossing to the next map
 
-<!-- covers: gen2/journey.js gen2/world.js @ 758eeb566cda -->
+<!-- covers: gen2/journey.js gen2/world.js @ eb80c50364d5 -->
 
 A connection spans only part of a shared edge, so "walk west until something
 happens" does not work. `crossEdge()` closes the distance in stages, then tries
@@ -1554,7 +1554,7 @@ precedes it defaults to yes, which is what we want; the nickname box does not.
 
 ## 7a. Four that act on where you already are
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ 3f6b59c49a09 -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ fb48ff8a3aa3 -->
 
 Grind, hunt and catch all go *looking* for something. These four do the obvious
 thing with the situation you are already in, and take no parameters:
@@ -1772,7 +1772,7 @@ to take here — tried 2* and stayed green.
 
 ## 7d. The counter, and the money it takes
 
-<!-- covers: gen2/menus.js gen2/state.js titles/crystal.js @ ed7aa1af5fbc -->
+<!-- covers: gen2/menus.js gen2/state.js titles/crystal.js @ 43f3542af4d2 -->
 
 Everything the pilot could do until now used what it found. **Shop** walks to a
 mart and buys, which is the first thing it does that spends rather than
@@ -2091,7 +2091,7 @@ because that failure is only otherwise discovered by reaching for the undo.
 
 ## 8. The errands
 
-<!-- covers: titles/crystal.js gen2/journey.js @ 2527892fa9a9 -->
+<!-- covers: titles/crystal.js gen2/journey.js @ 2131e01ef587 -->
 
 Everything in this section is `crystal.js` — the only file in the app that names
 a Crystal map, a Crystal door or a Crystal NPC. What it stands on is
@@ -2390,7 +2390,7 @@ This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ d54e499565f0 -->
+<!-- covers: app/main.js index.html @ 7e42e2880e55 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -2919,7 +2919,7 @@ seconds by a page whose loop was supposedly running.
 
 ### One thing at a time
 
-<!-- covers: app/main.js @ ee234dfe406d -->
+<!-- covers: app/main.js @ ba6130d6dea7 -->
 
 One Game Boy, one joypad, one canvas — so a great deal of this app is about
 making sure two things are never driving them at once. There are three claims,
@@ -3552,7 +3552,7 @@ they have been installed.
 
 ### Watching the other device's screen
 
-<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ 2aaf3a14169f -->
+<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ 9adba523027b -->
 
 One device shows its screen; the other watches it, and plays it if the first
 one says so. The picture goes straight between them over WebRTC and never

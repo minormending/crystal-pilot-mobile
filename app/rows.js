@@ -27,7 +27,7 @@ export function describeRows(s, ctx = {}) {
   const { rom = null, target = 5, huntWanted = null, ballId = null,
           savedThisSession = false, healPlace = null,
           places = [], travelTo = null, wilds = null, takeables = [],
-          bagHeal = null, bagCure = null,
+          bagHeal = null, bagCure = null, marts = false, shopFor = null,
           // The cartridge's own numbers. A party of six and a trainer battle of
           // 2 are Gen 2's, not this module's, and reading them from an import
           // meant the stock values reached here even when a title had changed
@@ -40,6 +40,10 @@ export function describeRows(s, ctx = {}) {
 
   const lead = s.party[0];
   const leadName = lead ? name(lead.species) : null;
+  // Money, said the way the game says it. Read for the first time in
+  // twenty-six passes: the app has asserted since the seventeenth that a
+  // knockout costs half of it, and could not show the number.
+  const money = `¥${(s.money || 0).toLocaleString('en')}`;
   const needsBalls = !ballId;
   const ballName = ballId && rom ? rom.itemName(ballId) : null;
   const foe = s.inBattle ? name(s.enemy.species) : null;
@@ -170,6 +174,16 @@ export function describeRows(s, ctx = {}) {
           : 'pick a place below',
       enabled: afoot && !!travelTo && byKey.has(travelTo),
       places,
+    },
+    // Buying, where the cartridge has somewhere to buy from. The row says what
+    // it will cost rather than what it will get, because the money is the thing
+    // the person has a finite amount of -- and because a mart's stock is the one
+    // thing in this app that cannot be read before arriving.
+    shop: {
+      text: s.inBattle ? 'finish the battle first'
+        : !marts ? 'nowhere to shop that this build knows about'
+        : `${money} in hand · ${shopFor || 'nothing named to buy'}`,
+      enabled: afoot && !!marts && !!shopFor,
     },
     // What the map is holding. Counted rather than named, because the app
     // cannot tell a ball somebody has already taken from one still lying there
@@ -397,7 +411,10 @@ export function describeOffers(s, ctx = {}) {
   // Take sits above Travel and below the jobs, for the reason Travel is last:
   // it is never urgent, but unlike a place, a thing lying on the ground is
   // *here* -- and the whole of its cost is that you walked past it.
-  order.push('catch', 'hunt', 'grind', 'heal', 'take', 'travel');
+  // Shop sits last, below Travel. It is the only offer that is never about
+  // where you are or what is wrong -- it is about what you will need next, and
+  // that is the least urgent thing on the list.
+  order.push('catch', 'hunt', 'grind', 'heal', 'take', 'travel', 'shop');
 
   const offered = [];
   for (const key of order) {

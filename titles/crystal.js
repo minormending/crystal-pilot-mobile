@@ -34,6 +34,10 @@ const CHERRYGROVE_POKECENTER = key(26, 5);
 const ROUTE_30 = key(26, 1);
 const ROUTE_31 = key(26, 2);
 const MR_POKEMONS_HOUSE = key(26, 10);
+// CherrygroveCity warp_events again: the Mart is the door west of the Center.
+// Measured by reading Cherrygrove's own warp list off the cartridge -- five
+// doors, and this is the one that leads to a room with a clerk in it.
+const CHERRYGROVE_MART = key(26, 4);
 
 const MAP_NAMES = {
   [PLAYERS_HOUSE_2F]: 'your bedroom',
@@ -45,6 +49,7 @@ const MAP_NAMES = {
   [CHERRYGROVE_POKECENTER]: "Cherrygrove's Pokémon Center",
   [ROUTE_30]: 'Route 30',
   [ROUTE_31]: 'Route 31',
+  [CHERRYGROVE_MART]: "Cherrygrove's Mart",
   [MR_POKEMONS_HOUSE]: "Mr. Pokémon's house",
 };
 
@@ -113,6 +118,17 @@ export const crystal = {
     { map: CHERRYGROVE_CITY, reach: 'heal' },
   ],
   grassyMaps: [ROUTE_29, ROUTE_30],
+  // Where things can be bought, and how to get to the counter.
+  //
+  // `stand` and `face` rather than the clerk's own tile, because a mart counter
+  // is a *wall*: measured in Cherrygrove, the clerk sits at (1,3) and the only
+  // place you can talk to it from is (3,3) facing LEFT -- two tiles away, across
+  // a corner. Which is why this is declared per mart rather than derived from
+  // the clerk's position the way a healer's is.
+  marts: [
+    { map: CHERRYGROVE_MART, from: CHERRYGROVE_CITY, door: [23, 3],
+      stand: [3, 3], face: 'LEFT' },
+  ],
   // What in the bag mends a Pokemon, weakest first, matched by folded name.
   //
   // Names rather than ids, and here rather than in the engine profile, for the

@@ -744,6 +744,90 @@ export class Journey {
     return spent;
   }
 
+  /**
+   * Go to a mart and buy `want` of the cheapest thing on `names`, or fewer.
+   *
+   * The walk is the same machinery every other errand uses -- travel to the
+   * town, `through` the door, walk to the tile the profile says the counter can
+   * be reached from -- and the buying is `buyFromClerk`. What is here rather
+   * than there is the *deciding*: which mart, which item, and how many are
+   * already in the bag.
+   *
+   * Answers with what it spent, because that is the evidence the purchase
+   * happened and because it is the number somebody wants: a knockout in Gen 2
+   * takes half of it, which this app has asserted since the seventeenth pass
+   * and could not read until now.
+   */
+  async restock(names, want = 5) {
+    const marts = (this.title && this.title.marts) || null;
+    const rom = this.tasks && this.tasks.rom;
+    if (!marts || !marts.length) {
+      return { ok: false, stats: {}, message: 'nowhere to shop that this build knows about' };
+    }
+    if (!rom || !Array.isArray(names) || !names.length) {
+      return { ok: false, stats: {}, message: 'nothing named to buy' };
+    }
+    const before = await this.snap();
+    if (before.inBattle) return { ok: false, stats: {}, message: 'finish the battle first' };
+
+    // The cheapest name the *mart* might stock, chosen from the list rather
+    // than from the bag: this is the one decision in the app that is about what
+    // is *not* carried.
+    const wanted = names[0];
+    const here = await this.mapKey();
+    const mart = marts[0];
+
+    if (here !== mart.map) {
+      if (mart.from && here !== mart.from) {
+        const there = await this.travelTo(mart.from);
+        if (!there.ok) {
+          return { ok: false, stats: {}, message: `could not reach ${this.where(mart.from)}` };
+        }
+      }
+      if (!await this.through(mart.door, mart.map)) {
+        return { ok: false, stats: {},
+                 message: `could not get into ${this.where(mart.map)}` };
+      }
+    }
+
+    if (!await this.settled()) {
+      return { ok: false, stats: {}, message: 'the shop never settled' };
+    }
+    const walk = await this.nav.walkTo(this.collision, mart.stand, this.longWalk);
+    if (walk.stopped !== null) {
+      return { ok: false, stats: {}, message: 'could not get to the counter' };
+    }
+    await this.nav.step(mart.face);
+    await this.gb.press('A', 6, 12);
+
+    // The id is looked up *after* arriving, because a mart's stock is the only
+    // place the app cares about an item it does not already hold -- and
+    // `cheapestOf` reads the bag. So this asks the item table for the id of the
+    // name, which is what the pack walk needs.
+    const id = rom.itemIdOf ? rom.itemIdOf(wanted) : null;
+    if (!id) {
+      await this.tasks.closeMenus();
+      return { ok: false, stats: {},
+               message: `this cartridge has no item called ${wanted}` };
+    }
+    const already = (before.items.find(([i]) => i === id) || [0, 0])[1];
+    const buy = Math.max(0, want - already);
+    if (!buy) {
+      await this.tasks.closeMenus();
+      return { ok: true, stats: { bought: 0 },
+               message: `already carrying ${already}` };
+    }
+    const got = await this.tasks.buyFromClerk(id, buy);
+    const after = await this.snap();
+    return {
+      ok: got.ok,
+      stats: { bought: got.bought, spent: got.spent, money: after.money },
+      message: got.ok
+        ? `${got.message} — ${after.money} left`
+        : got.message,
+    };
+  }
+
   /** Run from anything that jumped us on the way. */
   /**
    * Get out of whatever battle we are in, whichever way that map allows.
