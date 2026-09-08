@@ -340,13 +340,13 @@ second, which is there so the core's own waits finish, not to run a game.
 
 Everything above was watched happening. This section was the exception, and the
 exception was the point of it: after the ROM-hack work shipped, **forty-one**
-passes went looking for defects in code that already worked, and found **171** —
+passes went looking for defects in code that already worked, and found **173** —
 a handful of them created by a fix on the way, which are in the table in italics
 because they are a different kind of thing. None of them announced itself.
 
 **Reading found twenty-three**, more than any other single method, which is why
 it comes first in the table and why it is worth doing before touching the game.
-But the interesting number is the tail: the remaining hundred and forty-eight were
+But the interesting number is the tail: the remaining hundred and fifty were
 found almost as many different ways, and almost every entry in that column is a sentence rather than
 a category — *measuring the fix*, *asking a second tile*, *feeding it the wrong
 thing*, *writing a cartridge Crystal is not*, *a test, before the cartridge*,
@@ -549,6 +549,8 @@ exactly why nothing failed.
 | 41 | a device mid-connect was not tested for being offered a code box, which now gates two controls rather than one | Settings, while connecting | mutation, and the pass before it |
 | 41 | *the first signature omitted the ball pocket, so "threw four balls and caught nothing" would have read as nothing happened* | *a catch that fails* | *reading it back* |
 | 41 | *a handler that declines before reaching `runTask` answers `undefined`, and the runner would have stopped dead with a blank bar* | *—* | *reading the three outcomes* |
+| 41 | nothing asserted any of `install`'s three refusals — the size, the save marker, and whether a ROM is loaded — which are what stand between a `.sav` file and somebody's live game | loading a file of the wrong size | mutation, on the module holding the saves |
+| 41 | `sameKey` normalises both sides and only one side was ever tested, because every caller today happens to pass the ArrayBuffer first | — | the same |
 
 Five things in that table are worth more than the individual rows.
 
@@ -2843,7 +2845,14 @@ exactly that. There is a check for it now, and for one more thing the runner
 introduced: the word it prints is built from a row's key rather than from a
 second copy of nine words, so `labels` holds the markup to it.
 
-**The method note.** One defect from the feature itself, three from mutation,
+The same tool then rated `gbcore/saves.js` — the code that holds people's
+games — at **34%**, with its survivors sitting on `install`'s three guards: the
+size, the save marker, and whether a ROM is loaded. Getting past those is worse
+than a crash, because installing re-loads the ROM and leaves the player at a
+title screen with nothing behind it, having lost what they had. All three could
+be deleted with the suite green. They are 56% now.
+
+**The method note.** One defect from the feature itself, five from mutation,
 one from counting, and two from reading the new code before running it — the
 signature that omitted the ball pocket, and the handler that declines before
 reaching `runTask` and would have stopped the runner dead with a blank bar.

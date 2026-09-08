@@ -130,3 +130,77 @@ test('a transaction that aborts fails the call rather than half-filling it',
   await t.rejects(() => slots({}, { abort: true }).list(),
                   'the caller is told, once');
 });
+
+// --- the three refusals between a .sav file and somebody's game -------------
+//
+// `tools/mutate` put gbcore/saves.js at 34%, and the survivors sat on
+// `install`'s guards: the size, the save marker, and whether a ROM is loaded.
+// Those three stand between "load a .sav" and overwriting a live game with
+// something that is not a save -- and getting past them is worse than a crash,
+// because installing re-loads the ROM and leaves the player at a title screen
+// with nothing behind it, having lost what they had. Every one of them could be
+// removed with the suite green.
+//
+// Reachable from here because all three throw before anything touches IndexedDB
+// or an animation frame.
+
+const battery = (present = true) => {
+  const b = new Uint8Array(32768);
+  if (present) { b[0] = 99; b[1] = 127; }
+  return b;
+};
+/** A pilot whose ROM and save-marker answers are whatever the test says. */
+const saver = ({ rom = {}, present = true, bytes = battery() } = {}) =>
+  new Saves({ rom, batterySave: async () => bytes },
+            { saveIsPresent: (b) => present && !!b && b.length === 32768 },
+            null);
+
+test('install refuses anything that is not 32768 bytes', async (t) => {
+  const s = saver();
+  await t.rejects(() => s.install(new Uint8Array(1024)), 'a short file');
+  await t.rejects(() => s.install(new Uint8Array(65536)), 'a long one');
+  await t.rejects(() => s.install(null), 'and nothing at all');
+  // The number is in the message, because "wrong size" without it sends
+  // somebody looking at the wrong file.
+  try { await s.install(new Uint8Array(1024)); } catch (e) {
+    t.contains(e.message, '32768', 'the size it wanted');
+    t.contains(e.message, '1024', 'and the size it got');
+  }
+});
+
+test('install refuses 32768 bytes that hold no save', async (t) => {
+  // The cartridge's own two check bytes, not "any byte is non-zero" -- a
+  // never-saved battery has five non-zero bytes in it. A file of the right
+  // length is the easiest wrong file to hand over.
+  const s = saver({ present: false });
+  await t.rejects(() => s.install(battery(false)), 'refused');
+  try { await s.install(battery(false)); } catch (e) {
+    t.contains(e.message, 'no save', 'saying what is wrong with it');
+  }
+});
+
+test('install refuses when there is no ROM to put it in', async (t) => {
+  const s = saver({ rom: null });
+  await t.rejects(() => s.install(battery()), 'nothing to install into');
+  try { await s.install(battery()); } catch (e) {
+    t.contains(e.message, 'no ROM', 'and it says so');
+  }
+});
+
+test('capture refuses a battery with no save in it', async (t) => {
+  // Otherwise the slot looks filled and restores to nothing, which is the one
+  // failure a slot exists to prevent.
+  const s = saver({ present: false });
+  const r = await s.capture('2');
+  t.false(r.ok, 'nothing kept');
+  t.contains(r.message, 'no save', 'and it says why');
+  t.eq(r.when, undefined, 'with no timestamp to make it look filled');
+});
+
+test('a key compares the same in either direction', async (t) => {
+  // `sameKey` normalises both sides, and only one side was ever tested: every
+  // caller today happens to pass the ArrayBuffer first. The symmetry is the
+  // reason the function exists rather than an accident of the call sites.
+  t.true(sameKey(CRYSTAL, stored(CRYSTAL)), 'Uint8Array against ArrayBuffer');
+  t.false(sameKey(CRYSTAL, stored(hack())), 'and a byte apart is still not equal');
+});
