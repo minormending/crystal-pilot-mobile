@@ -28,7 +28,7 @@ flowchart LR
 
 Every step of that is the first time it has been watched on a cartridge since
 the battle and job code was rewritten, and one of them failed the first time
-round — see [the eleventh pass](#twenty-one-audits-and-how-each-defect-was-actually-found).
+round — see [the eleventh pass](#twenty-two-audits-and-how-each-defect-was-actually-found).
 
 Proven, and visible in [the screenshot on the front page](../README.md):
 
@@ -332,7 +332,7 @@ second, which is there so the core's own waits finish, not to run a game.
   candidates and returned true standing three tiles clear of any. It checks the
   tile underfoot now.
 
-## Twenty-one audits, and how each defect was actually found
+## Twenty-two audits, and how each defect was actually found
 
 Everything above was watched happening. This section was the exception, and the
 exception was the point of it: after the ROM-hack work shipped, eleven passes
@@ -426,6 +426,12 @@ exactly why nothing failed.
 | 21 | the grind reported an evolution a battle late, and never when it ended the job | evolving on the last level | a field the deciders never learned |
 | 21 | tap-to-walk had a `finally` and no `catch`, so it died in silence | a bad read mid-walk | a field the deciders never learned |
 | 21 | and my own new advice named an hour no better than this one | measuring it on Crystal | measuring the fix |
+| 22 | `pickUp` stood below and pressed UP, which is a rule about one tile | a ball with a wall under it | **asking a second tile the same question** |
+| 22 | and its "did it work?" read the balls, so a berry was a failure | a fruit tree | asking a second tile |
+| 22 | and a dead `continue` let a battle-stopped walk press A where it stood | reading it | asking a second tile |
+| 22 | the approach used `walkTo`'s eighty steps while every other leg passes 260 | a thing across a route | asking a second tile |
+| 22 | listing the slots dropped five rejections nobody could catch | a read that fails | **a fake IndexedDB** |
+| 22 | and my own new advice painted an ordinary outcome red | pressing Take twice | measuring the fix |
 
 Five things in that table are worth more than the individual rows.
 
@@ -436,12 +442,12 @@ device, a second cartridge, a second Pokémon. What it measures is how much of
 the world you have to *arrange*, not how much you have to own: the fifth pass
 needed no hardware at all, only a party with a corpse in slot one.
 
-**Two of the sixty-one were caught by a check**, and only after the fix
+**Two of the sixty-seven were caught by a check**, and only after the fix
 had decided what to look for: the wiring group named the four modules still
 importing constants that had just been deleted. One more was caught by a *test*,
 and only because the test hung — the obvious `continue` for the party prompt
 advanced nothing in a loop bounded by balls thrown. That is the honest weight to
-give this repository's seventeen check groups and 240 tests: they hold a fix
+give this repository's seventeen check groups and 258 tests: they hold a fix
 down, and they catch the fix that is itself wrong. They do not find the fault.
 
 **Measuring also rules things out, which is half of what it is for.** The
@@ -1173,6 +1179,93 @@ injected throw: before, the call rejected out of a click handler nobody awaits
 and the status line still held what it said before the tap; after, it reads *the
 walk stopped: bad WRAM read* and the dot goes red. Which is precisely the shape
 the third pass found in `Join`, in the other half of the app.
+
+### A twenty-second pass: asking a second tile the same question
+
+The pass before this one wrote a cartridge Crystal is not. This one stayed on
+Crystal and asked a *second instance* of something the app had only ever been
+asked about once — which turns out to be the same move at a different scale, and
+just as productive.
+
+`pickUp` has existed since the errand did. It is asked about exactly one tile:
+Route 31's Poké Ball at (19,15), the earliest ball in the game that does not need
+the Pokédex. Everything about it was correct for that tile and a rule about
+nothing.
+
+```mermaid
+flowchart LR
+    A["Route 31 (19,15)<br/><b>the only tile ever asked</b>"] --> B["stand below,<br/>press UP"]
+    B --> C["a ball arrives"]
+    C --> D["check s.balls<br/>&mdash; it grew"]
+    D --> OK["works, for twenty-two versions"]
+    E["Route 30 (8,35)<br/><b>a second tile</b>"] --> F["stand below&hellip;<br/><b>the tile below is a wall</b>"]
+    F --> G["walk fails, press A<br/>wherever it stopped"]
+    G --> H["nothing arrives"]
+    I["Route 30 (5,39)<br/><b>a fruit tree</b>"] --> J["a BERRY arrives"]
+    J --> K["check s.balls<br/>&mdash; unchanged"]
+    K --> L["<i>the ball would not<br/>go in the bag</i>"]
+```
+
+Four defects in eleven lines, and each one measured rather than reasoned about:
+
+| What | How it was seen |
+| --- | --- |
+| it approached only from the south | (8,35) has a wall under it; approaching from **above** and facing DOWN put an ANTIDOTE in the bag |
+| it judged success by the **balls** pocket | *the ball would not go in the bag*, said twice, with a BERRY and then a PSNCUREBERRY in the pocket |
+| a dead `continue` inside an already-excluding condition | `if (res.stopped !== null && res.stopped !== 'battle') { if (res.stopped === 'battle') continue; }` — so a battle-stopped walk fell through and pressed A in the battle |
+| it used `walkTo`'s default eighty steps | every other leg of a journey passes 260, written out at four call sites; the fifth got the default by omission |
+
+The last one is the one worth keeping. **A walk cut short by its step budget
+reports the same `stopped` as a tile that refused**, so the wrong number does not
+look like a wrong number — it looks like the map being in the way. The four call
+sites are one named `longWalk` now, and the reason they were four is that nobody
+had needed a fifth.
+
+### The feature was the fix, and the fix needed a fact off the cartridge
+
+*Take* walks to every item ball and fruit tree on the map you are standing on.
+Which objects those are is `wMapObjects` filtered by sprite id, and the two ids
+are in the engine profile because a sprite id is precisely what a hack moves.
+Both were measured rather than copied out of `constants/sprite_constants.asm`:
+
+| Sprite | What | Measured |
+| --- | --- | --- |
+| **84** | an item ball | Route 31's ball carries it in the ROM's `object_events` at exactly its known tile (19,15); the Route 30 object with it gave an ANTIDOTE |
+| **93** | a fruit tree | Route 30's two, at (5,39) and (11,5), gave a BERRY and a PSNCUREBERRY |
+
+Reading the ROM's `object_events` is what settled the first row without walking
+anywhere: the stride is **13 bytes, sprite first, then y+4 and x+4**, and a
+13-byte read of Route 31's block lands sprite 84 on the ball's tile exactly.
+
+**A ball already taken is still in the list.** Measured, and it shapes the whole
+feature: after the ANTIDOTE was in the bag, its object was still where it had
+been in work RAM. So the row counts what the map *placed* and never promises what
+is left, and the job answers by differencing both pockets rather than by
+expecting anything. Which makes three outcomes, not two — and the third was a
+defect in this pass's own new code, painting *nothing left to take here* red
+until the second press showed how wrong that reads.
+
+End to end on Route 29, from where the bootstrap leaves you: **one press picked
+up a POTION and a BERRY thirty-five tiles apart, in about forty seconds**, and
+the press before the retry budget was raised had come back with neither.
+
+### And one in the save path, found the same way
+
+`Saves.list` reads a summary per slot in one transaction, and fired the five
+reads and forgot them. A read that fails then rejects with nobody listening: one
+error the caller can catch, and five it cannot, arriving a turn later with no
+stack pointing at the file. **That is the codec's shape from ten passes ago**, on
+the other half of the same path — and it was found the same way this pass found
+everything else, by building the second instance: a fake IndexedDB, small enough
+to describe in a paragraph, that can be told which key's read should fail.
+
+One line beside it is belt and braces and is labelled as such, which matters more
+than the line does. `await Promise.all(pending)` fails no test if removed,
+because a request's `onsuccess` resolves before the transaction's `oncomplete`
+and the microtask queue drains in between. It is there to make the ordering a
+rule of the function rather than a property of the platform — and saying which
+of two changes was the fix is the thing three earlier passes got wrong by not
+saying.
 
 ## The part that had to be redesigned
 

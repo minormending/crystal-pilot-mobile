@@ -186,6 +186,19 @@ Elm's lab it offers *downstairs · one map away*, and from downstairs that entry
 is gone and *Elm's lab* has appeared. A cartridge nobody has described has no
 list and no row, the same way it has no scripted intro.
 
+**Take is the sixth offer, and the only one whose whole reason to exist is
+read off the map you are standing on.** Every other row is about your party, your
+bag or the graph; this one is about `wMapObjects`. It says what is *placed* here
+— *one item ball and one fruit tree* — and deliberately not what you will get,
+because the app cannot tell a ball somebody already took from one still lying
+there: measured, the object stays in work RAM once the item is in the bag. A
+count is a promise the row can keep; a name is not.
+
+It sits above Travel and below the jobs, and for the mirror of Travel's reason.
+Travel is last because a place is still there in a minute. Take is above it
+because a thing on the ground is *here*, and the whole of its cost is that you
+walked past it.
+
 Two other things went in the same pass, further back. *Pick one to look for* was
 a filled accent primary button that was disabled and did nothing, sitting below
 the chips that were the real control — the chips are the control, and the rows

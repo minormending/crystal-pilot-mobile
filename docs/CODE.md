@@ -39,7 +39,7 @@ and the code disagree, the code is right and the section is a bug — see
    · [How the tasks are arranged](#5a-how-the-tasks-are-arranged)
 6. [Battles](#6-battles)
 7. [Catching something](#7-catching-something)
-   · [Three that act on where you are](#7a-three-that-act-on-where-you-already-are)
+   · [Four that act on where you are](#7a-four-that-act-on-where-you-already-are)
    · [Saving, and getting the save out](#7b-saving-and-getting-the-save-out)
    · [Slots, undo, and bringing a save in](#7c-slots-undo-and-bringing-a-save-in)
 8. [The errands](#8-the-errands)
@@ -455,7 +455,15 @@ enforces it, so it is a fact about the build rather than a habit.
 <!-- covers: gen2/state.js @ 6134dc6623d7 -->
 
 One snapshot, many answers: `inBattle`, `party`, `pos`, `onGrass`,
-`worldLoaded`, `menu`, `balls`, and the enemy's HP.
+`worldLoaded`, `menu`, `balls`, `items`, and the enemy's HP.
+
+**`items` is the ITEM pocket, read for the first time in twenty-two versions**,
+and the pocket next door had been read since the beginning. Both go through one
+`_pocket`, because they are the same three bytes of layout: a count of *kinds*
+carried, then two bytes per entry, id and quantity. What it cost not to have it
+is the whole of section 7a's pickup defect — `pickUp` decided whether it had
+picked something up by looking at the balls, so a BERRY off a fruit tree reported
+*the ball would not go in the bag* with the berry visibly in the pocket.
 
 It also exports the four collision values that roll for a wild encounter, as
 `GRASS_TILES`, because the pilot needs that fact from both sides: this module
@@ -476,6 +484,12 @@ and in `bootstrap.js`, with nothing able to notice if they drifted.
   where confusing the pack for the battle menu cost five Poké Balls.
 - **`wBalls` does not settle until a battle ends.** A Pokémon can already be
   caught while the bag still reads five. Never difference the bag mid-battle.
+  Out on the map it settles immediately, which is what lets a pickup be
+  confirmed by differencing both pockets.
+- **`POCKET_KINDS = 20` is a bound, not a capacity.** A garbage count byte must
+  not send a reader walking through work RAM. It is deliberately not in the
+  engine profile: that file says in its own header that this app's caution is
+  not a fact about the machine.
 
 </details>
 
@@ -569,6 +583,21 @@ because the bag reader still uses it.
 Decodes the loaded map into "can I stand on this tile", and does breadth-first
 pathfinding over the result. This is what turns walking from trial and error
 into a plan.
+
+It also reads `wMapObjects` twice, asking two different questions of the same
+byte. `occupied()` asks *who is standing where*, so a plan routes around them.
+`takeables()` asks *which of these is not a person* — an item ball or a fruit
+tree — so the pilot can go and press A at it. Which sprite ids those are is in
+the engine profile rather than here, because a sprite id is exactly the sort of
+thing a hack moves; both were measured on the cartridge, and the profile records
+where.
+
+**A ball that has already been taken is still in that list.** Measured, not
+assumed: after the ANTIDOTE at (8,35) on Route 30 was in the bag, its object was
+still exactly where it had been in work RAM. So `takeables` answers *what the map
+placed here* and nothing stronger, and the only honest way to find out what is
+left is to go and press A — which is why the job that uses it reports what
+arrived in the bag rather than what it expected to.
 
 <details>
 <summary><b>Advanced detail:</b> the decode, and why one check is not enough</summary>
@@ -819,6 +848,15 @@ DOWN, `0x76` LEFT, `0x78` UP, `0x7e` RIGHT. Standing on one and pressing
 anything else simply walks you off it, which is what made the front door of the
 player's house look like a wall that could be reached but never opened.
 `CollisionMap.pushFor()` returns the required direction.
+
+**Every leg of a journey is a `longWalk`.** `walkTo` defaults to eighty steps,
+which is a plan inside a building; a route is not, and Route 30 is fifty-four
+tiles top to bottom on its own. That number was written out as `maxSteps: 260`
+at four call sites — so the fifth, the approach to something lying on the
+ground, was handed the default by omission. It has a name now, and the five
+share it. Running out of steps is worth naming for what it looks like from
+outside: a walk cut short reports the same `stopped` as a tile that refused, so
+the wrong budget reads as the map being in the way.
 
 </details>
 
@@ -1372,11 +1410,11 @@ precedes it defaults to yes, which is what we want; the nickname box does not.
 
 ---
 
-## 7a. Three that act on where you already are
+## 7a. Four that act on where you already are
 
 <!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ 74edd8a8618a -->
 
-Grind, hunt and catch all go *looking* for something. These three do the obvious
+Grind, hunt and catch all go *looking* for something. These four do the obvious
 thing with the situation you are already in, and take no parameters:
 
 | Command | Does | Refuses when |
@@ -1384,6 +1422,7 @@ thing with the situation you are already in, and take no parameters:
 | **Battle** | plays out the battle you are in, wild or trainer | you are not in one |
 | **Catch this one** | weakens and throws at the wild Pokémon in front of you | not in a battle · it is a trainer's · party full · no balls |
 | **Heal** | goes to the nearer heal place and comes back | you are in a battle · nothing is hurt |
+| **Take** | walks to every item ball and fruit tree on this map and presses A | you are in a battle · the map is holding nothing |
 
 ```mermaid
 flowchart TD
@@ -1431,6 +1470,50 @@ This surfaced as a plain `ReferenceError` the first time `captureHere` ran,
 which is worth knowing: the syntax check in `tools/check-app` parses every
 module but cannot see an undefined reference. That class of bug only shows up by
 running the thing.
+
+**Take is the one whose list comes out of the cartridge.** `collision.takeables`
+reads `wMapObjects` for the sprite ids the engine profile names as an item ball
+or a fruit tree, so on Route 29 the row reads *one item ball and one fruit tree*
+with nothing about Route 29 written down anywhere.
+
+```mermaid
+flowchart TD
+    T["takeables: what the map placed"] --> S["nearest first"]
+    S --> A["approach: every side that is<br/>walkable, nearest first"]
+    A --> W{"walk"}
+    W -- "battle" --> E["escape, and ask again<br/>&mdash; up to six times"]
+    E --> A
+    W -- "arrived" --> P["face it, press A"]
+    P --> D["difference both pockets"]
+    D -- "something" --> G["say what arrived, by name"]
+    D -- "nothing, twice" --> N["already taken &mdash; an outcome,<br/>not a failure"]
+    A -- "no side opens" --> M["could not get to it &mdash; this one is"]
+```
+
+Three things in that diagram were defects, and each was invisible on the one
+tile this code had ever been asked about: Route 31's ball, which the errand
+fetches.
+
+- **It stood on the tile below and pressed UP.** That is a rule about nothing.
+  The item ball at (8,35) on Route 30 has a wall under it, so the walk failed —
+  and the code then pressed A wherever it had stopped, through a dead `continue`
+  inside a condition that had already excluded the case it tested for.
+  Approaching from above and facing DOWN is what put the ANTIDOTE in the bag.
+- **It decided success by looking at the balls.** A BERRY off a fruit tree
+  reported *the ball would not go in the bag*, with the berry in the pocket.
+  Measured twice, on two trees, before `state.items` existed.
+- **It used `walkTo`'s default eighty steps.** Every other leg of a journey
+  passes 260, written out at four call sites — so the fifth got the default by
+  omission. Running out of steps reads as the tile refusing rather than as the
+  walk being cut short, which is the sort of wrong answer that gets believed.
+  The number has a name now, `longWalk`, and the five sites share it.
+
+**And the outcomes are three, not two.** Getting nothing from a ball somebody has
+already taken is ordinary; a thing no walk can reach is not. `pickUp` answers
+with which, because painting *nothing left to take here* red says something went
+wrong when nothing did. Measured on Route 29: the first press picked up a POTION
+and a BERRY thirty-five tiles apart and went green; the second said *nothing left
+to take here — tried 2* and stayed green.
 
 </details>
 
@@ -1543,7 +1626,7 @@ Tackle and Leer. Two emulators, two implementations, one save file.
 
 ## 7c. Slots, undo, and bringing a save in
 
-<!-- covers: gbcore/saves.js @ c7ab145f2ff7 -->
+<!-- covers: gbcore/saves.js @ 6dce5d064d49 -->
 
 **There is one way to load a slot, and that is the point.** `loadSlot` in
 `main.js` reads the record, refuses it if its ROM fingerprint is not this
@@ -1553,6 +1636,22 @@ it, so nothing exercised it, so it stayed as the fourth audit pass had found the
 code before that pass fixed it. Found by coverage, in the module the tests run
 least of, and deleted rather than patched: two ways to load a slot is what made
 one of them wrong in the first place.
+
+**Listing the slots dropped five rejections into the void.** `list` reads a
+summary per slot in one transaction and used to fire the five reads and forget
+them: a read that failed rejected with nobody listening, so a failing
+transaction produced one error the caller can catch and five it cannot, arriving
+a turn later with no stack pointing at this file. Which is the shape the codec
+had ten passes ago, on the other half of the save path — and the same fix, at
+the source: a slot whose read failed is a slot with no summary, which is a state
+the rows already draw.
+
+The `await Promise.all` beside it is belt and braces rather than a second fix,
+and is worth saying so out loud. A request's `onsuccess` resolves before the
+transaction's `oncomplete`, and the microtask queue drains in between, so the
+fill was already ordered — removing that line fails no test, deliberately. What
+it buys is making the ordering a rule of this function instead of a property of
+the platform.
 
 Three slots a person picks, plus an undo point the pilot writes before every
 job and the game a handoff replaced, if there is one — five records. A slot
@@ -2827,7 +2926,7 @@ recorded at all, so the kept battery was restored into whatever ROM was picked
 next; and `pickKey` was *the only record, if there is exactly one*, which wrote
 this cartridge's save into the previous cartridge's record. Both failed
 silently, and both were on the paths nobody presses — see
-[Twenty-one audits](PROVEN.md#twenty-one-audits-and-how-each-defect-was-actually-found)
+[Twenty-two audits](PROVEN.md#twenty-two-audits-and-how-each-defect-was-actually-found)
 for why that is not a coincidence.
 
 `patchMeta` merges fields into the `meta` record, and it used to do that as a
@@ -3386,9 +3485,9 @@ and it reports 45 because that is how many symbols it has.
 ```mermaid
 flowchart LR
     F["the .sym file<br/>1.8MB, 58,456 symbols"] --> S["Symbols<br/>the parsed table"]
-    S -->|"digest(SHARED_SYMBOLS)"| D["{name: [bank, addr]}<br/>45 entries, ~1KB"]
+    S -->|"digest(SHARED_SYMBOLS)"| D["{name: [bank, addr]}<br/>47 entries, ~1KB"]
     D --> R[["the room"]]
-    R --> D2["the same 45 entries"]
+    R --> D2["the same 47 entries"]
     D2 -->|"Symbols.fromDigest"| T["a table that behaves<br/>like the parsed file"]
     T --> APP["the second device,<br/>with the ROM and no .sym"]
     C{{"check-app: is SHARED_SYMBOLS<br/>every name the app looks up?"}} -.-> D
@@ -3417,6 +3516,11 @@ because nothing at run time can know which names the code is *going* to ask
 for. That makes it exactly the kind of list that rots, and rot here is
 invisible where it is written: every device with the file keeps working, and
 only the one handed a digest fails — hours later, on the second phone.
+The list grew by two this pass, `wNumItems` and `wItems`, and the growth is the
+check group working the way it is meant to: the ITEM pocket was added to
+`state.js`, and `check-app` named the two symbols that were being read and not
+declared before anything was committed.
+
 
 So `check-app` reads every lookup in the app and fails if one is missing from
 the list. It caught two on the way in, and the second one is why the check

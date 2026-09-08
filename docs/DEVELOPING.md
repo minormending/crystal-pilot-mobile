@@ -117,7 +117,7 @@ section gives. Everything by hand runs against a local build.
 
 ```mermaid
 flowchart BT
-    C["the app"] --> T["./run-tests<br/>240 behaviour tests"]
+    C["the app"] --> T["./run-tests<br/>258 behaviour tests"]
     C --> A["tools/check-app<br/>17 groups"]
     C --> D["tools/docs-check<br/>25 tracked sections"]
     C --> V["tools/coverage<br/>what the suite never runs"]
@@ -167,6 +167,13 @@ invisible until one was written. `grind` went the same way in
 `tests/cases/grind.mjs`, where the script is one party state per *battle
 fought* — getting that wrong is why those tests were briefly wrong about how
 many battles a three-level climb takes.
+
+**A fake IndexedDB is the newest of those**, in `tests/cases/saves.mjs`: not a
+mock of `list`, a mock of the two shapes that file uses — a transaction that
+completes, and requests that call back — small enough to read, and able to be
+told which key's read should fail. `saves.js` had the lowest coverage in the
+table for eleven passes on the grounds that it needs a database, and that turned
+out to mean it needs about forty lines of one.
 
 **And the harness could not compare two objects.** `same` walked arrays deeply
 and fell back to `a === b` for everything else, so `t.eq({low:2,high:4},

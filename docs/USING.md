@@ -436,6 +436,33 @@ Two bugs surfaced while measuring that, both from walking into people:
   matches the disassembly's `object_event` lists on Route 29 and Route 30, in
   order.
 
+## Take: what the map is holding
+
+Routes have things lying on them — item balls, and fruit trees you can pick from
+— and walking past them is the easiest thing in the world to do. The **Take**
+row counts what is on the map you are standing on: *one item ball and one fruit
+tree*. Press it and the pilot walks to each in turn, nearest first, and tells you
+what went into the bag: *picked up POTION, BERRY*.
+
+Nothing about any particular route is written down in this app. The list is read
+out of your cartridge — the map's own object list, filtered to the two sprites
+that are not people — so it works the same on a map nobody has described.
+
+**The row counts what is placed, not what is left**, and that is a limit worth
+knowing rather than discovering. An item ball you have already emptied stays on
+the map as far as the game's memory is concerned, so the row goes on offering it.
+Press Take again and it says *nothing left to take here* — which is an answer,
+not a failure, and the status dot stays green for it. The one thing that does
+count as going wrong is a thing no walk can reach: *could not get to 1 of 2
+here*.
+
+Measured on Route 29, from where the pilot's own bootstrap leaves you: one press
+picked up the POTION from the ball at the east end and a BERRY from the tree
+thirty-five tiles west, in about forty seconds, running from whatever jumped out
+on the way.
+
+Fruit trees regrow, so they are worth coming back to. Item balls are not.
+
 ## Travel: take me somewhere else
 
 Tap to walk moves you around the map you are standing on. **Travel** walks you

@@ -193,11 +193,27 @@ export class Saves {
   async list() {
     const db = await this.db();
     const out = {};
+    // Five reads in one transaction, fired and forgotten. **A read that fails
+    // rejected with nobody listening** -- an error the caller can catch, and one
+    // it cannot, arriving a turn later with no stack pointing here. Which is the
+    // shape the codec had nine passes ago, on the other half of the save path.
+    // Answered at the source: a slot whose read failed is a slot with no
+    // summary, which is a state this already draws.
+    //
+    // The `Promise.all` is belt and braces rather than a second fix, and is
+    // worth saying so: a request's onsuccess resolves before the transaction's
+    // oncomplete and the microtask queue drains in between, so the fill was
+    // already ordered. Removing it fails no test, deliberately -- it makes the
+    // ordering a rule of this function instead of a property of the platform.
+    const pending = [];
     await tx(db, STORE, 'readonly', (os) => {
       for (const slot of ALL_SLOTS) {
-        wrap(os.get(summaryKey(slot))).then((s) => { out[slot] = s || null; });
+        pending.push(wrap(os.get(summaryKey(slot))).then(
+          (s) => { out[slot] = s || null; },
+          () => { out[slot] = null; }));
       }
     });
+    await Promise.all(pending);
     for (const slot of ALL_SLOTS) {
       if (out[slot]) continue;
       const rec = await tx(db, STORE, 'readonly', (os) => wrap(os.get(slot)));

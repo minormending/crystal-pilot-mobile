@@ -4,7 +4,7 @@
 // reachable from here. This part is, and it is the part that was wrong: the
 // arithmetic of deciding whether a record in the library's store is *ours*.
 import { test } from '../harness.mjs';
-import { pickKey, sameKey } from '../../gbcore/saves.js';
+import { pickKey, sameKey, Saves } from '../../gbcore/saves.js';
 
 // The real thing, measured: ROM bytes 0x134-0x14E of pokecrystal, which is the
 // title, the cartridge flags, the header checksum, and the top byte of the
@@ -46,4 +46,87 @@ test('the right record is found among several cartridges', async (t) => {
   t.true(sameKey(pickKey(keys, hack()), hack()), 'and theirs when we are it');
   t.eq(pickKey([], CRYSTAL), null, 'an empty store has nothing of ours');
   t.eq(pickKey(null, CRYSTAL), null, 'nor does a store that is not there');
+});
+
+// --- listing the slots, and what happens when a read fails -------------------
+
+/**
+ * The smallest thing `tx` and `wrap` will accept for a read.
+ *
+ * Not a mock of `list` -- a mock of *IndexedDB*, to the two shapes this file
+ * uses: a transaction that completes, and requests that call back. `fails` names
+ * the keys whose read raises, which is the case with no other way to reach it.
+ */
+function fakeDb(records, { fails = [], abort = false } = {}) {
+  return {
+    transaction() {
+      const t = {};
+      const reqs = [];
+      queueMicrotask(() => {
+        for (const r of reqs) {
+          if (fails.includes(r.key)) { r.error = new Error('read failed'); r.onerror && r.onerror(); }
+          else { r.result = records[r.key]; r.onsuccess && r.onsuccess(); }
+        }
+        // The transaction settles after every request has, which is the ordering
+        // the real one guarantees and the fill used to depend on by luck.
+        queueMicrotask(() => {
+          if (abort) { t.error = new Error('aborted'); t.onabort && t.onabort(); }
+          else t.oncomplete && t.oncomplete();
+        });
+      });
+      t.objectStore = () => ({
+        get(key) { const r = { key }; reqs.push(r); return r; },
+      });
+      return t;
+    },
+  };
+}
+
+/** A Saves whose database is that. */
+function slots(records, opts) {
+  const s = new Saves({}, {}, null, () => {});
+  s.db = async () => fakeDb(records, opts);
+  return s;
+}
+
+test('every slot comes back, summary or nothing', async (t) => {
+  const got = await slots({
+    '1:about': { when: 5, where: 'Route 29', lead: 'CYNDAQUIL Lv5' },
+    'undo:about': { when: 9, where: "Elm's lab" },
+  }).list();
+  t.eq(Object.keys(got).sort(), ['1', '2', '3', 'replaced', 'undo'],
+       'all five, whether or not they hold anything');
+  t.eq(got['1'].where, 'Route 29', 'the one that was written');
+  t.eq(got['2'], null, 'and an empty slot is null rather than missing');
+});
+
+test('a read that fails leaves an empty slot, not an unhandled rejection',
+     async (t) => {
+  // The defect. The five reads were fired and forgotten, so a read that failed
+  // rejected with nobody listening -- an error the caller can catch *and* one
+  // it cannot, arriving a turn later with no stack pointing here. Which is the
+  // shape the codec had nine passes earlier, on the other half of the save
+  // path.
+  const strays = [];
+  const catcher = (e) => strays.push(e);
+  process.on('unhandledRejection', catcher);
+  let got;
+  try {
+    got = await slots({ '2:about': { when: 1, where: 'Route 30' } },
+                      { fails: ['1:about'] }).list();
+    // Abandoned rejections are reported a turn after the fact, so a check here
+    // without the wait would always find none.
+    await new Promise((r) => setTimeout(r, 50));
+  } finally {
+    process.off('unhandledRejection', catcher);
+  }
+  t.eq(strays.length, 0, 'nothing was left rejecting into the void');
+  t.eq(got['1'], null, 'the one that failed reads as empty');
+  t.eq(got['2'].where, 'Route 30', 'and the others are unaffected');
+});
+
+test('a transaction that aborts fails the call rather than half-filling it',
+     async (t) => {
+  await t.rejects(() => slots({}, { abort: true }).list(),
+                  'the caller is told, once');
 });
