@@ -395,6 +395,31 @@ reported.
 game that comes up will not take a single button press — START included — until
 something runs the scripts.
 
+### Measuring a screen against the build before it
+
+A before-and-after count of what is on screen is only worth reading if both
+readings come from the same cartridge in the same place in the game — and the
+app keeps its ROM, its symbol file and its slots in IndexedDB, which is keyed by
+origin. So the old build has to be served from the **same origin**, which
+`dev/` already is and is gitignored:
+
+```bash
+mkdir -p dev/pre && git archive <rev> | tar -x -C dev/pre
+```
+
+Then open `/dev/pre/index.html` beside `/`. Both share one IndexedDB, so a
+build from twenty versions ago resumes the same game the current one does, and
+the two counts differ only by what changed. Delete `dev/pre` afterwards; the
+command is one line.
+
+The counter itself has to use `checkVisibility({checkOpacity, contentVisibilityAuto})`.
+A closed `<details>` reports a real bounding box *and* a non-null
+`offsetParent` while being genuinely unrendered, so `offsetParent !== null`
+counts collapsed prose as visible — which once made a hundred-word cut measure
+as thirteen. And remember what the count cannot see: a `placeholder` is an
+attribute, not a text node. It is read by everybody who opens the sheet and
+counted by nothing.
+
 `patch` is the one this session typed most. Verifying an edit against the
 cartridge means either reloading — which loses the running game — or hand-listing
 every method that changed and copying it off a fresh prototype. **The hand-list
