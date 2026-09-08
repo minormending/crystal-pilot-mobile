@@ -298,7 +298,7 @@ fine and is wrong at run time:
 | `syntax` | all 27 modules and `sw.js` parse — copied to `.mjs` first, because `node --check` on a `.js` file with a syntax error exits 0 |
 | `shell` | the service worker's shell lists every file it needs, and each exists |
 | `markup` | `index.html`'s tags and its CSS braces balance |
-| `contrast` | 22 colour pairs meet WCAG in **both** themes |
+| `contrast` | 24 colour pairs meet WCAG in **both** themes, and the two light blocks match |
 | `gamefiles` | no ROM, save or symbol file is tracked |
 | `moves` | the lethal moves excluded from weakening are the ones that lie about their power |
 | `buttons` | every button name handed to `press`/`hold` is one the core knows |

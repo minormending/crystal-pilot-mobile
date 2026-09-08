@@ -339,14 +339,14 @@ second, which is there so the core's own waits finish, not to run a game.
 ## The audits, and how each defect was actually found
 
 Everything above was watched happening. This section was the exception, and the
-exception was the point of it: after the ROM-hack work shipped, **thirty-seven**
-passes went looking for defects in code that already worked, and found **144** —
+exception was the point of it: after the ROM-hack work shipped, **thirty-eight**
+passes went looking for defects in code that already worked, and found **150** —
 a handful of them created by a fix on the way, which are in the table in italics
 because they are a different kind of thing. None of them announced itself.
 
 **Reading found twenty-two**, more than any other single method, which is why it
 comes first in the table and why it is worth doing before touching the game. But
-the interesting number is the tail: the remaining hundred and twenty-two were
+the interesting number is the tail: the remaining hundred and twenty-eight were
 found almost as many different ways, and almost every entry in that column is a sentence rather than
 a category — *measuring the fix*, *asking a second tile*, *feeding it the wrong
 thing*, *writing a cartridge Crystal is not*, *a test, before the cartridge*,
@@ -522,6 +522,12 @@ exactly why nothing failed.
 | 37 | `backToGrass` walked to the first grass written down, not the nearest | a grind starting on Route 32 | ninety-nine seconds and no battles |
 | 37 | `menuIsLive`'s four bounds could all be moved with the suite passing | the battle menu, at any cursor | **the mutation tool** |
 | 37 | the ring fake never called `escapeBattle`, though every real crossing does | — | a test that could not fail |
+| 38 | the contrast check watched the surface a key sits *on*, not the key | the pad, in either theme | extending the check |
+| 38 | in the dark theme `--key` and `--raise` were the same colour, so it compared a token with itself | the pad at night | the same |
+| 38 | the light palette was written out twice and had already drifted | the theme most people get | a screenshot that would not change |
+| 38 | *and the check then read no hex from a block of `var()`, reporting "both themes" while reading one twice* | *—* | *fixing the duplication* |
+| 38 | the offers ranking was invisible whenever the lead row's action was disabled | Catch leading with "pick something below" | reading the DOM |
+| 38 | a new disabled-button rule made the pad's keys read as missing | any key with no game loaded | a screenshot |
 
 Five things in that table are worth more than the individual rows.
 
@@ -2635,6 +2641,62 @@ And a fake that could not fail, again: the ring walker never called
 The [thirty-sixth pass](#a-thirty-sixth-pass-the-badge-and-the-claim-that-came-with-it)
 found the same thing about map group spacing. **A fake is a claim about the
 thing it stands for, and it should be held to it.**
+
+### A thirty-eighth pass: a stylesheet, and what it exposed
+
+Asked to fix a UI that looked awful. Pico CSS v2.1.1 (MIT) was vendored for the
+half that was genuinely missing — a type scale, control states, a spacing
+rhythm — and the interesting part is what the work exposed rather than what it
+added. Four defects, and none of them was in Pico.
+
+**The contrast check was watching the wrong background, and had been for
+thirty-seven passes.** It compared the pad's ink against `--raise`, the surface
+a key sits *on*, rather than against the key. And in the dark theme `--key` and
+`--raise` were **the same colour** — so the check was comparing a token with
+itself and passing.
+
+Extending it turned up a bar that cannot be met: two dark greys a card apart do
+not reach 3:1, and a real handheld at night does not either. What has to be
+visible is where a key *ends*, so the guarded pair became the key's **edge**
+against its well. That is the honest repair rather than either faking the number
+or forcing a palette nobody wants — and it is worth saying that the first draft
+of the new pairs was wrong in the opposite direction, asking for something the
+design should not deliver.
+
+**The light palette was written out twice**, once for `[data-theme="light"]` and
+once for the `prefers-color-scheme` media query, because CSS cannot put a media
+query in a selector list. They had already drifted: a new token went into one
+and the other kept the old value, so **the theme most people get was the wrong
+one**. Twenty minutes went on a screenshot that would not change while the
+computed styles said the dark value was in force on a light page.
+
+The values live once now and both switches map them — which immediately caught
+the *check* reading no hex at all from a block full of `var()`, falling back to
+the dark values and reporting "both themes" while reading one of them twice. **A
+check that quietly stops checking is worse than no check**, and this one had
+just been made to do exactly that by a fix meant to help it.
+
+**And the ranking was invisible whenever it mattered most.** The offers list is
+reordered every refresh and the lead row was shown only by a filled Start
+button — which is `.primary` *and* frequently `[disabled]`, because the row that
+leads is often the one that needs something first. So the single visible sign of
+an ordering this app spends real work computing disappeared exactly when the
+ordering needed explaining.
+
+**One regression, caused and caught inside ten minutes.** A new
+`button[disabled]` rule cleared the fill, which is right for a row's offer and
+wrong for a key: with no game loaded every key is disabled, and A, B, SELECT and
+START read as *missing*. A row's button is an offer and can be withdrawn; a key
+is part of a machine, and a machine with no buttons on it is broken.
+
+**The method note.** Three of the six were found by *extending a check and
+watching it fail*, which is a different move from reading and a different move
+from playing: it is asking a guard to state its claim precisely and finding the
+claim was never true. The other three came from a screenshot and a DOM read —
+and one of *those* was nearly misdiagnosed, because the first attempt to measure
+both themes mutated the theme attribute and read the computed style in the same
+call, returning each theme one step out of phase and looking exactly like an
+inverted palette. Measuring one theme per call, both were right.
 
 ## The part that had to be redesigned
 
