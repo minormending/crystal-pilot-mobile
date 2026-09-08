@@ -28,6 +28,13 @@ const MAP_LANDMARK = 5;
 
 // The tail of a map-attributes block: a bitmask, then one struct per connection
 // in a fixed order, whatever subset of them is present.
+// The map's own size, in blocks, at the front of its attributes block. Measured
+// rather than read off the macro, against two maps whose tile dimensions were
+// already known from work RAM: Route 32 reads 45 and 10 for a map that is 20 by
+// 90 tiles, and Route 31 reads 9 and 20 for one that is 40 by 18. So height
+// comes first, and a block is two tiles each way.
+const ATTR_HEIGHT = 1, ATTR_WIDTH = 2;
+const TILES_PER_BLOCK = 2;
 const ATTR_SCRIPTS_BANK = 6, ATTR_EVENTS = 9;
 const ATTR_CONNECTIONS = 11, ATTR_STRUCTS = 12;
 
@@ -45,8 +52,12 @@ const COORD_BYTES = 8, BG_BYTES = 5, OBJECT_BYTES = 13;
 const OBJECT_SPRITE = 0, OBJECT_Y = 1, OBJECT_X = 2;
 // Objects are stored with the same +4 origin work RAM uses.
 const OBJECT_ORIGIN = 4;
-// A sanity bound, like MAX_WARPS: a bad read should give up rather than walk
-// off into the ROM.
+// A sanity bound, like MAX_WARPS. **A count that reaches it means the read is
+// wrong, not that the map is crowded**, and the difference is what the bound is
+// for: truncating at thirty-two and returning them believes the first
+// thirty-two bytes of nonsense, which is how a map past the end of the last
+// group answered with thirty-two objects at plausible tiles. No real map in
+// Crystal carries anything like this many.
 const MAX_OBJECTS = 32;
 
 const CONNECTION_BYTES = 12;
@@ -83,8 +94,60 @@ export class World {
     return this.gb.romByte(bank, addr) | (this.gb.romByte(bank, addr + 1) << 8);
   }
 
+  /**
+   * How many maps a group has, or null where the cartridge will not say.
+   *
+   * **A map number the ROM does not have used to read as nonsense**, and this
+   * file said so in a comment and shrugged: an empty neighbour list was the
+   * honest answer while the only things asking were the graph's own exits, all
+   * of which exist. Then `objectsOn` started being asked about whatever a warp
+   * pointed at, and a sweep looking for the Gyms asked about *ranges* -- which
+   * returned Violet's Gym under six different group numbers and put an object
+   * at (141,72) on a map twenty tiles wide.
+   *
+   * `MapGroupPointers` carries no count, so the bound is the next group's
+   * pointer: the lists sit one after another, and measured on Crystal the
+   * twenty-six pointers ascend by 126, 63, 819, 81 ... 135 bytes, every one an
+   * exact multiple of the nine-byte header.
+   *
+   * **Null wherever that reasoning does not hold, and permissive on null.** The
+   * last group has nothing after it; a hack that padded between its lists would
+   * give a step that is not a multiple of nine. Refusing a map that exists is
+   * worse than reading one that does not -- the first breaks a cartridge this
+   * app should support, and the second is caught by the coordinate check in
+   * `objectsOn`, which is why both exist.
+   */
+  mapCount(group) {
+    if (group < 1) return 0;
+    if (this._counts === undefined) this._counts = new Map();
+    if (this._counts.has(group)) return this._counts.get(group);
+    let count = null;
+    try {
+      const at = (g) => this._word(this.groups.bank, this.groups.addr + (g - 1) * 2);
+      const step = at(group + 1) - at(group);
+      // `>= 0` rather than `> 0`, and the difference is a whole group: a step
+      // of exactly nought is a group with no maps in it, and refusing every
+      // number in one is right where staying permissive is not. Found by
+      // `tools/mutate` surviving the change, which is the tool answering a
+      // question sharper than the one it was asked.
+      if (step >= 0 && step % MAP_BYTES === 0) count = step / MAP_BYTES;
+    } catch (e) { /* unreadable is the same answer as unbounded */ }
+    this._counts.set(group, count);
+    return count;
+  }
+
+  /** Is this a map the cartridge says it has? Permissive where it will not say. */
+  hasMap(group, number) {
+    if (group < 1 || number < 1) return false;
+    const count = this.mapCount(group);
+    return count === null || number <= count;
+  }
+
   /** Where a map's attributes live, via its group's table of map headers. */
   _attributes(group, number) {
+    if (!this.hasMap(group, number)) {
+      throw new Error(`no map ${group}.${number} on this cartridge`);
+    }
     const list = this._word(this.groups.bank, this.groups.addr + (group - 1) * 2);
     const header = list + (number - 1) * MAP_BYTES;
     return {
@@ -141,7 +204,10 @@ export class World {
       const bank = this.gb.romByte(attr.bank, attr.addr + ATTR_SCRIPTS_BANK);
       const events = this._word(attr.bank, attr.addr + ATTR_EVENTS);
       const count = this.gb.romByte(bank, events + EVENTS_WARP_COUNT);
-      for (let i = 0; i < Math.min(count, MAX_WARPS); i++) {
+      // Over the cap is a bad read, and an empty list is the honest answer to
+      // one -- see MAX_OBJECTS.
+      if (count > MAX_WARPS) throw new Error(`${count} warps is not a map`);
+      for (let i = 0; i < count; i++) {
         const at = events + EVENTS_WARPS + i * WARP_BYTES;
         const g = this.gb.romByte(bank, at + WARP_GROUP);
         const n = this.gb.romByte(bank, at + WARP_NUMBER);
@@ -201,6 +267,7 @@ export class World {
     const out = [];
     try {
       const attr = this._attributes(group, number);
+      const size = this.sizeOf(group, number);
       const bank = this.gb.romByte(attr.bank, attr.addr + ATTR_SCRIPTS_BANK);
       const events = this._word(attr.bank, attr.addr + ATTR_EVENTS);
       const rd = (i) => this.gb.romByte(bank, (events + i) & 0xffff);
@@ -209,13 +276,19 @@ export class World {
       at += 1 + rd(at) * COORD_BYTES;             // coord events
       at += 1 + rd(at) * BG_BYTES;                // bg events
       const count = rd(at++);
-      for (let i = 0; i < Math.min(count, MAX_OBJECTS); i++) {
+      if (count > MAX_OBJECTS) throw new Error(`${count} objects is not a map`);
+      for (let i = 0; i < count; i++) {
         const o = at + i * OBJECT_BYTES;
-        out.push({
-          sprite: rd(o + OBJECT_SPRITE),
-          x: rd(o + OBJECT_X) - OBJECT_ORIGIN,
-          y: rd(o + OBJECT_Y) - OBJECT_ORIGIN,
-        });
+        const x = rd(o + OBJECT_X) - OBJECT_ORIGIN;
+        const y = rd(o + OBJECT_Y) - OBJECT_ORIGIN;
+        // **A tile off the map is not a tile**, which is the same rule
+        // `placedObjects` follows over work RAM and for the same reason: a read
+        // that has walked off the end of something gives plausible numbers, and
+        // an empty list makes a caller do nothing where a list of wrong tiles
+        // makes it do something wrong. This is what caught the sweep looking
+        // for the Gyms -- an object at (141,72) on a map twenty tiles wide.
+        if (size && (x < 0 || y < 0 || x >= size[0] || y >= size[1])) continue;
+        out.push({ sprite: rd(o + OBJECT_SPRITE), x, y });
       }
     } catch (e) {
       // Same as the other readers here: nonsense reads mean nothing placed,
@@ -223,6 +296,27 @@ export class World {
     }
     this.objectCache.set(id, out);
     return out;
+  }
+
+  /**
+   * How big a map is, in tiles, without standing on it: `[w, h]` or null.
+   *
+   * `collision.mapSize()` answers the same question off work RAM, which means
+   * only about the map that is loaded. This is the ROM's copy, so it can be
+   * asked about a room the pilot has not walked into -- and it is what lets
+   * `objectsOn` tell a real object list from a read that walked off the end of
+   * a group.
+   */
+  sizeOf(group, number) {
+    try {
+      const attr = this._attributes(group, number);
+      const h = this.gb.romByte(attr.bank, attr.addr + ATTR_HEIGHT);
+      const w = this.gb.romByte(attr.bank, attr.addr + ATTR_WIDTH);
+      if (!w || !h) return null;
+      return [w * TILES_PER_BLOCK, h * TILES_PER_BLOCK];
+    } catch (e) {
+      return null;
+    }
   }
 
   /** Every way off this map, edges and doors alike. */

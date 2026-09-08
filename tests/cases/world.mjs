@@ -22,7 +22,7 @@ const ORDER = ['UP', 'DOWN', 'LEFT', 'RIGHT'];
  *
  * `maps` is keyed by map key: `{ edges: { RIGHT: key, ... }, warps: [[x,y,key]] }`.
  */
-function cartridge(maps) {
+function cartridge(maps, { pad = 0 } = {}) {
   const GROUPS_BANK = 1, GROUPS_ADDR = 0x4000;
   const ATTR_BANK = 2, EVENT_BANK = 3;
   const rom = new Map();                       // "bank:addr" -> byte
@@ -31,16 +31,36 @@ function cartridge(maps) {
 
   // One pointer table per group, and a header per map inside it. Both are
   // little-endian words, which is how the ROM stores them.
+  //
+  // **The lists are packed, which is how the real cartridge lays them out**, and
+  // it matters: `MapGroupPointers` carries no count, so the only bound on a map
+  // number is the *next* group's pointer. This fake used to space the tables
+  // 0x400 apart, which is not a multiple of the nine-byte header -- so
+  // `mapCount` could not derive anything, stayed permissive, and the whole
+  // reason for the bound went untested. A fake that is laid out more
+  // conveniently than the thing it stands for is a fake that cannot fail.
   const groups = new Map();
-  let nextGroupTable = 0x5000, nextAttr = 0x6000, nextEvents = 0x100;
+  const perGroup = new Map();
   for (const key of maps.keys()) {
     const g = key >> 8;
-    if (!groups.has(g)) {
-      groups.set(g, nextGroupTable);
-      put16le(GROUPS_BANK, GROUPS_ADDR + (g - 1) * 2, nextGroupTable);
-      nextGroupTable += 0x400;
-    }
+    perGroup.set(g, Math.max(perGroup.get(g) || 0, key & 0xff));
   }
+  let nextGroupTable = 0x5000, nextAttr = 0x6000, nextEvents = 0x100;
+  // Every group index up to the last one gets a pointer, including the ones
+  // with no maps -- which is how the real table is: twenty-six pointers, one
+  // after another, and a group with nothing in it is a zero-length list rather
+  // than a hole. A fake with holes reads a zero for the next pointer and makes
+  // every count underivable, which is the case this is trying not to be in.
+  const lastGroup = Math.max(...perGroup.keys());
+  for (let g = 1; g <= lastGroup; g++) {
+    groups.set(g, nextGroupTable);
+    put16le(GROUPS_BANK, GROUPS_ADDR + (g - 1) * 2, nextGroupTable);
+    nextGroupTable += (perGroup.get(g) || 0) * 9 + pad;
+  }
+  // And the pointer past the last group. A real cartridge has whatever comes
+  // next in the bank; here it is deliberately *not* a sane step forward, so the
+  // last group's own count stays underivable -- which is the real case.
+  put16le(GROUPS_BANK, GROUPS_ADDR + lastGroup * 2, 0);
   for (const [key, spec] of maps) {
     const g = key >> 8, n = key & 0xff;
     const header = groups.get(g) + (n - 1) * 9;
@@ -226,4 +246,137 @@ test('a leg is named by its two maps, which is what a failure knows', async (t) 
   // Rather than by a direction: after a refusal the caller knows it tried to
   // get from here to there, and a warp has no direction at all.
   t.eq(World.leg(6147, 1289), '6147>1289', 'from and to');
+});
+
+
+// --- a map the cartridge does not have --------------------------------------
+
+test('a map number past the end of its group is not a map', async (t) => {
+  // **Measured on the cartridge, by a sweep looking for the Gyms.** Asking
+  // about map 55 of a group that has ten returned Violet's Gym -- the same
+  // objects, at the same tiles -- under six different group numbers, and put an
+  // object at (141,72) on a map twenty tiles wide. `MapGroupPointers` carries
+  // no count, so nothing was stopping the read: the header index just walked
+  // off into whatever came next.
+  //
+  // This file's own comment admitted it -- "a map number the ROM does not have
+  // reads as nonsense rather than failing" -- and that was true and harmless
+  // while the only things asking were the graph's exits, all of which exist.
+  const { world } = johto();
+  t.eq(world.mapCount(24), 5, 'group 24 holds five maps here');
+  t.true(world.hasMap(24, 5), 'the last of them is a map');
+  t.false(world.hasMap(24, 6), 'one past it is not');
+  t.false(world.hasMap(24, 55), 'and neither is fifty-five');
+  t.eq(world.neighbours(24, 55), [], 'so it has no neighbours');
+  t.eq(world.warps(24, 55), [], 'no doors');
+  t.eq(world.objectsOn(24, 55), [], 'and nothing standing on it');
+});
+
+test('a group with no maps in it has none, rather than all of them', async (t) => {
+  // A step of exactly nought between two pointers is an empty group, and that
+  // is a *derivation*, not a failure to derive -- so it refuses rather than
+  // staying permissive. Group 25 sits between two that have maps and has none.
+  const { world } = johto();
+  t.eq(world.mapCount(25), 0, 'nothing in it');
+  t.false(world.hasMap(25, 1), 'so not even the first');
+  t.eq(world.objectsOn(25, 1), [], 'and nothing to read off it');
+});
+
+test('the last group is left permissive, because nothing bounds it',
+     async (t) => {
+  // The bound is the *next* group's pointer, and the last group has none. Left
+  // permissive rather than guessed at: refusing a map that exists breaks a
+  // cartridge this app should support, and reading one that does not is caught
+  // by the coordinate check in `objectsOn`. Wrong in the cheaper direction.
+  const { world } = johto();
+  t.eq(world.mapCount(30), null, 'the last group will not say');
+  t.true(world.hasMap(30, 99), 'so it is not refused');
+});
+
+test('a group whose lists are padded is left permissive too', async (t) => {
+  // A hack that spaced its header lists for room gives a step that is a
+  // perfectly good positive number and *not* a multiple of nine -- so deriving
+  // a count from it would be arithmetic on a coincidence, and the count would
+  // be a fraction. Both halves of that test have to hold, which is why it is an
+  // `&&`: positive alone would divide 0x400 by nine and refuse map 46 of a
+  // group that has fifty.
+  const spaced = cartridge(new Map([
+    [mapKey(1, 1), {}], [mapKey(1, 2), {}], [mapKey(2, 1), {}],
+  ]), { pad: 4 });
+  t.eq(spaced.world.mapCount(1), null, 'a step of 22 says nothing about nine');
+  t.true(spaced.world.hasMap(1, 40), 'so nothing is refused');
+  t.eq(spaced.world.neighbours(1, 1), [], 'and a real map still reads');
+
+  const packed = cartridge(new Map([
+    [mapKey(1, 1), {}], [mapKey(1, 2), {}], [mapKey(2, 1), {}],
+  ]));
+  t.eq(packed.world.mapCount(1), 2, 'while a packed one counts');
+  t.false(packed.world.hasMap(1, 3), 'and bounds');
+});
+
+test('a map that does exist is not refused by any of this', async (t) => {
+  // The failure mode worth guarding against: a bound that is too clever
+  // silently loses real maps, and every symptom of that reads as the graph
+  // being wrong.
+  const { world } = johto();
+  for (const [g, n] of [[24, 1], [24, 2], [24, 5], [26, 1], [26, 2]]) {
+    t.true(world.hasMap(g, n), `${g}.${n} is a map`);
+  }
+  t.eq(world.neighbours(24, 2).length, 2, 'and still has its neighbours');
+});
+
+
+test('a count that reaches the sanity bound is a bad read, not a crowd',
+     async (t) => {
+  // **The bound was truncating and returning.** Asked about a map past the end
+  // of the *last* group -- the one nothing can bound -- the object reader
+  // answered with thirty-two objects at plausible tiles, which is exactly
+  // `MAX_OBJECTS`: it had believed the first thirty-two bytes of nonsense.
+  //
+  // A count that reaches the cap says the read is wrong, not that the map is
+  // crowded. No real map in Crystal carries anything close.
+  const GROUPS_BANK = 1, GROUPS_ADDR = 0x4000;
+  const rom = new Map();
+  const put = (b, a, v) => rom.set(`${b}:${a}`, v & 0xff);
+  const put16 = (b, a, v) => { put(b, a, v & 0xff); put(b, a + 1, v >> 8); };
+  // One group, one map, whose event block claims two hundred objects.
+  put16(GROUPS_BANK, GROUPS_ADDR, 0x5000);
+  put(GROUPS_BANK, 0x5000, 2);                    // attributes bank
+  put16(GROUPS_BANK, 0x5003, 0x6000);             // attributes address
+  put(2, 0x6001, 8); put(2, 0x6002, 5);           // 8 x 5 blocks
+  put(2, 0x6006, 3);                              // events bank
+  put16(2, 0x6009, 0x100);                        // events address
+  put(3, 0x102, 0);                               // no warps
+  put(3, 0x103, 0); put(3, 0x104, 0);             // no coord events
+  put(3, 0x105, 0);                               // no bg events
+  put(3, 0x106, 200);                             // and two hundred objects
+  const gb = { romByte: (b, a) => rom.get(`${b}:${a}`) || 0 };
+  const world = new World({ bank: () => GROUPS_BANK, addr: () => GROUPS_ADDR,
+                            has: () => true }, gb);
+  t.eq(world.objectsOn(1, 1), [],
+       'nothing, rather than the first thirty-two of it');
+});
+
+test('a map knows its own size without being stood on', async (t) => {
+  // Measured on the cartridge against two maps whose tile dimensions were
+  // already known from work RAM: Route 32's attributes read 45 and 10 for a map
+  // that is 20 by 90 tiles, and Route 31's read 9 and 20 for one that is 40 by
+  // 18. So height comes first and a block is two tiles each way.
+  //
+  // `collision.mapSize()` answers this off work RAM, which means only about the
+  // map that is loaded. This one can be asked about a room nobody has walked
+  // into -- which is what bounds the object reader.
+  const GROUPS_BANK = 1, GROUPS_ADDR = 0x4000;
+  const rom = new Map();
+  const put = (b, a, v) => rom.set(`${b}:${a}`, v & 0xff);
+  const put16 = (b, a, v) => { put(b, a, v & 0xff); put(b, a + 1, v >> 8); };
+  put16(GROUPS_BANK, GROUPS_ADDR, 0x5000);
+  put(GROUPS_BANK, 0x5000, 2);
+  put16(GROUPS_BANK, 0x5003, 0x6000);
+  put(2, 0x6001, 45); put(2, 0x6002, 10);         // Route 32's own numbers
+  const gb = { romByte: (b, a) => rom.get(`${b}:${a}`) || 0 };
+  const world = new World({ bank: () => GROUPS_BANK, addr: () => GROUPS_ADDR,
+                            has: () => true }, gb);
+  t.eq(world.sizeOf(1, 1), [20, 90], 'twenty by ninety tiles');
+  t.eq(world.sizeOf(1, 2), null, 'and a map with no size will not guess');
 });
