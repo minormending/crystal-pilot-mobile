@@ -192,8 +192,11 @@ const POTION = 18, BERRY = 154;
  * are both reachable.
  */
 function packing({ pocket = [[POTION, 1]], party = [{ hp: 10, maxHp: 40 }],
+                   // What the item does about a status, if anything: an
+                   // ANTIDOTE moves no HP at all.
+                   curesKeys = null,
                    packRow = 2, rows = 7, heals = 20, consumes = true,
-                   boxes = null, curPocket = 0, startItem = POTION,
+                   boxes = null, curPocket = 0, startItem = null,
                    // How many reads of the pocket happen before the removal is
                    // written back. The real cartridge lags: measured, a berry
                    // was still in `wItems` long after it had healed ten HP.
@@ -205,10 +208,14 @@ function packing({ pocket = [[POTION, 1]], party = [{ hp: 10, maxHp: 40 }],
     items: { 18: 'POTION', 154: 'BERRY' },
   }));
   const E = tasks.state.e.field;
-  const at = { box: 'start', cursor: 1, pocket: curPocket, item: startItem, row: 1 };
+  // The pack opens on the first entry of the pocket, which is what the
+  // cartridge does -- defaulting to a fixed id made a test with a different
+  // pocket look like the walk had overshot.
+  const at = { box: 'start', cursor: 1, pocket: curPocket, row: 1,
+               item: startItem ?? (pocket.length ? pocket[0][0] : 0xff) };
   const bag = pocket.map(([id, n]) => [id, n]);
   const mons = party.map((m) => ({ species: 155, level: 5, moves: [33, 0, 0, 0],
-                                   pp: [35, 0, 0, 0], ...m }));
+                                   pp: [35, 0, 0, 0], status: [], ...m }));
   const log = [];
   // The write-back the pocket owes, and when it lands.
   let pending = null, reads = 0;
@@ -232,6 +239,10 @@ function packing({ pocket = [[POTION, 1]], party = [{ hp: 10, maxHp: 40 }],
     const shape = shapeOf();
     return {
       ...state.read(worldRam(sym, { party: mons, items: bag })),
+      // The party as the fake holds it, so a status the item cleared is visible
+      // -- `worldRam` writes the byte and `state.read` decodes it, but the fake
+      // mutates the object rather than the bytes.
+      party: mons.map((m) => ({ ...m })),
       windowOpen: at.box !== 'closed',
       menuItems: shape ? shape.items : 0,
       menuTop: shape ? shape.top : 0,
@@ -254,6 +265,9 @@ function packing({ pocket = [[POTION, 1]], party = [{ hp: 10, maxHp: 40 }],
       const mon = mons[at.row - 1];
       if (mon && heals && mon.hp < mon.maxHp) {
         mon.hp = Math.min(mon.maxHp, mon.hp + heals);
+      }
+      if (mon && curesKeys) {
+        mon.status = (mon.status || []).filter((k) => !curesKeys.includes(k));
       }
       // Consumption is independent of healing on purpose: the cartridge spends
       // an item that turns out to do nothing, and refuses one that would have
@@ -313,7 +327,7 @@ test('an item spent for nothing is said differently from one never spent',
   const { tasks } = packing({ party: [{ hp: 10, maxHp: 40 }], heals: 0, consumes: true });
   const r = await tasks.useItemOn(POTION, 0);
   t.false(r.ok, 'still not a heal');
-  t.contains(r.message, 'spent and nothing healed', 'the bag moved, so this is the other one');
+  t.contains(r.message, 'spent and nothing changed', 'the bag moved, so this is the other one');
 });
 
 test('a pocket that catches up late is waited for, briefly', async (t) => {
@@ -470,4 +484,31 @@ test('a message that never clears is given up on rather than tapped for ever',
   tasks.push = async (b) => pressed.push(b);
   t.false(await tasks._pastTheMessage(5), 'the answer is no');
   t.eq(pressed.length, 5, 'and it is bounded');
+});
+
+test('a cure counts as the item having worked, though no HP moved', async (t) => {
+  // An ANTIDOTE moves no HP at all: what it changes is the status byte, which
+  // is the field this same pass taught the party reader to look at. Judging on
+  // HP alone would have made every cure report a failure -- and that failure
+  // would then have stopped the loop reaching for the next item.
+  const ANTIDOTE = 12;
+  const { tasks, mons } = packing({ pocket: [[ANTIDOTE, 1]],
+                                    party: [{ hp: 40, maxHp: 40, status: ['psn'] }],
+                                    heals: 0, curesKeys: ['psn'] });
+  const r = await tasks.useItemOn(ANTIDOTE, 0);
+  t.true(r.ok, 'it worked');
+  t.eq(r.gained, 0, 'without moving any HP');
+  t.eq(r.cured, ['psn'], 'and it says what it cured');
+  t.eq(mons[0].status, [], 'which is gone');
+});
+
+test('an item that cures nothing on a well Pokémon is still no effect',
+     async (t) => {
+  const ANTIDOTE = 12;
+  const { tasks } = packing({ pocket: [[ANTIDOTE, 1]],
+                              party: [{ hp: 40, maxHp: 40 }],
+                              heals: 0, consumes: false, curesKeys: ['psn'] });
+  const r = await tasks.useItemOn(ANTIDOTE, 0);
+  t.false(r.ok, 'nothing happened');
+  t.contains(r.message, 'no effect', 'and it says so');
 });

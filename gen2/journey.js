@@ -615,15 +615,35 @@ export class Journey {
    */
   async healFromBag(seen = null) {
     const s = seen || await this.snap();
-    const heals = (this.title && this.title.heals) || null;
     const rom = this.tasks && this.tasks.rom;
-    if (!heals || !rom) return { ok: false, stats: {}, message: 'no healing items known' };
-    // Fainted is a Center's job. Everything else is worth a Potion.
-    const hurt = s.party
+    if (!rom) return { ok: false, stats: {}, message: 'no cartridge to read' };
+
+    // Status first, and *before* the HP check rather than after it. Poison
+    // ticks a Pokemon while you walk, so a journey or a grind with a poisoned
+    // lead bleeds HP per step -- and a potion spent before the antidote is a
+    // potion spent into a leak.
+    //
+    // Before, because a party at *full HP* that is poisoned has nothing to mend
+    // and everything to cure: putting this after the `hurt` check meant the one
+    // party the status reader exists for was the one that returned early.
+    const cured = await this.cureFromBag(s);
+
+    const heals = (this.title && this.title.heals) || null;
+    const hurt = !heals ? [] : s.party
       .map((m, slot) => ({ ...m, slot }))
+      // Fainted is a Center's job. Everything else is worth a Potion.
       .filter((m) => m.hp > 0 && m.hp < m.maxHp)
       .sort((a, b) => a.hp / Math.max(1, a.maxHp) - b.hp / Math.max(1, b.maxHp));
-    if (!hurt.length) return { ok: false, stats: {}, message: 'nothing the bag can mend' };
+    if (!hurt.length) {
+      return {
+        ok: cured.length > 0,
+        stats: { mended: 0, cured: cured.join(', ') },
+        message: cured.length
+          ? `cured ${cured.length === 1 ? 'one Pokémon' : `${cured.length} Pokémon`}`
+            + ` out of the bag (${cured.join(', ')})`
+          : 'nothing the bag can mend',
+      };
+    }
 
     let mended = 0, spent = [];
     // The pocket is read once and then kept, decremented as things are spent.
@@ -670,15 +690,58 @@ export class Journey {
       if (after && after.hp > mon.hp) mended++;
     }
     const at = await this.snap();
+    const did = mended + cured.length;
     return {
-      ok: mended > 0,
-      stats: { mended, spent: spent.join(', '),
+      ok: did > 0,
+      stats: { mended, cured: cured.join(', '), spent: spent.join(', '),
                party: at.party.map((m) => `${m.hp}/${m.maxHp}`).join(' ') },
-      message: mended > 0
-        ? `mended ${mended === 1 ? 'one Pokémon' : `${mended} Pokémon`} out of the bag`
-          + (spent.length ? ` (${spent.join(', ')})` : '')
+      message: did > 0
+        ? `mended ${did === 1 ? 'one Pokémon' : `${did} Pokémon`} out of the bag`
+          + (spent.concat(cured).length ? ` (${spent.concat(cured).join(', ')})` : '')
         : 'nothing in the bag helped',
     };
+  }
+
+  /**
+   * Cure what is wrong with the party besides its HP, out of the bag.
+   *
+   * `cures` is the title's map of status key to item names, weakest first. The
+   * specific cure comes before the general one, so a FULL HEAL is not spent on
+   * a poisoning an ANTIDOTE would have fixed.
+   *
+   * Answers with the names it spent, so a caller can say what it did. Sleep is
+   * on the list and is the one that will time out on its own -- but not while
+   * you are walking, and a Pokemon asleep at the front of a grind loses every
+   * turn it is asleep for.
+   */
+  async cureFromBag(seen = null) {
+    const s = seen || await this.snap();
+    const cures = (this.title && this.title.cures) || null;
+    const rom = this.tasks && this.tasks.rom;
+    if (!cures || !rom) return [];
+    const pocket = new Map(s.items.map(([id, n]) => [id, n]));
+    const spent = [];
+    for (const mon of s.party) {
+      if (this.stopped) break;
+      // Fainted has no status worth curing: the faint is the problem, and only
+      // a Center answers it.
+      if (!mon.hp || !mon.status || !mon.status.length) continue;
+      for (const key of mon.status) {
+        const names = cures[key];
+        if (!names) continue;
+        const pick = rom.cheapestOf(
+          [...pocket.entries()].filter(([, n]) => n > 0), names);
+        if (!pick) continue;
+        this.say(`${this.nameOf(mon)} is ${key} — using ${pick.name}`);
+        const used = await this.tasks.useItemOn(pick.id, mon.slot);
+        // The pocket is read once and kept, for the reason `healFromBag` gives:
+        // it lags a use, so re-reading it picks the same spent item again.
+        pocket.set(pick.id, used.ok ? (pocket.get(pick.id) || 1) - 1 : 0);
+        if (used.ok) spent.push(pick.name);
+        else this.say(`${pick.name}: ${used.message}`);
+      }
+    }
+    return spent;
   }
 
   /** Run from anything that jumped us on the way. */

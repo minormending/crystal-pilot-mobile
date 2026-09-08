@@ -30,6 +30,15 @@ export const generic = {
   heals: ['berry', 'potion', 'fresh water', 'soda pop', 'lemonade',
           'moomoo milk', 'super potion', 'hyper potion', 'max potion',
           'full restore'],
+  // The stock cures, on the same grounds: a cartridge nobody has described is
+  // still a pokecrystal build, and these are the names that build ships.
+  cures: {
+    psn: ['psncureberry', 'antidote', 'full heal', 'full restore'],
+    par: ['przcureberry', 'parlyz heal', 'full heal', 'full restore'],
+    brn: ['burnt berry', 'burn heal', 'full heal', 'full restore'],
+    frz: ['ice berry', 'ice heal', 'full heal', 'full restore'],
+    slp: ['mint berry', 'awakening', 'full heal', 'full restore'],
+  },
   // No names, no healers, no grassy maps, no scripts. Each absence is a
   // capability the interface will not offer rather than a thing that fails.
 };

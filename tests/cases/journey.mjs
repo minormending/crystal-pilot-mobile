@@ -368,12 +368,17 @@ test('a map with nothing on it says so instead of walking', async (t) => {
 
 // --- healing out of the bag --------------------------------------------------
 
-const ITEMS = { 18: 'POTION', 154: 'BERRY', 26: 'FULL RESTORE', 19: 'SUPER POTION' };
+const ITEMS = { 18: 'POTION', 154: 'BERRY', 26: 'FULL RESTORE', 19: 'SUPER POTION',
+                12: 'ANTIDOTE', 173: 'PSNCUREBERRY', 45: 'PARLYZ HEAL' };
 const STOCK = ['berry', 'potion', 'super potion', 'full restore'];
+
+const CURES = { psn: ['psncureberry', 'antidote', 'full heal'],
+                par: ['przcureberry', 'parlyz heal', 'full heal'] };
 
 /** A Journey whose party, bag and item use are scripted. */
 function mender({ party = [{ hp: 10, maxHp: 40 }], items = [[18, 2]],
-                  heals = STOCK, gain = 20, works = () => true } = {}) {
+                  heals = STOCK, cures = CURES, gain = 20,
+                  works = () => true } = {}) {
   const sym = symbols();
   const state = new GameState(sym);
   const gb = new FakeGameBoy({ wram: worldRam(sym, {}) });
@@ -388,19 +393,30 @@ function mender({ party = [{ hp: 10, maxHp: 40 }], items = [[18, 2]],
       const e = bag.find(([b]) => b === id);
       if (e && --e[1] <= 0) bag.splice(bag.indexOf(e), 1);
       const mon = mons[slot];
-      if (!mon || mon.hp >= mon.maxHp) return { ok: false, message: 'no effect' };
+      if (!mon) return { ok: false, message: 'no effect' };
+      // A cure moves no HP at all: what it changes is the status byte. Which is
+      // why `useItemOn` cannot judge on HP alone.
+      const isCure = Object.values(cures || {}).some((names) =>
+        names.includes((ITEMS[id] || '').toLowerCase()));
+      if (isCure) {
+        const gone = mon.status || [];
+        mon.status = [];
+        return { ok: gone.length > 0, gained: 0, cured: gone,
+                 message: `cured ${gone.join(', ')}` };
+      }
+      if (mon.hp >= mon.maxHp) return { ok: false, message: 'no effect' };
       mon.hp = Math.min(mon.maxHp, mon.hp + gain);
-      return { ok: true, gained: gain, message: `+${gain} HP` };
+      return { ok: true, gained: gain, cured: [], message: `+${gain} HP` };
     },
   };
   const j = new Journey(gb, state, tasks, { off: 0, calibrate: () => true,
                                             playerPos: () => [1, 1], mapSize: () => [10, 10] },
                         { mapKey: async () => 1 }, () => {}, { route: () => null },
-                        { heals });
+                        { heals, cures });
   j.said = [];
   j.say = (m) => j.said.push(m);
-  j.snap = async () => ({ party: mons.map((m) => ({ ...m })), items: bag.map((b) => [...b]),
-                          inBattle: false });
+  j.snap = async () => ({ party: mons.map((m) => ({ status: [], ...m })),
+                          items: bag.map((b) => [...b]), inBattle: false });
   j.nameOf = (m) => `MON${m.slot}`;
   j.used = used;
   return j;
@@ -502,4 +518,57 @@ test('healNow on a fainted party walks, carrying potions or not', async (t) => {
   await j.healNow();
   t.eq(j.walked, 1, 'a Centre is the only thing that mends a faint');
   t.eq(j.used.length, 0, 'and no potion was spent finding that out');
+});
+
+test('the bag cures what a potion cannot', async (t) => {
+  // A potion does nothing about poison, and poison goes on doing damage while
+  // you walk -- so a potion spent before the antidote is a potion spent into a
+  // leak.
+  const j = mender({ party: [{ hp: 40, maxHp: 40, status: ['psn'] }],
+                     items: [[12, 1], [18, 2]] });
+  const r = await j.healFromBag();
+  t.true(r.ok, 'something was done');
+  t.eq(j.used.map((u) => u.id), [12], 'the antidote, and no potion');
+  t.contains(r.stats.cured, 'ANTIDOTE', 'and it says what it spent');
+});
+
+test('the specific cure comes before the general one', async (t) => {
+  // A FULL HEAL is not spent on a poisoning an ANTIDOTE would have fixed --
+  // which is the ball preference's rule, in a third pocket.
+  const j = mender({ party: [{ hp: 40, maxHp: 40, status: ['psn'] }],
+                     items: [[26, 1], [12, 1], [173, 1]] });
+  await j.healFromBag();
+  t.eq(j.used[0].id, 173, 'the berry first, being free and regrowing');
+});
+
+test('poisoned and hurt gets the cure and the potion', async (t) => {
+  const j = mender({ party: [{ hp: 10, maxHp: 40, status: ['psn'] }],
+                     items: [[12, 1], [18, 1]] });
+  const r = await j.healFromBag();
+  t.true(r.ok, 'both');
+  t.eq(j.used.map((u) => u.id).sort(), [12, 18], 'antidote and potion');
+});
+
+test('a cure the bag does not have is left alone rather than guessed at',
+     async (t) => {
+  const j = mender({ party: [{ hp: 40, maxHp: 40, status: ['par'] }],
+                     items: [[12, 1]] });
+  const r = await j.healFromBag();
+  t.false(r.ok, 'nothing the bag holds cures paralysis');
+  t.eq(j.used.length, 0, 'and an antidote was not tried on it');
+});
+
+test('a fainted Pokémon’s status is not cured', async (t) => {
+  // The faint is the problem, and only a Center answers it.
+  const j = mender({ party: [{ hp: 0, maxHp: 40, status: ['psn'] }],
+                     items: [[12, 1]] });
+  const r = await j.healFromBag();
+  t.false(r.ok, 'nothing to do here');
+  t.eq(j.used.length, 0, 'and no antidote spent on a corpse');
+});
+
+test('a cartridge whose title lists no cures cures nothing', async (t) => {
+  const j = mender({ party: [{ hp: 40, maxHp: 40, status: ['psn'] }],
+                     items: [[12, 1]], cures: null });
+  t.eq(await j.cureFromBag(), [], 'and says so by doing nothing');
 });

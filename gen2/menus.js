@@ -299,31 +299,47 @@ export function withMenus(Base) {
     // added one pass ago saying it settles immediately out on the map was
     // wrong. So the pocket is polled for, briefly, and its silence is reported
     // rather than believed: a heal that moved the HP is a heal.
-    const healed = (await this._bagSettles(itemId, had)).party[on];
-    const gained = healed ? healed.hp - target.hp : 0;
+    // **HP is not the only evidence, and assuming it was would have made every
+    // cure report a failure.** An ANTIDOTE moves no HP at all: what it changes
+    // is the status byte, which is the field this same pass taught the party
+    // reader to look at. So the question is "did anything about that Pokemon
+    // change", and there are two answers worth telling apart.
+    const after = (await this._settled(itemId, had)).party[on];
+    const gained = after ? after.hp - target.hp : 0;
+    const had_ = target.status || [];
+    const now = (after && after.status) || [];
+    const cured = had_.filter((k) => !now.includes(k));
     const left = (await this.snap()).items.find(([id]) => id === itemId);
     const spentIt = !left || left[1] < had;
-    if (gained > 0) {
-      return { ok: true, gained, spent: spentIt,
-               message: spentIt ? `+${gained} HP`
-                                : `+${gained} HP (the bag has not caught up)` };
+    if (gained > 0 || cured.length) {
+      const said = [gained > 0 ? `+${gained} HP` : null,
+                    cured.length ? `cured ${cured.join(', ')}` : null]
+        .filter(Boolean).join(', ');
+      return { ok: true, gained, cured, spent: spentIt,
+               message: spentIt ? said : `${said} (the bag has not caught up)` };
     }
-    // Nothing healed. Now the pocket is the question, because the two ways of
-    // getting here are different states: at full HP the game takes every press,
-    // says the item would have no effect and spends nothing -- measured -- and
-    // an item that went and did nothing is a different problem.
-    return { ok: false, gained: 0, spent: spentIt,
-             message: spentIt ? 'the item was spent and nothing healed'
+    // Nothing changed. Now the pocket is the question, because the two ways of
+    // getting here are different states: on a Pokemon the item cannot help the
+    // game takes every press, says it would have no effect and spends nothing --
+    // measured -- and an item that went and did nothing is a different problem.
+    return { ok: false, gained: 0, cured: [], spent: spentIt,
+             message: spentIt ? 'the item was spent and nothing changed'
                               : 'it would have had no effect' };
   }
 
   /**
-   * Give the item pocket a chance to catch up, and hand back a fresh snapshot.
+   * Wait for the pocket to be written back, and hand back a fresh snapshot.
+   *
+   * The pocket is the *slowest* of the three things a use changes -- measured:
+   * a BERRY moved ten HP while `wItems` still listed it -- which is exactly why
+   * it is the one to wait on. By the time it has caught up, the HP and the
+   * status certainly have; waiting on either of those instead would return
+   * early and leave `spent` reading false for an ordinary heal.
    *
    * Bounded, and it returns whatever it has rather than failing: the pocket not
    * settling is a thing to report, not a reason to stop.
    */
-  async _bagSettles(itemId, had, tries = BAG_SETTLE_TRIES) {
+  async _settled(itemId, had, tries = BAG_SETTLE_TRIES) {
     let s = await this.snap();
     for (let i = 0; i < tries; i++) {
       const entry = s.items.find(([id]) => id === itemId);

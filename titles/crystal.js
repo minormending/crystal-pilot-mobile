@@ -128,6 +128,23 @@ export const crystal = {
   heals: ['berry', 'potion', 'fresh water', 'soda pop', 'lemonade',
           'moomoo milk', 'super potion', 'hyper potion', 'max potion',
           'full restore'],
+  // What cures what, by status key and item name, weakest first.
+  //
+  // Names and here, for the same reason `heals` is: an item id is layout and an
+  // item name is content. The specific cure comes before the general one in
+  // every list, so a FULL HEAL is not spent on a poisoning an ANTIDOTE would
+  // have fixed -- the ball preference's rule again, in a third pocket.
+  //
+  // The berries are first where there is one, because Crystal grows them on the
+  // trees the Take row finds: PSNCUREBERRY on Route 30, and BURNT BERRY,
+  // ICE BERRY, PRZCUREBERRY and MINT BERRY elsewhere.
+  cures: {
+    psn: ['psncureberry', 'antidote', 'full heal', 'full restore'],
+    par: ['przcureberry', 'parlyz heal', 'full heal', 'full restore'],
+    brn: ['burnt berry', 'burn heal', 'full heal', 'full restore'],
+    frz: ['ice berry', 'ice heal', 'full heal', 'full restore'],
+    slp: ['mint berry', 'awakening', 'full heal', 'full restore'],
+  },
   // Every map, tile and door the scripts below walk to.
   //
   // They read these from the profile rather than closing over the constants,
