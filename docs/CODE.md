@@ -107,7 +107,7 @@ of the subtleties in sections 6 and 7.
 
 ## 2. The shape of it
 
-<!-- covers-api: app/main.js gen2/journey.js titles/crystal.js gen2/tasks.js gen2/nav.js gen2/world.js gen2/collision.js gen2/state.js gen2/romdata.js gen2/symbols.js gbcore/gb.js @ 5938f9e65f3c -->
+<!-- covers-api: app/main.js gen2/journey.js titles/crystal.js gen2/tasks.js gen2/nav.js gen2/world.js gen2/collision.js gen2/state.js gen2/romdata.js gen2/symbols.js gbcore/gb.js @ dd85b7b8e4cc -->
 
 Twenty-eight modules, in four directories, and the directories are the design:
 **an import may point down this list and never up.**
@@ -735,7 +735,16 @@ so the guard costs nothing and prevents the one way this could do harm.
 on the end of a report: *the USE box never appeared* says what the pilot
 expected, and not what turned up instead. That difference was measured the hard
 way while driving the bedroom PC — three probes failed to identify a box by its
-shape, and one look at its words, *CHRIS turned on the PC*, settled it.
+shape, and one look at its words, *CHRIS turned on the PC*, settled it. Ten
+failures carry it, across the field pack, the battle pack, the shop and a duel
+that will not start — which is nine more than the pass that added it wired up,
+and the shape this repository keeps finding.
+
+**The starter's name was the first thing it caught.** Every starter this app
+ever took was called AAAAAAAAAA, for twenty-eight passes, because Gen 2 asks two
+questions when you take one and A is right for only one of them. The fix is one
+button and is in [section 8](#8-the-errands); what the screen contributed was
+noticing at all.
 
 </details>
 
@@ -1025,7 +1034,7 @@ point those coordinates mean somewhere else entirely.
 
 ## 5. Crossing to the next map
 
-<!-- covers: gen2/journey.js gen2/world.js @ f583bb5cd162 -->
+<!-- covers: gen2/journey.js gen2/world.js @ 359d4b6274a8 -->
 
 A connection spans only part of a shared edge, so "walk west until something
 happens" does not work. `crossEdge()` closes the distance in stages, then tries
@@ -1187,7 +1196,7 @@ eight kilobytes a full snapshot copies, which is worth keeping distinct.
 
 ## 6. Battles
 
-<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 17dafed612d1 -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 87287aa2d841 -->
 
 ### Which move, and which question
 
@@ -1651,7 +1660,7 @@ fainted.
 
 ## 7. Catching something
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ 38bbf1902738 -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ 69365d67d1ef -->
 
 Catching is the most involved loop, because a Poké Ball's odds turn on how much
 HP is left. Throwing at a full-health target is mostly throwing balls away.
@@ -1748,7 +1757,7 @@ than by one handler that happened to have the data.
 
 ## 7a. Five that act on where you already are
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ a9800825b79b -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ a330ba11df31 -->
 
 Grind, hunt and catch all go *looking* for something. These five do the obvious
 thing with the situation you are already in, and take no parameters:
@@ -2019,7 +2028,7 @@ said *trainer battle: lost* **seven times**. One loss, reported seven ways.
 
 ## 7d. The counter, and the money it takes
 
-<!-- covers: gen2/menus.js gen2/state.js titles/crystal.js @ 26ac418d526c -->
+<!-- covers: gen2/menus.js gen2/state.js titles/crystal.js @ afca91fa5630 -->
 
 Everything the pilot could do until now used what it found. **Shop** walks to a
 mart and buys, which is the first thing it does that spends rather than
@@ -2096,7 +2105,7 @@ counter and came away with **five potions and ¥1800**, in 49 seconds.
 
 ## 7b. Saving, and getting the save out
 
-<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 17dafed612d1 -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 87287aa2d841 -->
 
 ```mermaid
 flowchart TD
@@ -2338,7 +2347,7 @@ because that failure is only otherwise discovered by reaching for the undo.
 
 ## 8. The errands
 
-<!-- covers: titles/crystal.js gen2/journey.js @ fb2e138ecd25 -->
+<!-- covers: titles/crystal.js gen2/journey.js @ cc01490e2690 -->
 
 Everything in this section is `crystal.js` — the only file in the app that names
 a Crystal map, a Crystal door or a Crystal NPC. What it stands on is
@@ -2365,6 +2374,43 @@ The class is *procedure*. Knowing that Elm's machine is read by facing it, or
 that the nurse's question defaults to yes, is not something a table can hold —
 so `reach` names a method rather than describing one, and `Journey.nearestHeal`
 calls `this[h.reach]()`. Coordinates are data; presses are code.
+
+**Two questions on the way out of the lab, and A is right for only one.**
+Taking a starter asks *Do you want CYNDAQUIL, the fire POKéMON?*, where yes is
+right, and then *Give a nickname to the CYNDAQUIL you received?*, where no is.
+Pressing through answers both, walks into the naming screen, and types the
+letter under the cursor — so **every starter this app took for twenty-eight
+passes was named AAAAAAAAAA**, and nothing could see it until
+[`screen.js`](#screenjs--the-words-on-screen) arrived.
+
+```mermaid
+flowchart TD
+    B["press A on the ball"] --> R["runUntilParty:<br/>press A, checking first"]
+    R -- "party grew" --> Q["takeDefaultName"]
+    Q --> L{"a window,<br/>with YES and NO?"}
+    L -- no --> P["press A: hurry the text"]
+    P --> L
+    L -- yes --> BB["press <b>B</b>"]
+    BB --> D["the name the game gave it"]
+```
+
+Two halves, and the split is what decides *which* question is being answered.
+`runUntilParty` presses A through the first one and stops the moment the party
+grows — the Pokémon is ours, so the next box is the one that must not be pressed
+through, and `watchThrow` has used that same signal to decline the same box
+since catching worked. `takeDefaultName` then handles the nickname question
+alone: **B on it is the game's own name for the thing**, measured by pausing a
+new game on that box and pressing it.
+
+Getting *to* the box is the part five cleverer attempts got wrong, and the trace
+says why. When the party grows the question's text has barely begun — the screen
+reads `G` — and it then **stops and waits for a button**, with
+`wWindowStackSize` reading zero the whole time. One press finishes it and draws
+the choice, which is up and stable from that frame on. So an A issued the instant
+the party grows only hurries the text, and a look taken straight afterwards sees
+no box and gives up; that is exactly what `declineNickname` did, twelve runs in a
+row. Which makes it a loop rather than a sequence: press A, look, press B the
+moment a choice is on screen.
 
 **And the procedures read the coordinates from the profile**, which they did not
 at first. When the object was introduced the scripts went on closing over the
@@ -2637,7 +2683,7 @@ This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ efda3fdb8334 -->
+<!-- covers: app/main.js index.html @ 3a7290692a94 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -3166,7 +3212,7 @@ seconds by a page whose loop was supposedly running.
 
 ### One thing at a time
 
-<!-- covers: app/main.js @ 01e19fc98b26 -->
+<!-- covers: app/main.js @ ea96dbb45b4f -->
 
 One Game Boy, one joypad, one canvas — so a great deal of this app is about
 making sure two things are never driving them at once. There are three claims,
@@ -3799,7 +3845,7 @@ they have been installed.
 
 ### Watching the other device's screen
 
-<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ 406731b7fe45 -->
+<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ 337ee96ec883 -->
 
 One device shows its screen; the other watches it, and plays it if the first
 one says so. The picture goes straight between them over WebRTC and never

@@ -274,6 +274,33 @@ Lv10, became four presets, two of them relative to the party's own level. The
 presets are only drawn when Grind is on the list, because with nothing to level
 they are four buttons that change a number nobody is using.
 
+## The bar carries two voices
+
+The status line has always mirrored the pilot's newest line — *heading left*,
+*using POTION* — because a job takes ninety seconds and the log is behind the
+door it just closed. That says what the pilot is **doing**. Under it now is what
+the *game* is doing, in quotes and italic:
+
+> **grinding slot 1 from Lv5 to Lv8**
+> battle 3: won
+> *“Would you like to save the game?”*
+
+It is a **dwell**, not a commentary, and two goes at it said why. Painting every
+change put *“17/ 20 CYN”* and *“: Go! CYNDAQU”* on the bar, because Gen 2 types
+its text a character at a time and most frames catch a sentence halfway.
+Painting only what held still for one poll showed nothing at all through a
+four-second grind, because during one the screen never holds still.
+
+So a line has to be there for a second before it is worth reading — and a second
+is exactly the length of something the pilot is *stuck on*: a box it cannot
+identify, a question nobody can see, a walk refusing a tile. A job flying
+through battles shows nothing here and should; the pilot's own line is the
+informative one then, and it is directly above.
+
+No third ink. The two lines are told apart by italic and by the game's own
+monospace, because a third step of grey would have to stay legible in three
+palettes for the sake of a distinction two typefaces already make.
+
 ## A battle is answered where the battle is
 
 Fight and Throw are not offers. They answer what is in front of you rather than
@@ -602,4 +629,4 @@ So this page carries a marker naming the files it describes and the hash they
 had when it was last read against them. `tools/docs-check` reports it when they
 move, and the pre-commit hook blocks on that report.
 
-<!-- covers: index.html app/main.js app/rows.js @ 8ee9bc1763ed -->
+<!-- covers: index.html app/main.js app/rows.js @ 86d5b1835802 -->

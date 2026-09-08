@@ -232,6 +232,16 @@ boring parts should hand that back rather than answer it. The second press walks
 out to the grass once you have chosen, and refuses with *pick a starter first*
 if you have not.
 
+**And the Pokémon keeps the name the game gives it**, which for twenty-eight
+passes it did not. Taking a starter asks two questions — *Do you want CYNDAQUIL,
+the fire POKéMON?*, where yes is right, and *Give a nickname to the CYNDAQUIL
+you received?*, where no is — and pressing A through both walked into the letter
+grid and spelled `AAAAAAAAAA`. Exactly the failure this section warns about for
+*your* name, in the one place it was happening unwatched. The pilot presses B on
+that question now, which is the game's own way of saying "keep the species
+name", and nothing in this app could see the difference until it could read the
+party screen.
+
 It also tells you which ball is which, because the game does not: they are three
 identical sprites, and the name only appears once you are already talking to
 one. Left to right on the table is Cyndaquil, Totodile, Chikorita — read off
@@ -470,6 +480,24 @@ failure raises: you are on the wrong route for what you asked for.
 
 Until the twenty-eighth pass only **Hunt** did this. Catch ran the same walk
 through the same grass and threw the tally away.
+
+## What the game is saying, while the pilot works
+
+The status line under the screen has always shown the pilot's newest step —
+*heading left*, *battle 3: won*. Under it now, in quotes, is what the **game**
+is showing:
+
+> *“Would you like to save the game?”*
+
+It only appears when the game has been sitting on something for a second or
+more, which is the useful case: a box the pilot cannot get past, a question you
+would otherwise never see, a walk refusing a tile. While a job is flying through
+battles the line stays empty — nothing is stuck, and the pilot's own step is the
+thing to read.
+
+This is also why failures read better now. *The pack never opened* said what the
+pilot expected; it now says what was there instead — *the pack never opened —
+the screen says: CHRIS turned on the PC*.
 
 ## Take: what the map is holding
 

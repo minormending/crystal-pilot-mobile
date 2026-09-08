@@ -336,7 +336,7 @@ second, which is there so the core's own waits finish, not to run a game.
   candidates and returned true standing three tiles clear of any. It checks the
   tile underfoot now.
 
-## Twenty-eight audits, and how each defect was actually found
+## Twenty-nine audits, and how each defect was actually found
 
 Everything above was watched happening. This section was the exception, and the
 exception was the point of it: after the ROM-hack work shipped, eleven passes
@@ -464,6 +464,9 @@ exactly why nothing failed.
 | 28 | `catch_` counted nothing, while `hunt` beside it counted everything | asking for a species by mistake | asking for the wrong thing |
 | 28 | `_menuRowCount` read a swallowed press as a one-row menu, in the primitive two features stand on | one dropped press | reading the primitive |
 | 28 | *and five fixes for the starter's name, none of which shipped* | *twelve runs* | *measuring each fix* |
+| 29 | six more box failures that could have quoted the screen and did not | asking who else should read a one-pass-old mechanism | **asking who calls what** |
+| 29 | the bar's screen reader could overlap its own reads and miscount a dwell | reading it back | reading it back |
+| 29 | *and the starter's name, fixed by a button nobody had asked about* | *being told* | **being told** |
 
 Five things in that table are worth more than the individual rows.
 
@@ -474,14 +477,14 @@ device, a second cartridge, a second Pokémon. What it measures is how much of
 the world you have to *arrange*, not how much you have to own: the fifth pass
 needed no hardware at all, only a party with a corpse in slot one.
 
-**Three of the ninety-five were caught by a check**, and only after the fix
+**Three of the ninety-eight were caught by a check**, and only after the fix
 had decided what to look for: the wiring group named the four modules still
 importing constants that had just been deleted, and the symbol group refused a
 new address that had not been added to the list that travels between devices.
 One more was caught by a *test*, and only because the test hung — the obvious
 `continue` for the party prompt advanced nothing in a loop bounded by balls
 thrown. That is the honest weight to give this repository's seventeen check
-groups and 395 tests: they hold a fix down, and they catch the fix that is
+groups and 408 tests: they hold a fix down, and they catch the fix that is
 itself wrong. They do not find the fault.
 
 **Measuring also rules things out, which is half of what it is for.** The
@@ -1564,9 +1567,10 @@ same `useItemOn` measured on the cartridge two passes ago. **This is the third
 standing gap in this document**, beside the remote-play picture and the ROM hack,
 and it has the same character: it is waiting on a *situation* rather than on more
 reading. The list is worth keeping in one place, because it is the honest answer
-to "what would you do next if you could" — and two later passes each added one
-in the same shape. The fifth is the odd one out: it is not waiting on a
-situation but on an idea, and five have been tried.
+to "what would you do next if you could" — and the twenty-seventh pass added a
+fourth in the same shape. A fifth stood here for one pass, the starter's
+nickname, and came off it when somebody who knew the game said which button to
+press.
 
 | Gap | What it needs |
 | --- | --- |
@@ -1574,7 +1578,6 @@ situation but on an idea, and five have been tried.
 | a title profile that is not Crystal | a `.gbc` and a `.sym` from a real hack |
 | a non-zero status byte | a wild Pokémon that gets a turn |
 | the duel moving on to a second trainer | two spawned trainers in range, one already beaten |
-| declining the starter's nickname | a way to answer a box that a press has to create |
 
 Sleep is worth one more line, because it is the one the decode could have got
 wrong quietly. **It is a counter, not a flag**: the low three bits hold the turns
@@ -1841,8 +1844,14 @@ mashing answers both, walks into the naming screen, and every further press
 types the letter under the cursor. `declineNickname` is called afterwards, by
 which time there is nothing left to decline.
 
-**Twelve runs and five approaches, and it is still not fixed.** Each failure
-says something, so each is written down:
+**Fixed on the twenty-ninth pass, by one button somebody knew about.** B on the
+nickname question is the game's own way of saying *keep the species name* —
+measured by pausing a new game on that box and pressing it: the nickname went
+from ten `$80`s to `82 98 8d 83 80 90 94 88 8b 50`, CYNDAQUIL. Twelve runs of
+looking for a cleverer answer, and the answer was a button.
+
+Getting *to* the box is the rest, and each of the five failures says something
+about how, so each is kept:
 
 | tried | measured |
 | --- | --- |
@@ -1860,11 +1869,26 @@ wait for and nothing to look at; and the same box *is* declined correctly when
 catching, because `watchThrow` presses A in a loop and checks between presses,
 so its caller has already done the waiting the primitive does not do.
 
-None of the five attempts shipped. Shipping a mechanism whose comment has to say
-it does not work is the "second way to do a thing" this repository has a check
-against, so the code is as it was and the defect is written down instead. It is
-cosmetic — the Pokémon is the right species at the right level — and it is real,
-and it is now the fifth [standing gap](#what-was-measured-and-what-was-not).
+None of the five shipped, and the pass ended with the code as it was and the
+defect written down — shipping a mechanism whose comment has to say it does not
+work is the "second way to do a thing" this repository has a check against.
+
+What the traces did establish is the shape of the fix that works. **The press
+that turns the text into a question is also the press the question receives**,
+so no amount of looking first can help; and the same box *is* declined correctly
+when catching, because `watchThrow` presses in a loop and checks *between*
+presses. So the fix is a loop rather than a sequence — press A, look, press B the
+moment a choice is on screen — with the party growing as the line between the
+two questions. Two halves:
+
+| | does |
+| --- | --- |
+| `runUntilParty` | presses A through *Do you want CYNDAQUIL?*, and stops the moment the Pokémon is ours |
+| `takeDefaultName` | presses A until a window is open **with YES and NO readable**, then presses B |
+
+Measured end to end on a fresh new game: *ready on Route 29 with a Lv5
+CYNDAQUIL*, nickname **CYNDAQUIL**, and the log saying *keeping the name the
+game gave it*.
 
 ### And one the same question turned up
 
@@ -1884,6 +1908,56 @@ of the lot to be dropped — and a dropped press leaves the cursor where it was,
 which read as the wrap. **One row.** `_openPack` then tried row 1 only and
 reported *the pack never opened*; `saveGame` tried row 1 only and could not find
 SAVE. Confirmed by mutation: reverting the fix makes the count read 1 of 7.
+
+### A twenty-ninth pass: the button somebody knew about
+
+The pass before measured a defect twelve times and could not fix it, and the fix
+turned out to be one button: **B on the nickname question keeps the species
+name.** Written up in full [above](#the-defect-the-screen-found-in-its-first-hour),
+because the five failed attempts are more instructive than the fix.
+
+It is worth saying plainly what happened, though. Twelve runs went into reading
+the box, waiting for the box, and pressing around the box — and none of them into
+asking what the button does. The traces were all correct and the conclusion drawn
+from them ("nothing simpler works") was correct about *looking*, and simply did
+not consider that the answer might not require looking at all.
+
+### And the screen went where it was needed
+
+`saying(message)` was added the pass before and wired to the four failures in
+the module it was written beside. Every other *a box I expected did not appear*
+message is exactly the kind the screen answers, and there were six of them: the
+battle pack, its ITEMS pocket and its USE box, the field pack's pocket and USE
+row, and the shop's BUY row. Which is this document's oldest recurring shape —
+a mechanism wired to the callers its author had in mind — caught this time on a
+mechanism one pass old.
+
+**And the bar's own reader had a race.** The interval callback is `async` and the
+interval does not wait for it, so a read that outlives its quarter-second — which
+is what happens under a task driving frames flat out — overlaps the next one, and
+both count towards the dwell. Two readings of the same frame are not a line that
+held still. Found by reading it back rather than by seeing it misbehave.
+
+### What the bar shows now
+
+The status line has always carried the pilot's own newest step. Under it now is
+what the *game* is showing, and getting that right took two attempts that are
+worth recording because both were reasonable:
+
+| tried | measured |
+| --- | --- |
+| paint every change | *“17/ 20 CYN”*, *“: Go! CYNDAQU”* — Gen 2 types a character at a time, so most frames catch a sentence halfway |
+| paint only what held still for one poll | nothing at all through a four-second grind: during one, the screen never holds still |
+| paint what has been there a **second** | *“Would you like to save the game?”* — and silence while a job is flying |
+
+Which turned the feature into a better one than the one intended: not a
+commentary but **what the game is showing that the pilot has not got past**,
+which is the thing worth seeing.
+
+One more measurement, small and easy to get wrong. A Gen 2 screen has *columns*:
+one tilemap row on the START menu carries `Save your` on the left and `EXIT` on
+the right, so collapsing whitespace reads as one sentence that says neither. A
+gap of three spaces or more is kept, as `Save your · EXIT progress`.
 
 ## The part that had to be redesigned
 
