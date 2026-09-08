@@ -1691,8 +1691,19 @@ async function refresh() {
   // Asked once per refresh, off the same snapshot the rest of the row context
   // comes from. Cheap: the graph and the ROM object lists are both cached, and
   // neither can change while a cartridge is loaded.
-  martsNear = boot && s.worldLoaded && typeof boot.martList === 'function'
-    ? boot.martList(s.map[0] * 256 + s.map[1]).length > 0 : false;
+  // **A mart the game will not let the pilot reach is not a mart within
+  // reach.** `martList` answers what the cartridge *has* near here; the Shop
+  // row's question is whether any of them can be walked to, and a leg the game
+  // has refused is the difference. Heal got this from `nearestPlace`, which
+  // both rows share; the Shop row asks a boolean of its own and was the caller
+  // that mechanism never reached.
+  if (boot && s.worldLoaded && typeof boot.martList === 'function') {
+    const here = s.map[0] * 256 + s.map[1];
+    martsNear = boot.martList(here)
+      .some((m) => !boot.shutBetween(here, m, (x) => x.from || x.map));
+  } else {
+    martsNear = false;
+  }
   const trainerType = (state.e.objectTypes || {}).trainer;
   trainersOnMap = collision && s.worldLoaded && s.wram && trainerType !== undefined
     ? collision.placedObjects(s.wram)

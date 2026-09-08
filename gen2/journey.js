@@ -217,6 +217,53 @@ export class Journey {
   }
 
   /**
+   * The room a place's door leads into, or null where it has no door.
+   *
+   * **The two lists of places name their two maps the opposite way round**, and
+   * this exists because guessing at the field names got it wrong twice in one
+   * afternoon:
+   *
+   *     healers   { map: the town,  inside: the room }
+   *     marts     { from: the town, map: the room }
+   *
+   * So `place.map` is a town in one list and a room in the other, and the only
+   * reliable tell is which *other* field the entry carries. Named here rather
+   * than fixed in the profiles because both shapes are declared data somebody
+   * may already have written, and a reader that copes is cheaper than a
+   * migration -- but the asymmetry is a wart, and this comment is where it is
+   * admitted rather than worked around silently.
+   */
+  static doorTo(place) {
+    if (place.inside !== undefined) return place.inside;
+    if (place.from !== undefined) return place.map;
+    return null;
+  }
+
+  /**
+   * Is the way from here into this *place* shut?
+   *
+   * **The leg a place is reached by is not the leg it sits on**, and getting
+   * that wrong is how the first version of this feature came to do nothing at
+   * all on a real cartridge. Route 32 is 2561 and its Pokemon Center is 2573;
+   * `healAtCenter` walks `through(door, inside)`, so the leg written off is
+   * `2561>2573`. The filter was asking about `2561>2561`, which nothing writes.
+   *
+   * It read correctly, it passed a test, and the test passed because the fake
+   * healer had been written to match the mistake: one map, no `inside`. Which
+   * is the whole argument for driving a feature against the cartridge before
+   * believing it.
+   *
+   * Two questions, because a place has two ways of being out of reach: the road
+   * to the town, and the door once you are standing in it.
+   */
+  shutBetween(from, place, mapOf = (p) => p.map) {
+    const outside = mapOf(place);
+    const door = Journey.doorTo(place);
+    if (door !== null && this.isShut(outside, door)) return true;
+    return this.isShut(from, outside);
+  }
+
+  /**
    * What the screen is saying, or '' when this cartridge cannot say.
    *
    * A cartridge whose symbol file does not name the tilemap has no words to
@@ -828,7 +875,19 @@ export class Journey {
     // The title's own names first, because a hand-written one can be better
     // than the cartridge's: "Elm's lab" against "NEW BARK TOWN", which is the
     // town the lab is in.
-    const found = this.world.routesFrom(here, keys);
+    // **Not through a leg the game has refused.** The rule this whole list
+    // follows is that offering a walk which cannot happen is worse than not
+    // offering it -- and until the pilot could learn about a gate, every leg the
+    // graph knew about was one it could take. Now some are not, so a place whose
+    // only route runs through a shut leg comes off the list rather than being
+    // offered with a leg count that is a fiction.
+    //
+    // Not swept for expiry here, because this is the one synchronous member of
+    // the family and the count lives in work RAM. It does not need to be: the
+    // interface asks `nearestHeal` on every refresh and that sweeps, so by the
+    // time these rows are painted a badge just won has already re-opened them.
+    const avoid = this.shut.size ? new Set(this.shut.keys()) : null;
+    const found = this.world.routesFrom(here, keys, { avoid });
     for (const k of keys) {
       if (found.has(k)) add(k, named[k], found.get(k).length);
     }
@@ -841,7 +900,7 @@ export class Journey {
     // Bounded by legs rather than by maps, because the graph reaches hundreds:
     // a list of two hundred rows is not an offer, it is a data dump. Six legs
     // is about as far as any job walks in one press.
-    for (const { key, legs } of this._within(here, maxLegs)) {
+    for (const { key, legs } of this._within(here, maxLegs, avoid)) {
       const own = this.landmarkName(key);
       if (own) add(key, own, legs);
     }
@@ -929,7 +988,7 @@ export class Journey {
   }
 
   /** Every map within `maxLegs` of here, nearest first. */
-  _within(here, maxLegs) {
+  _within(here, maxLegs, avoid = null) {
     const out = [];
     // A graph that cannot list exits is one this cannot walk outward from --
     // which a title with names still uses, so an absence here is not a reason
@@ -941,6 +1000,9 @@ export class Journey {
       const next = [];
       for (const key of edge) {
         for (const exit of this.world.exits(key)) {
+          // A leg the game itself refuses is not a leg, and a place reachable
+          // only through one is not reachable. Same set `travelTo` walks with.
+          if (avoid && avoid.has(World.leg(key, exit.key))) continue;
           if (seen.has(exit.key)) continue;
           seen.add(exit.key);
           out.push({ key: exit.key, legs });
@@ -1694,7 +1756,8 @@ export class Journey {
     // shut; Violet City is one leg north and open. Asked before the distance,
     // because a zero-cost answer used to short-circuit the whole search.
     if (wram && this.state) this.reopen(this.state.badgeCount(wram));
-    const open = places.filter((p) => !this.isShut(from, mapOf(p)));
+    const shutLegs = this.shut.size ? new Set(this.shut.keys()) : null;
+    const open = places.filter((p) => !this.shutBetween(from, p, mapOf));
     // Everything is shut, so there is nothing better to say than the last one
     // and no cost -- the same answer this gives when it has no graph to ask.
     if (!open.length) return { place: last, cost: undefined };
@@ -1702,7 +1765,10 @@ export class Journey {
     for (const p of open) {
       const there = mapOf(p);
       if (from === there) return { place: p, cost: 0 };
-      const route = this.world.route(from, there);
+      // **And not through a shut leg on the way.** A door being open says
+      // nothing about the road to it: an edge refused mid-route makes the place
+      // beyond it unreachable, and `route` already knows how to be asked that.
+      const route = this.world.route(from, there, { avoid: shutLegs });
       if (route === null) continue;
       let cost = (route.length - 1) * legCost;
       const first = route[0];
@@ -1733,8 +1799,10 @@ export class Journey {
     // priceable cost -- and a row that says *nearest is ROUTE 32* about a route
     // the pilot has already been turned back from is making a promise it knows
     // it cannot keep.
+    const door = Journey.doorTo(h);
     return { map: h.map, heal: () => this[h.reach](h), cost: picked.cost,
-             shut: this.shutSaid(from, h.map) };
+             shut: (door !== null && this.shutSaid(h.map, door))
+                   || this.shutSaid(from, h.map) };
   }
 
   /**

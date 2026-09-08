@@ -17,6 +17,7 @@ const HOME = 1, NEAR = 2, FAR = 3;
 
 /** A Journey with the map graph and the decode stubbed out. */
 function walker({ routes = {}, at = [5, 5], size = [60, 20], title = {},
+                  via = {},
                   world: game = { party: [{ hp: 4, maxHp: 20 }] } } = {}) {
   // `game.badges` rides along in the same snapshot, because that is where the
   // real one lives: a written-off route expires on a badge count, and the count
@@ -28,7 +29,16 @@ function walker({ routes = {}, at = [5, 5], size = [60, 20], title = {},
     playerPos: () => at,
     mapSize: () => size,
   };
-  const world = { route: (from, to) => (to in routes ? routes[to] : null) };
+  // `via` names the legs a destination's route is made of, so the fake can
+  // honour `avoid` the way the real graph does -- which is the only way to test
+  // that a shut leg *on the way* makes the place beyond it unreachable.
+  const world = {
+    route: (from, to, { avoid = null } = {}) => {
+      if (!(to in routes)) return null;
+      if (avoid && (via[to] || []).some((leg) => avoid.has(leg))) return null;
+      return routes[to];
+    },
+  };
   const nav = { mapKey: async () => HOME };
   const j = new Journey(gb, new GameState(sym), null, collision, nav,
                         () => {}, world, title);
@@ -148,8 +158,11 @@ test('a script that finishes is still reported as finished', async (t) => {
 function traveller({ reachable = {}, names = null, landmarks = {} } = {}) {
   const gb = new FakeGameBoy({ wram: worldRam(sym, {}) });
   const world = {
-    routesFrom: (from, targets) => new Map(
+    routesFrom: (from, targets, { avoid = null } = {}) => new Map(
       [...targets].filter((k) => k !== from && k in reachable)
+        // A star, so a destination's only leg is `HOME>k` -- which is exactly
+        // what a write-off names.
+        .filter((k) => !(avoid && avoid.has(`${from}>${k}`)))
         .map((k) => [k, new Array(reachable[k]).fill({ kind: 'edge' })])),
     // A star: everything reachable is one leg from home, which is enough to
     // exercise one-entry-per-landmark without modelling a map.
@@ -164,6 +177,32 @@ function traveller({ reachable = {}, names = null, landmarks = {} } = {}) {
   j.tasks = { rom: { landmarkName: (k) => landmarks[k] || '' } };
   return j;
 }
+
+test('Travel does not offer a place behind a leg the game refused',
+     async (t) => {
+  // The rule this list has always followed -- an offer nobody can take is
+  // worse than no offer -- meeting a fact the pilot could not learn until this
+  // pass. Every leg the graph knew about used to be one it could take.
+  //
+  // Both halves of the list, because they are two searches: the title's own
+  // names go through `routesFrom` and the cartridge's landmarks through
+  // `_within`, and wiring one and not the other is this repository's most
+  // frequent kind of defect.
+  const j = traveller({
+    names: { [NEAR]: 'Cherrygrove City' },
+    reachable: { [NEAR]: 1, [FAR]: 1 },
+    landmarks: { [FAR]: 'VIOLET CITY' },
+  });
+  t.eq(j.placesFrom(HOME).map((p) => p.name),
+       ['Cherrygrove City', 'VIOLET CITY'], 'both to start with');
+
+  j.shutLeg(HOME, NEAR, 'a guard', 0);
+  t.eq(j.placesFrom(HOME).map((p) => p.name), ['VIOLET CITY'],
+       'the title-named one goes when its leg is shut');
+
+  j.shutLeg(HOME, FAR, 'another guard', 0);
+  t.eq(j.placesFrom(HOME), [], 'and so does the landmark-named one');
+});
 
 test('the places offered are the named ones the graph can reach', async (t) => {
   const j = traveller({
@@ -1199,18 +1238,30 @@ test('a place the game turned us back from is not offered again', async (t) => {
   //
   // Written off by *leg*, because "shut from here" is what was measured: the
   // same Center may well be open from the south.
-  const title = { legCost: 25, healers: [{ map: 2, reach: 'healAtFar' },
-                                         { map: 1, reach: 'healAtNear' }] };
+  // **The real healer shape, and it is the point of this test.** An entry
+  // names two maps: `map` is the town you stand in, `inside` is the room behind
+  // the door. Route 32 is 2561 and its Center is 2573, and `healAtCenter` walks
+  // `through(door, inside)` -- so the leg written off is `2561>2573`, not
+  // `2561>2561`. The first version of this filter asked about the second, which
+  // nothing ever writes, and it did nothing at all on a cartridge.
+  //
+  // It passed a test, too, because the fake healer had been written with one
+  // map and no `inside` -- matching the mistake rather than the game.
+  const title = {
+    legCost: 25,
+    healers: [{ map: 2, inside: 20, reach: 'healAtFar' },
+              { map: 1, inside: 10, reach: 'healAtNear' }],
+  };
   const j = walker({ title, routes: { 2: [{ kind: 'warp' }] } });
   const under = await j.nearestPlace(title.healers, 1);
   t.eq(under.place.map, 1, 'under our feet, so it wins outright');
   t.eq(under.cost, 0, 'at no cost');
 
-  j.shutLeg(1, 1, "Wait up! / What's the hurry?", 0);
+  j.shutLeg(1, 10, "Wait up! / What's the hurry?", 0);
   const after = await j.nearestPlace(title.healers, 1);
   t.eq(after.place.map, 2, 'now the one a leg away');
   t.eq(after.cost, 0, 'priced by the route, not skipped');
-  t.eq(j.shutSaid(1, 1), "Wait up! / What's the hurry?",
+  t.eq(j.shutSaid(1, 10), "Wait up! / What's the hurry?",
        'and the words are kept, for a row that has to explain itself');
 });
 
@@ -1220,14 +1271,93 @@ test('choosing a place sweeps the write-offs itself', async (t) => {
   // sweeps by hand first proves the sweep and not the caller. This one does
   // not touch it: one badge in the snapshot, an entry written off at none, and
   // the near place has to come back on its own.
-  const title = { legCost: 25, healers: [{ map: 2, reach: 'healAtFar' },
-                                         { map: 1, reach: 'healAtNear' }] };
+  const title = {
+    legCost: 25,
+    healers: [{ map: 2, inside: 20, reach: 'healAtFar' },
+              { map: 1, inside: 10, reach: 'healAtNear' }],
+  };
   const j = walker({ title, routes: { 2: [{ kind: 'warp' }] },
                      world: { party: [{ hp: 4, maxHp: 20 }], badges: 1 } });
-  j.shutLeg(1, 1, 'a man with a rite of passage', 0);
+  j.shutLeg(1, 10, 'a man with a rite of passage', 0);
   const picked = await j.nearestPlace(title.healers, 1);
   t.eq(picked.place.map, 1, 'the near one, re-opened by the badge');
   t.eq(j.shut.size, 0, 'and the entry swept away by the asking');
+});
+
+test('a place beyond a shut leg is not offered either', async (t) => {
+  // A door being open says nothing about the road to it. An edge refused
+  // mid-route makes everything past it unreachable, and the graph already
+  // knows how to be asked that -- so the same set that skips a shut door is
+  // handed to `route` as the legs it may not use.
+  const title = {
+    legCost: 25,
+    healers: [{ map: 3, inside: 30, reach: 'healAtFar' },
+              { map: 2, inside: 20, reach: 'healAtNear' }],
+  };
+  const j = walker({
+    title,
+    routes: { 2: [{ kind: 'warp' }], 3: [{ kind: 'warp' }, { kind: 'warp' }] },
+    via: { 2: ['1>2'], 3: ['1>9', '9>3'] },
+  });
+  const before = await j.nearestPlace(title.healers, 1);
+  t.eq(before.place.map, 2, 'the near one to start with');
+
+  j.shutLeg(1, 2, 'a guard on the near road', 0);
+  const after = await j.nearestPlace(title.healers, 1);
+  t.eq(after.place.map, 3, 'the far one, once the near road is shut');
+
+  j.shutLeg(9, 3, 'a guard on the far road too', 0);
+  const both = await j.nearestPlace(title.healers, 1);
+  t.eq(both.cost, undefined, 'and with both shut it cannot price anything');
+});
+
+test('a shut mart is read off the other list shape, not the healers\' one',
+     async (t) => {
+  // The two lists name their two maps the opposite way round -- a healer's
+  // `map` is the town and its `inside` is the room; a mart's `from` is the town
+  // and its `map` is the room. So `place.map` means different things in the two
+  // lists, and a reader that guesses gets one of them wrong every time. It got
+  // both wrong, in turn, within an afternoon.
+  const marts = [{ map: 30, from: 3 }, { map: 10, from: 1 }];
+  const j = walker({ title: { legCost: 25, marts },
+                     routes: { 3: [{ kind: 'warp' }] } });
+  const mapOf = (m) => m.from || m.map;
+
+  const before = await j.nearestPlace(marts, 1, mapOf);
+  t.eq(before.place.map, 10, 'the mart in the town we are standing in');
+
+  // What `through(door, map)` writes for a mart: town to room.
+  j.shutLeg(1, 10, 'the shutters are down', 0);
+  t.true(j.shutBetween(1, marts[1], mapOf), 'that is the leg the reader wants');
+  const after = await j.nearestPlace(marts, 1, mapOf);
+  t.eq(after.place.map, 30, 'so the other town is chosen');
+});
+
+test('a place with no door at all is judged on the road to it', async (t) => {
+  // Elm's computer is a healer with one map and no door -- there is nothing to
+  // walk `through`. So the only question is the road, and asking about a door
+  // that does not exist must not answer yes.
+  const healers = [{ map: 2, reach: 'healAtFar' }, { map: 1, reach: 'healAtNear' }];
+  const j = walker({ title: { legCost: 25, healers },
+                     routes: { 2: [{ kind: 'edge', dir: 'LEFT' }] } });
+  t.eq(Journey.doorTo(healers[0]), null, 'no door named');
+  t.false(j.shutBetween(1, healers[1]), 'and nothing shut, so it is open');
+  j.shutLeg(1, 1, 'a guard', 0);
+  t.true(j.shutBetween(1, healers[1]), 'shut on the road, which is the only way in');
+});
+
+test('nearestHeal quotes the door that refused, not the town it is in',
+     async (t) => {
+  // Two maps in one entry, and the words belong to the leg that was walked.
+  // Reporting `map` instead of `inside` looked identical in every log and was
+  // simply always null.
+  const title = { legCost: 25,
+                  healers: [{ map: 1, inside: 10, reach: 'healAtNear' }] };
+  const j = walker({ title, routes: {} });
+  j.shutLeg(1, 10, "Wait up! / What's the hurry?", 0);
+  const pick = await j.nearestHeal(1);
+  t.eq(pick.map, 1, 'the town is what a row names');
+  t.eq(pick.shut, "Wait up! / What's the hurry?", 'and the door is what refused');
 });
 
 test('a badge re-opens every route that was written off', async (t) => {
@@ -1235,13 +1365,16 @@ test('a badge re-opens every route that was written off', async (t) => {
   // would be worse than asking again. One walk that would have worked is the
   // cost of being wrong this way round; the same wall on every press is the
   // cost of being wrong the other.
-  const title = { legCost: 25, healers: [{ map: 2, reach: 'healAtFar' },
-                                         { map: 1, reach: 'healAtNear' }] };
+  const title = {
+    legCost: 25,
+    healers: [{ map: 2, inside: 20, reach: 'healAtFar' },
+              { map: 1, inside: 10, reach: 'healAtNear' }],
+  };
   const j = walker({ title, routes: { 2: [{ kind: 'warp' }] },
                      world: { party: [{ hp: 4, maxHp: 20 }], badges: 1 } });
-  j.shutLeg(1, 1, 'a man with a rite of passage', 0);
+  j.shutLeg(1, 10, 'a man with a rite of passage', 0);
   t.eq(j.reopen(1), 1, 'one badge beats the none it was shut with');
-  t.false(j.isShut(1, 1), 'so the leg is open again');
+  t.false(j.isShut(1, 10), 'so the leg is open again');
   const after = await j.nearestPlace(title.healers, 1);
   t.eq(after.place.map, 1, 'so the near one is offered again');
   t.eq(j.shut.size, 0, 'and the write-off is gone rather than merely ignored');
