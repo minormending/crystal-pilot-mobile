@@ -117,17 +117,75 @@ section gives. Everything by hand runs against a local build.
 
 ```mermaid
 flowchart BT
-    C["the app"] --> T["./run-tests<br/>450 behaviour tests"]
+    C["the app"] --> T["./run-tests<br/>511 behaviour tests"]
     C --> A["tools/check-app<br/>17 groups"]
-    C --> D["tools/docs-check<br/>27 tracked sections"]
+    C --> D["tools/docs-check<br/>31 tracked sections"]
     C --> V["tools/coverage<br/>what the suite never runs"]
-    T --> M{{"mutation testing<br/>change a line, see who notices"}}
+    T --> M["tools/mutate<br/>break a line, see who notices"]
     A --> K["tools/check-checks<br/>break each group's own subject"]
     T -.-> V
-    M -.->|"13 of 15 caught"| R(["the suite is load-bearing"])
+    M -.->|"survivors, by file"| R(["the suite is load-bearing"])
     K -.->|"17 of 17 bite"| R2(["the groups are awake"])
-    V -.->|"63%, and where"| R3(["the gaps are known"])
+    V -.->|"65%, and where"| R3(["the gaps are known"])
 ```
+
+The two on the right are the same idea pointed at different subjects, and the
+pairing is the point: `check-checks` asks whether the *static checks* still
+bite, and `mutate` asks whether the *tests* do. Both work by breaking something
+on purpose in a copy of the tree.
+
+### Whether the tests would notice
+
+```bash
+tools/mutate                       # every module, sampled
+tools/mutate gen2/journey.js       # one file, every mutation
+tools/mutate gen2 --all            # no sampling
+tools/mutate --limit 60 --seed 7   # a reproducible slice
+tools/mutate -k shut               # only lines whose text matches
+tools/mutate gen2/state.js --list  # print the mutations, run nothing
+```
+
+**Coverage answers which lines ran, which is much weaker than it looks.** A line
+runs every time the suite touches the function around it, whether or not
+anything asserted on what it did. This changes one small thing — `&&` to `||`, a
+number to zero, a `true` to `false` — runs the suite, and reports the changes
+nothing caught.
+
+The first run of it made the case better than any argument could. `collision.js`
+sat at 51% line coverage, which sounds like a gap and reads as a plateau.
+Mutation said **18%**, in the module that decides where the pilot may walk: the
+wall and water rules, the ledge and warp ranges, the pathfinder and all four of
+`furthestToward`'s direction comparators could be inverted and the suite passed.
+The cause was one line in a fake — every collision test handed the decode
+`{ romByte: () => 0 }`, so every tile on every map answered LAND. It is 66% now.
+
+A **survivor** is one of three things and all three are worth reading:
+
+* a line nothing asserts on — the honest gap
+* a line whose behaviour does not matter — dead code, or a guard that is belt to
+  another's braces. Two of those have been *deleted* on this evidence rather
+  than tested, which is the better outcome.
+* a mutation that is not really a change — `x > 0` to `x >= 0` where x is never 0
+
+It exits 0 with survivors on purpose. Some guards here are deliberately
+redundant, and a tool that failed the build for those would be turned off.
+
+Three things it had to get right, two of which were bugs first:
+
+* **Comments and strings are never touched.** The prose here outweighs the code
+  better than two to one and is full of `&&`, of numbers, and of the words the
+  game says. The first draft produced hundreds of mutations of documentation,
+  every one of which "survived".
+* **One tree per worker process.** It was one per task index, which is a race,
+  and it was measured as one: two runs over the same code said 69 caught and
+  then 59. The honest number was 59; the 69 was corruption being counted as the
+  suite noticing. **A tool whose answer is not reproducible is worse than none,
+  because it is believed once.**
+* **Its own watchdog.** `run-tests` wraps the suite in a subshell because an
+  in-process timer can be starved by a microtask loop — which several mutations
+  provoke. `subprocess` is a separate process by construction, which satisfies
+  the same argument for a third of the wall clock, and the limit is set from the
+  clean run rather than picked.
 
 ### What the tests never run
 
@@ -291,6 +349,48 @@ that.
 two WebRTC ends as `host` and `watcher` — so anything can be driven and watched
 from a console rather than reasoned about. `boot` is the title's driver, which is
 where the walks and the errands live.
+
+### A shorthand for the console
+
+```js
+// paste tools/dev-probe.js into the console at ?dev=1
+await DEV.keep('3')       // save in-game, then copy the battery to a slot
+await DEV.load('3')       // put it back, boot it, and unstick it
+await DEV.at()            // where, who, how hurt — always a fresh read
+await DEV.watch(b => b.clearHere(), 60)   // run a job, collect what it said
+await DEV.grid(9)         // the collision map around the player, as a picture
+```
+
+Not part of the app: nothing imports it, `?dev=1` does not load it, and the
+service worker's shell does not list it. It exists because verification against
+the cartridge is the only method here that can refuse an assumption the code and
+its tests share — the thirty-fourth pass turned on exactly that — and it cost
+six fiddly steps every time, two of which are easy to get wrong in ways that
+read as the app being broken:
+
+* **A page reload loses the running game.** The emulator library persists a
+  cartridge only when something asks it to, and its own store held *no record at
+  all* after a save this app had verified byte for byte. One of our slots is the
+  only copy, so `keep` before anything that reloads.
+* **`collision.playerPos()` reads the snapshot it was handed**, not live work
+  RAM. A stale read cost one pass a phantom "ledge hop" and two hours of chasing
+  a pathfinder that was fine. Everything in `DEV` re-snapshots first.
+
+`load` also presses through the script a restored game wakes in, which is why
+`saves.install` refuses on a hidden page at all: the ROM does reload, and the
+game that comes up will not take a single button press — START included — until
+something runs the scripts.
+
+`grid` earned itself in one call. Asked why a sweep had stopped, it drew:
+
+```
+  7 .o......#..
+  8 .@.....###.
+```
+
+which is the pilot at (1,8) and a trainer directly above — so the walk had
+worked and the trainer was simply already beaten, a thing three numbers in a row
+would not have said.
 
 Sharing is tested by serving the same tree on **two ports** and treating them as
 two devices: separate origins mean separate IndexedDB and localStorage, which is
