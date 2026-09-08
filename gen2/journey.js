@@ -84,6 +84,10 @@ const CLEAR_SLACK = 3;
 // that is a thousand of the three the pilot tends to have.
 const GYM_POTIONS = 4;
 
+// How many goes at reaching the leader. More than a doorway gets, because the
+// room between the pilot and them is the whole point of a Gym's layout.
+const LEADER_TRIES = 6;
+
 // Reaching the nickname question: how many presses to spend getting there, and
 // how long to let the screen settle between them. The text ahead of it is two
 // pages, so a handful is plenty -- and each poll is cheap because it is a read
@@ -2003,7 +2007,24 @@ export class Journey {
                    : `could not get into the Gym at ${where}` };
       }
     }
+    // The trainers first, because they are levels and because the leader's room
+    // is usually past them.
     const swept = await this.clearHere();
+    // **Then the leader, who is not one of them.** Read off Violet's Gym in work
+    // RAM: Falkner is object 1 at (5,1) with type 0 -- a script -- while the two
+    // Bird Keepers are type 2. `clearHere` fights what the map calls a trainer,
+    // so it beat the Keepers, reported *everyone here has already been beaten*,
+    // and left without a badge. His battle starts by being talked to.
+    if (gym.leaderAt && !(await this.snap()).party.every((m) => m.hp === 0)) {
+      await this.leaderFight(gym);
+    }
+    // **The badge is handed over after the battle, not by it.** Measured:
+    // Falkner went down for ¥675 and `hasBadge` still read false, with a script
+    // running and his "just because you beat me!" on the screen. The award is
+    // in that speech. Reading the case before pressing through it says the Gym
+    // was not beaten about a Gym that was -- which is the same shape as
+    // reading the ITEM pocket before the game has put the thing in it.
+    await this.runScripts();
     const after = await this.snap();
     const won = after.wram ? this.state.hasBadge(after.wram, gym.badge) : null;
     const stats = {
@@ -2020,6 +2041,41 @@ export class Journey {
     // the party ran out, the trainers ran out, or a battle was lost.
     return { ok: false, stats,
              message: `no badge yet — ${swept.message}` };
+  }
+
+  /**
+   * Walk up to a gym leader and start the battle by talking to them.
+   *
+   * A script object rather than a trainer, so none of the duelling machinery
+   * finds it: `_approach` puts the pilot on a neighbouring tile facing the
+   * right way, and then it is the same press-and-watch as a doorway.
+   *
+   * Mends out of the bag first, because this is the fight the potions were
+   * bought for and there is no Center on the way to it.
+   */
+  async leaderFight(gym) {
+    for (let go = 0; go < LEADER_TRIES; go++) {
+      if (this.stopped) return { ok: false, message: 'stopped' };
+      const s = await this.snap();
+      if (s.inBattle) return this._fightDuel(s);
+      if (s.party.some((m) => m.hp === 0)) {
+        return { ok: false, message: 'nobody fit to send out' };
+      }
+      if (s.party.some((m) => m.hp < m.maxHp)) await this.healFromBag(s);
+      const from = await this._approach(gym.leaderAt);
+      if (!from) {
+        await this.runScripts();
+        continue;
+      }
+      this.say(`talking to ${gym.leader || 'the leader'}`);
+      await this.nav.step(from.face);
+      const met = await this._awaitDuel();
+      if (met) return this._fightDuel(met);
+      // Reached and said nothing back. Which on a leader means the badge is
+      // already won, or something in the room is still talking.
+      await this.runScripts();
+    }
+    return { ok: false, message: `${gym.leader || 'the leader'} would not fight` };
   }
 
   /** What `clearHere` has to say for itself. */
@@ -2053,9 +2109,18 @@ export class Journey {
     }
     // Cleared. Worth saying against the map's own total, because "beat three"
     // and "beat the three that were here" are different claims.
-    return placed && stats.won >= placed
-      ? `${beat}${money} — everyone on this map`
-      : `${beat}${money}`;
+    if (placed && stats.won >= placed) return `${beat}${money} — everyone on this map`;
+    // **And short of the total is not the same as done.** Measured inside
+    // Falkner's Gym: one Bird Keeper beaten, two more on the map, and this said
+    // *beat one trainer, ¥126* -- which reads as a finished job. They either
+    // declined, which means already beaten, or could not be reached; this
+    // cannot tell those apart and does not pretend to, but it can say the
+    // number, and the number is the part that was missing.
+    const left = placed - stats.won;
+    if (left > 0) {
+      return `${beat}${money} — ${left} more on this map did not fight`;
+    }
+    return `${beat}${money}`;
   }
 
   /** Press until the battle the trainer owes us turns up. */

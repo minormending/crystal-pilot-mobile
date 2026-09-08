@@ -730,9 +730,13 @@ function dueller({ trainers = () => [], at = [5, 5], starts = true,
 function gymGoer({ badge = 0, has = false, inside = 2567, at = 2565,
                    trainers = 2, wins = true, enter = true } = {}) {
   const sym = symbols();
+  // `leaderAt` because a leader is a *script* object, not a trainer: Falkner is
+  // object 1 at (5,1) with type 0 while the Bird Keepers are type 2, so nothing
+  // in the duelling machinery finds him and the tile has to be declared.
   const title = { legCost: 25, heals: ['potion'],
                   gyms: [{ map: at, inside, door: [18, 17],
-                           leader: 'FALKNER', badge, opens: 'the road south' }] };
+                           leader: 'FALKNER', leaderAt: [5, 1], badge,
+                           opens: 'the road south' }] };
   let here = at, badges = has ? 1 << badge : 0;
   const gb = new FakeGameBoy({ wram: worldRam(sym, {}) });
   const j = new Journey(gb, new GameState(sym), null,
@@ -766,8 +770,50 @@ function gymGoer({ badge = 0, has = false, inside = 2567, at = 2565,
              message: wins ? `beat ${trainers} trainers` : 'nobody fit to send out' };
   };
   j.fought = () => fought;
+  // Talking to the leader is its own step, stubbed to nothing here so the tests
+  // that are about the badge or the sweep are not also about the walk across a
+  // gym floor. The two that *are* about it replace this.
+  j.leaderFight = async () => ({ ok: true, won: true, message: 'won the battle' });
   return j;
 }
+
+test('the leader is talked to, because a leader is not a trainer', async (t) => {
+  // **Read off Violet's Gym in work RAM.** Falkner is object 1 at (5,1) with
+  // type 0 -- a *script* -- while the two Bird Keepers at (5,6) and (2,10) are
+  // type 2. `clearHere` fights what the map calls a trainer, so it beat the
+  // Keepers, reported *everyone here has already been beaten*, and left without
+  // a badge. His battle starts by being talked to.
+  const j = gymGoer();
+  let talked = false;
+  j.clearHere = async () => ({ ok: true, stats: { won: 2, prize: 200 },
+                               message: 'beat 2 trainers' });
+  j.leaderFight = async (gym) => {
+    talked = true;
+    j.gb.wram[symbols().addr('wJohtoBadges') - 0xc000] |= 1 << gym.badge;
+    return { ok: true, won: true, message: 'won the battle' };
+  };
+  const r = await j.beatGym((await j.gymList(2565))[0]);
+  t.true(talked, 'the leader was talked to');
+  t.true(r.ok, `and the badge is in: ${r.message}`);
+});
+
+test('the badge is read after the speech, not before it', async (t) => {
+  // **Measured.** Falkner went down for ¥675 and `hasBadge` still read false,
+  // with a script running and his "just because you beat me!" on the screen:
+  // the award is *in* that speech. Reading the case before pressing through it
+  // says the Gym was not beaten about a Gym that was -- the same shape as
+  // reading the ITEM pocket before the game has put the thing in it.
+  const j = gymGoer();
+  const at = symbols().addr('wJohtoBadges') - 0xc000;
+  j.clearHere = async () => ({ ok: true, stats: { won: 2, prize: 200 },
+                               message: 'beat 2 trainers' });
+  // The battle ends and the badge is *not* set. Only pressing through gives it.
+  j.leaderFight = async () => ({ ok: true, won: true, message: 'won the battle' });
+  j.runScripts = async () => { j.gb.wram[at] |= 1; return true; };
+  const r = await j.beatGym((await j.gymList(2565))[0]);
+  t.true(r.ok, `the badge arrived with the speech: ${r.message}`);
+  t.eq(r.stats.badge, true, 'and is read as in the case');
+});
 
 test('a badge won is the evidence, and it says what it opens', async (t) => {
   const j = gymGoer();
@@ -996,6 +1042,42 @@ test('everybody on the map is fought, one after another', async (t) => {
   t.eq(r.stats.prize, 300, 'and the money added up');
   t.contains(r.message, 'everyone on this map',
              'said against the map’s own total');
+});
+
+test('beating some of a map is not the same as clearing it', async (t) => {
+  // **Measured inside Falkner's Gym.** One Bird Keeper beaten, two more on the
+  // map, and the sweep said *beat one trainer, ¥126* -- which reads as a
+  // finished job. Whether the other two declined or could not be reached is
+  // not something this can tell, and it does not pretend to; the number is the
+  // part that was missing.
+  const three = [{ x: 9, y: 9, sprite: 39 }, { x: 7, y: 6, sprite: 39 },
+                 { x: 2, y: 10, sprite: 39 }];
+  let asked = 0;
+  const j = dueller({
+    placed: three,
+    // Only the first ever answers, which is what "unreachable or already
+    // beaten" looks like from inside the loop.
+    trainers: () => (asked++ === 0 ? [three[0]] : []),
+    open: (x, y) => x === 9 || y === 9,
+  });
+  const r = await j.clearHere();
+  t.eq(r.stats.won, 1, 'one beaten');
+  t.contains(r.message, 'beat one trainer', 'said');
+  t.contains(r.message, '2 more on this map did not fight', 'and so is the rest');
+  t.false(r.message.includes('everyone'), 'no claim to have cleared it');
+
+  // Exactly one left, which is the boundary: nought left is a cleared map and
+  // takes the branch above, so this is the smallest number this sentence is
+  // ever about.
+  let once = 0;
+  const two = [{ x: 9, y: 9, sprite: 39 }, { x: 7, y: 6, sprite: 39 }];
+  const j2 = dueller({
+    placed: two,
+    trainers: () => (once++ === 0 ? [two[0]] : []),
+    open: (x, y) => x === 9 || y === 9,
+  });
+  const r2 = await j2.clearHere();
+  t.contains(r2.message, '1 more on this map did not fight', 'one is still said');
 });
 
 test('one trainer is one trainer, and the map is only claimed when known',

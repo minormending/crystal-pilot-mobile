@@ -170,8 +170,15 @@ export const crystal = {
   // Falkner sets bit 0. Which bit means which badge is a fact about the story,
   // so it belongs here; counting the bits is the engine's job.
   gyms: [
+    // `leaderAt` is where the leader stands, and it has to be declared because
+    // **a gym leader is not a trainer**. Read off Violet's Gym in work RAM:
+    // Falkner is object 1 at (5,1) with type 0 -- a *script* -- while the two
+    // Bird Keepers at (5,6) and (2,10) are type 2. So `clearHere`, which fights
+    // what the map calls a trainer, can beat the Keepers and could never beat
+    // him: his battle starts by being talked to, not by crossing a sight line.
     { map: VIOLET_CITY, inside: VIOLET_GYM, door: [18, 17],
-      leader: 'FALKNER', badge: 0, opens: 'the road south out of Violet' },
+      leader: 'FALKNER', leaderAt: [5, 1], badge: 0,
+      opens: 'the road south out of Violet' },
   ],
   grassyMaps: [ROUTE_29, ROUTE_30, ROUTE_31],
   // Where things can be bought, and how to get to the counter.
