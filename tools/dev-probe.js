@@ -21,6 +21,7 @@
 //     await DEV.at()           where, who, how hurt -- always a fresh read
 //     await DEV.watch(fn, 60)  run a job and report what it said and did
 //     await DEV.grid(9)        the collision map around the player, as a picture
+//     DEV.clipped()            every line on screen that is cut off
 //
 // Not part of the app: nothing imports it, `?dev=1` does not load it, and the
 // service worker's shell does not list it. It is a note to whoever is next at
@@ -51,7 +52,12 @@
       const saved = await P.tasks.saveGame();
       // `capture` refuses a battery with no save in it, which is the whole
       // reason the in-game save has to come first rather than after.
-      const kept = await P.saves.capture(slot, { note: note || await where() });
+      // `{where}`, not `{note}`: paintSlots reads `meta.where` and `meta.lead`,
+      // so a slot kept from here showed a bare timestamp in the app -- three
+      // rows reading `2  13:54` with nothing to tell them apart, which is
+      // exactly what a slot exists to avoid. Found by looking at the card this
+      // tool had filled.
+      const kept = await P.saves.capture(slot, { where: note || await where() });
       return { saved: saved.ok, kept: kept.message };
     },
 
@@ -189,6 +195,35 @@
     },
 
     /**
+     * Every line on screen that is cut off, and what it says in full.
+     *
+     * A `jstate` is one nowrap line with an ellipsis, which is the right shape
+     * for a row and the wrong shape for a sentence -- so a string written four
+     * words too long reaches the phone with the half that mattered missing, and
+     * reads as a bug in whatever wrote it. `nothing from this session yet`
+     * arrived as "nothing from this sessi…" the day it was written, and the
+     * only reason it was caught is that somebody happened to look at that row.
+     *
+     * `scrollWidth > clientWidth` is the honest test, and it needs the real
+     * layout at the real width -- which is why this is a console call on a
+     * phone-sized viewport rather than a check in `tools/`.
+     */
+    clipped(root = document) {
+      const out = [];
+      for (const el of root.querySelectorAll('*')) {
+        if (el.children.length) continue;          // leaves: the text is here
+        if (!el.checkVisibility({ checkOpacity: true,
+                                  contentVisibilityAuto: true })) continue;
+        if (el.scrollWidth > el.clientWidth + 1) {
+          out.push({ where: el.id || el.className || el.tagName,
+                     text: (el.textContent || '').trim(),
+                     over: el.scrollWidth - el.clientWidth });
+        }
+      }
+      return out;
+    },
+
+    /**
      * The collision map around the player, as a picture.
      *
      * Because reading twenty numbers per row and working out which one is under
@@ -221,5 +256,5 @@
   };
 
   window.DEV = DEV;
-  return 'DEV ready — keep, load, at, watch, grid';
+  return 'DEV ready — keep, load, at, watch, grid, clipped';
 })();
