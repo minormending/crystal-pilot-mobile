@@ -103,6 +103,11 @@ def mutations(root):
             'btl["battle.js<br/>one turn"]', 'btl["battle-probe.js<br/>one turn"]')),
         "names": lambda: edit("gen2/state.js", append(
             "\nexport const probe = () => ProbeUndefinedName();\n")),
+        # A heading renamed out from under the links that point at it, which
+        # is exactly how all four of the dead anchors this group was written
+        # for came about.
+        "doclinks": lambda: edit("docs/CODE.md", sub(
+            "## 9. The interface", "## 9. The interface, renamed")),
         "moves": lambda: edit("gen2/engine.js", sub(
             "lethalEffects: [38, 40, 87, 88, 89, 144]", "lethalEffects: [40]")),
     }

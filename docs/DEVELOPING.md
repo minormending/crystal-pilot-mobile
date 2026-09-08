@@ -118,14 +118,14 @@ section gives. Everything by hand runs against a local build.
 ```mermaid
 flowchart BT
     C["the app"] --> T["./run-tests<br/>511 behaviour tests"]
-    C --> A["tools/check-app<br/>17 groups"]
+    C --> A["tools/check-app<br/>18 groups"]
     C --> D["tools/docs-check<br/>31 tracked sections"]
     C --> V["tools/coverage<br/>what the suite never runs"]
     T --> M["tools/mutate<br/>break a line, see who notices"]
     A --> K["tools/check-checks<br/>break each group's own subject"]
     T -.-> V
     M -.->|"survivors, by file"| R(["the suite is load-bearing"])
-    K -.->|"17 of 17 bite"| R2(["the groups are awake"])
+    K -.->|"18 of 18 bite"| R2(["the groups are awake"])
     V -.->|"65%, and where"| R3(["the gaps are known"])
 ```
 
@@ -275,7 +275,7 @@ a file it had moved out of. Every one still printed `ok`.
 So `check-checks` breaks, on purpose, the one thing each group claims to watch,
 and asserts the group fails. It works on a copy of the tree — nothing it does
 can reach your files — and re-runs each group after restoring, so a mutation
-that fails to undo itself is reported rather than believed. **All seventeen bite.**
+that fails to undo itself is reported rather than believed. **All eighteen bite.**
 
 Writing a mutation is the whole cost of the tool, and it is easy to get wrong in
 a way that reads as a broken check: the first draft of seven of these missed what
@@ -284,10 +284,10 @@ the group actually greps for — `s.addr(...)` where the pattern wants
 `.sym` that `.gitignore` was already refusing. **A mutation has to violate what
 the group claims**, and when it does not, the honest reading is that the mutation
 is wrong, not the check. It is not in the pre-commit hook: it runs `check-app`
-about forty-five times, which is the wrong price for every commit and the right
+about fifty times, which is the wrong price for every commit and the right
 one for the commit that changes a check.
 
-`tools/check-app` is seventeen groups, each one a class of mistake that parses
+`tools/check-app` is eighteen groups, each one a class of mistake that parses
 fine and is wrong at run time:
 
 | group | asserts |
@@ -307,6 +307,7 @@ fine and is wrong at run time:
 | `version` | `gbcore/version.js` and `sw.js` agree, and both doors are reachable with no ROM |
 | `docshape` | section 2's architecture diagram draws, counts and tables all 27 modules |
 | `names` | every capitalised name a module uses is one it can see |
+| `doclinks` | every `](#anchor)` in `docs/` lands on a heading that exists |
 
 `tools/docs-check` is the other half, and it checks the prose rather than the
 code: a documentation section opts in with a marker naming the files it covers

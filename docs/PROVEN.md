@@ -28,7 +28,7 @@ flowchart LR
 
 Every step of that is the first time it has been watched on a cartridge since
 the battle and job code was rewritten, and one of them failed the first time
-round — see [the eleventh pass](#twenty-six-audits-and-how-each-defect-was-actually-found).
+round — see [the eleventh pass](#thirty-four-audits-and-how-each-defect-was-actually-found).
 
 Proven, and visible in [the screenshot on the front page](../README.md):
 

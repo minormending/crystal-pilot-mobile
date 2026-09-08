@@ -39,7 +39,7 @@ and the code disagree, the code is right and the section is a bug — see
    · [How the tasks are arranged](#5a-how-the-tasks-are-arranged)
 6. [Battles](#6-battles)
 7. [Catching something](#7-catching-something)
-   · [Four that act on where you are](#7a-four-that-act-on-where-you-already-are)
+   · [Four that act on where you are](#7a-five-that-act-on-where-you-already-are)
    · [The counter, and the money it takes](#7d-the-counter-and-the-money-it-takes)
    · [Saving, and getting the save out](#7b-saving-and-getting-the-save-out)
    · [Slots, undo, and bringing a save in](#7c-slots-undo-and-bringing-a-save-in)
@@ -766,6 +766,22 @@ Decodes the loaded map into "can I stand on this tile", and does breadth-first
 pathfinding over the result. This is what turns walking from trial and error
 into a plan.
 
+**And for a long time almost none of it was checked.** Line coverage said 51%,
+which sounds like a gap and reads as a plateau. [`tools/mutate`](DEVELOPING.md#whether-the-tests-would-notice)
+said **18%**: the wall and water rules, the ledge and warp ranges, and all four
+of `furthestToward`'s direction comparators could be inverted and the suite
+passed. One line in a fake was the whole cause — every collision test handed the
+decode `{ romByte: () => 0 }`, so `permission()` answered LAND for every byte on
+every map, and `isWall` ran on each of those tests and was checked by none of
+them.
+
+It is 66% now, over painted maps: routing round a fence, water refusing, the
+avoid set and the goal's exemption to it, a warp entered only as an errand, the
+node bound, and the one-way ledge rule. Worth the note because *this* is the
+module where being quietly wrong is expensive — an inverted comparator in
+`furthestToward` walks the pilot away from the edge it is trying to leave by, and
+every symptom of that looks like the map being in the way.
+
 It also reads the map's objects, and there are **two arrays**, not one. Getting
 that wrong was the twenty-seventh pass's biggest find, so it is worth stating
 plainly:
@@ -1044,7 +1060,7 @@ point those coordinates mean somewhere else entirely.
 
 ## 5. Crossing to the next map
 
-<!-- covers: gen2/journey.js gen2/world.js @ 5cd86d5ead6d -->
+<!-- covers: gen2/journey.js gen2/world.js @ 77df72f0e46b -->
 
 A connection spans only part of a shared edge, so "walk west until something
 happens" does not work. `crossEdge()` closes the distance in stages, then tries
@@ -1853,7 +1869,7 @@ flowchart TD
 
 ## 7a. Five that act on where you already are
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ 765b3d6763f8 -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ fad20a936276 -->
 
 Grind, hunt and catch all go *looking* for something. These five do the obvious
 thing with the situation you are already in, and take no parameters:
@@ -2475,7 +2491,7 @@ because that failure is only otherwise discovered by reaching for the undo.
 
 ## 8. The errands
 
-<!-- covers: titles/crystal.js gen2/journey.js @ 1e4757d5b685 -->
+<!-- covers: titles/crystal.js gen2/journey.js @ c4f17f6e1b99 -->
 
 Everything in this section is `crystal.js` — the only file in the app that names
 a Crystal map, a Crystal door or a Crystal NPC. What it stands on is
@@ -2807,7 +2823,7 @@ the bag" rather than "did we gain any".
 
 ## 8a. Finding the Centers and the Marts in the cartridge
 
-<!-- covers: gen2/world.js gen2/journey.js @ 5cd86d5ead6d -->
+<!-- covers: gen2/world.js gen2/journey.js @ 77df72f0e46b -->
 
 The last thing in this app that had to be written out by hand. A title said
 where the Centers and the Marts were, so the pilot healed in the two towns
@@ -3043,7 +3059,7 @@ by, which is the only leg it can measure.
 
 ## 8d. A route the game itself refuses
 
-<!-- covers: gen2/journey.js gen2/state.js @ 2a75d11fba75 -->
+<!-- covers: gen2/journey.js gen2/state.js @ 7ce53955705d -->
 
 The pass before this one taught the walk to *quote* the man who turns it back.
 This is the pilot doing something about it.
@@ -3148,13 +3164,114 @@ counting bytes reads a full case as one.
 
 </details>
 
+## 8e. Fighting everybody here
+
+<!-- covers: gen2/journey.js @ aa1800c1c64d -->
+
+The primitive a Gym needs. The pilot has been stopped on Route 32 for three
+passes by a man who wants Falkner beaten first, and beating Falkner means
+walking into a building and fighting everyone in it. `duelHere` fights *one*;
+`clearHere` is the loop, and the loop is where all the awkwardness lives.
+
+Useful long before there is a Gym feature: Route 32 carries eight trainers, and
+clearing a route is how a party gets levels without standing in grass.
+
+```mermaid
+flowchart TD
+    S["clearHere"] --> C{"anybody at 0 HP?"}
+    C -- yes --> STOP["stop — the Heal row is above this one"]
+    C -- no --> B["mend the hurt out of the bag<br/><i>never a walk to a Center</i>"]
+    B --> D["duelHere, with the job's own spent set"]
+    D -- won --> T["tally, and go again"]
+    T --> C
+    D -- "lost" --> L["stop — the party is at a Center now,<br/>which is not this map"]
+    D -- "none · beaten" --> N{"anybody the map placed<br/>that is not drawn yet?"}
+    N -- yes --> W["walk at them<br/><i>a battle on the way is arriving early</i>"]
+    W --> C
+    N -- no --> DONE["report, against the map's own count"]
+```
+
+**Bounded by who the map *placed*, not by who is drawn.** Gen 2 loads an object
+only when you are close enough to see it, so the count of live trainers is a
+fact about where you are standing: measured arriving on Route 31 at its western
+edge, `trainers()` answered **nought** with one placed seventeen tiles east.
+Placements never move and are all there whether drawn or not.
+
+**And the sweep is only *claimed* as a sweep when that count could be taken.**
+"beat three" and "beat the three that were here" are different claims, and the
+second one needs a list that decoded.
+
+<details>
+<summary><b>Advanced detail:</b> five things the cartridge said, in the twenty
+minutes after this shipped</summary>
+
+**A beaten trainer is as spent as one who declined.** `duelHere` marked a tile
+spent only on a *refusal* — so the first test of the loop wrote three trainers,
+watched six wins, and logged every approach to the same tile. Gen 2 leaves a
+beaten trainer standing there with the same sprite and the same sight range;
+having fought somebody is exactly as good a reason not to walk back as having
+been ignored by them.
+
+**Nobody drawn is not nobody here.** `duelHere` reads the spawned structs, so on
+a route it answers "nobody near enough to fight" while the map's list has three
+people on it. `_closeOnTrainer` walks at the nearest one the map placed and the
+game has not drawn, and a wild battle on the way is the errand arriving early
+rather than an interruption — a trainer with a sight range opens the battle the
+moment the walk crosses their line.
+
+**'beaten' is about the ones it can see, not about the map.** The pilot walked up
+to Route 30's trainer at (1,7), found them already beaten, and stopped — with two
+more placed at (2,28) and (5,23) that had never been drawn. An empty view and an
+exhausted view ask this loop the same question, so both go and look further
+along. Twenty tiles south, in the event.
+
+**A placement nothing can walk to is written off**, once, rather than walked at
+every round. And **a map of people who have all already lost is not an empty
+map** — different things to do next, so a different sentence.
+
+**`duelHere` reports an `outcome` rather than only wording one.** A loop above it
+has to tell a loss from an empty map, and the only difference used to be the
+message — so rewording a sentence would have quietly changed what the loop did.
+
+</details>
+
+### A whiteout looks exactly like a successful heal
+
+Not part of the loop, and found while verifying it, which is where the pass's
+sharpest defect came from.
+
+`healNow` was asked to mend a lead at 9 of 24. The walk to Violet met something
+it could not run from, the party fainted, and the job reported **healed one
+Pokémon at Violet City**.
+
+Every reading agreed with it. A whiteout in Gen 2 heals the party, moves the
+player to the last Pokémon Center and takes half the wallet — so afterwards the
+HP is full and the map is the town the walk was heading for, which is precisely
+what success looks like. The only trace was a wallet that had gone from 3136 to
+1568.
+
+**So money is the evidence, and nothing else can be.** `knockedOut(before,
+after)` is one comparison, and it is the whole mechanism; the difficulty was
+never in detecting it but in noticing that it needed detecting. `travelTo` asks
+too, because a whiteout puts the player at a Center and the walk carries on from
+there — it very often *does* still arrive, and `arrived` on its own is true and
+misleading.
+
+Which is the third time this document has had to write down the same shape: [the
+failure message is a diagnosis the app
+publishes](PROVEN.md#a-thirty-third-pass-the-diagnosis-that-was-wrong-twice),
+and a job
+that reports the wrong one sends the next reader somewhere else entirely. A
+failure dressed as a failure costs a minute. A failure dressed as a *success*
+costs however long it takes somebody to notice their money is gone.
+
 ## 9. The interface
 
 This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ 3ab72592bd4a -->
+<!-- covers: app/main.js index.html @ 4237b3fdf647 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -3693,7 +3810,7 @@ seconds by a page whose loop was supposedly running.
 
 ### One thing at a time
 
-<!-- covers: app/main.js @ 7c7dec1a41da -->
+<!-- covers: app/main.js @ 0f4dee4b2e96 -->
 
 One Game Boy, one joypad, one canvas — so a great deal of this app is about
 making sure two things are never driving them at once. There are three claims,
@@ -4052,7 +4169,7 @@ recorded at all, so the kept battery was restored into whatever ROM was picked
 next; and `pickKey` was *the only record, if there is exactly one*, which wrote
 this cartridge's save into the previous cartridge's record. Both failed
 silently, and both were on the paths nobody presses — see
-[Twenty-six audits](PROVEN.md#twenty-six-audits-and-how-each-defect-was-actually-found)
+[Thirty-four audits](PROVEN.md#thirty-four-audits-and-how-each-defect-was-actually-found)
 for why that is not a coincidence.
 
 `patchMeta` merges fields into the `meta` record, and it used to do that as a
@@ -4326,7 +4443,7 @@ they have been installed.
 
 ### Watching the other device's screen
 
-<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ fac514b0f71f -->
+<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ 77967d109f5b -->
 
 One device shows its screen; the other watches it, and plays it if the first
 one says so. The picture goes straight between them over WebRTC and never
@@ -4939,7 +5056,7 @@ about that code did not.
 
 ### The other checks
 
-<!-- covers: tools/check-app @ b80b74333892 -->
+<!-- covers: tools/check-app @ 840b483b0db5 -->
 
 `tools/check-app` runs everything that can be verified without a ROM:
 

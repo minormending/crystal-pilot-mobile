@@ -687,6 +687,36 @@ back where you started. If a leg fails it says which and where it stopped —
 *could not leave Route 29 going LEFT — stopped at Route 29* — because a route
 that gives up halfway leaves you somewhere you did not choose.
 
+## Clear: fighting everybody on this map
+
+The Duel row has two buttons. **Fight** takes on whoever is in front of you.
+**Clear** works through the whole map, and it only appears when there is more
+than one person on it to work through — a second button that does what the first
+does is a choice nobody can make well.
+
+What it does between fights is the interesting part:
+
+* **It goes and finds them.** Gen 2 only draws a character when you are close
+  enough to see one, so "nobody here wants a battle" is often a fact about where
+  you are standing. Clear reads the map's own list — which is there whether
+  they are drawn or not — and walks over. Measured on Route 31: the trainer was
+  seventeen tiles east and the pilot went and got them.
+* **It mends out of the bag, and never walks to a Center.** A trip to a Center
+  in the middle of this is a trip *off* the map the job is about, and you would
+  come back to the next fight at whatever HP the journey left you. So the pocket
+  is used and nothing else is.
+* **It stops when the bag cannot help.** Somebody at 0 HP means the next fight
+  is unwinnable, so it stops and says so, with Heal sitting right above it.
+* **It stops if you lose.** Losing puts you at a Center, which is not this map.
+
+Afterwards it says how many and how much: *beat 3 trainers, ¥312 — everyone on
+this map*. That last clause is a claim, and it is only made when the map's list
+could actually be read.
+
+This is also the thing a Gym will need. Route 32 is shut until Falkner is
+beaten, and beating Falkner means walking into a building and fighting everyone
+in it.
+
 ## Healing: the bag first, then the walk
 
 Press **Heal** and the pilot mends whoever is hurt. What it does about it now
@@ -768,6 +798,25 @@ rather than accidents:
 The write-offs last as long as the tab does. Reload and the pilot will go and
 find out again, which is the right way round: the game may have changed its
 mind, and it is the only one who knows.
+
+### When the heal was really a knockout
+
+**A whiteout looks exactly like a successful trip to a Center**, and for a while
+the pilot could not tell. Losing in Gen 2 mends your party, puts you at the last
+Pokémon Center and takes half your money — so afterwards the HP is full and you
+are standing in the town the pilot was walking to. It reported *healed one
+Pokémon at Violet City* for a knockout that had cost ¥1,568.
+
+The money is the only thing that gives it away, so that is what it watches now:
+
+> knocked out on the way — the party is mended and it cost half the money (¥1568)
+
+Travel says it too, because a whiteout drops you at a Center and the walk
+carries on from there: it often still arrives, and *arrived* on its own would be
+true and misleading.
+
+If you see it, the party is fine and the wallet is not. It usually means the
+lead was too hurt to be walking, which is what the Heal row's bag line is for.
 
 ### Poisoned is not "hurt", and the row says which
 

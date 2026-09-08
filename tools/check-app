@@ -655,6 +655,79 @@ def _code_only(text: str) -> str:
 CAPITALISED_USE = re.compile(r"\b([A-Z][A-Za-z0-9_]*)\s*(?:\.|\()")
 
 
+def check_doc_links():
+    """Every `](#anchor)` in the docs lands on a heading that exists.
+
+    A rot nothing here could see. `docs-check` notices when described *code*
+    changes; it cannot notice a heading being renamed underneath the six links
+    that point at it. Measured the day this was written: four dead anchors, three
+    of them from section renames nobody could have caught -- "Twenty-six audits"
+    became "Thirty-four audits" and took two links with it, "7a. Four that act on
+    where you already are" gained a fifth -- and one written an hour earlier that
+    pointed at a heading in the *other* file.
+
+    A dead anchor in a document this size is not cosmetic: these files are how
+    the next reader finds the argument for a decision, and a link that silently
+    lands at the top of the page is worse than no link, because it reads as
+    having been checked.
+
+    Slugs the way GitHub makes them: lower case, punctuation dropped, and each
+    remaining space turned into a hyphen *without collapsing runs* -- which is
+    why "`screen.js` -- the words on screen" anchors as `screenjs--the-words-on-
+    screen`. Getting that wrong is what made the first draft of this report six
+    links that were perfectly fine.
+    """
+    def prose(text):
+        """The document with code taken out of it.
+
+        A fenced block or a backticked span is not a link, and this check found
+        that out by failing on the line in DEVELOPING.md that *documents* it --
+        which contains a literal `](#anchor)` as an example. The same masking
+        idea `tools/mutate` needs, for the same reason: prose about code reads
+        like code.
+        """
+        text = re.sub(r"```.*?```", "", text, flags=re.S)
+        return re.sub(r"`[^`\n]*`", "", text)
+
+    # Headings come from the *raw* text and links from the masked text, which
+    # is not a nicety: masking a heading strips its backticked half, so
+    # "`romdata.js` -- what the cartridge knows" would anchor as
+    # "-what-the-cartridge-knows" and four perfectly good links would be
+    # reported dead. The first draft did exactly that.
+    docs = {}
+    for path in sorted((ROOT / "docs").glob("*.md")):
+        raw = path.read_text()
+        text = prose(raw)
+        heads = set()
+        for m in re.finditer(r"^#{1,6}\s+(.*)$", raw, re.M):
+            title = m.group(1).strip().lower()
+            title = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", title)
+            title = re.sub(r"[`*]", "", title)
+            title = re.sub(r"[^\w\s-]", "", title, flags=re.U)
+            heads.add(re.sub(r"\s", "-", title))
+        docs[path.name] = (text, heads)
+    if not docs:
+        print("  skip  documentation links (no docs/)")
+        return 0
+
+    problems = []
+    for name, (text, _) in docs.items():
+        for m in re.finditer(r"\]\((([A-Za-z0-9_.-]+\.md)?)#([A-Za-z0-9._-]+)\)", text):
+            target, anchor = m.group(2) or name, m.group(3)
+            where = f"{name} -> {target}#{anchor}"
+            if target not in docs:
+                problems.append(f"{where} (no such file in docs/)")
+            elif anchor not in docs[target][1]:
+                problems.append(where)
+    if problems:
+        for p in problems[:8]:
+            print(f"        {p}")
+        return fail(f"{len(problems)} documentation link(s) point at nothing")
+    total = sum(len(re.findall(r"\]\(([A-Za-z0-9_.-]+\.md)?#", t))
+                for t, _ in docs.values())
+    return ok(f"{total} documentation anchors across {len(docs)} files resolve")
+
+
 def check_names():
     """Every capitalised name a module uses is one it can actually see.
 
@@ -986,6 +1059,7 @@ CHECKS = {
     "version": check_version,
     "symbols": check_symbols,
     "docshape": check_docs_shape,
+    "doclinks": check_doc_links,
     "names": check_names,
     "moves": check_moves,
 }

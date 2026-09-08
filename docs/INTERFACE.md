@@ -256,6 +256,19 @@ walk, and the row may only make it about a walk the pilot would actually
 complete. That is why a shut road changes the sentence rather than only the
 outcome.
 
+**Duel is the one row with two buttons that are both about fighting**, and the
+second one had to earn its place. *Fight* answers whoever is in front of you;
+*Clear* works through the map. A second button that does what the first does is
+a choice nobody can make well — so Clear is drawn only where the map holds more
+than one person, and it is counted off the map's own object list rather than off
+who is currently drawn. Those are different numbers: Gen 2 loads a character
+when you are close enough to see one, so *nearby* is a fact about where you
+stand and *on this map* is a fact about the map. The row says the first and the
+button is offered on the second.
+
+Which is the same rule the Shop row follows about *within reach of here*: a
+control may only be offered on a claim it can keep.
+
 **Take is the sixth offer, and the only one whose whole reason to exist is
 read off the map you are standing on.** Every other row is about your party, your
 bag or the graph; this one is about `wMapObjects`. It says what is *placed* here
@@ -674,4 +687,4 @@ So this page carries a marker naming the files it describes and the hash they
 had when it was last read against them. `tools/docs-check` reports it when they
 move, and the pre-commit hook blocks on that report.
 
-<!-- covers: index.html app/main.js app/rows.js @ 521e9a1a9d7a -->
+<!-- covers: index.html app/main.js app/rows.js @ 3e3b49419e32 -->
