@@ -40,10 +40,17 @@ test('a job is never enabled without saying what it would do', async (t) => {
     { battleMode: 1, party: [{ hp: 20, maxHp: 20 }], enemy: { species: PIDGEY, level: 3, hp: 15, maxHp: 15 } },
     { battleMode: 2, party: [{ hp: 20, maxHp: 20 }], enemy: { species: PIDGEY, level: 9, hp: 15, maxHp: 15 } },
   ];
+  // **Or offers a slot to fill**, which is the stronger version of the same
+  // rule. Three rows used to read "pick something below" -- a sentence that
+  // exists only because the control was somewhere else, and that asks the
+  // person to do the linking. They carry a tappable slot now, so a row with no
+  // words is a row whose next step is *in* it. Silence with nothing to press
+  // is still the defect this test was written for.
   for (const w of worlds) {
     for (const [name, row] of Object.entries(look(w))) {
-      t.true(typeof row.text === 'string' && row.text.length > 0,
-             `${name} always says something`);
+      const says = typeof row.text === 'string' && row.text.length > 0;
+      t.true(says || !!row.needs,
+             `${name} says something or offers a slot`);
     }
   }
 });
@@ -52,7 +59,11 @@ test('catch offers the errand instead of itself when there are no balls', async 
   const world = { party: [{ species: CYNDAQUIL, level: 5, hp: 20, maxHp: 20 }] };
   const without = look(world, { huntWanted: 'SENTRET' });
   t.true(without.catch.needsBalls, 'no ball chosen means no balls');
-  t.contains(without.catch.text, 'fetch them first', 'it points at the errand');
+  t.contains(without.catch.text, 'no Poké Balls', 'it says what is missing');
+  // The words "fetch them first" are gone, and the flag they were duplicating
+  // is what stays: `needsBalls` is what draws the Get button, and a sentence
+  // telling somebody to press a button sitting beside it is the sentence this
+  // pass is trying to stop writing.
   t.false(without.catch.enabled, 'and catch itself is not offered');
 
   const with_ = look(world, { huntWanted: 'SENTRET', ballId: POKE_BALL });
@@ -499,7 +510,8 @@ const FIGHTING = { ...PARTY, battleMode: 1, enemy: { species: PIDGEY, level: 3 }
 
 test('travel names the place and what the walk will cost', async (t) => {
   const none = look(PARTY, { places: PLACES }).travel;
-  t.eq(none.text, 'pick a place below', 'with nothing chosen it asks');
+  t.eq(none.text, '', 'with nothing chosen it says nothing');
+  t.eq(none.needs, 'place', 'and offers a slot instead of an instruction');
   t.false(none.enabled, 'and will not walk');
 
   const near = look(PARTY, { places: PLACES, travelTo: PLACES[0].key }).travel;
@@ -526,7 +538,8 @@ test('a place that has gone out of reach is not still offered', async (t) => {
   // Walking changes the answer. A chosen key no longer in the list would be a
   // button that fails on being pressed.
   const row = look(PARTY, { places: PLACES, travelTo: 999 }).travel;
-  t.eq(row.text, 'pick a place below', 'it falls back to asking');
+  t.eq(row.text, '', 'it says nothing about a place it cannot reach');
+  t.eq(row.needs, 'place', 'and offers the slot again');
   t.false(row.enabled, 'rather than offering a walk it cannot make');
 });
 

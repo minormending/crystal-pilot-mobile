@@ -1557,11 +1557,50 @@ async function runTask(id, busy, work,
  * balls offers the errand -- and greying that row's name out while accenting
  * the button next to it says two opposite things at once.
  */
+/**
+ * Where a row's picker lives, so a row that needs one can point at it.
+ *
+ * The row used to *tell* you: "pick something below". This is the same fact
+ * expressed as a control -- the slot is in the row, pressing it takes you to
+ * the chooser, and nobody has to hold "below" in their head while scrolling.
+ */
+const PICKER_FOR = { species: '#pick', place: '#wheretogo' };
+
 function paintRow(row, stateSel, buttonSel, rowSel) {
-  $(stateSel).textContent = row.text;
+  const state = $(stateSel);
+  if (row.needs) {
+    // A button rather than text, because it is one: `needs` names which
+    // chooser, and tapping the slot scrolls it into view and focuses its first
+    // option. An instruction that cannot be pressed is a chore; a slot that can
+    // is the next step.
+    const what = row.needs === 'place' ? 'Choose a place' : 'Choose a Pokémon';
+    state.innerHTML = '';
+    const slot = document.createElement('button');
+    slot.type = 'button';
+    slot.className = 'slot';
+    slot.textContent = what;
+    slot.dataset.picker = row.needs;
+    state.appendChild(slot);
+  } else {
+    state.textContent = row.text;
+  }
   if (buttonSel) $(buttonSel).disabled = !row.enabled;
   if (rowSel) $(rowSel).classList.toggle('blocked', !(row.enabled || row.lit));
 }
+
+// One listener for every slot, because they are created and thrown away on
+// every repaint and a listener each would leak them.
+document.addEventListener('click', (e) => {
+  const slot = e.target.closest && e.target.closest('button.slot');
+  if (!slot) return;
+  const sel = PICKER_FOR[slot.dataset.picker];
+  const box = sel && $(sel);
+  if (!box) return;
+  box.hidden = false;
+  box.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  const first = box.querySelector('button:not([disabled])');
+  if (first) first.focus({ preventScroll: true });
+});
 
 const JOB_ROWS = {
   grind: ['#grindstate', '#go', '#job-grind'],

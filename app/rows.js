@@ -121,8 +121,15 @@ export function describeRows(s, ctx = {}) {
       // experience, which is why it is stated and not calculated.
       outlevelled: !!(lead && wilds && lead.level > wilds.high),
     },
+    // **`needs` replaces an instruction with an affordance.** Three rows used to
+    // read "pick something below", which is a sentence that exists only because
+    // the control is somewhere else -- and it asks the person to do the linking.
+    // The rows carry a tappable slot now, so the thing to press is in the row
+    // that wants it and the sentence is gone. Same information, a third of the
+    // reading, and one fewer thing to work out.
     hunt: {
-      text: huntWanted ? `${huntWanted} · here now` : 'pick something below',
+      text: huntWanted ? `${huntWanted} · here now` : '',
+      needs: huntWanted ? null : 'species',
       enabled: !!huntWanted && afoot,
     },
     // Catch owns its own prerequisite. The errand is a one-time thing -- run it
@@ -130,8 +137,9 @@ export function describeRows(s, ctx = {}) {
     // is Catch's empty state rather than a peer button.
     catch: {
       text: needsBalls
-        ? 'no Poké Balls yet — fetch them first'
-        : huntWanted ? `${huntWanted} · ${ballName}` : 'pick something below',
+        ? 'no Poké Balls yet'
+        : huntWanted ? `${huntWanted} · ${ballName}` : '',
+      needs: needsBalls || huntWanted ? null : 'species',
       enabled: !!(ballId && huntWanted) && afoot,
       needsBalls,
     },
@@ -210,7 +218,9 @@ export function describeRows(s, ctx = {}) {
         : !places.length ? 'nowhere named to walk to'
         : travelTo && byKey.has(travelTo)
           ? `${byKey.get(travelTo).name} · ${legsWord(byKey.get(travelTo).legs)}`
-          : 'pick a place below',
+          : '',
+      needs: !s.inBattle && places.length && !(travelTo && byKey.has(travelTo))
+        ? 'place' : null,
       enabled: afoot && !!travelTo && byKey.has(travelTo),
       places,
     },

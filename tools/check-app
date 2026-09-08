@@ -130,8 +130,24 @@ def check_shell():
 
 def check_markup():
     s = INDEX.read_text()
+    # **Comments are not markup, and prose about markup reads like markup.**
+    # This counted a `<use>` written inside an HTML comment that *described*
+    # the sprite sheet, and reported the document unbalanced by one. That is
+    # the fourth time in one session that prose mentioning a construct has been
+    # parsed as the construct -- the mutation tool needed a masker for the same
+    # reason, the documentation-link check needed one for code spans, and the
+    # contrast check split on a selector name that appeared in a comment. The
+    # pattern is worth naming: **a checker that reads source has to know which
+    # parts of it are addressed to people.**
+    #
+    # Stripped for the tag count only. The CSS brace count below reads the
+    # style block, where a `{` inside a comment would be a different bug and
+    # one this has never seen.
+    s = re.sub(r"<!--.*?-->", "", s, flags=re.S)
     void = {"br", "img", "link", "meta", "input", "hr", "source", "area",
-            "base", "col", "embed", "param", "track", "wbr"}
+            "base", "col", "embed", "param", "track", "wbr", "use", "path",
+            "circle", "rect", "line", "polyline", "polygon", "ellipse",
+            "stop"}
     opened = re.findall(r"<([a-zA-Z][a-zA-Z0-9]*)[^>]*?(?<!/)>", s)
     closed = re.findall(r"</([a-zA-Z][a-zA-Z0-9]*)\s*>", s)
     counts = {}

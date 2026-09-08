@@ -561,11 +561,27 @@
      the one that ranks first, so three HP bars ran straight into "Catch". */
   .partybox[open]{border-bottom:1px solid var(--line);margin-bottom:8px}
   .jobs{display:flex;flex-direction:column}
-  .job{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;
+  /* Three columns now: the glyph, the name and state, the action. The glyph
+     column is what makes the name skippable -- a person who has used this once
+     finds Heal by its shape and never reads the word again. */
+  .job{display:grid;grid-template-columns:auto 1fr auto;gap:10px;
+       align-items:center;
        padding:10px 0 10px 11px;border-top:1px solid var(--line);
        /* Room for the lead's rail on every row, so nothing shifts sideways
           when the ranking changes under it. */
        border-left:3px solid transparent;margin-left:-3px}
+  /* The slot that replaced "pick something below". Sized and coloured as a
+     *hole waiting to be filled* rather than as a button competing with the
+     row's own action -- dashed, quiet, and obviously not the primary thing. */
+  .job .slot{display:inline-flex;align-items:center;gap:5px;min-height:0;
+       padding:3px 9px;margin-top:2px;font-size:11.5px;font-weight:500;
+       flex:0 0 auto;color:var(--accent);background:transparent;
+       border:1px dashed var(--accent);border-radius:999px}
+  .job .slot::after{content:"▾";font-size:9px;opacity:.8}
+  .job .slot:hover{background:color-mix(in srgb,var(--accent) 10%,transparent)}
+  .job .jicon{width:19px;height:19px;flex:0 0 auto;color:var(--dim)}
+  .job.lead .jicon{color:var(--accent)}
+  .job.blocked .jicon{opacity:.5}
   /* Whichever row ranks first wears no rule. This was `:first-of-type`, which
      is the row written first -- a different row once the list is sorted, and no
      row at all once the ones that cannot run stop being drawn. */
@@ -831,6 +847,57 @@
 </style>
 </head>
 <body>
+<!-- One sprite sheet, drawn once and referenced by `<use>`.
+     
+     No icon font and no CDN: this app has no build step and has to work with
+     the network off, so a font would be one more shell entry and a flash of
+     nothing. Inline SVG costs no request, takes `currentColor` so it themes
+     itself, and stays crisp at any size.
+     
+     Icons rather than more words, because the row names were being read every
+     time. A person learns eight glyphs in one session and then never reads
+     "Grind" again -- which is the whole point: the fastest text is the text
+     nobody has to look at twice. Every one keeps its label beside it, because
+     an icon on its own is a quiz. -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <g id="i-grind" fill="none" stroke="currentColor" stroke-width="1.8"
+     stroke-linecap="round" stroke-linejoin="round">
+    <path d="M3 13.5 7 9l3 3 4.5-5.5"/><path d="M11 6.5h3.5V10"/></g>
+  <g id="i-hunt" fill="none" stroke="currentColor" stroke-width="1.8"
+     stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="8" cy="8" r="4.6"/><path d="M11.4 11.4 15 15"/></g>
+  <g id="i-catch" fill="none" stroke="currentColor" stroke-width="1.8"
+     stroke-linecap="round">
+    <circle cx="9" cy="9" r="6"/><path d="M3 9h12"/><circle cx="9" cy="9" r="1.9"/></g>
+  <g id="i-duel" fill="none" stroke="currentColor" stroke-width="1.8"
+     stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 14 12.5 5.5"/><path d="M10.5 3.5h4v4"/>
+    <path d="M14 14 5.5 5.5"/><path d="M7.5 3.5h-4v4"/></g>
+  <g id="i-gym" fill="none" stroke="currentColor" stroke-width="1.8"
+     stroke-linecap="round" stroke-linejoin="round">
+    <path d="M9 2.5 15 5.5v4c0 3.4-2.6 5.6-6 6.6-3.4-1-6-3.2-6-6.6v-4Z"/>
+    <path d="M6.5 9 8.4 11 11.8 7.2"/></g>
+  <g id="i-heal" fill="none" stroke="currentColor" stroke-width="1.8"
+     stroke-linecap="round" stroke-linejoin="round">
+    <path d="M9 15.5S2.5 11.6 2.5 7.2A3.7 3.7 0 0 1 9 5a3.7 3.7 0 0 1 6.5 2.2
+             c0 4.4-6.5 8.3-6.5 8.3Z"/></g>
+  <g id="i-take" fill="none" stroke="currentColor" stroke-width="1.8"
+     stroke-linecap="round" stroke-linejoin="round">
+    <path d="M3 6.5 9 3.5l6 3v6l-6 3-6-3Z"/><path d="M3 6.5 9 9.5l6-3"/>
+    <path d="M9 9.5v6"/></g>
+  <g id="i-travel" fill="none" stroke="currentColor" stroke-width="1.8"
+     stroke-linecap="round" stroke-linejoin="round">
+    <path d="M9 15.5s5.5-5 5.5-8.8A5.5 5.5 0 0 0 3.5 6.7C3.5 10.5 9 15.5 9 15.5Z"/>
+    <circle cx="9" cy="6.9" r="1.9"/></g>
+  <g id="i-shop" fill="none" stroke="currentColor" stroke-width="1.8"
+     stroke-linecap="round" stroke-linejoin="round">
+    <path d="M3.2 5.5h11.6l-1 8.5a1 1 0 0 1-1 .9H5.2a1 1 0 0 1-1-.9Z"/>
+    <path d="M6.4 5.5V4.3a2.6 2.6 0 0 1 5.2 0v1.2"/></g>
+  <g id="i-save" fill="none" stroke="currentColor" stroke-width="1.8"
+     stroke-linecap="round" stroke-linejoin="round">
+    <path d="M3.5 3.5h8L14.5 6.5v8h-11Z"/><path d="M6 3.5v4h6v-4"/>
+    <path d="M6 14.5v-4h6v4"/></g>
+</defs></svg>
 <header>
   <h1>crystal-pilot</h1>
   <span class="vnum" id="version">&mdash;</span>
@@ -1036,6 +1103,7 @@
          same sort. -->
     <div class="jobs" id="jobs">
     <div class="job" id="job-grind">
+      <svg class="jicon" viewBox="0 0 18 18" aria-hidden="true"><use href="#i-grind"/></svg>
       <div class="what">
         <span class="jname">Grind</span>
         <span class="jstate" id="grindstate">—</span>
@@ -1044,6 +1112,7 @@
     </div>
 
     <div class="job" id="job-hunt">
+      <svg class="jicon" viewBox="0 0 18 18" aria-hidden="true"><use href="#i-hunt"/></svg>
       <div class="what">
         <span class="jname">Hunt</span>
         <span class="jstate" id="huntstate">pick something below</span>
@@ -1052,6 +1121,7 @@
     </div>
 
     <div class="job" id="job-catch">
+      <svg class="jicon" viewBox="0 0 18 18" aria-hidden="true"><use href="#i-catch"/></svg>
       <div class="what">
         <span class="jname">Catch</span>
         <span class="jstate" id="catchstate">pick something below</span>
@@ -1061,6 +1131,7 @@
     </div>
 
     <div class="job" id="job-heal">
+      <svg class="jicon" viewBox="0 0 18 18" aria-hidden="true"><use href="#i-heal"/></svg>
       <div class="what">
         <span class="jname">Heal</span>
         <span class="jstate" id="healstate">—</span>
@@ -1069,6 +1140,7 @@
     </div>
 
     <div class="job" id="job-shop">
+      <svg class="jicon" viewBox="0 0 18 18" aria-hidden="true"><use href="#i-shop"/></svg>
       <div class="what">
         <span class="jname">Shop</span>
         <span class="jstate" id="shopstate">—</span>
@@ -1077,6 +1149,7 @@
     </div>
 
     <div class="job" id="job-take">
+      <svg class="jicon" viewBox="0 0 18 18" aria-hidden="true"><use href="#i-take"/></svg>
       <div class="what">
         <span class="jname">Take</span>
         <span class="jstate" id="takestate">—</span>
@@ -1085,6 +1158,7 @@
     </div>
 
     <div class="job" id="job-duel">
+      <svg class="jicon" viewBox="0 0 18 18" aria-hidden="true"><use href="#i-duel"/></svg>
       <div class="what">
         <span class="jname">Duel</span>
         <span class="jstate" id="duelstate">—</span>
@@ -1094,6 +1168,7 @@
     </div>
 
     <div class="job" id="job-gym">
+      <svg class="jicon" viewBox="0 0 18 18" aria-hidden="true"><use href="#i-gym"/></svg>
       <div class="what">
         <span class="jname">Gym</span>
         <span class="jstate" id="gymstate">—</span>
@@ -1102,6 +1177,7 @@
     </div>
 
     <div class="job" id="job-travel">
+      <svg class="jicon" viewBox="0 0 18 18" aria-hidden="true"><use href="#i-travel"/></svg>
       <div class="what">
         <span class="jname">Travel</span>
         <span class="jstate" id="travelstate">—</span>

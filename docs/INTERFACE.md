@@ -779,6 +779,37 @@ took twenty minutes of reading a screenshot that would not change. The values
 live once now and both switches map them, and the check asserts the two mappings
 are identical, so what duplication is left is a checked invariant.
 
+## Fewer words, because most of them were not being read
+
+One screen with a game loaded carried **279 words in 108 separate pieces**. That
+is not a page anybody reads; it is a page people learn to skip, which is worse
+than a page that says less.
+
+The reductions are not deletions. Each one asks what job a sentence was doing
+and whether something other than a sentence does it better.
+
+**Icons, so the names become skippable.** Nine rows, nine glyphs, drawn once as
+an inline SVG sheet — no icon font, because there is no build step and a font
+would be one more shell entry and a flash of nothing offline. The name stays
+beside the glyph, because an icon on its own is a quiz; what changes is that a
+person who has used this once finds Heal by its shape and stops reading the
+word.
+
+**An instruction became an affordance.** Three rows read *pick something below*
+— a sentence that exists only because the control was somewhere else, and that
+asks the reader to do the linking. Those rows carry a **slot** now: a dashed
+chip in the row saying *Choose a Pokémon*, which scrolls the picker into view
+and focuses its first option. Same information, a third of the reading, and one
+fewer thing to work out.
+
+It is drawn as a hole waiting to be filled rather than as a button competing
+with the row's own action — dashed, quiet, and obviously not the primary thing.
+
+And the invariant the tests keep got *stronger* rather than weaker: it used to
+be "a job always says what it would do", and it is now **"a job says something
+or offers a slot to fill"**. Silence with nothing to press is still the defect
+that test was written for.
+
 ## Keeping this page honest
 
 This is the page that went stale. It described a column-flex layout that
@@ -790,4 +821,4 @@ So this page carries a marker naming the files it describes and the hash they
 had when it was last read against them. `tools/docs-check` reports it when they
 move, and the pre-commit hook blocks on that report.
 
-<!-- covers: index.html app/main.js app/rows.js @ ec00ce0f0dda -->
+<!-- covers: index.html app/main.js app/rows.js @ f76cc07995b5 -->
