@@ -19,6 +19,7 @@
 // into the emulator per byte would make a search of a few hundred tiles slow
 // enough to feel broken.
 import { GameBoy } from '../gbcore/gb.js';
+import { gen2 } from './engine.js';
 
 const b = GameBoy.byteAt;
 
@@ -59,8 +60,9 @@ const MAP_OBJECT_ORIGIN = 4;
 const CANDIDATE_OFFSETS = [[4, 4], [0, 0], [4, 0], [0, 4], [2, 2], [6, 6], [5, 5], [3, 3]];
 
 export class CollisionMap {
-  constructor(symbols, gb) {
+  constructor(symbols, gb, engine = null) {
     this.gb = gb;
+    this.e = engine || gen2;
     this.a = {
       blocks: symbols.addr('wOverworldMapBlocks'),
       mapWidth: symbols.addr('wMapWidth'),
@@ -155,6 +157,43 @@ export class CollisionMap {
       taken.add(x + ',' + y);
     }
     return taken;
+  }
+
+  /**
+   * Things on this map you can take something from: `[{ x, y, what }]`.
+   *
+   * The same walk of `wMapObjects` as `occupied`, asking a different question of
+   * the same byte: a sprite the engine profile names as an item ball or a fruit
+   * tree rather than a person. Which sprites those are is measured on the
+   * cartridge and lives in the profile, because a hack may have moved them --
+   * see the note there for what was picked up where.
+   *
+   * **A ball that has already been taken is still in this list**, and that is
+   * measured rather than assumed: taking the ANTIDOTE at (8,35) on Route 30 left
+   * its object exactly where it was in work RAM. So this answers *what the map
+   * placed here*, and the only honest way to find out whether anything is left
+   * is to go and press A -- which is why the job that uses it reports what
+   * arrived in the bag rather than what it expected to.
+   */
+  takeables(wram = this.wram) {
+    const out = [];
+    if (this.a.objects === null) return out;
+    const kinds = new Map((this.e.takeable || []).map((t) => [t.sprite, t.what]));
+    if (!kinds.size) return out;
+    const w = b(wram, this.a.mapWidth) * 2, h = b(wram, this.a.mapHeight) * 2;
+    for (let i = 1; i < MAP_OBJECT_COUNT; i++) {
+      const at = this.a.objects + i * MAP_OBJECT_BYTES;
+      const what = kinds.get(b(wram, at + MAP_OBJECT_SPRITE));
+      if (!what) continue;
+      const x = b(wram, at + MAP_OBJECT_X) - MAP_OBJECT_ORIGIN;
+      const y = b(wram, at + MAP_OBJECT_Y) - MAP_OBJECT_ORIGIN;
+      // The same bounds as `occupied`, for the same reason: an object read at a
+      // different origin is out of the map, and a wrong in-bounds tile is worse
+      // than none.
+      if (x < 0 || y < 0 || x >= w || y >= h) continue;
+      out.push({ x, y, what });
+    }
+    return out;
   }
 
   // --- calibration -----------------------------------------------------------

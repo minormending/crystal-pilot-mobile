@@ -48,3 +48,42 @@ test('a sprite of zero is an empty slot, not an object at the origin', async (t)
   ] });
   t.eq([...cm.occupied()], ['5,5'], 'the empty slot is skipped');
 });
+
+// --- what the map is holding -------------------------------------------------
+
+test('an item ball and a fruit tree are told apart from the people', async (t) => {
+  // Both sprite ids measured on the cartridge and carried in the engine
+  // profile: Route 31's ball, the one the errand fetches, has sprite 84 in the
+  // ROM's object_events at exactly its known tile, and pressing A on the object
+  // with that sprite on Route 30 gave an ANTIDOTE. Sprite 93 is a fruit tree --
+  // Route 30's two gave a BERRY and a PSNCUREBERRY.
+  const cm = mapWith({ objects: [
+    { sprite: 1, x: 8, y: 15 },     // the player
+    { sprite: 39, x: 7, y: 8 },     // somebody
+    { sprite: 84, x: 6, y: 13 },    // an item ball
+    { sprite: 93, x: 10, y: 7 },    // a fruit tree
+  ] });
+  t.eq(cm.takeables(), [{ x: 2, y: 9, what: 'ball' }, { x: 6, y: 3, what: 'tree' }],
+       'the two that hold something, and not the person');
+  t.eq(cm.occupied().size, 3, 'while all three are still tiles to route around');
+});
+
+test('a takeable off the map is dropped, the same as anyone else', async (t) => {
+  const cm = mapWith({ mapBlocks: [2, 2], objects: [   // 4x4 tiles
+    { sprite: 1, x: 8, y: 15 },
+    { sprite: 84, x: 5, y: 5 },     // (1,1): inside
+    { sprite: 84, x: 40, y: 6 },    // (36,2): far off the right
+    { sprite: 93, x: 1, y: 6 },     // (-3,2): before the left edge
+  ] });
+  t.eq(cm.takeables(), [{ x: 1, y: 1, what: 'ball' }], 'only the one on the map');
+});
+
+test('a cartridge whose profile names no takeable sprites has none', async (t) => {
+  // The generic profile's position, and it has to be silence rather than a
+  // guess: a sprite id is exactly the kind of thing a hack moves, and a wrong
+  // one would send the pilot to press A at a person.
+  const sym = symbols();
+  const cm = new CollisionMap(sym, { romByte: () => 0 }, { takeable: [] });
+  cm.use(worldRam(sym, { objects: [{ sprite: 1, x: 8, y: 15 }, { sprite: 84, x: 6, y: 13 }] }));
+  t.eq(cm.takeables(), [], 'nothing is offered');
+});

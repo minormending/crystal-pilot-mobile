@@ -72,6 +72,25 @@ export const gen2 = {
   // seven (level, species) -- morning, day, night.
   encounter: { blocks: 3, slotsPerBlock: 7, headerBytes: 5 },
 
+  // --- things on the map you can take something from -----------------------
+  // Map objects carry a sprite id in wMapObjects, and two of those sprites are
+  // not people. Both measured on the cartridge rather than copied out of
+  // constants/sprite_constants.asm, because the point of reading them is that a
+  // hack may have moved them:
+  //
+  //   84  an item ball. Route 31's ball, the one the errand fetches, carries it
+  //       in the ROM's object_events at exactly its known tile (19,15); and on
+  //       Route 30 the object at (8,35) with this sprite gave an ANTIDOTE.
+  //   93  a fruit tree. Route 30's two, at (5,39) and (11,5), gave a BERRY and
+  //       a PSNCUREBERRY.
+  //
+  // Kept apart because they are approached the same way and read differently: a
+  // ball is gone once taken, a tree comes back.
+  takeable: [
+    { sprite: 84, what: 'ball' },
+    { sprite: 93, what: 'tree' },
+  ],
+
   // --- what the overworld rolls an encounter on ----------------------------
   // COLL_LONG_GRASS $14, COLL_TALL_GRASS $18, and the two unused mirrors the
   // engine still treats as grass.

@@ -186,3 +186,182 @@ test('with no map graph there is nowhere to offer either', async (t) => {
                         { names: { [NEAR]: 'Cherrygrove City' } });
   t.eq(j.placesFrom(HOME), [], 'a title with names but no world knows no routes');
 });
+
+// --- taking what the map is holding ------------------------------------------
+
+/**
+ * A Journey standing on a map with things on it, and a scripted walk.
+ *
+ * `open` says which tiles can be stood on, `pocket` is the bag as the game will
+ * report it after each press, and every walk and press is recorded. What is
+ * under test is the *choosing* -- which side to approach from, how many times to
+ * try, and what to call the result -- so the pressing is stubbed.
+ */
+function collector({ things = [], open = () => true, gives = () => [],
+                     walkFails = () => null, at = [5, 5] } = {}) {
+  const sym = symbols();
+  const pocket = [];
+  const gb = new FakeGameBoy({ wram: worldRam(sym, {}) });
+  const log = [];
+  const collision = {
+    off: 0,
+    calibrate: () => true,
+    playerPos: () => at,
+    mapSize: () => [60, 20],
+    walkable: (x, y) => open(x, y),
+    takeables: () => things,
+  };
+  const nav = {
+    mapKey: async () => 1,
+    walkTo: async (_c, to) => {
+      log.push(`walk ${to[0]},${to[1]}`);
+      const bad = walkFails(to);
+      if (!bad) { at = [...to]; return { stopped: null }; }
+      return { stopped: bad };
+    },
+    step: async (dir) => { log.push(`face ${dir}`); return { blocked: false }; },
+  };
+  const j = new Journey(gb, new GameState(sym), null, collision, nav, () => {},
+                        { route: () => null }, {});
+  j.log = log;
+  j.said = [];
+  j.say = (m) => j.said.push(m);
+  j.settled = async () => gb.wram;
+  j.escapeBattle = async () => true;
+  j.runScripts = async () => {};
+  j.itemName = (id) => `ITEM ${id}`;
+  j.snap = async () => ({ items: pocket.map((id) => [id, 1]), balls: [] });
+  j.gb = { press: async () => { for (const id of gives(at)) pocket.push(id); } };
+  return j;
+}
+
+test('a thing with a wall under it is approached from the side that is open',
+     async (t) => {
+  // The defect this replaced. `pickUp` stood on the tile *below* and pressed
+  // UP, which works for Route 31's ball and is a rule about nothing: the item
+  // ball at (8,35) on Route 30 has a wall under it, so the walk failed and the
+  // old code pressed A wherever it had stopped. Approaching from above and
+  // facing DOWN is what put an ANTIDOTE in the bag.
+  const j = collector({
+    open: (x, y) => !(x === 8 && y === 36),        // the tile below is a wall
+    gives: (at) => (at[0] === 8 && at[1] === 34 ? [11] : []),
+  });
+  t.eq(await j.pickUp([8, 35]), null, 'it got there');
+  t.contains(j.log.join(' | '), 'walk 8,34', 'from above');
+  t.contains(j.log.join(' | '), 'face DOWN', 'facing back down at it');
+});
+
+test('a berry counts as having picked something up', async (t) => {
+  // It reported "the ball would not go in the bag" with the berry in the
+  // pocket, because it decided by looking at the balls -- the pocket next door
+  // to the one it had read since the beginning.
+  const j = collector({ gives: () => [7] });
+  t.eq(await j.pickUp([4, 4]), null, 'a non-ball is still something');
+});
+
+test('a thing nothing can reach is reported rather than pressed at', async (t) => {
+  const j = collector({ open: () => false });
+  t.contains(await j.pickUp([4, 4]), 'could not get to it', 'it says which');
+  t.eq(j.log.filter((l) => l.startsWith('face')).length, 0, 'and never pressed');
+});
+
+test('a battle on the way is asked again, not given up on', async (t) => {
+  // Measured: the first press of Take on Route 29 -- thirty-five tiles of grass
+  // between the two things it wanted -- came back with neither, because one
+  // battle ended the approach. Each walk gets partway before something jumps
+  // out, so asking again from where it stopped converges.
+  // Exactly one open side, so re-asking is the only way through: with four to
+  // choose from, moving on to the next side hides a retry that never happens.
+  let battles = 2, escapes = 0;
+  const j = collector({
+    open: (x, y) => x === 4 && y === 5,
+    walkFails: () => (battles-- > 0 ? 'battle' : null),
+    gives: () => [11],
+  });
+  j.escapeBattle = async () => { escapes++; return true; };
+  t.eq(await j.pickUp([4, 4]), null, 'it got there on the third ask');
+  t.eq(j.log.filter((l) => l === 'walk 4,5').length, 3,
+       'the same side asked three times, not three different sides');
+  t.eq(escapes, 3, 'and each ask escaped whatever was on screen first');
+
+  // Two battles is not the bound. A walk that keeps being interrupted has to
+  // run out eventually, and say so rather than looping.
+  let forever = 99;
+  const stuck = collector({
+    open: (x, y) => x === 4 && y === 5,
+    walkFails: () => (forever-- > 0 ? 'battle' : null),
+  });
+  t.contains(await stuck.pickUp([4, 4]), 'could not get to it', 'it gives up saying which');
+
+  // And a battle must not send it to the *other* side of the same thing. The
+  // battle is still on screen, so that walk would fail too -- the way out is up
+  // a level, where the escape is.
+  let first = true;
+  const two = collector({
+    at: [4, 6],
+    open: (x, y) => (x === 4 && y === 5) || (x === 4 && y === 3),
+    walkFails: () => { const bad = first; first = false; return bad ? 'battle' : null; },
+    gives: () => [11],
+  });
+  const order = [];
+  two.escapeBattle = async () => { order.push('escape'); return true; };
+  const realWalk = two.nav.walkTo;
+  two.nav.walkTo = async (c, to) => { order.push(`walk ${to[1]}`); return realWalk(c, to); };
+  await two.pickUp([4, 4]);
+  t.eq(order[0], 'escape', 'it escapes before the first walk');
+  t.eq(order[2], 'escape', 'and again before the second, rather than trying the far side');
+});
+
+test('taking everything here reports what arrived, by name', async (t) => {
+  const j = collector({
+    things: [{ x: 10, y: 4, what: 'ball' }, { x: 4, y: 4, what: 'tree' }],
+    gives: (at) => (at[0] === 4 && at[1] === 5 ? [7] : [11]),
+  });
+  const r = await j.takeHere();
+  t.true(r.ok, 'it worked');
+  t.eq(r.got.length, 2, 'both');
+  t.contains(r.message, 'ITEM 7', 'named');
+  t.contains(j.said.join(' | '), 'picked up', 'and said at the time');
+});
+
+test('the nearest thing is taken first', async (t) => {
+  const j = collector({
+    at: [5, 5],
+    things: [{ x: 40, y: 4, what: 'ball' }, { x: 6, y: 5, what: 'tree' }],
+    gives: () => [7],
+  });
+  await j.takeHere();
+  // The walk goes to a *side* of the thing, so this asserts on which thing was
+  // approached rather than on the tile: (5,5) and (7,5) are sides of the tree
+  // at (6,5), and anything near x=40 is the far ball.
+  const first = j.log.find((l) => l.startsWith('walk'));
+  t.true(Number(first.split(' ')[1].split(',')[0]) < 10,
+         'the one six tiles away, not the one thirty-five');
+});
+
+test('a ball already taken is an ordinary outcome, not a failure', async (t) => {
+  // The object stays in work RAM once the item is in the bag -- measured, the
+  // ball at (8,35) was still there with the ANTIDOTE carried -- so the row goes
+  // on offering it. Painting that red says something went wrong when nothing
+  // did.
+  const j = collector({ things: [{ x: 4, y: 4, what: 'ball' }], gives: () => [] });
+  const r = await j.takeHere();
+  t.true(r.ok, 'it is not a failure');
+  t.contains(r.message, 'nothing left to take here', 'and it says which');
+  t.eq(r.missed, 0, 'nothing was out of reach');
+});
+
+test('a thing that could not be reached is a failure, and is counted',
+     async (t) => {
+  const j = collector({ things: [{ x: 4, y: 4, what: 'ball' }], open: () => false });
+  const r = await j.takeHere();
+  t.false(r.ok, 'this one really did go wrong');
+  t.contains(r.message, 'could not get to 1', 'and says how many');
+});
+
+test('a map with nothing on it says so instead of walking', async (t) => {
+  const j = collector({ things: [] });
+  const r = await j.takeHere();
+  t.false(r.ok, 'nothing to do');
+  t.eq(j.log.length, 0, 'and it did not move');
+});

@@ -16,6 +16,45 @@
 // because a walk that quietly drifts off course ends up mashing A at a wall.
 import { CollisionMap } from './collision.js';
 
+// How many times a pickup starts over -- each one escapes whatever is on screen
+// and re-reads the map before choosing a side again -- and how many empty
+// presses are enough to believe there is nothing there. Six, because a walk
+// across a route is interrupted several times: the number is this app's patience
+// rather than a fact about the cartridge, which is why it is here and not in the
+// engine profile.
+const PICKUP_TRIES = 6, EMPTY_PRESSES = 2;
+// Steps for a walk that crosses a map. Route 30 is fifty-four tiles top to bottom.
+const LONG_WALK_STEPS = 260;
+
+// What `pickUp` answers with when it did not come away with anything. Named,
+// because `takeHere` has to tell them apart: the first is what an item ball
+// somebody already took looks like -- the object stays in work RAM once the
+// item is in the bag -- and the second is a walk that failed.
+const NOTHING_THERE = 'nothing there to take';
+const OUT_OF_REACH = 'could not get to it';
+
+/**
+ * The whole bag as `id -> quantity`, both pockets.
+ *
+ * Both, because what you pick up off a map lands in either one and the app had
+ * only ever read the balls -- which is how "the ball would not go in the bag"
+ * came to be said about a berry that had.
+ */
+function bagCount(s) {
+  const out = new Map();
+  for (const [id, n] of [...(s.items || []), ...(s.balls || [])]) {
+    out.set(id, (out.get(id) || 0) + n);
+  }
+  return out;
+}
+
+/** Which ids went up between two readings of the bag. */
+function arrived(before, after) {
+  const got = [];
+  for (const [id, n] of after) if (n > (before.get(id) || 0)) got.push(id);
+  return got;
+}
+
 export class Journey {
   /**
    * `title` is everything about one cartridge that this layer cannot work out.
@@ -63,6 +102,18 @@ export class Journey {
 
   /** The option bag every walk in here takes, so Stop reaches inside them. */
   get walkOpts() { return { cancelled: () => this.stopped }; }
+
+  /**
+   * Walking across a map rather than across a room.
+   *
+   * `walkTo` defaults to eighty steps, which is a plan inside a building. Every
+   * leg of a journey needs more, and the number was written out at four call
+   * sites -- so the fifth, the approach to something lying on the ground, was
+   * given the default by omission and would have run out of steps on a route.
+   * Running out reads as the tile refusing rather than as the walk being cut
+   * short, which is the sort of wrong answer that gets believed.
+   */
+  get longWalk() { return { maxSteps: LONG_WALK_STEPS, ...this.walkOpts }; }
   async mapKey() { return this.nav.mapKey(); }
 
   /**
@@ -172,7 +223,7 @@ export class Journey {
       // so the budget is a route's, not a room's, and whatever jumps out on the
       // way is dealt with rather than counted as the door being unreachable.
       await this.escapeBattle();
-      const res = await this.nav.walkTo(this.collision, goal, { maxSteps: 260, ...this.walkOpts });
+      const res = await this.nav.walkTo(this.collision, goal, this.longWalk);
       if (res.stopped === 'battle') continue;
       if (await this.mapKey() === expect) return true;
       if (res.stopped === 'refused' || res.stopped === 'battle') {
@@ -216,7 +267,7 @@ export class Journey {
       const at = this.collision.playerPos(w2);
       const goal = this.collision.furthestToward(at, direction);
       if (!goal || (goal[0] === at[0] && goal[1] === at[1])) break;
-      const res = await this.nav.walkTo(this.collision, goal, { maxSteps: 260, ...this.walkOpts });
+      const res = await this.nav.walkTo(this.collision, goal, this.longWalk);
       if (await this.mapKey() !== from) return await this.mapKey() === expect;
       // "Refused" means the game stopped taking walking input, which out here
       // is almost always somebody talking: Elm phones the moment you leave
@@ -275,7 +326,7 @@ export class Journey {
         // Routes are long -- Route 30 is fifty-four tiles top to bottom -- and
         // the default step budget is sized for a room, so it runs out halfway
         // up with nothing to show for it.
-        const res = await this.nav.walkTo(this.collision, tile, { maxSteps: 260, ...this.walkOpts });
+        const res = await this.nav.walkTo(this.collision, tile, this.longWalk);
         // Walking to the edge can carry us over it, and that is the errand
         // done rather than a failure -- the walk reports it as a warp, which
         // an earlier version treated as a reason to give up on a crossing it
@@ -551,22 +602,138 @@ export class Journey {
     return this.tasks.flee();
   }
 
-  /** Stand next to an item ball and take it. */
-  async pickUp(tile) {
-    const below = [tile[0], tile[1] + 1];
-    for (let attempt = 0; attempt < 3; attempt++) {
+  /**
+   * Stand next to something on the map and take what it is holding.
+   *
+   * Two things were wrong with this and both were invisible on the one tile it
+   * was ever asked about. It stood on the tile *below* and pressed UP, which
+   * works for Route 31's ball and is not a rule about anything: on Route 30 the
+   * item ball at (8,35) has a wall under it, so the walk failed, and the code
+   * then pressed A wherever it had stopped -- a dead `continue` inside a
+   * condition that had already excluded the case it tested for. And it decided
+   * whether it had succeeded by looking at the *balls*, so a BERRY off a tree
+   * reported "the ball would not go in the bag" with the berry in the pocket.
+   *
+   * Now: approach from whichever neighbour is walkable, face the thing, and
+   * answer with what actually arrived. Approaching from above and facing DOWN is
+   * what put that ANTIDOTE in the bag.
+   */
+  async pickUp(tile, { tries = PICKUP_TRIES } = {}) {
+    let pressed = 0;
+    for (let attempt = 0; attempt < tries; attempt++) {
       await this.escapeBattle();
-      const res = await this.nav.walkTo(this.collision, below, this.walkOpts);
-      if (res.stopped !== null && res.stopped !== 'battle') {
-        if (res.stopped === 'battle') continue;
-      }
-      await this.nav.step('UP');
+      const before = bagCount(await this.snap());
+      const from = await this._approach(tile);
+      if (!from) continue;
+      await this.nav.step(from.face);
       await this.gb.press('A', 6, 12);
       await this.runScripts();
-      const s = await this.snap();
-      if (s.balls.length) return null;
+      const got = arrived(before, bagCount(await this.snap()));
+      if (got.length) return null;
+      // Reached it and it gave nothing. One more go, because a press can land
+      // while the last box is still closing -- and then stop, because a ball
+      // somebody has already taken will go on giving nothing however long this
+      // stands there asking.
+      if (++pressed >= EMPTY_PRESSES) break;
     }
-    return 'the ball would not go in the bag';
+    // Two different answers, and the caller needs them apart: a ball already
+    // taken is an ordinary outcome and a tile nothing can reach is not.
+    return pressed ? NOTHING_THERE : OUT_OF_REACH;
+  }
+
+  /**
+   * Walk to a tile beside `tile` and report which way to face from it.
+   *
+   * Every side is tried, nearest first, because which one is open is a fact
+   * about the map rather than a convention -- and the one that is open is
+   * sometimes the only one.
+   */
+  async _approach(tile) {
+    const wram = await this.settled();
+    if (!wram) return null;
+    const at = this.collision.playerPos(wram);
+    const sides = [
+      { from: [tile[0], tile[1] + 1], face: 'UP' },
+      { from: [tile[0], tile[1] - 1], face: 'DOWN' },
+      { from: [tile[0] - 1, tile[1]], face: 'RIGHT' },
+      { from: [tile[0] + 1, tile[1]], face: 'LEFT' },
+    ].filter((s) => this.collision.walkable(s.from[0], s.from[1]))
+     .sort((a, b) => Math.abs(a.from[0] - at[0]) + Math.abs(a.from[1] - at[1])
+                     - Math.abs(b.from[0] - at[0]) - Math.abs(b.from[1] - at[1]));
+    for (const side of sides) {
+      // The same budget every other leg uses: a thing lying on a route is
+      // routinely further off than a plan inside a room -- Route 29's ball and
+      // its fruit tree are thirty-five tiles apart before any detour.
+      const res = await this.nav.walkTo(this.collision, side.from, this.longWalk);
+      if (res.stopped === null) return side;
+      // A battle on the way is not this side refusing, and on a route it is the
+      // ordinary case rather than the exception: measured, the first press of
+      // Take on Route 29 -- thirty-five tiles of grass between the two things it
+      // wanted -- came back having picked up neither. Each walk gets partway
+      // before something jumps out, so asking again from where it stopped
+      // converges. Asking again is `pickUp`'s loop, which escapes the battle
+      // first and re-reads the map; a second retry in here would be the same
+      // thing done worse, and it was there for one commit before the mutation
+      // that should have broken a test and did not said so.
+      if (res.stopped === 'battle') return null;
+    }
+    return null;
+  }
+
+  /**
+   * Take everything this map is holding, and say what arrived.
+   *
+   * The list is `collision.takeables` -- item balls and fruit trees, by the
+   * sprite ids the engine profile carries -- nearest first. A ball somebody has
+   * already taken is still in that list, so this cannot know in advance what is
+   * left; it presses A and reports the bag, which is the only thing that
+   * actually answers the question.
+   */
+  async takeHere() {
+    const wram = await this.settled();
+    if (!wram) return { ok: false, got: [], message: 'the map never settled' };
+    const here = this.collision.takeables(wram);
+    if (!here.length) return { ok: false, got: [], message: 'nothing lying about here' };
+    const at = this.collision.playerPos(wram);
+    const order = [...here].sort(
+      (a, b) => Math.abs(a.x - at[0]) + Math.abs(a.y - at[1])
+                - Math.abs(b.x - at[0]) - Math.abs(b.y - at[1]));
+    const got = [];
+    let missed = 0;
+    for (const thing of order) {
+      if (this.stopped) break;
+      const before = bagCount(await this.snap());
+      const failed = await this.pickUp([thing.x, thing.y]);
+      const took = arrived(before, bagCount(await this.snap()));
+      for (const name of took) {
+        this.say(`picked up ${this.itemName(name)}`);
+        got.push(name);
+      }
+      // Only a walk that never landed its press counts as missed. An
+      // empty-handed press is not that: a ball somebody has already taken gives
+      // nothing and refuses nothing.
+      if (failed === OUT_OF_REACH) missed++;
+    }
+    // Three outcomes, and only one of them is a failure. Getting nothing from a
+    // ball that has already been taken is the ordinary case -- the object stays
+    // in work RAM once the item is in the bag, so the row goes on offering it --
+    // and painting that red says something went wrong when nothing did.
+    if (got.length) {
+      return { ok: true, got, missed,
+               message: `picked up ${got.map((n) => this.itemName(n)).join(', ')}` };
+    }
+    if (missed) {
+      return { ok: false, got, missed,
+               message: `could not get to ${missed} of ${order.length} here` };
+    }
+    return { ok: true, got, missed,
+             message: `nothing left to take here — tried ${order.length}` };
+  }
+
+  /** An item id as a name, where there is a ROM to ask. */
+  itemName(id) {
+    const name = this.tasks && this.tasks.rom ? this.tasks.rom.itemName(id) : '';
+    return name || `item ${id}`;
   }
 
   /** Run a list of named legs, stopping at the first one that fails. */

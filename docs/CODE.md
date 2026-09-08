@@ -106,7 +106,7 @@ of the subtleties in sections 6 and 7.
 
 ## 2. The shape of it
 
-<!-- covers-api: app/main.js gen2/journey.js titles/crystal.js gen2/tasks.js gen2/nav.js gen2/world.js gen2/collision.js gen2/state.js gen2/romdata.js gen2/symbols.js gbcore/gb.js @ 2a96f048740c -->
+<!-- covers-api: app/main.js gen2/journey.js titles/crystal.js gen2/tasks.js gen2/nav.js gen2/world.js gen2/collision.js gen2/state.js gen2/romdata.js gen2/symbols.js gbcore/gb.js @ 8b54fb0643e3 -->
 
 Twenty-seven modules, in four directories, and the directories are the design:
 **an import may point down this list and never up.**
@@ -578,7 +578,7 @@ because the bag reader still uses it.
 
 ### `collision.js` — what you can walk on
 
-<!-- covers: gen2/collision.js @ 9ac07137497a -->
+<!-- covers: gen2/collision.js @ 007920bcf242 -->
 
 Decodes the loaded map into "can I stand on this tile", and does breadth-first
 pathfinding over the result. This is what turns walking from trial and error
@@ -698,7 +698,7 @@ Route 30's door to it at `(17,5)`.
 
 ## 4. Taking one step, and planning a walk
 
-<!-- covers: gen2/nav.js gen2/collision.js @ 5005e3758893 -->
+<!-- covers: gen2/nav.js gen2/collision.js @ 132389345097 -->
 
 ### One step
 
@@ -796,7 +796,7 @@ point those coordinates mean somewhere else entirely.
 
 ## 5. Crossing to the next map
 
-<!-- covers: gen2/journey.js gen2/world.js @ 60d5100dce5e -->
+<!-- covers: gen2/journey.js gen2/world.js @ 45a90786548d -->
 
 A connection spans only part of a shared edge, so "walk west until something
 happens" does not work. `crossEdge()` closes the distance in stages, then tries
@@ -1412,7 +1412,7 @@ precedes it defaults to yes, which is what we want; the nickname box does not.
 
 ## 7a. Four that act on where you already are
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ 74edd8a8618a -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ c08e2ee77072 -->
 
 Grind, hunt and catch all go *looking* for something. These four do the obvious
 thing with the situation you are already in, and take no parameters:
@@ -1761,7 +1761,7 @@ because that failure is only otherwise discovered by reaching for the undo.
 
 ## 8. The errands
 
-<!-- covers: titles/crystal.js gen2/journey.js @ 8e5d55305d17 -->
+<!-- covers: titles/crystal.js gen2/journey.js @ 510b248d68d3 -->
 
 Everything in this section is `crystal.js` — the only file in the app that names
 a Crystal map, a Crystal door or a Crystal NPC. What it stands on is
