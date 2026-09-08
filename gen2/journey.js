@@ -15,7 +15,6 @@
 // to land on and stops with a plain description if it lands somewhere else,
 // because a walk that quietly drifts off course ends up mashing A at a wall.
 import { CollisionMap } from './collision.js';
-import { normalise } from './romdata.js';
 
 // How many times a pickup starts over -- each one escapes whatever is on screen
 // and re-reads the map before choosing a side again -- and how many empty
@@ -51,29 +50,6 @@ function bagCount(s) {
     out.set(id, (out.get(id) || 0) + n);
   }
   return out;
-}
-
-/**
- * The cheapest thing in the bag that will mend somebody, or null.
- *
- * `heals` is the title's list of names, weakest first; `items` is the pocket as
- * `[id, quantity]`. Answered as `{ id, name }` so the caller can say what it
- * spent without asking the ROM twice.
- *
- * Weakest first is the whole rule, and it is the same one the ball preference
- * follows: spend the cheapest thing that will do. A Full Restore on a Pokemon
- * missing four HP is the Master Ball at a Rattata.
- */
-export function cheapestHeal(items, heals, rom) {
-  if (!rom || !Array.isArray(heals) || !heals.length) return null;
-  const carried = (items || []).filter(([, n]) => n > 0);
-  for (const want of heals) {
-    for (const [id] of carried) {
-      const name = rom.itemName(id);
-      if (name && normalise(name) === want) return { id, name };
-    }
-  }
-  return null;
 }
 
 /** Which ids went up between two readings of the bag. */
@@ -672,7 +648,7 @@ export class Journey {
         const now = await this.snap();
         const mine = now.party[mon.slot];
         if (!mine || mine.hp >= mine.maxHp) break;
-        const pick = cheapestHeal(asEntries(), heals, rom);
+        const pick = rom.cheapestOf(asEntries(), heals);
         if (!pick) break;
         this.say(`using ${pick.name} on ${this.nameOf(mine)}`);
         const used = await this.tasks.useItemOn(pick.id, mon.slot);
@@ -719,7 +695,11 @@ export class Journey {
     const s = await this.snap();
     if (!s.inBattle) return true;
     if (s.battleMode === this.state.e.trainerBattle) {
-      const how = await this.tasks.fightBattle();
+      // A trainer battle met on the way is still worth a potion: the whole
+      // reason this walks rather than flees is that a trainer cannot be run
+      // from, so losing it costs the trip it was in the middle of.
+      const how = await this.tasks.fightBattle(
+        undefined, { heals: (this.title && this.title.heals) || null });
       this.say(how === 'won' ? 'won a trainer battle' : `trainer battle: ${how}`);
       return how === 'won';
     }

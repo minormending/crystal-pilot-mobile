@@ -8,7 +8,7 @@
 // the walk.
 import { FakeGameBoy, fakeRom, symbols, test, worldRam } from '../harness.mjs';
 import { GameState } from '../../gen2/state.js';
-import { cheapestHeal, Journey } from '../../gen2/journey.js';
+import { Journey } from '../../gen2/journey.js';
 
 const sym = symbols();
 
@@ -370,41 +370,6 @@ test('a map with nothing on it says so instead of walking', async (t) => {
 
 const ITEMS = { 18: 'POTION', 154: 'BERRY', 26: 'FULL RESTORE', 19: 'SUPER POTION' };
 const STOCK = ['berry', 'potion', 'super potion', 'full restore'];
-
-test('the cheapest thing that will do is the one picked', async (t) => {
-  // The same rule as never throwing a Master Ball at a Rattata. A Full Restore
-  // on a Pokémon missing four HP is that, in the other pocket.
-  const rom = fakeRom({ items: ITEMS });
-  t.eq(cheapestHeal([[26, 1], [18, 2]], STOCK, rom).name, 'POTION',
-       'a potion before a full restore');
-  t.eq(cheapestHeal([[26, 1], [18, 2], [154, 5]], STOCK, rom).name, 'BERRY',
-       'and a berry before either, being free and regrowing');
-  t.eq(cheapestHeal([[26, 1]], STOCK, rom).name, 'FULL RESTORE',
-       'but the expensive one when it is all there is');
-});
-
-test('a bag with nothing that heals answers nothing', async (t) => {
-  const rom = fakeRom({ items: { 5: 'POKé BALL', 12: 'ANTIDOTE' } });
-  t.eq(cheapestHeal([[5, 3], [12, 1]], STOCK, rom), null, 'balls and cures are not heals');
-  t.eq(cheapestHeal([[18, 0]], STOCK, rom), null, 'nor is a zero quantity');
-  t.eq(cheapestHeal([], STOCK, rom), null, 'nor an empty pocket');
-});
-
-test('a cartridge whose title lists no healing items answers nothing',
-     async (t) => {
-  // The honest position for a hack that renamed POTION: lose this, keep
-  // everything else, and get it back when somebody writes the name down.
-  const rom = fakeRom({ items: ITEMS });
-  t.eq(cheapestHeal([[18, 1]], null, rom), null, 'no list, no answer');
-  t.eq(cheapestHeal([[18, 1]], [], rom), null, 'and an empty list is the same');
-  t.eq(cheapestHeal([[18, 1]], STOCK, null), null, 'nor without a ROM to name ids');
-});
-
-test('the name is folded, so case and the accent cost nothing', async (t) => {
-  const rom = fakeRom({ items: { 30: 'FRESH WATER' } });
-  t.eq(cheapestHeal([[30, 1]], ['fresh water'], rom).name, 'FRESH WATER',
-       'matched through the same fold the ball preference uses');
-});
 
 /** A Journey whose party, bag and item use are scripted. */
 function mender({ party = [{ hp: 10, maxHp: 40 }], items = [[18, 2]],

@@ -181,6 +181,36 @@ export class RomData {
 
 
   /**
+   * The cheapest thing in a pocket that matches a list of names, or null.
+   *
+   * `names` is weakest-first and comes from the title, because an item id is
+   * layout and an item name is content -- and content is what a hack changes.
+   * `pocket` is `[id, quantity]` pairs as `state.items` reads them.
+   *
+   * A method on the decoder rather than a free function somewhere else, because
+   * both halves of the work are already here: `itemName` and the `normalise`
+   * fold that lets POKe and case cost nothing. It began as an export of
+   * `journey.js` and moved when a second caller turned up in `battle.js` --
+   * which would otherwise have had one gen2 module reaching sideways into
+   * another for a question about the bag.
+   *
+   * Weakest first is the whole rule, and it is the same one the ball preference
+   * follows: spend the cheapest thing that will do. A Full Restore on a Pokemon
+   * missing four HP is the Master Ball at a Rattata.
+   */
+  cheapestOf(pocket, names) {
+    if (!Array.isArray(names) || !names.length) return null;
+    const carried = (pocket || []).filter(([, n]) => n > 0);
+    for (const want of names) {
+      for (const [id] of carried) {
+        const name = this.itemName(id);
+        if (name && normalise(name) === want) return { id, name };
+      }
+    }
+    return null;
+  }
+
+  /**
    * The grass entry for a map, as `{ table, addr }`, or null.
    *
    * Three readers now want the same scan -- what appears, what levels it

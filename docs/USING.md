@@ -340,6 +340,29 @@ Measured end to end: **Lv5 to Lv17 in 192 seconds, 159 battles, 158 won, one
 knockout healed through, one evolution, and all four original moves still in
 place.**
 
+### It drinks the potion mid-fight, rather than after
+
+For twenty-three versions the pilot chose FIGHT every turn until something
+dropped. A knockout costs half your money and puts you back at a Pokémon Center,
+and the pilot was carrying potions through every one of them.
+
+Now, when the Pokémon on the field falls under about a third of its HP, it opens
+the pack and uses the cheapest thing that will mend it — a berry before a potion,
+a potion before a super potion — and that *is* the turn, so the fight carries on
+from there. Three items per battle at most: a fight that needs four is a fight
+you should have run from.
+
+**Measured on Route 29, grinding a Cyndaquil from Lv5 to Lv14:** 132 seconds, 79
+battles, **79 won, no knockouts**, three items spent inside battles and three
+walks to Cherrygrove. The same grind before this could do it, and used to come
+back with a knockout in it.
+
+**Out of PP is still a walk, and it has to be.** A potion mends HP and nothing
+mends PP except a Pokémon Center, so when the pilot has no move left that can
+win anything it goes. That is not a limitation to work around: it is the reason
+the job knows when to stop asking.
+
+
 **A knockout is healed and carried on from.** Grinding a Pokémon well above the
 local wilds means it will eventually go down, and the pilot is handed a way to
 heal and a budget of twelve trips. It used to use neither here: it reported *the

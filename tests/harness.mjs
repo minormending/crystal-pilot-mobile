@@ -386,6 +386,10 @@ export function fakeRom({ moves = {}, species = {}, items = {} } = {}) {
     },
     speciesName: (id) => species[id] || `SPECIES_${id}`,
     itemName: (id) => items[id] || `ITEM_${id}`,
+    // The real method, borrowed rather than restated: a stub of "which item is
+    // cheapest" would test the stub, and the fold it does on the way is the
+    // part that can be wrong.
+    cheapestOf: RomData.prototype.cheapestOf,
   };
 }
 

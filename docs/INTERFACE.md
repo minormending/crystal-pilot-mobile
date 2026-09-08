@@ -186,6 +186,15 @@ Elm's lab it offers *downstairs · one map away*, and from downstairs that entry
 is gone and *Elm's lab* has appeared. A cartridge nobody has described has no
 list and no row, the same way it has no scripted intro.
 
+**Fight has a third thing it can do, and it does not need a button for it.**
+When the Pokémon on the field drops under about a third of its HP, the battle
+loop opens the pack and uses the cheapest thing that will mend it — which *is*
+the turn, so the fight carries on. There is no control for that and there should
+not be: the two modal actions beside the pad answer the battle in front of you,
+and this is the pilot doing its job rather than asking you a question. What it
+does show up in is the log, which names the HP and the item: *6/23 — using
+POTION*.
+
 **The Heal row names what it will spend.** It has always named the nearer of the
 two healing places; it now names a POTION instead when there is one in the bag,
 because that is what it will actually do and the bag is free. *1 hurt · POTION

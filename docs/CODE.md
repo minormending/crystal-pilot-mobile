@@ -106,7 +106,7 @@ of the subtleties in sections 6 and 7.
 
 ## 2. The shape of it
 
-<!-- covers-api: app/main.js gen2/journey.js titles/crystal.js gen2/tasks.js gen2/nav.js gen2/world.js gen2/collision.js gen2/state.js gen2/romdata.js gen2/symbols.js gbcore/gb.js @ 7053522a5fe6 -->
+<!-- covers-api: app/main.js gen2/journey.js titles/crystal.js gen2/tasks.js gen2/nav.js gen2/world.js gen2/collision.js gen2/state.js gen2/romdata.js gen2/symbols.js gbcore/gb.js @ e830e6fbb0bf -->
 
 Twenty-seven modules, in four directories, and the directories are the design:
 **an import may point down this list and never up.**
@@ -501,7 +501,7 @@ and in `bootstrap.js`, with nothing able to notice if they drifted.
 
 ### `romdata.js` — what the cartridge knows
 
-<!-- covers: gen2/romdata.js @ 2ca4118cb9f9 -->
+<!-- covers: gen2/romdata.js @ f310e10d366a -->
 
 Species names, item names, wild-encounter tables, move power. All read out of
 the ROM, not shipped as a copy, so they cannot drift from the build being driven.
@@ -530,6 +530,15 @@ the ROM, not shipped as a copy, so they cannot drift from the build being driven
   of Route 31 read Lv4–5, while the *species* swap completely after dark. The
   earlier note compared two maps and called it two hours: 26.1 is Route 30 and
   26.2 is Route 31, and the Lv3–4-against-Lv4–5 it quoted is exactly that pair.
+  `cheapestOf(pocket, names)` lives here for the same reason the decoders do:
+  both halves of the work were already in this file — `itemName`, and the
+  `normalise` fold that lets POKé and case cost nothing. It answers *the cheapest
+  thing in the bag that matches this list*, weakest-first, and the list comes
+  from the title because an item id is layout and an item name is content. It
+  began as an export of `journey.js` and moved when a second caller turned up in
+  `battle.js`, which would otherwise have had one gen2 module reaching sideways
+  into another for a question about the bag.
+
   All three readers share one `_grassAt` for the table scan and one `_slots` for
   a block, which is not tidying: a slot with no species is padding, and its
   level byte means nothing. `wildLevels` knew that and `wildOn` did not, so a
@@ -802,7 +811,7 @@ point those coordinates mean somewhere else entirely.
 
 ## 5. Crossing to the next map
 
-<!-- covers: gen2/journey.js gen2/world.js @ 385ac7e46b37 -->
+<!-- covers: gen2/journey.js gen2/world.js @ 9c880b89dcd1 -->
 
 A connection spans only part of a shared edge, so "walk west until something
 happens" does not work. `crossEdge()` closes the distance in stages, then tries
@@ -1036,6 +1045,65 @@ on the NO row, so a box still up after that is the second question.
 | --- | --- | --- |
 | Chikorita over Lv15 with four moves | `[POISONPOWDER, GROWL, RAZOR LEAF, REFLECT]` | `[TACKLE, GROWL, RAZOR LEAF, REFLECT]` |
 
+**And it reaches for the bag before the thing on the field faints.** For
+twenty-three passes this loop chose FIGHT every turn until something dropped —
+and a knockout in Gen 2 takes half your money and puts you back at a Center. The
+grind's answer to one has always been to heal up and carry on, *after* the fact.
+The pilot was carrying potions through every one of them, because nothing in
+this loop had ever opened the pack.
+
+```mermaid
+flowchart TD
+    M["battle menu is live"] --> F{"is the thing on the field<br/>under a third of its HP?"}
+    F -- no --> FIGHT["FIGHT, strongest move"]
+    F -- yes --> B{"anything in the bag,<br/>and any allowance left?"}
+    B -- no --> FIGHT
+    B -- yes --> P["PACK → ITEMS → the item → USE"]
+    P --> V{"did the HP move?"}
+    V -- yes --> T["that was the turn; go round again"]
+    V -- no --> BK["back out to the battle menu,<br/>say what went wrong, go round again"]
+```
+
+The boxes are the ones measured on the cartridge, on a Cyndaquil at 9 of 21:
+PACK draws the same `5/1` box the field pack does, the item draws USE/QUIT at
+`2/7`, confirming draws `2/0`, **the HP moves on the press after that**, and the
+pocket is not written back until the box closes. So HP is the evidence here too.
+
+Three items per battle, and low on purpose: a fight that needs four is a fight
+that should have been run from, and spending the bag on it is worse than losing
+it. Which items count is passed in — an item name is content and this file is
+the engine — so a cartridge nobody has described fights exactly as it did.
+
+<details>
+<summary><b>Advanced detail:</b> the two boxes that share a signature, and the
+press that vanishes</summary>
+
+**`battlePack.use` is the same shape as `learnMove`** — two items at row 7 — and
+that is written down rather than deduplicated. They are two different questions
+that a snapshot cannot tell apart, and only the context can: the learn-move box
+appears while a turn is resolving, and this one only while the pack is being
+driven. Any code that could be in both states at once would answer the wrong
+one, which is why `useItemInBattle` finishes before the turn loop resumes.
+
+**A swallowed PACK press is not a pack that will not open**, and reading it as
+one cost a knockout. Measured: three attempts in one battle came back *the pack
+never opened*, spending the whole three-item allowance, after which the Pokémon
+fought on at 4 of 18 and fainted. The pack itself opens in under twenty frames —
+measured separately, by pressing PACK and sampling at 20, 40, 60 and 90 — so what
+happens is the A press landing while the turn's text is still running and
+vanishing. `_openBattlePack` presses, looks, and presses again, which is the
+discipline `_packMoved` already applies one level down.
+
+**And `closeMenus` cannot succeed inside a battle.** It presses B until *no
+window is open*, and the battle menu is a window B will not close — so it could
+only ever exhaust its budget and report failure, which is honest and useless.
+The resting state in a battle is the battle menu, so `_backToBattleMenu` presses
+toward that instead. Worth noting as a consequence of making `closeMenus` check
+itself one pass earlier: the fix turned a silent waste into a reported one, and
+the report is what named the wrong caller.
+
+</details>
+
 **And evolution is allowed and said out loud.** It is the last item in the list
 of things this job had no policy for. Letting it happen is what somebody
 grinding expects and cancelling would be the surprising choice — but it went by
@@ -1068,6 +1136,33 @@ is an odd place for the one job people leave running.
 The end-to-end run: **Lv5 to Lv17 in 192 seconds, 159 battles, 158 won, one
 knockout healed through, one evolution — and all four original moves still in
 place.**
+
+**And the grind now says *why* it needs healing, because the two answers
+differ.** The bag mends HP; nothing but a Center mends PP. This loop's own
+comment has said for six passes that it terminates *only* because a Center does
+both — and the day the bag arrived, handing it a bag heal for everything proved
+that comment right: measured, it spent all twelve trips at Lv8 on a Pokémon at
+**full health** with no move left that could win. A loop with no exit, predicted
+in a comment above the line that broke it.
+
+So the reason goes to the caller, which is the only place that knows what each
+of its ways to heal actually does:
+
+| Why | What the caller does | Because |
+| --- | --- | --- |
+| `dry` — nothing left that can win | walk to a Center | only a Center restores PP |
+| `hurt` — low on HP | ask the bag, then walk | a POTION in the pocket is free |
+| a knockout | walk to a Center | a potion does nothing at 0 HP |
+
+The counter that bounds those trips was called `heals` until the bag's list of
+healing items arrived as an option and the names collided. The collision was the
+tell: it has never counted heals — the bag mends things without one — it counts
+**walks**, which is the thing the budget is a budget for. It is `trips` now.
+
+**Measured end to end, twice.** Before the bag reached this loop: Lv5 to Lv17 in
+192 seconds, 159 battles, one knockout. After: **Lv5 to Lv14 in 132 seconds, 79
+battles, 79 won, no knockouts**, three items spent inside battles and three walks
+for PP.
 
 One loose end, recorded rather than smoothed: in that run the decline's own log
 line was not captured, though it was captured in the run before. The outcome is
@@ -1332,7 +1427,7 @@ fainted.
 
 ## 7. Catching something
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ b91965e964de -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ 202774389dcc -->
 
 Catching is the most involved loop, because a Poké Ball's odds turn on how much
 HP is left. Throwing at a full-health target is mostly throwing balls away.
@@ -1418,7 +1513,7 @@ precedes it defaults to yes, which is what we want; the nickname box does not.
 
 ## 7a. Four that act on where you already are
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ 25c20a7fe723 -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ e6a01c22959a -->
 
 Grind, hunt and catch all go *looking* for something. These four do the obvious
 thing with the situation you are already in, and take no parameters:
@@ -1843,7 +1938,7 @@ because that failure is only otherwise discovered by reaching for the undo.
 
 ## 8. The errands
 
-<!-- covers: titles/crystal.js gen2/journey.js @ 7abc7316e60b -->
+<!-- covers: titles/crystal.js gen2/journey.js @ 25cef1ac14f9 -->
 
 Everything in this section is `crystal.js` — the only file in the app that names
 a Crystal map, a Crystal door or a Crystal NPC. What it stands on is
@@ -2745,6 +2840,12 @@ and the dot goes red. Which is the shape found in `Join` three audits earlier,
 in the other half of the app: a `finally` without a `catch`, on a path nobody
 presses twice.
 
+**And the one place `closeMenus` cannot help is a battle**, which the fix below
+made visible rather than caused. The battle menu is a window that B will not
+close, so pressing B until no window is open can only exhaust its budget — and
+now it says so, which is how the wrong caller got named. Battle paths press
+toward the battle menu instead; see section 6.
+
 **And a press that is not looked at is not a press.** `closeMenus` pressed B
 four times and asked nothing — in the primitive every other primitive falls back
 to, in a repository that has spent twenty passes replacing exactly that habit
@@ -3024,7 +3125,7 @@ recorded at all, so the kept battery was restored into whatever ROM was picked
 next; and `pickKey` was *the only record, if there is exactly one*, which wrote
 this cartridge's save into the previous cartridge's record. Both failed
 silently, and both were on the paths nobody presses — see
-[Twenty-three audits](PROVEN.md#twenty-three-audits-and-how-each-defect-was-actually-found)
+[Twenty-four audits](PROVEN.md#twenty-four-audits-and-how-each-defect-was-actually-found)
 for why that is not a coincidence.
 
 `patchMeta` merges fields into the `meta` record, and it used to do that as a

@@ -28,7 +28,7 @@ flowchart LR
 
 Every step of that is the first time it has been watched on a cartridge since
 the battle and job code was rewritten, and one of them failed the first time
-round — see [the eleventh pass](#twenty-three-audits-and-how-each-defect-was-actually-found).
+round — see [the eleventh pass](#twenty-four-audits-and-how-each-defect-was-actually-found).
 
 Proven, and visible in [the screenshot on the front page](../README.md):
 
@@ -332,7 +332,7 @@ second, which is there so the core's own waits finish, not to run a game.
   candidates and returned true standing three tiles clear of any. It checks the
   tile underfoot now.
 
-## Twenty-three audits, and how each defect was actually found
+## Twenty-four audits, and how each defect was actually found
 
 Everything above was watched happening. This section was the exception, and the
 exception was the point of it: after the ROM-hack work shipped, eleven passes
@@ -437,6 +437,11 @@ exactly why nothing failed.
 | 23 | the ITEM pocket lags a use, so the bag is not the evidence | a berry that healed and stayed listed | **watching both halves** |
 | 23 | and the loop re-read that pocket, so it never reached the second item | one berry and two potions | watching both halves |
 | 23 | my own patch landed in the wrong method, and 284 tests passed | pressing the button once | measuring the fix |
+| 24 | the grind was handed the *walk*, so the bag never reached the job that heals twelve times | pressing Go | **following a feature to its second caller** |
+| 24 | a swallowed PACK press read as "the pack never opened", three times, and cost a knockout | grinding with potions | **grinding with the new thing on** |
+| 24 | `closeMenus` cannot succeed in a battle, so it always exhausts its budget | any battle path that fails | following a feature |
+| 24 | and routing every grind heal through the bag broke the loop's only exit | grinding to Lv14 | measuring the fix |
+| 24 | `heals` collided with a counter that had never counted heals | naming a new option | reading the collision |
 
 Five things in that table are worth more than the individual rows.
 
@@ -447,12 +452,12 @@ device, a second cartridge, a second Pokémon. What it measures is how much of
 the world you have to *arrange*, not how much you have to own: the fifth pass
 needed no hardware at all, only a party with a corpse in slot one.
 
-**Two of the seventy-two were caught by a check**, and only after the fix
+**Two of the seventy-seven were caught by a check**, and only after the fix
 had decided what to look for: the wiring group named the four modules still
 importing constants that had just been deleted. One more was caught by a *test*,
 and only because the test hung — the obvious `continue` for the party prompt
 advanced nothing in a loop bounded by balls thrown. That is the honest weight to
-give this repository's seventeen check groups and 292 tests: they hold a fix
+give this repository's seventeen check groups and 309 tests: they hold a fix
 down, and they catch the fix that is itself wrong. They do not find the fault.
 
 **Measuring also rules things out, which is half of what it is for.** The
@@ -1360,6 +1365,106 @@ End to end on Route 29, standing at (19,4) with a Lv7 Cyndaquil at **6 of 24**
 and a bag of two Potions and a Berry: **24 of 24, the Berry and one Potion
 spent, and the pilot never left the tile.** Before the pocket fix, the same
 situation stopped at 15 of 22.
+
+### A twenty-fourth pass: following a feature to its second caller
+
+The pass before this one taught the pilot to heal out of the bag, and measured
+it on the Heal button. This one asked the obvious next question — *who else
+heals?* — and the answer was the grind, which heals **twelve times** and had
+never been given the feature at all.
+
+```mermaid
+flowchart LR
+    F["healNow<br/><b>bag first, then the walk</b>"] --> H["#heal button"]
+    H --> OK["measured, shipped"]
+    G["grind"] -.->|"heal: () => healUp()"| W["the walk, and only the walk"]
+    W --> C["<b>twelve trips a job,<br/>carrying potions</b>"]
+```
+
+One line in `main.js`, and the pattern is this repository's oldest: a mechanism
+wired to the caller its author had in mind and not to the one that would use it
+most. Which makes it the eighth time, and the useful part is no longer the
+finding — it is that *following a new feature to its second caller* is now a
+move worth making deliberately rather than a thing to notice later.
+
+### Then it went into battles, and found three
+
+The feature this pass is that the battle loop reaches for the bag before the
+thing on the field faints. A knockout takes half your money; the grind's answer
+to one has always been to heal up and carry on, *after* the fact.
+
+Every box measured on the cartridge, on a Cyndaquil at 9 of 21:
+
+| Box | `menuItems` / `menuTop` | Note |
+| --- | --- | --- |
+| the battle menu | 34 / 12 | already known |
+| the pack | 5 / 1 | the same box the field pack draws |
+| USE / QUIT | 2 / 7 | **the same shape as `learnMove`** |
+| the result | 2 / 0 | the HP moves on the press *after* this appears |
+
+The third row is written down rather than deduplicated. They are two different
+questions a snapshot cannot tell apart, and only the context can: the learn-move
+box appears while a turn resolves, and this one only while the pack is being
+driven. Any code that could be in both states at once would answer the wrong
+one.
+
+**A swallowed press is not a pack that will not open.** Measured, and it cost a
+knockout: three attempts in one battle came back *the pack never opened*,
+spending the whole three-item allowance, after which the Pokémon fought on at 4
+of 18 and fainted. The pack opens in under twenty frames — measured separately by
+pressing PACK and sampling at 20, 40, 60 and 90 — so what happens is the A press
+landing in the turn's text and vanishing. The reading was accurate; the
+conclusion was wrong. Press, look, press again.
+
+**And `closeMenus` cannot succeed inside a battle.** It presses B until no
+window is open, and the battle menu is a window B will not close. That was
+always true; what changed is that the pass before last made `closeMenus`
+*check*, so a call that could never succeed started reporting failure — and the
+report is what named the wrong caller. A fix that turns a silent waste into a
+loud one is worth having for that alone.
+
+### And one of mine, predicted six passes earlier by a comment
+
+```
+// Bounded, and this loop is the reason: healing does not count a
+// battle, so nothing else here advances. It terminates only because a
+// Center restores HP *and* PP and healUp verifies the HP half.
+// A Center that left PP alone would walk there and back for ever.
+```
+
+That comment has sat above the grind's heal branch since the seventeenth pass.
+Routing every grind heal through the bag is exactly the case it describes: **the
+bag mends HP and nothing but a Center mends PP.** Measured — the grind spent all
+twelve trips at Lv8 on a Pokémon at *full health* with no move left that could
+win, and stopped. A loop with no exit, described in advance, above the line that
+broke it.
+
+So the *reason* goes to the caller, which is the only place that knows what each
+of its ways to heal does:
+
+| Why | The caller | Because |
+| --- | --- | --- |
+| `dry` | walks | only a Center restores PP |
+| `hurt` | asks the bag, then walks | a potion in the pocket is free |
+| a knockout | walks | a potion does nothing at 0 HP |
+
+One more thing fell out of naming that option. The counter bounding those trips
+was called `heals`, the new option was called `heals`, and the collision was the
+tell: **it has never counted heals.** The bag mends things without one. It counts
+*walks*, which is what the budget is for, and it is `trips` now.
+
+### What the measurements say
+
+| | before | after |
+| --- | --- | --- |
+| Lv5 to Lv14, Route 29 | — | **132s, 79 battles, 79 won, 0 knockouts** |
+| Lv5 to Lv17 (pass 19) | 192s, 159 battles, 1 knockout | — |
+| the run with the swallowed press | Lv5 to Lv12, 47 battles, **1 knockout** | — |
+| the run with the bag for everything | stopped at Lv8, twelve trips spent | — |
+
+Seventy-nine out of seventy-nine is the number worth keeping. A perfect record
+over a grind is what healing *before* the faint buys, and it is the first time
+this log has one.
 
 ## The part that had to be redesigned
 

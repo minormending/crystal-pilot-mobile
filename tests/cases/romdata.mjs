@@ -4,8 +4,8 @@
 // copied from a table, because copying a table hopefully is how the gaps got
 // there. `decodeText` is exported for exactly this and had no test until the
 // gaps were measured.
-import { test } from '../harness.mjs';
-import { decodeText, normalise } from '../../gen2/romdata.js';
+import { fakeRom, test } from '../harness.mjs';
+import { decodeText, normalise, RomData } from '../../gen2/romdata.js';
 
 test('the two NIDORAN are two different names', async (t) => {
   // The one that matters. Both came back "NIDORAN?", so the species picker drew
@@ -50,3 +50,51 @@ test('folding a name for matching keeps what tells two apart', async (t) => {
   t.ne(normalise('NIDORAN♀'), normalise('NIDORAN♂'),
        'the signs stay, because they are the difference');
 });
+
+// --- the cheapest thing in the bag that matches a list ----------------------
+
+const ITEMS = { 18: 'POTION', 154: 'BERRY', 26: 'FULL RESTORE', 19: 'SUPER POTION',
+                5: 'POKé BALL', 12: 'ANTIDOTE', 30: 'FRESH WATER' };
+const STOCK = ['berry', 'potion', 'super potion', 'full restore'];
+/** A RomData whose item names are those, or one with no names at all. */
+const rd = (names) => (names === null ? { cheapestOf: () => null }
+  : Object.assign(Object.create(RomData.prototype),
+                  { itemName: (id) => ITEMS[id] || '' }));
+test('the cheapest thing that will do is the one picked', async (t) => {
+  // The same rule as never throwing a Master Ball at a Rattata. A Full Restore
+  // on a Pokémon missing four HP is that, in the other pocket.
+  const rom = fakeRom({ items: ITEMS });
+  t.eq(rd(rom).cheapestOf([[26, 1], [18, 2]], STOCK).name, 'POTION',
+       'a potion before a full restore');
+  t.eq(rd(rom).cheapestOf([[26, 1], [18, 2], [154, 5]], STOCK).name, 'BERRY',
+       'and a berry before either, being free and regrowing');
+  t.eq(rd(rom).cheapestOf([[26, 1]], STOCK).name, 'FULL RESTORE',
+       'but the expensive one when it is all there is');
+});
+
+test('a bag with nothing that heals answers nothing', async (t) => {
+  const rom = fakeRom({ items: { 5: 'POKé BALL', 12: 'ANTIDOTE' } });
+  t.eq(rd(rom).cheapestOf([[5, 3], [12, 1]], STOCK), null, 'balls and cures are not heals');
+  t.eq(rd(rom).cheapestOf([[18, 0]], STOCK), null, 'nor is a zero quantity');
+  t.eq(rd(rom).cheapestOf([], STOCK), null, 'nor an empty pocket');
+});
+
+test('a cartridge whose title lists no healing items answers nothing',
+     async (t) => {
+  // The honest position for a hack that renamed POTION: lose this, keep
+  // everything else, and get it back when somebody writes the name down.
+  const rom = fakeRom({ items: ITEMS });
+  t.eq(rd(rom).cheapestOf([[18, 1]], null), null, 'no list, no answer');
+  t.eq(rd(rom).cheapestOf([[18, 1]], []), null, 'and an empty list is the same');
+  t.eq(rd().cheapestOf([[999, 1]], STOCK), null,
+       'nor an id the item table has no name for');
+});
+
+test('the name is folded, so case and the accent cost nothing', async (t) => {
+  const rom = fakeRom({ items: { 30: 'FRESH WATER', 5: 'POKé BALL' } });
+  t.eq(rom.cheapestOf([[30, 1]], ['fresh water']).name, 'FRESH WATER',
+       'matched through the same fold the ball preference uses');
+  t.eq(rom.cheapestOf([[5, 3]], ['poke ball']).name, 'POKé BALL',
+       'and the accent folds the way it does for a ball');
+});
+
