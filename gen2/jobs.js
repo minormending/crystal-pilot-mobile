@@ -64,6 +64,28 @@ const CAPTURE_OUTCOMES = {
                 say: (r, balls) => `used ${balls(r.thrown)} without catching it` },
 };
 
+/**
+ * What a budget was actually spent on: " — this grass gives PIDGEY x8, RATTATA x3".
+ *
+ * Both loops that flee wrong species have counted them all along and neither
+ * said so. The count is the answer to the question the failure raises: a name
+ * this cartridge never puts in this grass looks identical to bad luck, and the
+ * one thing that tells them apart is the list of what did turn up.
+ *
+ * Commonest first, and capped at three, because this goes on the end of a line
+ * that is already a sentence. Empty when nothing was met -- the two callers
+ * have their own words for a walk that met nothing at all.
+ */
+const TALLY_NAMES = 3;
+export function tally(seen) {
+  const rows = [...(seen || new Map()).entries()].sort((a, b) => b[1] - a[1]);
+  if (!rows.length) return '';
+  const said = rows.slice(0, TALLY_NAMES).map(([n, c]) => `${n} x${c}`);
+  const rest = rows.length - said.length;
+  return ` — this grass gives ${said.join(', ')}`
+         + (rest ? ` and ${rest} more` : '');
+}
+
 /** The outcome's entry, or a safe stand-in for a code nobody has taught it. */
 export function captureOutcome(code) {
   return CAPTURE_OUTCOMES[code]
@@ -125,7 +147,8 @@ export function withJobs(Base) {
     return { ok: false, seen, stats,
              message: this.cancelled
                ? `stopped after ${stats.encounters} encounter(s)`
-               : `saw ${stats.encounters} encounters without finding ${want}` };
+               : `saw ${stats.encounters} encounters without finding ${want}`
+                 + tally(seen) };
   }
 
   /**
@@ -344,10 +367,17 @@ export function withJobs(Base) {
   async catch_(want, ballId, { maxEncounters = 200, maxBalls = 40,
                               regrass = null, weakenTo = 0.34 } = {}) {
     const stats = { encounters: 0, fled: 0, thrown: 0 };
+    // What actually turned up, the way `hunt` has counted it since it was
+    // written. This ran the same encounter loop, fled the same wrong species
+    // and threw the tally away -- so a catch that spent its whole budget said
+    // "saw 200 encounters without catching SENTRET" while holding, unsaid, the
+    // list of the two hundred things it *had* seen. Which is the answer
+    // somebody wants: you are on the wrong route.
+    const seen = new Map();
     const started = Date.now();
     let s = await this.snap();
     if (s.party.length >= this.state.e.maxParty) {
-      return { ok: false, stats, message:
+      return { ok: false, seen, stats, message:
         'the party is full — a caught Pokemon would go to the PC, '
         + 'which this does not handle. Free a slot first.' };
     }
@@ -356,7 +386,8 @@ export function withJobs(Base) {
       return e ? e[1] : 0;
     };
     if (ballsOf(s) <= 0) {
-      return { ok: false, stats, message: 'no balls of that kind in the bag' };
+      return { ok: false, seen, stats,
+               message: 'no balls of that kind in the bag' };
     }
     const ballName = this.rom.itemName(ballId);
     this.say(`after ${want} with ${ballName}s`);
@@ -374,7 +405,7 @@ export function withJobs(Base) {
       s = await this.snap();
       if (!s.inBattle) {
         if (!await this._findFight(regrass)) {
-          return { ok: false, stats,
+          return { ok: false, seen, stats,
                    message: 'no wild Pokemon appeared — are you standing in grass?' };
         }
         await this.step(40);
@@ -382,10 +413,11 @@ export function withJobs(Base) {
       }
       stats.encounters++;
       const name = this.rom.speciesName(s.enemy.species);
+      seen.set(name, (seen.get(name) || 0) + 1);
       if (name !== want) {
         this.say(`${name} — not the one, running`);
         if (!await this.flee()) {
-          return { ok: false, stats,
+          return { ok: false, seen, stats,
                    message: partyDown(await this.snap())
                      ? 'the whole party fainted'
                      : `could not run from a ${name}` };
@@ -405,7 +437,7 @@ export function withJobs(Base) {
       if (r.outcome === 'caught') {
         stats.spent = stats.thrown;
         stats.seconds = ((Date.now() - started) / 1000).toFixed(1);
-        return { ok: true, stats, message: how.say({ ...r, name }, balls) };
+        return { ok: true, seen, stats, message: how.say({ ...r, name }, balls) };
       }
       if (!how.stop) {
         // Bad luck rather than a reason to give up: there is another one in the
@@ -422,21 +454,22 @@ export function withJobs(Base) {
         // Unlike a grind this has no heal hook, so carrying on would walk into
         // the next encounter with a fainted lead and spend the rest of the
         // budget answering party screens.
-        return { ok: false, stats,
+        return { ok: false, seen, stats,
                  message: 'your lead fainted while weakening \u2014 heal and retry' };
       }
       if (r.outcome !== 'budget') {
-        return { ok: false, stats, message: how.say({ ...r, name }, balls) };
+        return { ok: false, seen, stats, message: how.say({ ...r, name }, balls) };
       }
       if (stats.thrown >= maxBalls) {
-        return { ok: false, stats,
+        return { ok: false, seen, stats,
                  message: `used ${stats.thrown} balls without catching it` };
       }
     }
     stats.seconds = ((Date.now() - started) / 1000).toFixed(1);
-    return { ok: false, stats, message: this.cancelled
+    return { ok: false, seen, stats, message: this.cancelled
       ? `stopped after ${stats.encounters} encounter(s)`
-      : `saw ${stats.encounters} encounters without catching ${want}` };
+      : `saw ${stats.encounters} encounters without catching ${want}`
+        + tally(seen) };
   }
 
   /**

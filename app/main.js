@@ -2076,16 +2076,31 @@ $('#hunt').onclick = async () => {
   if (!tasks || !huntWanted) return;
   const res = await runTask('#hunt', `looking for ${huntWanted}`,
     () => tasks.hunt(huntWanted, { regrass: () => boot.backToGrass() }));
+  paintSeen(res);
+};
+
+/**
+ * What the grass actually gave, under the picker that asked for something else.
+ *
+ * Lifted out of the Hunt handler the pass Catch started collecting the same
+ * map. Naming it after the one caller it had is how the second caller ends up
+ * with a copy -- or, as here, with nothing.
+ */
+function paintSeen(res) {
   $('#seen').textContent = res && res.seen && res.seen.size
     ? 'seen: ' + [...res.seen.entries()].sort((a, b) => b[1] - a[1])
         .map(([n, c]) => `${n} x${c}`).join(', ')
     : '';
-};
+}
 
 $('#catch').onclick = async () => {
   if (!tasks || !huntWanted || !ballId) return;
   const res = await runTask('#catch', `after ${huntWanted}`,
     () => tasks.catch_(huntWanted, ballId, { regrass: () => boot.backToGrass() }));
+  // The same line Hunt paints, from the same map, because it is the same walk
+  // through the same grass -- and until this pass `catch_` collected nothing to
+  // put in it.
+  paintSeen(res);
   progress(res
     ? Object.entries(res.stats).map(([k, v]) => `${k}=${v}`).join('  ') : '');
 };

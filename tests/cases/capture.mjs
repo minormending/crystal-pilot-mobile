@@ -5,7 +5,7 @@
 // under test is the decision made between them, not the button pressing. Each
 // stub records what it was asked to do, so a test can assert on the sequence.
 import { FakeGameBoy, fakeRom, symbols, test, worldRam } from '../harness.mjs';
-import { captureOutcome, partyDown } from '../../gen2/jobs.js';
+import { captureOutcome, partyDown, tally } from '../../gen2/jobs.js';
 import { GameState } from '../../gen2/state.js';
 import { Tasks } from '../../gen2/tasks.js';
 
@@ -204,4 +204,31 @@ test('a whiteout is every one of them down, not any one of them', async (t) => {
           'one down is not — somebody is still standing');
   t.false(partyDown({ party: [{ hp: 12 }] }), 'nor is a healthy party');
   t.false(partyDown({ party: [] }), 'and no party at all is not a whiteout either');
+});
+
+
+// --- what the budget was spent on -------------------------------------------
+
+test('a budget spent without finding it says what the grass gave instead',
+     async (t) => {
+  // Both loops that flee wrong species have counted them all along, and
+  // neither said so: a catch that spent two hundred encounters reported the
+  // count and threw the tally away. The list is the answer to the question the
+  // failure raises -- you are on the wrong route.
+  const seen = new Map([['PIDGEY', 8], ['RATTATA', 3], ['SENTRET', 1]]);
+  t.eq(tally(seen), ' — this grass gives PIDGEY x8, RATTATA x3, SENTRET x1',
+       'commonest first');
+});
+
+test('the tally is capped, because it goes on the end of a sentence',
+     async (t) => {
+  const seen = new Map([['A', 9], ['B', 8], ['C', 7], ['D', 6], ['E', 5]]);
+  t.contains(tally(seen), 'A x9, B x8, C x7 and 2 more', 'three names and a count');
+});
+
+test('a walk that met nothing has nothing to tally', async (t) => {
+  // The two callers have their own words for that, and appending an empty
+  // clause to them would be noise.
+  t.eq(tally(new Map()), '', 'silence');
+  t.eq(tally(null), '', 'and the same for no map at all');
 });
