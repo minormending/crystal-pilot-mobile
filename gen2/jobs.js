@@ -42,13 +42,15 @@ export const partyDown = (s) => s.party.length > 0 && s.party.every((m) => m.hp 
 const CAPTURE_OUTCOMES = {
   caught:     { ok: true,  stop: true,
                 say: (r, balls) => `caught ${r.name}${r.level ? ` Lv${r.level}` : ''} `
-                                   + `with ${balls(r.thrown)}` },
+                                   + `with ${balls(r.thrown)}`
+                                   + (r.boxed ? ' \u2014 sent to the box' : '') },
   nobattle:   { stop: true, say: () => 'not in a battle' },
   trainer:    { stop: true,
                 say: () => "that is a trainer's Pok\u00e9mon \u2014 it cannot be caught" },
   full:       { stop: true,
-                say: () => 'the party is full \u2014 a caught Pok\u00e9mon would go to the '
-                           + 'PC, which this does not handle. Free a slot first.' },
+                say: () => 'the party is full, and this cartridge has not said '
+                           + 'what the game calls sending one to the box \u2014 '
+                           + 'so a catch could not be told from a getaway' },
   noballs:    { stop: true, say: () => 'no balls of that kind in the bag' },
   nopack:     { stop: true, say: () => 'could not reach the ball in the pack' },
   ranout:     { stop: true,
@@ -171,7 +173,7 @@ export function withJobs(Base) {
    * benefits from.
    */
   async captureHere(ballId, { maxBalls = 40, weakenTo = 0.34,
-                              memory = null } = {}) {
+                              memory = null, boxed = null } = {}) {
     const mem = memory || { biggestHit: 0 };
     const ballsOf = (snap) => {
       const e = snap.balls.find(([id]) => id === ballId);
@@ -183,7 +185,12 @@ export function withJobs(Base) {
     if (!s.inBattle) return { outcome: 'nobattle' };
     const e = this.state.e;
     if (s.battleMode === e.trainerBattle) return { outcome: 'trainer' };
-    if (s.party.length >= e.maxParty) return { outcome: 'full' };
+    // **A full party does not stop a catch** -- measured with six carried:
+    // "Gotcha! PIDGEY was caught!", then "was sent to BILL's PC." So the
+    // refusal is only for a cartridge whose title has not said what that
+    // message looks like, because without it a boxed catch and a getaway are
+    // indistinguishable from here.
+    if (s.party.length >= e.maxParty && !boxed) return { outcome: 'full' };
     if (ballsOf(s) <= 0) return { outcome: 'noballs', ballName };
 
     const name = this.rom.speciesName(s.enemy.species);
@@ -294,13 +301,19 @@ export function withJobs(Base) {
         return { outcome: thrown ? 'ranout' : 'nopack', name, thrown, chips,
                  ballName };
       }
-      const how = await this.watchThrow(partyBefore);
+      const how = await this.watchThrow(partyBefore, boxed);
       thrown++;
       if (how === 'caught') {
         const after = await this.snap();
+        // The party growing is what says it joined *here*. With six carried it
+        // does not grow -- the Pokemon went to the box -- and reading the last
+        // slot's level would report somebody else's.
+        const joined = after.party.length > partyBefore;
         const slot = after.party.length - 1;
         return { outcome: 'caught', name, thrown, chips, ballName,
-                 level: after.party[slot] ? after.party[slot].level : null };
+                 boxed: !joined,
+                 level: joined && after.party[slot]
+                   ? after.party[slot].level : null };
       }
       if (how === 'gone') return { outcome: 'gone', name, thrown, chips };
       if (how === 'stuck') return { outcome: 'stuck', name, thrown, chips };
@@ -313,13 +326,17 @@ export function withJobs(Base) {
    * Catch the wild Pokemon in front of you, as a task in its own right.
    *
    * Reports in the same shape as every other task, and refuses politely rather
-   * than flailing: a trainer's Pokemon cannot be caught, a full party would
-   * send the catch to a box this does not handle, and with no balls there is
-   * nothing to throw.
+   * than flailing: a trainer's Pokemon cannot be caught, and with no balls
+   * there is nothing to throw. A **full party is no longer a refusal** -- Gen 2
+   * sends the catch to the box and says so, and `boxed` is the phrase to watch
+   * for. It is still a refusal on a cartridge that has not said that phrase,
+   * because with nothing to read a boxed catch and a getaway are the same
+   * thing from in here.
    */
-  async catchHere(ballId, { maxBalls = 40, weakenTo = 0.34 } = {}) {
+  async catchHere(ballId, { maxBalls = 40, weakenTo = 0.34,
+                           boxed = null } = {}) {
     const started = Date.now();
-    const r = await this.captureHere(ballId, { maxBalls, weakenTo });
+    const r = await this.captureHere(ballId, { maxBalls, weakenTo, boxed });
     const stats = { thrown: r.thrown || 0, chips: r.chips || 0,
                     seconds: ((Date.now() - started) / 1000).toFixed(1) };
     const balls = (n) => `${n} ${r.ballName}${n === 1 ? '' : 's'}`;
@@ -365,7 +382,8 @@ export function withJobs(Base) {
   }
 
   async catch_(want, ballId, { maxEncounters = 200, maxBalls = 40,
-                              regrass = null, weakenTo = 0.34 } = {}) {
+                              regrass = null, weakenTo = 0.34,
+                              boxed = null } = {}) {
     const stats = { encounters: 0, fled: 0, thrown: 0 };
     // What actually turned up, the way `hunt` has counted it since it was
     // written. This ran the same encounter loop, fled the same wrong species
@@ -376,10 +394,11 @@ export function withJobs(Base) {
     const seen = new Map();
     const started = Date.now();
     let s = await this.snap();
-    if (s.party.length >= this.state.e.maxParty) {
+    if (s.party.length >= this.state.e.maxParty && !boxed) {
       return { ok: false, seen, stats, message:
-        'the party is full — a caught Pokemon would go to the PC, '
-        + 'which this does not handle. Free a slot first.' };
+        'the party is full, and this cartridge has not said what the game '
+        + 'calls sending one to the box — so a catch could not be told from '
+        + 'a getaway. Free a slot first.' };
     }
     const ballsOf = (snap) => {
       const e = snap.balls.find(([id]) => id === ballId);
@@ -428,7 +447,7 @@ export function withJobs(Base) {
 
       this.say(`found ${name} Lv${s.enemy.level} — weakening it`);
       const r = await this.captureHere(ballId, {
-        maxBalls: maxBalls - stats.thrown, weakenTo, memory });
+        maxBalls: maxBalls - stats.thrown, weakenTo, memory, boxed });
       stats.thrown += r.thrown || 0;
       if (r.chips) stats.chips = (stats.chips || 0) + r.chips;
 

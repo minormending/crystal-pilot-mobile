@@ -66,6 +66,11 @@ let takeables = [];
 // Who is near enough to fight, and how many the map holds anywhere. Two
 // numbers because the game only spawns an object you are close to, so the first
 // is what a duel can reach and the second is what tells you to walk on.
+// What the title says a boxed catch looks like, or null. Read once here so the
+// three places that need it -- the two catch handlers and the row -- cannot
+// disagree about whether this cartridge supports a full party.
+const boxedPhrase = () =>
+  (title && title.phrases && title.phrases.boxed) || null;
 let trainers = [];
 let trainersOnMap = 0;
 // The cheapest thing in the bag that would mend somebody, by name, or null. Read
@@ -1570,6 +1575,7 @@ function paintJobs(s) {
                 healPlace, canFetch: typeof boot.eggErrand === 'function',
                 places: travelPlaces, travelTo, huntable, wilds,
                 hours, hourNow, takeables, trainers, trainersOnMap,
+                canBox: !!boxedPhrase(),
                 bagHeal, bagCure,
                 marts: !!(title && title.marts && title.marts.length),
                 shopFor: shopFor(),
@@ -2173,7 +2179,8 @@ function paintSeen(res) {
 $('#catch').onclick = async () => {
   if (!tasks || !huntWanted || !ballId) return;
   const res = await runTask('#catch', `after ${huntWanted}`,
-    () => tasks.catch_(huntWanted, ballId, { regrass: () => boot.backToGrass() }));
+    () => tasks.catch_(huntWanted, ballId, { regrass: () => boot.backToGrass(),
+                                             boxed: boxedPhrase() }));
   // The same line Hunt paints, from the same map, because it is the same walk
   // through the same grass -- and until this pass `catch_` collected nothing to
   // put in it.
@@ -2530,7 +2537,8 @@ $('#battle').onclick = async () => {
 $('#catchhere').onclick = async () => {
   if (!tasks || !ballId) return;
   const res = await runTask('#catchhere', 'throwing',
-                            () => tasks.catchHere(ballId));
+                            () => tasks.catchHere(ballId,
+                                                  { boxed: boxedPhrase() }));
   progress(res ? Object.entries(res.stats)
     .map(([k, v]) => `${k}=${v}`).join('  ') : '');
 };

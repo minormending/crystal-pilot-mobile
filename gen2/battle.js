@@ -885,24 +885,37 @@ export function withBattle(Base) {
    * spends a ball the count never sees -- the desktop pilot shipped exactly
    * that bug, reporting two balls while three left the bag.
    */
-  async watchThrow(partyBefore) {
+  async watchThrow(partyBefore, boxed = null) {
+    // **A full party does not stop a catch**, and the party is then the wrong
+    // thing to watch. Measured with six carried: "Gotcha! PIDGEY was caught!",
+    // then the nickname question, then "AAAAAAAAAA was sent to BILL's PC." --
+    // the party never moved off six and one ball left the bag. So a catch that
+    // goes to the box looked exactly like one that got away.
+    //
+    // The screen is the evidence, and the phrase is the *title's* to say --
+    // content, like `heals` and `cures`, because it is words. A cartridge that
+    // has not said it keeps the old refusal, which is honest: with nothing to
+    // read, a boxed catch and a getaway are the same thing from here.
+    const wentToBox = async () => {
+      if (!boxed) return false;
+      const sc = this.state.screen && this.state.screen(await this.gb.readWram());
+      return !!sc && sc.says(boxed);
+    };
+    // Whichever way it lands, the same question follows -- and B on it keeps
+    // the name the game gave. `declineNickname` used to be called here and
+    // could only be reached when the party grew, so a full-party catch went
+    // unanswered and every one of them would have been named AAAAAAAAAA.
+    const took = async () => {
+      await this.keepDefaultName();
+      await this.settleText();
+      return 'caught';
+    };
     for (let i = 0; i < 140; i++) {
       const s = await this.snap();
-      if (!s.inBattle) {
-        if (s.party.length > partyBefore) {
-          await this.declineNickname();
-          await this.settleText();
-          return 'caught';
-        }
-        return 'gone';
-      }
+      if (s.party.length > partyBefore || await wentToBox()) return took();
+      if (!s.inBattle) return 'gone';
       // The menu coming back means it broke out and the turn is ours again.
       if (i > 3 && menuIsLive(s)) return 'broke free';
-      if (s.windowOpen && s.menu[1] >= 1 && s.party.length > partyBefore) {
-        await this.declineNickname();
-        await this.settleText();
-        return 'caught';
-      }
       await this.push('A', 4, 6);
       await this.pump();
     }

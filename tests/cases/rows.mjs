@@ -1013,3 +1013,28 @@ test('a gap wide enough to be a column stays one', async (t) => {
   const said = describeSaying(['Save your          EXIT', 'progress']);
   t.contains(said.text, 'Save your · EXIT', 'the columns stay apart');
 });
+
+// --- catching with a full party ---------------------------------------------
+
+test('a full party is only a refusal where the box cannot be read', async (t) => {
+  // Gen 2 sends a caught Pokemon to the box -- measured with six carried -- so
+  // the row offers it. It is a refusal only on a cartridge whose title has not
+  // said what that message looks like, because with nothing to read a boxed
+  // catch and a getaway are the same thing.
+  const full = { party: Array.from({ length: 6 }, () => ({ hp: 20, maxHp: 20 })),
+                 battleMode: 1, enemy: { species: PIDGEY } };
+  const cannot = look(full, { ballId: POKE_BALL, canBox: false });
+  t.contains(cannot.here.text, 'the party is full', 'it says so');
+  t.false(cannot.here.enabled, 'and will not run');
+
+  const can = look(full, { ballId: POKE_BALL, canBox: true });
+  t.false(can.here.text.includes('full'), 'no longer the thing in the way');
+  t.true(can.here.enabled, 'and it can run');
+});
+
+test('room in the party needs no phrase at all', async (t) => {
+  const one = { party: [{ hp: 20, maxHp: 20 }], battleMode: 1,
+                enemy: { species: PIDGEY } };
+  t.true(look(one, { ballId: POKE_BALL, canBox: false }).here.enabled,
+         'five slots free, nothing to read');
+});

@@ -24,6 +24,7 @@
  *   wilds             the levels the grass gives here, { low, high } or null
  *   trainers          who is near enough to fight, [{ x, y, sprite }]
  *   trainersOnMap     how many the map places anywhere, near or not
+ *   canBox            whether this cartridge has said what a boxed catch says
  */
 // How much of the game's own line fits on the bar beside the pilot's. Measured
 // against the narrowest layout this app supports rather than chosen: the bar is
@@ -35,7 +36,7 @@ export function describeRows(s, ctx = {}) {
           savedThisSession = false, healPlace = null,
           places = [], travelTo = null, wilds = null, takeables = [],
           bagHeal = null, bagCure = null, marts = false, shopFor = null,
-          trainers = [], trainersOnMap = 0,
+          trainers = [], trainersOnMap = 0, canBox = false,
           // The cartridge's own numbers. A party of six and a trainer battle of
           // 2 are Gen 2's, not this module's, and reading them from an import
           // meant the stock values reached here even when a title had changed
@@ -80,8 +81,12 @@ export function describeRows(s, ctx = {}) {
   // the list only holds things that can run: an offer that refuses itself is
   // worse than no offer.
   const afoot = s.worldLoaded && !s.inBattle;
+  // A full party is no longer a refusal: Gen 2 sends a caught Pokemon to the
+  // box, measured with six carried. It is one only on a cartridge whose title
+  // has not said what that message looks like, because with nothing to read a
+  // boxed catch and a getaway are the same thing -- which is what `canBox` is.
   const canCatchHere = s.inBattle && !trainer && !!ballId
-                       && s.party.length < maxParty;
+                       && (canBox || s.party.length < maxParty);
   // Indexed once, because the row asks about the chosen place twice and the
   // list is the journey's answer rather than something to search repeatedly.
   const byKey = new Map(places.map((pl) => [pl.key, pl]));
@@ -143,7 +148,7 @@ export function describeRows(s, ctx = {}) {
     here: {
       text: !s.inBattle ? 'not in a battle'
         : trainer ? 'a trainer’s Pokémon cannot be caught'
-        : s.party.length >= maxParty ? 'the party is full'
+        : s.party.length >= maxParty && !canBox ? 'the party is full'
         : needsBalls ? 'no Poké Balls yet'
         : `${foe} Lv${s.enemy.level} · ${ballName || 'a ball'}`,
       enabled: canCatchHere,

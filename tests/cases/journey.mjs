@@ -869,46 +869,24 @@ test('the pressing stops the moment the party grows', async (t) => {
   t.eq(j.log.filter((b) => b !== 'A').length, 0, 'all of them A');
 });
 
-test('B on the nickname question keeps the name the game gave it', async (t) => {
-  // Measured by pausing a new game on that box and pressing it:
-  // wPartyMon1Nickname went from ten 'A's to 82 98 8d 83 80 90 94 88 8b 50 --
-  // CYNDAQUIL. Every starter this app took for twenty-eight passes was called
-  // AAAAAAAAAA, because the pressing answered the question and then typed the
-  // letter under the cursor.
-  const j = ballScript({ growsAt: 1, pagesOfText: 2 });
+test('the name is kept through the shared primitive, and said out loud',
+     async (t) => {
+  // The behaviour is `tasks.keepDefaultName` -- tested against a real Tasks in
+  // the menus cases, because the second caller is a catch with a full party.
+  // What this layer adds is the sentence in the log.
+  const j = ballScript({ growsAt: 1 });
   await j.runUntilParty();
+  let asked = 0;
+  j.tasks.keepDefaultName = async () => { asked++; return true; };
   t.true(await j.takeDefaultName(), 'it answered');
-  t.eq(j.answered(), 'default', 'with B, on the choice');
+  t.eq(asked, 1, 'through the primitive');
   t.contains(j.said.join(' '), 'the name the game gave', 'and said so');
 });
 
-test('A is pressed until the choice is drawn, however long the text is',
-     async (t) => {
-  // The part five earlier attempts got wrong: an A issued the instant the party
-  // grows only hurries the text, and a look taken straight afterwards sees no
-  // box. So this is a loop -- press, look, press -- rather than a sequence.
-  const j = ballScript({ growsAt: 1, pagesOfText: 4 });
-  await j.runUntilParty();
-  t.true(await j.takeDefaultName(), 'it still got there');
-  const after = j.log.slice(1);
-  t.eq(after[after.length - 1], 'B', 'B last');
-  t.eq(after.slice(0, -1).filter((b) => b !== 'A').length, 0,
-       'and A for every page before it');
-});
-
-test('a question that never comes is given up on rather than pressed for ever',
-     async (t) => {
-  const j = ballScript({ growsAt: 1, pagesOfText: 99 });
-  await j.runUntilParty();
-  t.false(await j.takeDefaultName(), 'it gave up');
-  t.false(j.log.includes('B'), 'without pressing B at nothing');
-});
-
-test('Stop ends it', async (t) => {
+test('Stop ends the pressing before the party grows', async (t) => {
   const j = ballScript({ growsAt: 99 });
   j.tasks.cancelled = true;
   t.false(await j.runUntilParty(), 'the pressing stops');
-  t.false(await j.takeDefaultName(), 'and so does the answering');
   t.eq(j.log.length, 0, 'nothing was pressed');
 });
 

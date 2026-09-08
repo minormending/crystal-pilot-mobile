@@ -57,7 +57,9 @@ export function statusOf(byte, engine = gen2) {
 // exactly the kind of thing that drifts.
 
 // Six. The cap the game enforces, and the reason a catch refuses a full party
-// rather than sending it to a box this does not handle.
+// rather than sending it to a box. Which the game does do -- measured, with
+// six carried a caught Pokemon goes to BILL's PC and the party does not grow
+// -- and the app now reads the message that says so; see `watchThrow`.
 
 // Where the cartridge's save data lives, and how the game knows it is real.
 //

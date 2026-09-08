@@ -232,3 +232,34 @@ test('a walk that met nothing has nothing to tally', async (t) => {
   t.eq(tally(new Map()), '', 'silence');
   t.eq(tally(null), '', 'and the same for no map at all');
 });
+
+// --- a full party is not a refusal ------------------------------------------
+
+test('a caught Pokemon that went to the box is still caught', async (t) => {
+  // Measured with six carried: "Gotcha! PIDGEY was caught!", then the nickname
+  // question, then "AAAAAAAAAA was sent to BILL's PC." The party never moved
+  // off six and one ball left the bag -- so a catch that goes to the box looked
+  // exactly like one that got away, and the app refused to try.
+  const said = captureOutcome('caught').say(
+    { name: 'PIDGEY', level: null, thrown: 1, boxed: true },
+    (n) => `${n} ball`);
+  t.contains(said, 'caught PIDGEY', 'it was caught');
+  t.contains(said, 'sent to the box', 'and it says where it went');
+});
+
+test('a catch that joined the party says no such thing', async (t) => {
+  const said = captureOutcome('caught').say(
+    { name: 'SENTRET', level: 3, thrown: 2, boxed: false },
+    (n) => `${n} balls`);
+  t.contains(said, 'SENTRET Lv3', 'named and levelled');
+  t.false(said.includes('box'), 'and nothing about a box');
+});
+
+test('a cartridge that has not said what a boxed catch says still refuses',
+     async (t) => {
+  // Honest rather than brave: with nothing to read, a boxed catch and a getaway
+  // are the same thing from inside the battle. The refusal says which fact is
+  // missing rather than claiming the app cannot do it.
+  const said = captureOutcome('full').say({}, () => '');
+  t.contains(said, 'not said what the game calls', 'it names what is missing');
+});

@@ -263,21 +263,9 @@ export class Journey {
    * had before there was anything better.
    */
   async takeDefaultName(tries = NAME_TRIES) {
-    for (let i = 0; i < tries; i++) {
-      if (this.stopped) return false;
-      const wram = await this.gb.readWram();
-      const s = this.state.read(wram);
-      const sc = this.state.screen(wram);
-      if (s.windowOpen && (!sc || (sc.says('YES') && sc.says('NO')))) {
-        this.say('keeping the name the game gave it');
-        await this.gb.press('B', 6, 12);
-        await this.tasks.pump();
-        return true;
-      }
-      await this.gb.press('A', 4, 8);
-      await this.gb.run(NAME_SETTLE);
-    }
-    return false;
+    const kept = await this.tasks.keepDefaultName(tries);
+    if (kept) this.say('keeping the name the game gave it');
+    return kept;
   }
 
   async runScripts(maxTaps = 400, settle = 45) {

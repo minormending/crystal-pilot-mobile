@@ -42,7 +42,9 @@ export const gen2 = {
     status: 0x20, hp: 0x22, maxHp: 0x24,
   },
   // The cap the game enforces, and the reason a catch refuses a full party
-  // rather than sending it to a box this does not handle.
+  // rather than sending it to a box. The game boxes the seventh quite happily;
+// what this number decides is when the party stops *growing*, which is still
+// the thing every reader of it wants.
   maxParty: 6,
 
   // --- what is wrong with a Pokemon besides its HP ------------------------

@@ -17,6 +17,11 @@ const QUIET_TRIES = 250;
 // Long enough for the pack to write wCurItem for the pocket now showing.
 export const SETTLE_FRAMES = 20;
 
+// Reaching the nickname question: how many presses to spend getting there, and
+// how long to let the screen settle between them. The text in front of it is
+// two pages, so a handful is plenty.
+const NAME_TRIES = 12, NAME_SETTLE = 20;
+
 /**
  * Thrown when Stop is pressed, to unwind out of whatever loop was running.
  *
@@ -99,6 +104,45 @@ export class TaskBase {
       await this.push('B', 5, 10);
     }
     return !(await this.snap()).windowOpen;
+  }
+
+  /**
+   * Keep the name the game gives a Pokémon it has just handed over.
+   *
+   * **B on the nickname question is the default species name** -- measured by
+   * pausing a new game on that box and pressing it: the nickname went from ten
+   * `$80`s to `82 98 8d 83 80 90 94 88 8b 50`, CYNDAQUIL.
+   *
+   * A loop rather than a sequence, and that is measured too. The question's
+   * text stops and waits for a button with `wWindowStackSize` reading zero, and
+   * one press finishes it and draws the choice -- so a press issued too early
+   * only hurries the text, and a look taken straight afterwards sees no box.
+   * Press A, look, and press B the moment a choice is on screen.
+   *
+   * The box is identified by both halves where the screen can be read -- a
+   * window open *and* YES and NO on it -- because a window alone is also true
+   * of the text in front of it. A cartridge whose tilemap cannot be read falls
+   * back to the window, which is all `declineNickname` ever had.
+   *
+   * Here rather than in `journey.js`, where it was written, because the second
+   * caller arrived one pass later: a catch with a full party asks the same
+   * question, and `watchThrow` could not answer it. Naming a primitive after
+   * its first caller is how the second one ends up with a copy.
+   */
+  async keepDefaultName(tries = NAME_TRIES) {
+    for (let i = 0; i < tries; i++) {
+      if (this.cancelled) return false;
+      const wram = await this.gb.readWram();
+      const s = this.state.read(wram);
+      const sc = this.state.screen ? this.state.screen(wram) : null;
+      if (s.windowOpen && (!sc || (sc.says('YES') && sc.says('NO')))) {
+        await this.push('B', 6, 12);
+        return true;
+      }
+      await this.push('A', 4, 8);
+      await this.step(NAME_SETTLE);
+    }
+    return false;
   }
 
   /**

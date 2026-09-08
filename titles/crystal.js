@@ -161,6 +161,23 @@ export const crystal = {
     frz: ['ice berry', 'ice heal', 'full heal', 'full restore'],
     slp: ['mint berry', 'awakening', 'full heal', 'full restore'],
   },
+  // What the game *says*, for the two or three moments a number cannot answer.
+  //
+  // Words, so they are content and belong here rather than in the engine
+  // profile -- the same rule `heals` and `cures` follow. A hack in another
+  // language changes these and nothing else about the feature.
+  //
+  // `boxed` is the one that earns its keep. **A full party does not stop a
+  // catch**: measured with six carried, "Gotcha! PIDGEY was caught!", then the
+  // nickname question, then "AAAAAAAAAA was sent to BILL's PC." -- the party
+  // never moved off six and one ball left the bag. So a catch that goes to the
+  // box looks exactly like one that got away, and this phrase is the only thing
+  // that tells them apart. Matched folded to letters, on one line, so the
+  // apostrophe glyph and the line break after "was" cost nothing.
+  phrases: {
+    boxed: 'sent to BILL',
+  },
+
   // Every map, tile and door the scripts below walk to.
   //
   // They read these from the profile rather than closing over the constants,

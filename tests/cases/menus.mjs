@@ -871,3 +871,73 @@ test('a screen with no arrow costs no presses at all', async (t) => {
   const { tasks } = pilot();
   t.false(await tasks._driveToSaying('PACK'), 'nothing to drive');
 });
+
+// --- keeping the name the game gives ----------------------------------------
+
+/**
+ * A pilot in front of the nickname question, with the text still typing.
+ *
+ * Measured shape: the question's text stops and waits for a button with
+ * `wWindowStackSize` reading zero, and one press finishes it and draws the
+ * choice. So `pagesOfText` presses reach the box and nothing before that is
+ * answerable.
+ */
+function beingAsked({ pagesOfText = 2 } = {}) {
+  const sym0 = symbols();
+  const wram = worldRam(sym0, {});
+  const at = (n) => sym0.addr(n) - 0xc000;
+  const log = [];
+  let page = 0;
+  const show = (lines, open) => {
+    paintScreen(wram, sym0, lines);
+    wram[at('wWindowStackSize')] = open ? 1 : 0;
+  };
+  show([' Give a nickname to', ' the PIDGEY you'], false);
+  const gb = new FakeGameBoy({
+    wram,
+    onPress: (button) => {
+      log.push(button);
+      if (button === 'B') { show([], false); return; }
+      page++;
+      if (page >= pagesOfText) show([' >YES', '  NO', ' Give a nickname'], true);
+    },
+  });
+  const tasks = new Tasks(gb, new GameState(sym0), () => {}, fakeRom());
+  return { tasks, log };
+}
+
+test('B on the nickname question keeps the name the game gave it', async (t) => {
+  // Measured by pausing a new game on that box and pressing it:
+  // wPartyMon1Nickname went from ten $80s to 82 98 8d 83 80 90 94 88 8b 50 --
+  // CYNDAQUIL. Every starter this app took for twenty-eight passes was called
+  // AAAAAAAAAA, and so would every catch made with a full party.
+  const { tasks, log } = beingAsked();
+  t.true(await tasks.keepDefaultName(), 'it answered');
+  t.eq(log[log.length - 1], 'B', 'B last');
+  t.eq(log.filter((b) => b === 'B').length, 1, 'and exactly once');
+});
+
+test('A is pressed until the choice is drawn, however long the text is',
+     async (t) => {
+  // A press issued too early only hurries the text, and a look taken straight
+  // afterwards sees no box -- which is what `declineNickname` did, twelve runs
+  // in a row. So this is a loop: press, look, press B.
+  const { tasks, log } = beingAsked({ pagesOfText: 5 });
+  t.true(await tasks.keepDefaultName(), 'it still got there');
+  t.eq(log.slice(0, -1).filter((b) => b !== 'A').length, 0, 'A for every page');
+  t.eq(log[log.length - 1], 'B', 'then B');
+});
+
+test('a question that never comes is given up on rather than pressed for ever',
+     async (t) => {
+  const { tasks, log } = beingAsked({ pagesOfText: 99 });
+  t.false(await tasks.keepDefaultName(), 'it gave up');
+  t.false(log.includes('B'), 'without pressing B at nothing');
+});
+
+test('Stop ends the answering', async (t) => {
+  const { tasks, log } = beingAsked();
+  tasks.cancelled = true;
+  t.false(await tasks.keepDefaultName(), 'it stopped');
+  t.eq(log.length, 0, 'having pressed nothing');
+});
