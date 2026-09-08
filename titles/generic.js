@@ -23,6 +23,13 @@ export const generic = {
   // because which regions a cartridge has is a fact about the cartridge, and
   // whichever of these exists is used -- a hack with one region loses nothing.
   encounters: ['JohtoGrassWildMons', 'KantoGrassWildMons'],
+  // The stock healing items, for the same reason the stock tables are here: a
+  // cartridge nobody has described is still a pokecrystal build, and these are
+  // the names that build ships. A hack that renamed POTION loses this and keeps
+  // everything else -- and gets it back the moment somebody writes it down.
+  heals: ['berry', 'potion', 'fresh water', 'soda pop', 'lemonade',
+          'moomoo milk', 'super potion', 'hyper potion', 'max potion',
+          'full restore'],
   // No names, no healers, no grassy maps, no scripts. Each absence is a
   // capability the interface will not offer rather than a thing that fails.
 };

@@ -15,6 +15,7 @@
 // to land on and stops with a plain description if it lands somewhere else,
 // because a walk that quietly drifts off course ends up mashing A at a wall.
 import { CollisionMap } from './collision.js';
+import { normalise } from './romdata.js';
 
 // How many times a pickup starts over -- each one escapes whatever is on screen
 // and re-reads the map before choosing a side again -- and how many empty
@@ -23,6 +24,10 @@ import { CollisionMap } from './collision.js';
 // rather than a fact about the cartridge, which is why it is here and not in the
 // engine profile.
 const PICKUP_TRIES = 6, EMPTY_PRESSES = 2;
+// How many healing items one Pokemon is worth before giving up on it. A Potion
+// is 20 HP and a Pokemon at Lv30 has more than 60, so one is often not enough;
+// four is where this stops asking and lets the walk to a Center answer instead.
+const BAG_HEALS_PER_MON = 4;
 // Steps for a walk that crosses a map. Route 30 is fifty-four tiles top to bottom.
 const LONG_WALK_STEPS = 260;
 
@@ -46,6 +51,29 @@ function bagCount(s) {
     out.set(id, (out.get(id) || 0) + n);
   }
   return out;
+}
+
+/**
+ * The cheapest thing in the bag that will mend somebody, or null.
+ *
+ * `heals` is the title's list of names, weakest first; `items` is the pocket as
+ * `[id, quantity]`. Answered as `{ id, name }` so the caller can say what it
+ * spent without asking the ROM twice.
+ *
+ * Weakest first is the whole rule, and it is the same one the ball preference
+ * follows: spend the cheapest thing that will do. A Full Restore on a Pokemon
+ * missing four HP is the Master Ball at a Rattata.
+ */
+export function cheapestHeal(items, heals, rom) {
+  if (!rom || !Array.isArray(heals) || !heals.length) return null;
+  const carried = (items || []).filter(([, n]) => n > 0);
+  for (const want of heals) {
+    for (const [id] of carried) {
+      const name = rom.itemName(id);
+      if (name && normalise(name) === want) return { id, name };
+    }
+  }
+  return null;
 }
 
 /** Which ids went up between two readings of the bag. */
@@ -556,6 +584,21 @@ export class Journey {
                message: 'the party is already at full health' };
     }
 
+    // The bag first, because it is free. `nearestHeal` prices two Centers in
+    // tiles and picks the nearer -- measured at 31 against 53 from the east end
+    // of Route 29 -- and a POTION already in the pocket costs none of them. A
+    // grind is handed a budget of twelve trips to a Center for exactly this
+    // reason, and until now it spent them while carrying the answer.
+    const fromBag = await this.healFromBag(before);
+    if (fromBag.ok) {
+      return {
+        ok: true,
+        stats: { ...fromBag.stats,
+                 seconds: ((Date.now() - started) / 1000).toFixed(1) },
+        message: fromBag.message,
+      };
+    }
+
     const from = await this.mapKey();
     const where = await this.nearestHeal(from);
     // A cartridge nobody has told the pilot about has no healer, and saying so
@@ -579,6 +622,87 @@ export class Journey {
     return { ok: true, stats,
              message: `healed ${hurt.length === 1 ? 'one Pokémon' : `${hurt.length} Pokémon`}`
                       + ` at ${stats.at}` };
+  }
+
+  /**
+   * Mend whoever is hurt out of the bag, as far as the bag goes.
+   *
+   * Reports `ok` only when somebody's HP actually went up, so a caller can fall
+   * through to the walk on any other answer -- no healing items, an item the
+   * pack would not open for, a Pokemon the game refused. **Fainted is one of
+   * those**: a Potion does nothing for a Pokemon at 0 HP in Gen 2, and the
+   * whole reason a grind walks to a Center is the knockout, so the bag is not
+   * offered as an answer to it.
+   *
+   * The hurt are mended worst-first, because a party of two at 3/40 and 38/40
+   * has one member the next battle will lose and one it will not.
+   */
+  async healFromBag(seen = null) {
+    const s = seen || await this.snap();
+    const heals = (this.title && this.title.heals) || null;
+    const rom = this.tasks && this.tasks.rom;
+    if (!heals || !rom) return { ok: false, stats: {}, message: 'no healing items known' };
+    // Fainted is a Center's job. Everything else is worth a Potion.
+    const hurt = s.party
+      .map((m, slot) => ({ ...m, slot }))
+      .filter((m) => m.hp > 0 && m.hp < m.maxHp)
+      .sort((a, b) => a.hp / Math.max(1, a.maxHp) - b.hp / Math.max(1, b.maxHp));
+    if (!hurt.length) return { ok: false, stats: {}, message: 'nothing the bag can mend' };
+
+    let mended = 0, spent = [];
+    // The pocket is read once and then kept, decremented as things are spent.
+    //
+    // Which is the opposite of what this repository says about the ball count,
+    // and deliberately: *count them out of the bag rather than trusting a
+    // tally* is the right rule when the bag is current, and the ITEM pocket has
+    // been measured not to be. A BERRY used on a Cyndaquil at 5/22 took it to
+    // 15/22 and `wItems` still listed the berry on the next read -- so this
+    // loop picked the same berry again, walked past it in a pack that no longer
+    // had it, gave up on that reading, and never reached the POTION. The
+    // Pokemon was left at 15 of 22 with two potions in the bag.
+    //
+    // A local tally can only be wrong in one direction here -- it forgets an
+    // item sooner than the game does -- and the next press of Heal reads the
+    // pocket fresh.
+    const pocket = new Map(s.items.map(([id, n]) => [id, n]));
+    const asEntries = () => [...pocket.entries()].filter(([, n]) => n > 0);
+    for (const mon of hurt) {
+      if (this.stopped) break;
+      for (let go = 0; go < BAG_HEALS_PER_MON; go++) {
+        const now = await this.snap();
+        const mine = now.party[mon.slot];
+        if (!mine || mine.hp >= mine.maxHp) break;
+        const pick = cheapestHeal(asEntries(), heals, rom);
+        if (!pick) break;
+        this.say(`using ${pick.name} on ${this.nameOf(mine)}`);
+        const used = await this.tasks.useItemOn(pick.id, mon.slot);
+        if (!used.ok) {
+          this.say(`${pick.name}: ${used.message}`);
+          // Dropped from this loop's view entirely, not decremented. A use that
+          // failed is a *kind* of item this attempt cannot get at -- the pack
+          // would not open, or the walk to it overshot -- and asking again with
+          // the same id is how one failure becomes four. The next kind is worth
+          // a try; the same one is not.
+          pocket.set(pick.id, 0);
+          continue;
+        }
+        // Spent, so one fewer for the next Pokemon in the list.
+        pocket.set(pick.id, (pocket.get(pick.id) || 1) - 1);
+        spent.push(pick.name);
+      }
+      const after = (await this.snap()).party[mon.slot];
+      if (after && after.hp > mon.hp) mended++;
+    }
+    const at = await this.snap();
+    return {
+      ok: mended > 0,
+      stats: { mended, spent: spent.join(', '),
+               party: at.party.map((m) => `${m.hp}/${m.maxHp}`).join(' ') },
+      message: mended > 0
+        ? `mended ${mended === 1 ? 'one Pokémon' : `${mended} Pokémon`} out of the bag`
+          + (spent.length ? ` (${spent.join(', ')})` : '')
+        : 'nothing in the bag helped',
+    };
   }
 
   /** Run from anything that jumped us on the way. */

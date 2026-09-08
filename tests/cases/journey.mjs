@@ -6,9 +6,9 @@
 // before, and it is the piece most likely to be quietly wrong -- a cost model
 // that picks the wrong Center costs a minute of walking and looks like a bug in
 // the walk.
-import { FakeGameBoy, symbols, test, worldRam } from '../harness.mjs';
+import { FakeGameBoy, fakeRom, symbols, test, worldRam } from '../harness.mjs';
 import { GameState } from '../../gen2/state.js';
-import { Journey } from '../../gen2/journey.js';
+import { cheapestHeal, Journey } from '../../gen2/journey.js';
 
 const sym = symbols();
 
@@ -364,4 +364,177 @@ test('a map with nothing on it says so instead of walking', async (t) => {
   const r = await j.takeHere();
   t.false(r.ok, 'nothing to do');
   t.eq(j.log.length, 0, 'and it did not move');
+});
+
+// --- healing out of the bag --------------------------------------------------
+
+const ITEMS = { 18: 'POTION', 154: 'BERRY', 26: 'FULL RESTORE', 19: 'SUPER POTION' };
+const STOCK = ['berry', 'potion', 'super potion', 'full restore'];
+
+test('the cheapest thing that will do is the one picked', async (t) => {
+  // The same rule as never throwing a Master Ball at a Rattata. A Full Restore
+  // on a Pokémon missing four HP is that, in the other pocket.
+  const rom = fakeRom({ items: ITEMS });
+  t.eq(cheapestHeal([[26, 1], [18, 2]], STOCK, rom).name, 'POTION',
+       'a potion before a full restore');
+  t.eq(cheapestHeal([[26, 1], [18, 2], [154, 5]], STOCK, rom).name, 'BERRY',
+       'and a berry before either, being free and regrowing');
+  t.eq(cheapestHeal([[26, 1]], STOCK, rom).name, 'FULL RESTORE',
+       'but the expensive one when it is all there is');
+});
+
+test('a bag with nothing that heals answers nothing', async (t) => {
+  const rom = fakeRom({ items: { 5: 'POKé BALL', 12: 'ANTIDOTE' } });
+  t.eq(cheapestHeal([[5, 3], [12, 1]], STOCK, rom), null, 'balls and cures are not heals');
+  t.eq(cheapestHeal([[18, 0]], STOCK, rom), null, 'nor is a zero quantity');
+  t.eq(cheapestHeal([], STOCK, rom), null, 'nor an empty pocket');
+});
+
+test('a cartridge whose title lists no healing items answers nothing',
+     async (t) => {
+  // The honest position for a hack that renamed POTION: lose this, keep
+  // everything else, and get it back when somebody writes the name down.
+  const rom = fakeRom({ items: ITEMS });
+  t.eq(cheapestHeal([[18, 1]], null, rom), null, 'no list, no answer');
+  t.eq(cheapestHeal([[18, 1]], [], rom), null, 'and an empty list is the same');
+  t.eq(cheapestHeal([[18, 1]], STOCK, null), null, 'nor without a ROM to name ids');
+});
+
+test('the name is folded, so case and the accent cost nothing', async (t) => {
+  const rom = fakeRom({ items: { 30: 'FRESH WATER' } });
+  t.eq(cheapestHeal([[30, 1]], ['fresh water'], rom).name, 'FRESH WATER',
+       'matched through the same fold the ball preference uses');
+});
+
+/** A Journey whose party, bag and item use are scripted. */
+function mender({ party = [{ hp: 10, maxHp: 40 }], items = [[18, 2]],
+                  heals = STOCK, gain = 20, works = () => true } = {}) {
+  const sym = symbols();
+  const state = new GameState(sym);
+  const gb = new FakeGameBoy({ wram: worldRam(sym, {}) });
+  const mons = party.map((m, slot) => ({ species: 155, level: 5, slot, ...m }));
+  const bag = items.map(([id, n]) => [id, n]);
+  const used = [];
+  const tasks = {
+    rom: fakeRom({ items: ITEMS }),
+    useItemOn: async (id, slot) => {
+      used.push({ id, slot });
+      if (!works({ id, slot })) return { ok: false, message: 'refused' };
+      const e = bag.find(([b]) => b === id);
+      if (e && --e[1] <= 0) bag.splice(bag.indexOf(e), 1);
+      const mon = mons[slot];
+      if (!mon || mon.hp >= mon.maxHp) return { ok: false, message: 'no effect' };
+      mon.hp = Math.min(mon.maxHp, mon.hp + gain);
+      return { ok: true, gained: gain, message: `+${gain} HP` };
+    },
+  };
+  const j = new Journey(gb, state, tasks, { off: 0, calibrate: () => true,
+                                            playerPos: () => [1, 1], mapSize: () => [10, 10] },
+                        { mapKey: async () => 1 }, () => {}, { route: () => null },
+                        { heals });
+  j.said = [];
+  j.say = (m) => j.said.push(m);
+  j.snap = async () => ({ party: mons.map((m) => ({ ...m })), items: bag.map((b) => [...b]),
+                          inBattle: false });
+  j.nameOf = (m) => `MON${m.slot}`;
+  j.used = used;
+  return j;
+}
+
+test('the bag mends the one nearest to fainting first', async (t) => {
+  // A party of two at 3/40 and 38/40 has one member the next battle will lose
+  // and one it will not.
+  const j = mender({ party: [{ hp: 38, maxHp: 40 }, { hp: 3, maxHp: 40 }],
+                     items: [[18, 4]] });
+  const r = await j.healFromBag();
+  t.true(r.ok, 'it mended somebody');
+  t.eq(j.used[0].slot, 1, 'the one at 3 HP went first');
+});
+
+test('a fainted Pokémon is a Centre’s job, not a potion’s', async (t) => {
+  // A Potion does nothing for a Pokémon at 0 HP in Gen 2, and the knockout is
+  // the whole reason a grind walks to a Center.
+  const j = mender({ party: [{ hp: 0, maxHp: 40 }], items: [[18, 2]] });
+  const r = await j.healFromBag();
+  t.false(r.ok, 'the bag is not offered as an answer');
+  t.eq(j.used.length, 0, 'and nothing was spent finding out');
+});
+
+test('one potion is not always enough, and four is where it stops', async (t) => {
+  const j = mender({ party: [{ hp: 4, maxHp: 100 }], items: [[18, 9]], gain: 20 });
+  const r = await j.healFromBag();
+  t.true(r.ok, 'it made progress');
+  t.eq(j.used.length, 4, 'four goes at one Pokémon, then the walk can answer');
+});
+
+test('an item the pack would not use is dropped, not asked again', async (t) => {
+  // A refusal is a *kind* of item this attempt cannot get at -- the pack would
+  // not open, or the walk to it overshot -- so asking again with the same id is
+  // how one failure becomes four.
+  const j = mender({ party: [{ hp: 4, maxHp: 100 }], items: [[18, 9]],
+                     works: () => false });
+  const r = await j.healFromBag();
+  t.false(r.ok, 'nothing was mended');
+  t.eq(j.used.length, 1, 'asked once, with nine of them in the bag');
+});
+
+test('a refusal moves on to the next kind of item', async (t) => {
+  // Measured on the cartridge: a BERRY was used, the pocket still listed it on
+  // the next read, so the loop picked the berry again, walked past it in a pack
+  // that no longer had it, and gave up -- leaving the Pokémon at 15 of 22 with
+  // two potions in the bag.
+  const j = mender({ party: [{ hp: 4, maxHp: 100 }], items: [[154, 1], [18, 2]],
+                     works: ({ id }) => id !== 154 });
+  const r = await j.healFromBag();
+  t.true(r.ok, 'the potion was reached');
+  t.eq(j.used.map((u) => u.id), [154, 18, 18], 'berry refused, then the potions');
+});
+
+test('a party at full health is not the bag’s business', async (t) => {
+  const j = mender({ party: [{ hp: 40, maxHp: 40 }] });
+  const r = await j.healFromBag();
+  t.false(r.ok, 'nothing to do');
+  t.contains(r.message, 'nothing the bag can mend', 'and it says so');
+});
+
+test('healNow spends the bag before it spends the walk', async (t) => {
+  // The caller-level test, and it is here because its absence let a patch land
+  // in the wrong method: the bag block went into `healUp` instead of `healNow`,
+  // where `before` is not in scope. Every one of the tests above still passed.
+  // The cartridge caught it in under a minute -- "off to heal: before is not
+  // defined" -- which is not a substitute for a test that bites.
+  const j = mender({ party: [{ hp: 10, maxHp: 40 }], items: [[18, 2]] });
+  j.walked = 0;
+  j.mapKey = async () => 1;
+  j.nearestHeal = async () => ({ map: 2, heal: async () => true });
+  j.healUp = async () => { j.walked++; return true; };
+  const r = await j.healNow();
+  t.true(r.ok, 'it healed');
+  t.eq(j.walked, 0, 'and never walked');
+  t.contains(r.message, 'out of the bag', 'saying which it was');
+});
+
+test('healNow walks when the bag has nothing to give', async (t) => {
+  // The fall-through has to stay whole: this feature adds a preference, it does
+  // not replace the answer underneath it.
+  const j = mender({ party: [{ hp: 10, maxHp: 40 }], items: [] });
+  j.walked = 0;
+  j.mapKey = async () => 1;
+  j.nearestHeal = async () => ({ map: 2, heal: async () => true });
+  j.healUp = async () => { j.walked++; return true; };
+  const r = await j.healNow();
+  t.true(r.ok, 'it still healed');
+  t.eq(j.walked, 1, 'by walking');
+  t.contains(r.message, 'healed', 'and the old message is unchanged');
+});
+
+test('healNow on a fainted party walks, carrying potions or not', async (t) => {
+  const j = mender({ party: [{ hp: 0, maxHp: 40 }], items: [[18, 5]] });
+  j.walked = 0;
+  j.mapKey = async () => 1;
+  j.nearestHeal = async () => ({ map: 2, heal: async () => true });
+  j.healUp = async () => { j.walked++; return true; };
+  await j.healNow();
+  t.eq(j.walked, 1, 'a Centre is the only thing that mends a faint');
+  t.eq(j.used.length, 0, 'and no potion was spent finding that out');
 });

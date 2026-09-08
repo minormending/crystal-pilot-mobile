@@ -113,6 +113,21 @@ export const crystal = {
     { map: CHERRYGROVE_CITY, reach: 'heal' },
   ],
   grassyMaps: [ROUTE_29, ROUTE_30],
+  // What in the bag mends a Pokemon, weakest first, matched by folded name.
+  //
+  // Names rather than ids, and here rather than in the engine profile, for the
+  // reason the encounter tables are here: an id is layout and a name is
+  // content, and content is what a hack changes. Matched through `normalise`,
+  // the same fold the ball preference uses, so POKe and case cost nothing.
+  //
+  // Weakest first because the pilot should spend the cheapest thing that will
+  // do -- the same rule as never throwing a Master Ball at a Rattata. BERRY is
+  // on the list and is first: it restores ten HP in Gen 2, it grows back on the
+  // trees the Take row now finds, and it is the one healing item this game hands
+  // you for free.
+  heals: ['berry', 'potion', 'fresh water', 'soda pop', 'lemonade',
+          'moomoo milk', 'super potion', 'hyper potion', 'max potion',
+          'full restore'],
   // Every map, tile and door the scripts below walk to.
   //
   // They read these from the profile rather than closing over the constants,
