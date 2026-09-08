@@ -906,7 +906,12 @@ export class Journey {
     // is *not* carried.
     const wanted = names[0];
     const here = await this.mapKey();
-    const mart = marts[0];
+    // The nearest, not the first. Measured: standing in Violet City with a Mart
+    // across the street, `marts[0]` walked the pilot back to Cherrygrove for a
+    // potion -- the same defect `heal()` had, in the other feature that keeps a
+    // list of places, and fixed by the two of them sharing one cost model.
+    const mart = (await this.nearestPlace(marts, here, (m) => m.from || m.map))
+      .place;
 
     if (here !== mart.map) {
       if (mart.from && here !== mart.from) {
@@ -1272,38 +1277,67 @@ export class Journey {
    * charged at `legCost` because their entry points are not known until the
    * player is standing on them.
    */
-  async nearestHeal(from) {
-    const healers = this.title.healers || [];
-    if (!healers.length) return null;
-    // The entry is handed to the procedure, which is what lets one procedure
-    // serve several places: `healAtCenter` reads the door and the nurse off it
-    // rather than closing over one town's constants. A procedure that wants no
-    // argument simply ignores it.
-    const reach = (h) => ({ map: h.map, heal: () => this[h.reach](h) });
-    // The last one is the fallback, deliberately: a title lists its healers
-    // most-general last, and with no map graph to price the alternatives the
-    // general answer is the safe one.
-    const fallback = reach(healers[healers.length - 1]);
-    if (!this.world) return fallback;
+  /**
+   * The cheapest place on a list, in tiles, from where we are.
+   *
+   * Extracted from `nearestHeal` the pass a second list needed it, and the
+   * extraction *was* the bug fix: `restock` used `marts[0]`, so standing in
+   * Violet City with a Mart across the street the pilot walked back to
+   * Cherrygrove for a potion. A list with one entry hard-coded is the same
+   * defect `heal()` had, in the other feature that has a list of places.
+   *
+   * Priced in **tiles**, not legs, because a leg is not a unit of anything: a
+   * route crossing is fifty tiles and a door is one. So a further leg costs the
+   * title's `legCost` and the *first* one costs the real distance to the edge
+   * it leaves by, which is the only leg this can actually measure.
+   *
+   * The last entry is the fallback, deliberately: a title lists its places
+   * most-general last, and with no map graph to price the alternatives the
+   * general answer is the safe one.
+   *
+   * Returns `{ place, cost }`, because the cost is worth saying: the interface
+   * names the Center it would walk to *before* the button is pressed, so the
+   * choice is visible rather than discovered in the log afterwards.
+   */
+  async nearestPlace(list, from, mapOf = (p) => p.map) {
+    const places = list || [];
+    if (!places.length) return null;
+    const last = places[places.length - 1];
+    if (!this.world) return { place: last, cost: undefined };
 
     const legCost = this.title.legCost || 25;
     const wram = await this.settled();
-    let best = null;
-    for (const h of healers) {
-      if (from === h.map) return { ...reach(h), cost: 0 };
-      const route = this.world.route(from, h.map);
+    let best = null, bestCost = Infinity;
+    for (const p of places) {
+      const there = mapOf(p);
+      if (from === there) return { place: p, cost: 0 };
+      const route = this.world.route(from, there);
       if (route === null) continue;
       let cost = (route.length - 1) * legCost;
       const first = route[0];
       if (wram && first && first.kind === 'edge') {
-        const [w, hh] = this.collision.mapSize();
+        const [w, h] = this.collision.mapSize();
         const at = this.collision.playerPos(wram);
         cost += { LEFT: at[0], RIGHT: w - 1 - at[0],
-                  UP: at[1], DOWN: hh - 1 - at[1] }[first.dir] ?? legCost;
+                  UP: at[1], DOWN: h - 1 - at[1] }[first.dir] ?? legCost;
       }
-      if (!best || cost < best.cost) best = { ...reach(h), cost };
+      if (cost < bestCost) { best = p; bestCost = cost; }
     }
-    return best || fallback;
+    return best ? { place: best, cost: bestCost }
+                : { place: last, cost: undefined };
+  }
+
+  async nearestHeal(from) {
+    const healers = this.title.healers || [];
+    if (!healers.length) return null;
+    const picked = await this.nearestPlace(healers, from);
+    if (!picked || !picked.place) return null;
+    const h = picked.place;
+    // The entry is handed to the procedure, which is what lets one procedure
+    // serve several places: `healAtCenter` reads the door and the nurse off it
+    // rather than closing over one town's constants. A procedure that wants no
+    // argument simply ignores it.
+    return { map: h.map, heal: () => this[h.reach](h), cost: picked.cost };
   }
 
   /**

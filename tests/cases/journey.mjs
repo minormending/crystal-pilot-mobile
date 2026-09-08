@@ -1032,3 +1032,40 @@ test('a graph with no walkable route says so, and how many it tried',
   t.contains(r.message, 'refused', 'and it says how many legs it tried');
   t.contains(r.message, 'this can walk', 'distinguished from no route at all');
 });
+
+// --- one cost model, two lists of places ------------------------------------
+
+test('the nearest mart is chosen, not the first one written down', async (t) => {
+  // Measured on the cartridge: standing in Violet City with a Mart across the
+  // street, `marts[0]` walked the pilot all the way back to Cherrygrove for a
+  // potion. The same defect `heal()` had, in the other feature that keeps a
+  // list of places -- and fixed by the two of them sharing one cost model.
+  const FAR = 2, NEAR = 3;
+  const title = {
+    legCost: 25,
+    marts: [{ map: 20, from: FAR }, { map: 30, from: NEAR }],
+  };
+  const j = walker({
+    at: [3, 5], size: [60, 20], title,
+    routes: {
+      [FAR]: [{ kind: 'edge', dir: 'LEFT' }, { kind: 'edge', dir: 'UP' }],
+      [NEAR]: [{ kind: 'edge', dir: 'LEFT' }],
+    },
+  });
+  const picked = await j.nearestPlace(title.marts, 1, (m) => m.from || m.map);
+  t.eq(picked.place.map, 30, 'the near one');
+  t.eq(picked.cost, 3, 'priced in tiles to the edge it leaves by');
+});
+
+test('a place under our feet costs nothing and wins outright', async (t) => {
+  const title = { legCost: 25, marts: [{ map: 20, from: 2 }, { map: 30, from: 1 }] };
+  const j = walker({ title, routes: { 2: [{ kind: 'edge', dir: 'LEFT' }] } });
+  const picked = await j.nearestPlace(title.marts, 1, (m) => m.from || m.map);
+  t.eq(picked.place.map, 30, 'the one we are standing beside');
+  t.eq(picked.cost, 0, 'and it costs nothing');
+});
+
+test('an empty list has no nearest anything', async (t) => {
+  const j = walker({ title: {} });
+  t.eq(await j.nearestPlace([], 1), null, 'nothing to choose between');
+});
