@@ -179,9 +179,19 @@ export class Journey {
    * was measured. The same Center may well be open from the south.
    *
    * Written off is not forgotten: each entry remembers the badge count at the
-   * time, and a badge is precisely the thing that opens one of these. Win one
-   * and every write-off is re-opened, because the pilot has no idea which badge
-   * opened which route and guessing would be worse than asking again.
+   * time, and winning a badge re-opens every one of them.
+   *
+   * **The justification for that is weaker than it was first written**, and the
+   * weakening is worth keeping. It said a badge is *precisely* the thing that
+   * opens one of these, on the strength of a man on Route 32 asking whether the
+   * pilot had been to the Gym. Then the pilot beat Falkner -- `wJohtoBadges` 1,
+   * `hasBadge(0)` true -- and he said the same thing and put it back, five
+   * times in a row. Whatever he wants, it is not that badge.
+   *
+   * So a badge is not *the* key; it is the strongest signal this app has that
+   * the world may have changed, and re-trying on one costs a walk that would
+   * not have worked. Being wrong the other way costs the same wall on every
+   * press, which is why the rule stands even though its reason got smaller.
    */
   get shut() {
     if (!this._shut) this._shut = new Map();

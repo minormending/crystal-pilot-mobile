@@ -176,9 +176,14 @@ export const crystal = {
     // Bird Keepers at (5,6) and (2,10) are type 2. So `clearHere`, which fights
     // what the map calls a trainer, can beat the Keepers and could never beat
     // him: his battle starts by being talked to, not by crossing a sight line.
+    // No `opens:` here, and its absence is a correction. It said "the road
+    // south out of Violet", which was a guess that read well and is wrong:
+    // with `wJohtoBadges` at 1 and `hasBadge(0)` true, the man at the top of
+    // Route 32 still says "Wait up! What's the hurry?" and puts the player back
+    // -- measured five times in a row, stepping by hand. Whatever he wants, it
+    // is not this badge. See docs/PROVEN.md.
     { map: VIOLET_CITY, inside: VIOLET_GYM, door: [18, 17],
-      leader: 'FALKNER', leaderAt: [5, 1], badge: 0,
-      opens: 'the road south out of Violet' },
+      leader: 'FALKNER', leaderAt: [5, 1], badge: 0 },
   ],
   grassyMaps: [ROUTE_29, ROUTE_30, ROUTE_31],
   // Where things can be bought, and how to get to the counter.

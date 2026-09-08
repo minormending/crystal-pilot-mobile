@@ -816,6 +816,10 @@ test('the badge is read after the speech, not before it', async (t) => {
 });
 
 test('a badge won is the evidence, and it says what it opens', async (t) => {
+  // `opens` is a *title's* claim about its own cartridge, and optional -- and
+  // Crystal's own entry declines to make one, because the claim first written
+  // there was wrong: with Falkner beaten, the man on Route 32 still turns the
+  // pilot back. The field works; nobody should put a guess in it.
   const j = gymGoer();
   const r = await j.beatGym((await j.gymList(2565))[0]);
   t.true(r.ok, `won: ${r.message}`);
