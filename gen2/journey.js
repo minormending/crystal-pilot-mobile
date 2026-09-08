@@ -274,6 +274,29 @@ export class Journey {
   }
 
   /**
+   * Did the party get knocked out between these two snapshots?
+   *
+   * **Money is the evidence, and it is the only evidence there is.** A whiteout
+   * in Gen 2 heals the party, moves the player to the last Pokemon Center and
+   * takes half the wallet -- so afterwards the HP is *full*, the map is a place
+   * you might well have been walking to anyway, and every other reading looks
+   * like success.
+   *
+   * Which is not hypothetical. Measured: `healNow` was asked to mend a lead at
+   * 9 of 24, the walk to Violet met something it could not run from, the party
+   * fainted, and the job reported **healed one Pokémon at Violet City** with
+   * half the money gone. It was not wrong about the HP. It was wrong about what
+   * had happened, and the only trace was a wallet that had gone from 3136 to
+   * 1568.
+   *
+   * A job that spends money has to ask this before it spends any, because a
+   * purchase looks the same from here. `restock` does its own accounting.
+   */
+  knockedOut(before, after) {
+    return !!(before && after && (after.money || 0) < (before.money || 0));
+  }
+
+  /**
    * What the screen is saying, or '' when this cartridge cannot say.
    *
    * A cartridge whose symbol file does not name the tilemap has no words to
@@ -736,6 +759,9 @@ export class Journey {
     // without it. Only ever grows, so this terminates: every failure removes an
     // edge from a finite graph, and when none is left the answer is honestly
     // that there is no way.
+    // Held for the whole walk, because a knockout on the way is invisible from
+    // the far end: full HP at a Center is what arriving looks like.
+    const started = await this.snap();
     const avoid = new Set();
     // **Seeded with what earlier walks already learned.** A leg the game itself
     // refused -- a guard, a gate, a man who wants a badge first -- is refused
@@ -759,7 +785,7 @@ export class Journey {
     for (let step = 0; walked < maxLegs && refused < MAX_REFUSALS; step++) {
       if (this.stopped) return { ok: false, message: 'stopped' };
       const here = await this.mapKey();
-      if (here === target) return { ok: true, message: 'arrived' };
+      if (here === target) return this._arrived(started);
       const route = this.world.route(here, target, { avoid });
       if (route === null) {
         return {
@@ -770,7 +796,7 @@ export class Journey {
             : `no way from ${this.where(here)} to ${this.where(target)}`,
         };
       }
-      if (!route.length) return { ok: true, message: 'arrived' };
+      if (!route.length) return this._arrived(started);
       const next = route[0];
       if (next.kind === 'warp') {
         this.say(`through to ${this.where(next.key)}`);
@@ -853,7 +879,7 @@ export class Journey {
     // of the loop is the only one there was, so a walk that spent its whole
     // budget getting there reported *too many legs* from the doorstep -- found
     // by giving one exactly the legs it needed.
-    if (await this.mapKey() === target) return { ok: true, message: 'arrived' };
+    if (await this.mapKey() === target) return this._arrived(started);
     return { ok: false, message: refused >= MAX_REFUSALS
       ? `gave up after ${refused} legs that would not go`
       : 'too many legs' };
@@ -1205,6 +1231,20 @@ export class Journey {
                message: gate
                  ? `turned back on the way to ${stats.at} — ${gate}`
                  : `could not heal (stopped in ${this.where(await this.mapKey())})` };
+    }
+    // **A whiteout is not a heal, and every other reading says it is.** The
+    // party comes back at full HP at the last Center, which is exactly what a
+    // successful walk to a Center looks like -- so the wallet is the only thing
+    // that can tell them apart. Measured at 9 of 24 on Route 31: the walk met
+    // something it could not run from, the party fainted, and this said
+    // *healed one Pokémon at Violet City* with half the money gone.
+    if (this.knockedOut(before, after)) {
+      return {
+        ok: false,
+        stats: { ...stats, knockedOut: true },
+        message: `knocked out on the way — the party is mended and it cost `
+                 + `half the money (¥${before.money - after.money})`,
+      };
     }
     return { ok: true, stats,
              message: `healed ${hurt.length === 1 ? 'one Pokémon' : `${hurt.length} Pokémon`}`
@@ -1797,7 +1837,14 @@ export class Journey {
       // whether drawn or not, so this closes the distance and asks again --
       // which is the whole difference between a job that clears a route and one
       // that only works if you were already standing next to somebody.
-      if (r.outcome === 'none' && await this._closeOnTrainer(list, spent)) {
+      // **'beaten' is about the ones it can see, not about the map.** Measured
+      // on Route 30: the pilot walked up to the trainer at (1,7), found them
+      // already beaten -- Gen 2 leaves them standing there -- and stopped, with
+      // two more placed at (2,28) and (5,23) that had never been drawn. So an
+      // empty *view* and an exhausted view are the same question to this loop:
+      // is there anybody further along the map, and can I get to them?
+      if ((r.outcome === 'none' || r.outcome === 'beaten')
+          && await this._closeOnTrainer(list, spent)) {
         continue;
       }
       // 'none', 'beaten' and 'unreachable' otherwise all mean the same thing to
@@ -1875,7 +1922,14 @@ export class Journey {
       return stats.won ? `${beat}${money} — cannot get to anyone else`
                        : 'could not get to anyone here';
     }
-    if (!stats.won) return 'nobody here wants a battle';
+    if (!stats.won) {
+      // Two different things, and the difference is what to do next: an empty
+      // map is an empty map, and a map of people who have already lost to you
+      // is a map you have finished with.
+      return stoppedBy === 'beaten'
+        ? 'everyone here has already been beaten'
+        : 'nobody here wants a battle';
+    }
     // Cleared. Worth saying against the map's own total, because "beat three"
     // and "beat the three that were here" are different claims.
     return placed && stats.won >= placed
@@ -1922,6 +1976,22 @@ export class Journey {
   itemName(id) {
     const name = this.tasks && this.tasks.rom ? this.tasks.rom.itemName(id) : '';
     return name || `item ${id}`;
+  }
+
+  /**
+   * Arrived -- and whether anything was lost getting here.
+   *
+   * A walk that whites out on the way still often reaches its target, because a
+   * whiteout puts the player at a Center and the walk carries on from there. So
+   * `arrived` on its own is true and misleading, and the wallet is the only
+   * thing that says which kind of arrival it was.
+   */
+  async _arrived(started) {
+    const now = await this.snap();
+    if (!this.knockedOut(started, now)) return { ok: true, message: 'arrived' };
+    return { ok: true, knockedOut: true,
+             message: `arrived — but knocked out on the way, which cost `
+                      + `¥${started.money - now.money}` };
   }
 
   /** Run a list of named legs, stopping at the first one that fails. */

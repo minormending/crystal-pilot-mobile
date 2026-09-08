@@ -719,6 +719,94 @@ function dueller({ trainers = () => [], at = [5, 5], starts = true,
   return j;
 }
 
+// --- a whiteout looks exactly like success -----------------------------------
+
+test('a heal that was really a knockout says so', async (t) => {
+  // **Measured on the cartridge, and it is the worst kind of wrong report: not
+  // a failure dressed as one, but a failure dressed as a success.** `healNow`
+  // was asked to mend a lead at 9 of 24; the walk to Violet met something it
+  // could not run from; the party fainted. A whiteout in Gen 2 heals the party,
+  // moves the player to the last Center and takes half the wallet -- so
+  // afterwards the HP was full, the map was the town it had been walking to,
+  // and the job said *healed one Pokémon at Violet City*.
+  //
+  // Every reading agreed. The only trace was a wallet that had gone from 3136
+  // to 1568, which is why money is the evidence here and nothing else can be.
+  const sym = symbols();
+  const title = { legCost: 25, healers: [{ map: 1, reach: 'healAtNear' }] };
+  const gb = new FakeGameBoy({ wram: worldRam(sym, {}) });
+  const j = new Journey(gb, new GameState(sym), null,
+                        { off: 0, calibrate: () => true, playerPos: () => [5, 5],
+                          mapSize: () => [20, 20] },
+                        { mapKey: async () => 1 }, () => {},
+                        { route: () => [] }, title);
+  j.said = [];
+  j.say = (m) => j.said.push(m);
+  j.settled = async () => gb.wram;
+  let hp = 9, money = 3136;
+  j.snap = async () => ({ inBattle: false, money,
+                          party: [{ hp, maxHp: 24, level: 8 }],
+                          balls: [], items: [] });
+  j.healFromBag = async () => ({ ok: false, message: 'nothing in the bag' });
+  // What a whiteout does: full HP, and half the money.
+  j.healUp = async () => { hp = 24; money = Math.floor(money / 2); return true; };
+
+  const r = await j.healNow();
+  t.false(r.ok, 'not reported as a heal');
+  t.contains(r.message, 'knocked out', 'named for what it was');
+  t.contains(r.message, '1568', 'with what it cost');
+  t.true(r.stats.knockedOut, 'and said so where a caller can read it');
+});
+
+test('a heal that really was a heal is still a heal', async (t) => {
+  // The other side, and the reason this keys on money rather than on the walk:
+  // reaching a Center and being mended is the ordinary case and must not start
+  // reading as a disaster.
+  const sym = symbols();
+  const title = { legCost: 25, healers: [{ map: 1, reach: 'healAtNear' }] };
+  const gb = new FakeGameBoy({ wram: worldRam(sym, {}) });
+  const j = new Journey(gb, new GameState(sym), null,
+                        { off: 0, calibrate: () => true, playerPos: () => [5, 5],
+                          mapSize: () => [20, 20] },
+                        { mapKey: async () => 1 }, () => {},
+                        { route: () => [] }, title);
+  j.said = [];
+  j.say = () => {};
+  j.settled = async () => gb.wram;
+  let hp = 9;
+  j.snap = async () => ({ inBattle: false, money: 3136,
+                          party: [{ hp, maxHp: 24, level: 8 }],
+                          balls: [], items: [] });
+  j.healFromBag = async () => ({ ok: false, message: 'nothing in the bag' });
+  j.healUp = async () => { hp = 24; return true; };
+
+  const r = await j.healNow();
+  t.true(r.ok, 'a heal');
+  t.contains(r.message, 'healed one Pokémon', 'said plainly');
+  t.true(r.stats.knockedOut === undefined, 'and nothing about a knockout');
+});
+
+test('arriving after a knockout is not simply arriving', async (t) => {
+  // A whiteout puts the player at a Center and the walk carries on from there,
+  // so it very often *does* reach the target -- and `arrived` on its own is
+  // true and misleading. The trip that found this reported "arrived" with half
+  // the money gone and one line in a log that had already scrolled.
+  const j = ringWalker();
+  let money = 2000;
+  j.snap = async () => ({ inBattle: false, money, scriptRunning: false,
+                          windowOpen: false, badges: 0,
+                          party: [{ hp: 20, maxHp: 20 }], balls: [], items: [] });
+  const walked = j.crossEdge;
+  j.crossEdge = async (dir, expect) => {
+    money = 1000;                       // knocked out on the first leg
+    return walked(dir, expect);
+  };
+  const r = await j.travelTo(3);
+  t.true(r.ok, 'it did arrive');
+  t.true(r.knockedOut, 'and says it was knocked out');
+  t.contains(r.message, '1000', 'with what that cost');
+});
+
 // --- clearing a whole map ---------------------------------------------------
 //
 // The primitive a Gym needs. `duelHere` fights one; this is the loop, and the
@@ -810,6 +898,47 @@ test('a trainer the map placed but has not drawn is walked up to', async (t) => 
   t.contains(j.said.join(' '), 'walking up to whoever is at 21,13',
              'and said who it was walking at');
   t.eq(r.stats.won, 1, 'then fought them');
+});
+
+test('an already-beaten trainer does not end the sweep', async (t) => {
+  // **Measured on Route 30, and it is the difference between sweeping a route
+  // and giving up at its north end.** The pilot walked up to the trainer at
+  // (1,7), found them already beaten -- Gen 2 leaves them standing there with
+  // the same sprite and sight range -- and stopped, with two more placed at
+  // (2,28) and (5,23) that had never been drawn.
+  //
+  // So an *empty* view and an *exhausted* view ask this loop the same question:
+  // is there anybody further along, and can I get to them?
+  const done = { x: 1, y: 7, sprite: 37 };
+  const far = { x: 5, y: 23, sprite: 39 };
+  let reached = false;
+  const j = dueller({
+    at: [1, 8],
+    placed: [done, far],
+    trainers: () => (reached ? [far] : [done]),
+    // The near one will not fight, which is what "already beaten" looks like
+    // from outside: reached, asked, and no battle.
+    starts: false,
+  });
+  const walkTo = j.nav.walkTo;
+  j.nav.walkTo = async (...a) => {
+    if (a[1][1] > 20) reached = true;      // got down to the far one
+    return walkTo(...a);
+  };
+  await j.clearHere();
+  t.contains(j.said.join(' '), 'walking up to whoever is at 5,23',
+             'it went looking for the one further along');
+  t.false(j.said.join(' ').includes('whoever is at 1,7'),
+          'and not back to the one it had just been told was finished');
+});
+
+test('a map of people who have all already lost says that, not "nobody here"',
+     async (t) => {
+  // Different things to do next: an empty map is empty, and a map of people who
+  // have already lost to you is one you have finished with.
+  const j = dueller({ trainers: crowd(1), starts: false });
+  const r = await j.clearHere();
+  t.contains(r.message, 'already been beaten', 'named for what it is');
 });
 
 test('a placement nothing can walk to is not asked about twice', async (t) => {
