@@ -455,7 +455,7 @@ enforces it, so it is a fact about the build rather than a habit.
 
 ### `state.js` — what the game is doing right now
 
-<!-- covers: gen2/state.js @ e34a25f71209 -->
+<!-- covers: gen2/state.js @ 02d9f7a89910 -->
 
 One snapshot, many answers: `inBattle`, `party`, `pos`, `onGrass`,
 `worldLoaded`, `menu`, `balls`, `items`, each party member's `status`, the
@@ -912,7 +912,7 @@ Two more things the map alone will not tell you:
 
 ### `world.js` — which map adjoins which
 
-<!-- covers: gen2/world.js @ 443101fa3b7f -->
+<!-- covers: gen2/world.js @ f3453cd6b5be -->
 
 The map graph, read out of the cartridge: edge connections *and* warps, so it can
 route out of a building rather than only across a route.
@@ -1060,7 +1060,7 @@ point those coordinates mean somewhere else entirely.
 
 ## 5. Crossing to the next map
 
-<!-- covers: gen2/journey.js gen2/world.js @ 77df72f0e46b -->
+<!-- covers: gen2/journey.js gen2/world.js @ b14938ede7b7 -->
 
 A connection spans only part of a shared edge, so "walk west until something
 happens" does not work. `crossEdge()` closes the distance in stages, then tries
@@ -1268,7 +1268,7 @@ eight kilobytes a full snapshot copies, which is worth keeping distinct.
 
 ## 6. Battles
 
-<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ cf0dab4c9167 -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 42da330bb92d -->
 
 ### Which move, and which question
 
@@ -1869,7 +1869,7 @@ flowchart TD
 
 ## 7a. Five that act on where you already are
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ fad20a936276 -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ d97aa3d1c48f -->
 
 Grind, hunt and catch all go *looking* for something. These five do the obvious
 thing with the situation you are already in, and take no parameters:
@@ -2140,7 +2140,7 @@ said *trainer battle: lost* **seven times**. One loss, reported seven ways.
 
 ## 7d. The counter, and the money it takes
 
-<!-- covers: gen2/menus.js gen2/state.js titles/crystal.js @ 5be3d9d92c83 -->
+<!-- covers: gen2/menus.js gen2/state.js titles/crystal.js @ 3f783318370e -->
 
 Everything the pilot could do until now used what it found. **Shop** walks to a
 mart and buys, which is the first thing it does that spends rather than
@@ -2249,7 +2249,7 @@ counter and came away with **five potions and ¥1800**, in 49 seconds.
 
 ## 7b. Saving, and getting the save out
 
-<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ cf0dab4c9167 -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 42da330bb92d -->
 
 ```mermaid
 flowchart TD
@@ -2491,7 +2491,7 @@ because that failure is only otherwise discovered by reaching for the undo.
 
 ## 8. The errands
 
-<!-- covers: titles/crystal.js gen2/journey.js @ c4f17f6e1b99 -->
+<!-- covers: titles/crystal.js gen2/journey.js @ 02cd36addfe1 -->
 
 Everything in this section is `crystal.js` — the only file in the app that names
 a Crystal map, a Crystal door or a Crystal NPC. What it stands on is
@@ -2823,7 +2823,7 @@ the bag" rather than "did we gain any".
 
 ## 8a. Finding the Centers and the Marts in the cartridge
 
-<!-- covers: gen2/world.js gen2/journey.js @ 77df72f0e46b -->
+<!-- covers: gen2/world.js gen2/journey.js @ b14938ede7b7 -->
 
 The last thing in this app that had to be written out by hand. A title said
 where the Centers and the Marts were, so the pilot healed in the two towns
@@ -2900,7 +2900,7 @@ after](#8d-a-route-the-game-itself-refuses).
 
 ## 8b. Asking the cartridge what its places are called
 
-<!-- covers: gen2/romdata.js gen2/world.js @ 7dfc1c5711ff -->
+<!-- covers: gen2/romdata.js gen2/world.js @ 20ac78285f13 -->
 
 The one table that **retires** hand-written data rather than adding to it. A map
 used to be called whatever the title profile said, and everything else was
@@ -2975,7 +2975,7 @@ go](#8c-naming-a-city-is-a-feature).
 
 ## 8c. Naming a city is a feature
 
-<!-- covers: titles/crystal.js gen2/world.js @ 71033aac418e -->
+<!-- covers: titles/crystal.js gen2/world.js @ fb75885f6950 -->
 
 The map graph has always reached most of Johto. A flood over its exits from
 Route 31 finds sixty-odd maps in five legs — and every feature in this app was
@@ -3059,7 +3059,7 @@ by, which is the only leg it can measure.
 
 ## 8d. A route the game itself refuses
 
-<!-- covers: gen2/journey.js gen2/state.js @ 7ce53955705d -->
+<!-- covers: gen2/journey.js gen2/state.js @ 03cf54451876 -->
 
 The pass before this one taught the walk to *quote* the man who turns it back.
 This is the pilot doing something about it.
@@ -3166,7 +3166,7 @@ counting bytes reads a full case as one.
 
 ## 8e. Fighting everybody here
 
-<!-- covers: gen2/journey.js @ aa1800c1c64d -->
+<!-- covers: gen2/journey.js @ ff9c931462dc -->
 
 The primitive a Gym needs. The pilot has been stopped on Route 32 for three
 passes by a man who wants Falkner beaten first, and beating Falkner means
@@ -3265,13 +3265,83 @@ that reports the wrong one sends the next reader somewhere else entirely. A
 failure dressed as a failure costs a minute. A failure dressed as a *success*
 costs however long it takes somebody to notice their money is gone.
 
+## 8f. Going and winning a badge
+
+<!-- covers: gen2/journey.js gen2/state.js titles/crystal.js @ 1c293ece5aec -->
+
+The pilot has been turned back from Route 32 since the pass it learned to find
+Pokémon Centers. `reopen` throws away every written-off road the moment a badge
+is won. This is the thing that wins one, and the loop closes.
+
+```mermaid
+flowchart TD
+    G["beatGym"] --> H{"badge already in<br/>the case?"}
+    H -- yes --> DONE1["nothing to do"]
+    H -- no --> F{"everybody at<br/>full HP?"}
+    F -- no --> HEAL["healNow"]
+    HEAL --> F2{"fit now?"}
+    F2 -- no --> STOP["<b>do not go</b><br/><i>losing costs half the money</i>"]
+    F2 -- yes --> T
+    F -- yes --> T["travelTo the town"]
+    T --> D["through the door"]
+    D --> C["clearHere"]
+    C --> B{"is the badge<br/>in the case?"}
+    B -- yes --> WON["<b>beaten</b> — and every<br/>written-off road re-opens"]
+    B -- no --> NO["no badge yet,<br/>plus the sweep's own reason"]
+```
+
+**The badge is the evidence and there is no other.** A Gym ends with the leader
+beaten and the pilot standing in a room that looks like every other room it has
+cleared — so counting won battles reports *fought four, won four* about a run
+that never reached the leader. `wJohtoBadges` gains a bit, or nothing happened.
+
+Which bit means which badge is a fact about the *story*, so the title declares
+it and `state.hasBadge` only counts. Measured: Falkner sets bit 0. Bit 8 is the
+low bit of `wKantoBadges`, not the ninth bit of the first byte, which is what
+the `>> 3` is for.
+
+<details>
+<summary><b>Advanced detail:</b> why a Gym is declared rather than found, with
+the measurement</summary>
+
+Every other place in this app was hand-written until a signature good enough to
+trust turned up — [the Centers and the Marts](#8a-finding-the-centers-and-the-marts-in-the-cartridge)
+took thirty passes. A Gym does not meet that bar yet, and the numbers are worth
+keeping so nobody re-measures them:
+
+| | of the 349 maps that carry objects |
+| --- | --- |
+| carry the gym guide's sprite (72) | **24** |
+| of those, are actually Gyms | about **16** |
+
+The other eight are the Radio Tower, the Slowpoke Well, the Power Plant, the
+Seafoam Islands, a Cerulean house, a Celadon one, a Route 10 gatehouse and an
+Ecruteak building. Narrowing by where he stands — three rows up from the bottom
+wall, beside the door — gets **fourteen** Gyms, still admits the Seafoam Islands
+and the Cerulean house, and loses Saffron.
+
+Against the Center's 21 of 23 with misses that cost nothing, that is not narrow
+enough to walk into. So the title declares one Gym, the machinery is written
+against a declared shape exactly as the healers were, and the day a better
+signature turns up nothing above `gyms:` has to change.
+
+**And the heal's answer is read rather than discarded.** The first cartridge run
+of this had a lead at 1 of 22, a heal that was turned back at Route 32's gate,
+and it walked into the Gym anyway and lost the first battle — which is worse
+than not going, because losing costs half the money, and the pilot *knew* it
+could not heal before it set off. The check is on whether the party is fit
+afterwards rather than on what the heal reported, because a bag heal that mends
+everybody is a heal whatever it says about itself.
+
+</details>
+
 ## 9. The interface
 
 This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ 4237b3fdf647 -->
+<!-- covers: app/main.js index.html @ 33c3ac723a55 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -3810,7 +3880,7 @@ seconds by a page whose loop was supposedly running.
 
 ### One thing at a time
 
-<!-- covers: app/main.js @ 0f4dee4b2e96 -->
+<!-- covers: app/main.js @ 76ce4894dd04 -->
 
 One Game Boy, one joypad, one canvas — so a great deal of this app is about
 making sure two things are never driving them at once. There are three claims,
@@ -4443,7 +4513,7 @@ they have been installed.
 
 ### Watching the other device's screen
 
-<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ 77967d109f5b -->
+<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ a0b2c45b9621 -->
 
 One device shows its screen; the other watches it, and plays it if the first
 one says so. The picture goes straight between them over WebRTC and never

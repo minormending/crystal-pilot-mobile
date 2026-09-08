@@ -256,6 +256,16 @@ walk, and the row may only make it about a walk the pilot would actually
 complete. That is why a shut road changes the sentence rather than only the
 outcome.
 
+**Gym is the only row that reads its own past.** Every other offer is computed
+from the situation in front of it — who is hurt, what is placed here, where the
+graph reaches. This one asks the game whether a thing has already been done, and
+the game answers, because a badge is a fact it wrote down. So the row disappears
+when the badge is in the case, and it disappears for the right reason rather
+than because the pilot remembers going.
+
+It sits between Duel and Heal: the job that opens roads is worth more than
+tidying up and less than being able to fight at all.
+
 **Duel is the one row with two buttons that are both about fighting**, and the
 second one had to earn its place. *Fight* answers whoever is in front of you;
 *Clear* works through the map. A second button that does what the first does is
@@ -687,4 +697,4 @@ So this page carries a marker naming the files it describes and the hash they
 had when it was last read against them. `tools/docs-check` reports it when they
 move, and the pre-commit hook blocks on that report.
 
-<!-- covers: index.html app/main.js app/rows.js @ 3e3b49419e32 -->
+<!-- covers: index.html app/main.js app/rows.js @ c0bced076667 -->

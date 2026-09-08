@@ -794,6 +794,37 @@ test('a Gym cleared without the badge is not a Gym beaten', async (t) => {
   t.contains(r.message, 'beat 4 trainers', "keeping the sweep's own answer");
 });
 
+test('a party that could not be healed does not go into the Gym', async (t) => {
+  // **Measured on the first cartridge run of this**: a lead at 1 of 22, a heal
+  // turned back at Route 32's gate, and it walked into the Gym anyway and lost
+  // the first battle. Worse than not going, because losing costs half the
+  // money -- and the pilot knew it could not heal before it set off.
+  const j = gymGoer();
+  let hp = 1;
+  j.snap = async () => ({ inBattle: false, money: 3000, wram: j.gb.wram,
+                          party: [{ hp, maxHp: 22, level: 7 }],
+                          balls: [], items: [] });
+  j.healNow = async () => ({ ok: false, message: 'turned back on the way' });
+  const r = await j.beatGym((await j.gymList(2565))[0]);
+  t.false(r.ok, 'it did not go');
+  t.contains(r.message, 'not fit for a Gym', 'and says why');
+  t.contains(r.message, 'turned back on the way', "keeping the heal's reason");
+  t.false(j.said.join(' ').includes('in through the door'), 'no door was opened');
+});
+
+test('a heal that worked lets the Gym go ahead', async (t) => {
+  // The other side: the check is on whether the party is *fit*, not on whether
+  // the heal reported success -- a bag heal that mends everybody is a heal.
+  const j = gymGoer();
+  let hp = 1;
+  j.snap = async () => ({ inBattle: false, money: 3000, wram: j.gb.wram,
+                          party: [{ hp, maxHp: 22, level: 7 }],
+                          balls: [], items: [] });
+  j.healNow = async () => { hp = 22; return { ok: false, message: 'odd but mended' }; };
+  const r = await j.beatGym((await j.gymList(2565))[0]);
+  t.true(r.ok, `it went and won: ${r.message}`);
+});
+
 test('a Gym already beaten is not offered, and not walked to', async (t) => {
   const j = gymGoer({ has: true });
   t.eq(await j.gymList(2565), [], 'off the list');

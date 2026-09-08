@@ -687,6 +687,37 @@ back where you started. If a leg fails it says which and where it stopped —
 *could not leave Route 29 going LEFT — stopped at Route 29* — because a route
 that gives up halfway leaves you somewhere you did not choose.
 
+## Gym: going and winning a badge
+
+Press **Gym** and the pilot heals, walks to the town, goes in, and fights its
+way through. The row says who and how far — *FALKNER at Violet City · one leg*.
+
+**A badge is the only thing that says a Gym was beaten**, and that is why this
+row exists rather than the Duel row being enough. A Gym ends with the leader
+beaten and the pilot standing in a room that looks like every other room it has
+cleared, so counting battles would report *fought four, won four* about a run
+that never got to the leader. The game writes the badge down; the pilot reads it.
+
+Which means two things you can rely on:
+
+* **A Gym you have already beaten stops being offered.** Not because the pilot
+  remembers going — it reads your badge case.
+* **The road it opens opens.** Route 32 is shut until Falkner is beaten, and the
+  pilot writes that road off after being turned back once. Winning any badge
+  throws away every write-off, so the walk it refused this morning is offered
+  again the moment you have the badge for it.
+
+**It will not go in if it cannot heal first.** A Gym is several battles with no
+Pokémon Center between them, so the pilot mends up on the way — and if it
+cannot, it says so and stays out. Measured the first time this ran: a lead at 1
+of 22, a heal that was turned back at the gate, and it walked in anyway and lost
+the first battle. Losing costs half your money, so not going is the better
+answer.
+
+If it comes back with *no badge yet*, the rest of the sentence is the sweep's own
+reason: nobody fit to send out, a battle lost, or nobody left to fight. A lost
+one usually means levels — Grind is two rows up.
+
 ## Clear: fighting everybody on this map
 
 The Duel row has two buttons. **Fight** takes on whoever is in front of you.

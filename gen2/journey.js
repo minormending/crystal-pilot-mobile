@@ -1952,9 +1952,20 @@ export class Journey {
     const where = this.where(gym.map);
     // Full HP on the way in, because a Gym is several battles in a row with no
     // Center between them and the bag is what `clearHere` has to work with.
+    //
+    // **And the heal's answer is read, not discarded.** Measured on the first
+    // cartridge run of this: a lead at 1 of 22, a heal that was turned back at
+    // Route 32's gate, and this walked into the Gym anyway and lost the first
+    // battle. Which is worse than not going -- losing costs half the money --
+    // and the pilot knew it could not heal before it set off.
     if (before.party.some((m) => m.hp < m.maxHp)) {
       this.say('healing before the Gym');
-      await this.healNow();
+      const mended = await this.healNow();
+      const now = await this.snap();
+      if (!mended.ok && now.party.some((m) => m.hp < m.maxHp)) {
+        return { ok: false, stats: { at: where, badge: false },
+                 message: `not fit for a Gym and could not heal — ${mended.message}` };
+      }
     }
     if (await this.mapKey() !== gym.inside) {
       if (await this.mapKey() !== gym.map) {
