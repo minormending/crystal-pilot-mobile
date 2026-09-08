@@ -1253,7 +1253,11 @@ export class Journey {
   async nearestHeal(from) {
     const healers = this.title.healers || [];
     if (!healers.length) return null;
-    const reach = (h) => ({ map: h.map, heal: () => this[h.reach]() });
+    // The entry is handed to the procedure, which is what lets one procedure
+    // serve several places: `healAtCenter` reads the door and the nurse off it
+    // rather than closing over one town's constants. A procedure that wants no
+    // argument simply ignores it.
+    const reach = (h) => ({ map: h.map, heal: () => this[h.reach](h) });
     // The last one is the fallback, deliberately: a title lists its healers
     // most-general last, and with no map graph to price the alternatives the
     // general answer is the safe one.

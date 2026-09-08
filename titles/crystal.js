@@ -39,6 +39,22 @@ const MR_POKEMONS_HOUSE = key(26, 10);
 // doors, and this is the one that leads to a room with a clerk in it.
 const CHERRYGROVE_MART = key(26, 4);
 
+// Violet City and the two places in it the pilot can use, found by reading the
+// cartridge rather than a walkthrough: group 10's maps were scanned for the
+// nurse sprite standing at (3,1) behind her counter and for a clerk at (1,3),
+// and Violet City's own warp list says which door leads to each.
+//
+//   10.5   Violet City, one leg west of Route 31
+//   10.10  its Pokemon Center, through the door at (31,25)
+//   10.6   its Mart, through the door at (9,17)
+//
+// Both interiors are the standard ones -- the same nurse tile and the same
+// counter geometry as Cherrygrove's, which is what makes one procedure serve
+// every Center in the game.
+const VIOLET_CITY = key(10, 5);
+const VIOLET_POKECENTER = key(10, 10);
+const VIOLET_MART = key(10, 6);
+
 const MAP_NAMES = {
   [PLAYERS_HOUSE_2F]: 'your bedroom',
   [PLAYERS_HOUSE_1F]: 'downstairs',
@@ -51,6 +67,9 @@ const MAP_NAMES = {
   [ROUTE_31]: 'Route 31',
   [CHERRYGROVE_MART]: "Cherrygrove's Mart",
   [MR_POKEMONS_HOUSE]: "Mr. Pokémon's house",
+  [VIOLET_CITY]: 'Violet City',
+  [VIOLET_POKECENTER]: "Violet's Pokémon Center",
+  [VIOLET_MART]: "Violet's Mart",
 };
 
 // CherrygroveCity warp_events, and the nurse behind her counter.
@@ -113,11 +132,25 @@ export const crystal = {
   // Most general last: nearestHeal falls back to the final entry when there is
   // no map graph to price them with, and the Center is the answer that works
   // from anywhere the Pokedex has been earned.
+  // A healer is now a *place*, not a procedure with a place baked into it.
+  // `heal()` was Cherrygrove's: it checked it was standing on Cherrygrove City,
+  // went through Cherrygrove's door to Cherrygrove's Center, and left via
+  // Cherrygrove. Adding a second Center would have meant a second copy of all
+  // of that, which is the thing this file exists to avoid -- so the coordinates
+  // moved into the data and `healAtCenter` reads them.
+  //
+  // `inside` is the Center's own map, `door` the tile in `map` that leads to
+  // it, and `nurse` where she stands. Every Center in the game shares the last
+  // one, which is why it is here once per healer rather than once per file: a
+  // hack that moved her changes the entry, not the procedure.
   healers: [
     { map: ELMS_LAB, reach: 'healAtElm' },
-    { map: CHERRYGROVE_CITY, reach: 'heal' },
+    { map: CHERRYGROVE_CITY, reach: 'healAtCenter',
+      inside: CHERRYGROVE_POKECENTER, door: POKECENTER_DOOR, nurse: NURSE },
+    { map: VIOLET_CITY, reach: 'healAtCenter',
+      inside: VIOLET_POKECENTER, door: [31, 25], nurse: NURSE },
   ],
-  grassyMaps: [ROUTE_29, ROUTE_30],
+  grassyMaps: [ROUTE_29, ROUTE_30, ROUTE_31],
   // Where things can be bought, and how to get to the counter.
   //
   // `stand` and `face` rather than the clerk's own tile, because a mart counter
@@ -127,6 +160,11 @@ export const crystal = {
   // the clerk's position the way a healer's is.
   marts: [
     { map: CHERRYGROVE_MART, from: CHERRYGROVE_CITY, door: [23, 3],
+      stand: [3, 3], face: 'LEFT' },
+    // Violet's, and the same counter geometry: the clerk is at (1,3) here too,
+    // read off the map's own object list, so the tile you can talk to it from
+    // is the same one.
+    { map: VIOLET_MART, from: VIOLET_CITY, door: [9, 17],
       stand: [3, 3], face: 'LEFT' },
   ],
   // What in the bag mends a Pokemon, weakest first, matched by folded name.
@@ -208,6 +246,7 @@ export const crystal = {
     route29: ROUTE_29,
     route30: ROUTE_30,
     route31: ROUTE_31,
+    violetCity: VIOLET_CITY,
     route31Ball: ROUTE_31_BALL,
     stairsDown: STAIRS_DOWN,
     starterBallX: STARTER_BALL_X,
@@ -262,38 +301,58 @@ export class Crystal extends Journey {
    * and then one -- the same way the desktop pilot does it, and the same way a
    * person would. Her question defaults to yes, which is the answer we want.
    */
-  async heal() {
-    const p = this.title.places;
-    if (await this.mapKey() !== p.cherrygroveCity) return false;
-    if (!await this.through(p.pokecenterDoor, p.cherrygrovePokecenter)) return false;
+  /**
+   * Heal at a Pokémon Center, whichever one the entry names.
+   *
+   * This was `heal()`, and it was Cherrygrove's: the map it checked for, the
+   * door it went through, the Center it expected and the town it left by were
+   * all constants in the body. A second Center would have been a second copy of
+   * all of it -- so the four became fields of the healer entry and the
+   * procedure reads them. `nearestHeal` hands the entry in.
+   *
+   * The nurse is a *counter*, like a mart clerk: she stands at (3,1) with a
+   * wall in front of her, so the approach is two tiles below and then one, and
+   * the press goes UP into it. Walked in two steps rather than one because the
+   * room is small and the first tile is often occupied by somebody waiting.
+   *
+   * Three attempts, and the party's HP is the evidence -- not the presses
+   * landing. Her question defaults to yes, so `runScripts` answers it.
+   */
+  async healAtCenter(h) {
+    if (!h || !h.inside || !h.door || !h.nurse) return false;
+    if (await this.mapKey() !== h.map && await this.mapKey() !== h.inside) {
+      return false;
+    }
+    if (await this.mapKey() !== h.inside) {
+      if (!await this.through(h.door, h.inside)) return false;
+    }
     await this.runScripts();
     for (let attempt = 0; attempt < 3; attempt++) {
-      await this.nav.walkTo(this.collision, [p.nurse[0], p.nurse[1] + 2], this.walkOpts);
-      await this.nav.walkTo(this.collision, [p.nurse[0], p.nurse[1] + 1], this.walkOpts);
+      await this.nav.walkTo(this.collision, [h.nurse[0], h.nurse[1] + 2],
+                            this.walkOpts);
+      await this.nav.walkTo(this.collision, [h.nurse[0], h.nurse[1] + 1],
+                            this.walkOpts);
       await this.nav.step('UP');
       await this.gb.press('A', 6, 12);
       await this.runScripts();
       const s = await this.snap();
-      if (s.party.every((m) => m.hp === m.maxHp)) break;
+      if (s.party.length && s.party.every((m) => m.hp === m.maxHp)) break;
     }
     const healed = (await this.snap()).party.every((m) => m.hp === m.maxHp);
-    await this.leaveVia(p.cherrygroveCity);
+    if (healed) this.say(`healed at ${this.where(h.map)}`);
+    await this.leaveVia(h.map);
     return healed;
   }
 
-  /**
-   * Walk from Route 29 to the Poké Ball lying on Route 31, and pick it up.
-   *
-   * Wild encounters interrupt constantly on the way, so each leg runs from
-   * whatever it meets and carries on. Healing happens in Cherrygrove because
-   * fleeing is not free -- it can fail, and a fainted party ends the trip.
-   */
   async fetchBall() {
     const p = this.title.places;
     const legs = [
       ['west to Cherrygrove', async () =>
         await this.crossEdge('LEFT', p.cherrygroveCity) ? null : 'could not leave Route 29'],
-      ['healing up', async () => { await this.heal(); return null; }],
+      // `healNow` rather than a named Center: it prices every healer this
+      // title declares and walks to the nearest, which is what the errand
+      // wanted all along and could not ask for while `heal()` meant one town.
+      ['healing up', async () => { await this.healNow(); return null; }],
       ['north to Route 30', async () =>
         await this.crossEdge('UP', p.route30) ? null : 'could not reach Route 30'],
       ['north to Route 31', async () =>

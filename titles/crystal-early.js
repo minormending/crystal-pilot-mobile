@@ -31,7 +31,13 @@ export const crystalEarly = {
   },
   // One, and the general one -- which is what somebody finds first, because a
   // Pokemon Center is signposted and Elm's machine is not.
-  healers: [{ map: CHERRYGROVE_CITY, reach: 'heal' }],
+  //
+  // The door and the nurse are on the entry rather than in the procedure, which
+  // is the shape a partial profile most benefits from: `healAtCenter` is
+  // inherited whole, and describing a Center is three coordinates rather than a
+  // method somebody has to write.
+  healers: [{ map: CHERRYGROVE_CITY, reach: 'healAtCenter',
+              inside: key(26, 5), door: [29, 3], nurse: [3, 1] }],
   grassyMaps: [ROUTE_29],
   encounters: ['JohtoGrassWildMons'],
   legCost: 25,

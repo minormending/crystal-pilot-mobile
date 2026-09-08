@@ -13,6 +13,11 @@
 import { gen2 } from '../gen2/engine.js';
 
 const isKey = (k) => Number.isInteger(k) && k > 0 && k <= 0xffff;
+// A tile is a pair of small non-negative numbers. Not bounded above by a map's
+// size, because the map is not loaded when a profile is checked -- this only
+// keeps a typo or a single number out.
+const isTile = (t) => Array.isArray(t) && t.length === 2
+  && t.every((n) => Number.isInteger(n) && n >= 0 && n < 256);
 
 /**
  * Everything wrong with a profile, as sentences. Empty means it is usable.
@@ -48,6 +53,17 @@ export function validateTitle(title) {
       title.healers.forEach((h, i) => {
         if (!h || !isKey(h.map)) say(`\`healers[${i}].map\` must be a map key`);
         if (typeof h.reach !== 'string') say(`\`healers[${i}].reach\` must name a method`);
+        // A healer that names a *place* has to describe it, and the fields are
+        // checked here rather than discovered when somebody's party is hurt --
+        // which is the same reason `reach` is checked against the class. Only
+        // asked of an entry that brought any of them: a healer reached by a
+        // procedure with its own coordinates, like Elm's machine, needs none.
+        if (h && (h.inside !== undefined || h.door !== undefined
+                  || h.nurse !== undefined)) {
+          if (!isKey(h.inside)) say(`\`healers[${i}].inside\` must be a map key`);
+          if (!isTile(h.door)) say(`\`healers[${i}].door\` must be a tile`);
+          if (!isTile(h.nurse)) say(`\`healers[${i}].nurse\` must be a tile`);
+        }
         // The one that would otherwise wait until somebody's party is hurt.
         else if (typeof title.drive === 'function'
                  && typeof title.drive.prototype[h.reach] !== 'function') {

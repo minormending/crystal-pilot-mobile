@@ -5,6 +5,7 @@ import { TITLES, pickTitle, titleById } from '../../titles/pick.js';
 import { engineFor, validateTitle } from '../../titles/contract.js';
 import { describeTitle } from '../../app/rows.js';
 import { gen2 } from '../../gen2/engine.js';
+import { crystal } from '../../titles/crystal.js';
 
 // The smallest thing that passes the contract, for tests about picking rather
 // than about shape.
@@ -163,4 +164,55 @@ test('naming a profile by hand goes through the same gate as recognising one',
   } finally {
     TITLES.shift();
   }
+});
+
+// --- a healer is a place, not a procedure with a place baked in -------------
+
+test('a healer that names a place has to describe it', async (t) => {
+  // Checked here rather than discovered when somebody's party is hurt, which is
+  // the same reason `reach` is checked against the class. `heal()` used to be
+  // Cherrygrove's -- the map, the door, the Center and the town it left by were
+  // all constants in the body -- so a second Center would have been a second
+  // copy of all of it.
+  const base = { id: 'x', drive: class { healAtCenter() {} }, matches: () => true };
+  const bad = validateTitle({ ...base,
+    healers: [{ map: 100, reach: 'healAtCenter', inside: 200 }] });
+  t.contains(bad.join(' '), 'door', 'a missing door is named');
+  t.contains(bad.join(' '), 'nurse', 'and a missing nurse');
+
+  const good = validateTitle({ ...base,
+    healers: [{ map: 100, reach: 'healAtCenter', inside: 200,
+                door: [29, 3], nurse: [3, 1] }] });
+  t.eq(good, [], 'a described one passes');
+});
+
+test('a healer with no coordinates at all is not asked for any', async (t) => {
+  // Elm's machine: the procedure carries its own places, because it is the one
+  // healer in the game that is not a Center.
+  const base = { id: 'x', drive: class { healAtElm() {} }, matches: () => true };
+  t.eq(validateTitle({ ...base, healers: [{ map: 100, reach: 'healAtElm' }] }),
+       [], 'nothing to describe');
+});
+
+test('a tile has to be a pair of small numbers', async (t) => {
+  const base = { id: 'x', drive: class { healAtCenter() {} }, matches: () => true };
+  const wrong = validateTitle({ ...base,
+    healers: [{ map: 100, reach: 'healAtCenter', inside: 200,
+                door: 29, nurse: [3, 1] }] });
+  t.contains(wrong.join(' '), 'door', 'a single number is not a tile');
+});
+
+test('Crystal names Violet City, and can heal and shop there', async (t) => {
+  // Found by reading the cartridge rather than a walkthrough: group 10's maps
+  // were scanned for the nurse standing at (3,1) behind her counter and for a
+  // clerk at (1,3), and Violet City's own warp list says which door leads to
+  // each.
+  t.eq(crystal.names[10 * 256 + 5], 'Violet City', 'the city is named');
+  const centre = crystal.healers.find((h) => h.map === 10 * 256 + 5);
+  t.true(!!centre, 'and it has a healer');
+  t.eq(centre.inside, 10 * 256 + 10, "which is the city's own Center");
+  t.eq(centre.reach, 'healAtCenter', 'reached by the shared procedure');
+  const mart = crystal.marts.find((m) => m.from === 10 * 256 + 5);
+  t.true(!!mart, 'and a mart');
+  t.eq(mart.map, 10 * 256 + 6, 'through its own door');
 });
