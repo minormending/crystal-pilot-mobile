@@ -761,6 +761,15 @@ to be visible is where a key *ends*, so the guarded pair is the key's edge
 against its well — cheap in both themes, and the thing the design actually
 leans on. Twenty-four pairs now, from twenty-two.
 
+**And the ranking was invisible whenever it mattered most.** The offers list is
+reordered every refresh and the lead row was shown only by a filled Start
+button — which is `.primary` *and* frequently `[disabled]`, because the row that
+leads is often the one that needs something first: Catch leads with *pick
+something below* and its button is greyed. So the single visible sign of an
+ordering this app works to compute disappeared exactly when the ordering needed
+explaining. The lead wears a rail now, and a rail does not care whether the
+action is available.
+
 **And the light palette was written out twice.** Once for `[data-theme="light"]`
 and once for the `prefers-color-scheme` media query, because CSS cannot put a
 media query in a selector list. They drifted the moment anything touched them: a
@@ -781,4 +790,4 @@ So this page carries a marker naming the files it describes and the hash they
 had when it was last read against them. `tools/docs-check` reports it when they
 move, and the pre-commit hook blocks on that report.
 
-<!-- covers: index.html app/main.js app/rows.js @ 0ec28d3a7333 -->
+<!-- covers: index.html app/main.js app/rows.js @ ec00ce0f0dda -->

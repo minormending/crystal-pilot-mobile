@@ -562,17 +562,33 @@
   .partybox[open]{border-bottom:1px solid var(--line);margin-bottom:8px}
   .jobs{display:flex;flex-direction:column}
   .job{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;
-       padding:11px 0;border-top:1px solid var(--line)}
+       padding:10px 0 10px 11px;border-top:1px solid var(--line);
+       /* Room for the lead's rail on every row, so nothing shifts sideways
+          when the ranking changes under it. */
+       border-left:3px solid transparent;margin-left:-3px}
   /* Whichever row ranks first wears no rule. This was `:first-of-type`, which
      is the row written first -- a different row once the list is sorted, and no
      row at all once the ones that cannot run stop being drawn. */
-  .job.lead{border-top:0;padding-top:2px}
+  /* **The lead row wears the accent, not its button.** The ranking is computed
+     every refresh and was shown only by a filled Start -- which is `.primary`
+     *and* often `[disabled]`, because the row that leads is frequently the one
+     that needs something first: Catch leads with "pick something below" and its
+     button is greyed. So the one visible sign of the ordering disappeared
+     exactly when the ordering most needed explaining. A rail does not care
+     whether the action is available. */
+  .job.lead{border-top:0;padding-top:4px;border-left-color:var(--accent)}
+  .job.lead .jname{color:var(--ink)}
   .job .what{min-width:0}
   .job .jname{display:block;font-size:15.5px;font-weight:600;
               letter-spacing:-.005em}
   .job .jstate{display:block;font-family:var(--pico-font-family-monospace);
-               font-size:11.5px;color:var(--dim);margin-top:3px;
+               font-size:11.5px;color:var(--dim);margin-top:2px;
                white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  /* A row's own button is the primary action *of that row*, so the lead's is
+     filled even where Pico would leave it plain -- and a disabled one still
+     shows the rail above rather than pretending to be pressable. */
+  .job.lead button.jgo:not([disabled]){background:var(--action);
+       border-color:var(--action);color:#fff;font-weight:600}
   button.jgo{flex:0 0 auto;min-height:42px;padding:10px 20px;font-size:13px}
   .job.blocked .jname{color:var(--dim)}
 
