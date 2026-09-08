@@ -158,3 +158,38 @@ test('a cancelled grind reports the evolution it saw before stopping',
   t.eq(r.stats.evolved, 1, 'counted on the way out');
   t.contains(said.join(' | '), 'evolved into BAYLEEF', 'and named');
 });
+
+test('the grind says why it needs healing, because the ways differ', async (t) => {
+  // Measured, and this loop's own comment had already predicted it: a heal that
+  // mends HP out of the pocket answers "hurt" and cannot answer "dry", because
+  // nothing but a Center restores PP. Handing it a bag heal for everything
+  // spent all twelve trips at Lv8 on a Pokémon at full health with no move left
+  // that could win -- a loop with no exit.
+  const reasons = [];
+  const { tasks } = grinder([
+    { species: CHIKORITA, level: 5, hp: 40, maxHp: 44, pp: [0, 0, 0, 0] },
+  ]);
+  const r = await tasks.grind(0, 10, { heal: async (why) => { reasons.push(why); return false; } });
+  t.false(r.ok, 'it stopped');
+  t.eq(reasons, ['dry'], 'and asked for the kind of heal that restores PP');
+});
+
+test('merely hurt asks for the cheaper kind', async (t) => {
+  const reasons = [];
+  const { tasks } = grinder([
+    { species: CHIKORITA, level: 5, hp: 4, maxHp: 44 },
+  ]);
+  await tasks.grind(0, 10, { heal: async (why) => { reasons.push(why); return false; } });
+  t.eq(reasons, ['hurt'], 'so the caller may reach for the bag');
+});
+
+test('a knockout always asks for a Centre', async (t) => {
+  // A potion does nothing for a Pokémon at 0 HP in Gen 2.
+  const reasons = [];
+  const { tasks } = grinder([
+    { species: CHIKORITA, level: 10 },
+    { species: CHIKORITA, level: 10 },
+  ], { outcomes: ['lost'] });
+  await tasks.grind(0, 15, { heal: async (why) => { reasons.push(why); return false; } });
+  t.eq(reasons, ['dry'], 'whatever the bag holds');
+});

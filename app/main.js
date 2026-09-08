@@ -12,7 +12,6 @@ import { adoptable, forgetKept, keepBattery, keepRom, keepSym, keptMeta,
 import { chosenName, needsOffer, openRoom, wasSharing } from '../gbcore/room.js';
 import { createHost, createWatcher } from '../gbcore/stream.js';
 import { Cancelled } from '../gbcore/taskbase.js';
-import { cheapestHeal } from '../gen2/journey.js';
 import { REPLACED_SLOT, Saves, SLOT_IDS, UNDO_SLOT } from '../gbcore/saves.js';
 import { GameState } from '../gen2/state.js';
 import { Tasks } from '../gen2/tasks.js';
@@ -1576,7 +1575,7 @@ async function refresh() {
   // Center is -- so the choice the pilot would make is visible rather than
   // discovered in the log afterwards.
   const pick = romdata && title
-    ? cheapestHeal(s.items, title.heals, romdata) : null;
+    ? romdata.cheapestOf(s.items, title.heals) : null;
   bagHeal = pick ? pick.name : null;
   // Remembered so the relative presets have something to be relative to.
   lastLead = s.party.length ? s.party[0].level : null;
@@ -2339,8 +2338,23 @@ $('#go').onclick = async () => {
   // where grass is, is map knowledge tasks.js deliberately does not carry.
   const res = await runTask('#go', `grinding to Lv${target}`,
     () => tasks.grind(0, target, {
-      heal: () => boot.healUp(),
+      // Which way to heal depends on what is wrong, and only this line knows
+      // both ways. `healNow` prefers the bag, which is free -- and that
+      // preference reached the Heal button a pass ago and not the job that
+      // heals *twelve times*, which is the gap this closes.
+      //
+      // But a potion mends HP and nothing mends PP except a Center, and the
+      // grind's loop terminates only because a Center does both. Measured, by
+      // handing it `healNow` for everything: it spent all twelve trips at Lv8
+      // on a Pokémon at full health with no move left that could win. So `dry`
+      // walks, and everything else asks the bag first.
+      heal: async (why) => (why === 'dry'
+        ? boot.healUp()
+        : (await boot.healNow()).ok),
       regrass: () => boot.backToGrass(),
+      // What in the bag mends something, so the battle loop can reach for it
+      // before the thing on the field faints rather than after.
+      heals: title && title.heals,
     }));
   progress(res
     ? Object.entries(res.stats).map(([k, v]) => `${k}=${v}`).join('  ') : '');
@@ -2351,7 +2365,8 @@ $('#go').onclick = async () => {
 // the obvious thing or says why it cannot.
 $('#battle').onclick = async () => {
   if (!tasks) return;
-  const res = await runTask('#battle', 'fighting', () => tasks.battleHere());
+  const res = await runTask('#battle', 'fighting',
+    () => tasks.battleHere({ heals: title && title.heals }));
   progress(res ? Object.entries(res.stats)
     .map(([k, v]) => `${k}=${v}`).join('  ') : '');
 };

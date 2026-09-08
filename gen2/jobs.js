@@ -311,7 +311,7 @@ export function withJobs(Base) {
    * Distinct from a grind, which goes looking for battles -- here you walked
    * into one yourself.
    */
-  async battleHere({ maxTurns = 40 } = {}) {
+  async battleHere({ maxTurns = 40, heals = null } = {}) {
     const started = Date.now();
     const before = await this.snap();
     if (!before.inBattle) {
@@ -322,7 +322,7 @@ export function withJobs(Base) {
     const foe = this.rom ? this.rom.speciesName(before.enemy.species) : 'it';
     this.say(`fighting the ${kind} ${foe}`);
 
-    const how = await this.fightBattle(maxTurns);
+    const how = await this.fightBattle(maxTurns, { heals });
     const after = await this.snap();
     const stats = {
       kind,
@@ -452,10 +452,15 @@ export function withJobs(Base) {
    * training.
    */
   async grind(slot, toLevel, { maxBattles = 200, healBelow = 0.25,
-                              heal = null, regrass = null } = {}) {
+                              heal = null, regrass = null, heals = null } = {}) {
     const started = Date.now();
     const stats = { battles: 0, won: 0, levels: 0, knockouts: 0, evolved: 0 };
-    let stuckRun = 0, heals = 0;
+    // Trips to a Center, not heals. The names collided when the bag's list of
+    // healing items arrived as an option, and the collision was the tell: this
+    // counter has never counted heals -- the bag mends things without one, and
+    // `healNow` now prefers it -- it counts *walks*, which is the thing
+    // MAX_HEALS is a budget for.
+    let stuckRun = 0, trips = 0;
     let s = await this.snap();
     const mon0 = s.party[slot];
     if (!mon0) return { ok: false, message: `party slot ${slot + 1} is empty`, stats };
@@ -533,7 +538,14 @@ export function withJobs(Base) {
         // is an assumption about the cartridge, and this app now runs
         // cartridges nobody has seen. A Center that left PP alone would walk
         // there and back for ever.
-        if (++heals > MAX_HEALS) {
+        //
+        // Which is exactly what happened the day the bag arrived, and this
+        // comment had already said it would. A heal that mends HP out of the
+        // pocket answers `hurt` and cannot answer `dry`: nothing but a Center
+        // restores PP. So the *reason* goes to the caller, because the caller
+        // is the only one that knows which of its ways to heal does what --
+        // and a bag heal offered for an empty move is a loop with no exit.
+        if (++trips > MAX_HEALS) {
           return {
             ok: false,
             message: `stopped at Lv${mon.level}: healed ${MAX_HEALS} times and `
@@ -541,7 +553,7 @@ export function withJobs(Base) {
             stats: { ...stats, levels: mon.level - startLevel },
           };
         }
-        const healed = heal ? await heal() : false;
+        const healed = heal ? await heal(dry ? 'dry' : 'hurt') : false;
         if (!healed) {
           return {
             ok: false,
@@ -559,7 +571,7 @@ export function withJobs(Base) {
           stats,
         };
       }
-      const outcome = await this.fightBattle();
+      const outcome = await this.fightBattle(undefined, { heals });
       stats.battles++;
       if (outcome === 'won') stats.won++;
       if (outcome === 'lost') {
@@ -587,7 +599,7 @@ export function withJobs(Base) {
         // advances while walking to a Center, so an unbounded version paces for
         // ever.
         stats.knockouts = (stats.knockouts || 0) + 1;
-        if (!heal || ++heals > MAX_HEALS) {
+        if (!heal || ++trips > MAX_HEALS) {
           return {
             ok: false,
             message: `the whole party fainted at Lv${mon.level}`
@@ -596,7 +608,9 @@ export function withJobs(Base) {
           };
         }
         this.say(`knocked out at Lv${mon.level} — healing and carrying on`);
-        if (!await heal()) {
+        // A faint is a Center's job whatever the bag holds, so the reason says
+        // so: a potion does nothing for a Pokemon at 0 HP in Gen 2.
+        if (!await heal('dry')) {
           return {
             ok: false,
             message: `the whole party fainted at Lv${mon.level}, and healing `
