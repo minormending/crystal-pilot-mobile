@@ -1,0 +1,456 @@
+#!/usr/bin/env python3
+"""Does the suite actually notice when the code is wrong?
+
+`coverage` answers *which lines ran*, which is a much weaker question than it
+looks: a line runs every time the suite touches the function around it, whether
+or not anything asserted on what it did. This breaks the code on purpose, one
+small edit at a time, and reports the edits the suite failed to catch.
+
+A **survivor** is one of three things, and all three are worth a look:
+
+  * a line nothing asserts on -- the honest test gap
+  * a line whose behaviour genuinely does not matter -- dead code, or a guard
+    that is belt to another's braces
+  * a mutation that is not really a change -- `x > 0` to `x >= 0` where x is
+    never 0. Read before believing.
+
+Every fix in this repository since the tests existed has been hand-mutated: a
+python heredoc, a run, a restore. That worked and it was also the step most
+likely to be skipped when the budget got tight, which is exactly backwards --
+it is the step that decides whether the *test* is worth anything. So it is a
+tool now.
+
+    tools/mutate                       every module, sampled
+    tools/mutate gen2/journey.js       one file, every mutation
+    tools/mutate gen2 --all            no sampling
+    tools/mutate --limit 60 --seed 7   a reproducible slice
+    tools/mutate -k shut               only mutations on lines matching "shut"
+
+**Comments and strings are never touched.** That is not a nicety in this
+repository: the prose outweighs the code better than two to one, and it is full
+of `&&`, of numbers, and of the words the game says. A masker walks each file
+first and marks which characters are code; nothing else is a candidate. The
+first draft of this tool skipped that step and produced four hundred mutations
+of documentation, every one of which "survived".
+"""
+import argparse
+import multiprocessing
+import pathlib
+import random
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+
+HERE = pathlib.Path(__file__).resolve().parent
+REPO = HERE.parent
+
+# The layers, in the order `check-app` names them. `app/main.js` is here even
+# though its own tests cannot import it -- a survivor there is still a fact.
+LAYERS = ["gbcore", "gen2", "titles", "app"]
+
+# How long to let one run go before calling it a spin. Set from the clean run
+# rather than picked: the suite takes about a third of a second, and a flat
+# minute meant one runaway mutation cost as much wall clock as two hundred good
+# ones. Twenty times the real thing, with a floor for a cold start.
+#
+# A killed run counts as *caught*. A suite that hangs has noticed the change,
+# even if it noticed rudely -- and a mutation that makes the app spin is a
+# finding in its own right.
+RUN_TIMEOUT = 60
+
+
+def set_timeout(seconds):
+    global RUN_TIMEOUT
+    RUN_TIMEOUT = max(10, round(seconds * 20))
+
+
+# --- what counts as code ----------------------------------------------------
+
+def code_mask(src):
+    """A bytearray of 1 where `src` is code and 0 where it is comment or string.
+
+    Written by hand rather than with a parser because the only question is
+    *which characters may be edited*, and getting that wrong is safe in one
+    direction: a masker that is too cautious loses mutations, and one that is
+    too eager rewrites prose. So every ambiguous case here resolves to 0.
+
+    Template literals are masked whole, `${...}` included. That does lose real
+    mutations, and the alternative is tracking brace depth through nested
+    templates to gain edits inside strings this app mostly uses for messages.
+    """
+    mask = bytearray(b"\x01" * len(src))
+    i, n = 0, len(src)
+    # What the last significant code character was, which is the only way to
+    # tell `a / b` from `/re/`. A slash after a value divides; after an
+    # operator, a comma, an open bracket or a keyword, it opens a regex.
+    prev = ""
+    while i < n:
+        c = src[i]
+        two = src[i:i + 2]
+        if two == "//":
+            j = src.find("\n", i)
+            j = n if j < 0 else j
+            for k in range(i, j):
+                mask[k] = 0
+            i = j
+            continue
+        if two == "/*":
+            j = src.find("*/", i + 2)
+            j = n if j < 0 else j + 2
+            for k in range(i, j):
+                mask[k] = 0
+            i = j
+            continue
+        if c in "\"'`":
+            j = i + 1
+            while j < n:
+                if src[j] == "\\":
+                    j += 2
+                    continue
+                if src[j] == c:
+                    j += 1
+                    break
+                j += 1
+            for k in range(i, min(j, n)):
+                mask[k] = 0
+            i = j
+            prev = "x"
+            continue
+        if c == "/" and _regex_may_start(prev):
+            j = i + 1
+            closed = False
+            while j < n and src[j] != "\n":
+                if src[j] == "\\":
+                    j += 2
+                    continue
+                if src[j] == "[":
+                    while j < n and src[j] != "]" and src[j] != "\n":
+                        j += 2 if src[j] == "\\" else 1
+                if src[j] == "/":
+                    j += 1
+                    closed = True
+                    break
+                j += 1
+            if closed:
+                while j < n and src[j].isalpha():   # flags
+                    j += 1
+                for k in range(i, j):
+                    mask[k] = 0
+                i = j
+                prev = "x"
+                continue
+        if not c.isspace():
+            prev = c if not (c.isalnum() or c == "_") else "x"
+        i += 1
+    return mask
+
+
+_VALUEISH = set("])}") | set("x")
+
+
+def _regex_may_start(prev):
+    """A `/` here opens a regex rather than dividing."""
+    return prev == "" or prev not in _VALUEISH
+
+
+def masked_finditer(pattern, src, mask):
+    """Matches of `pattern` that lie entirely in code."""
+    for m in re.finditer(pattern, src):
+        if all(mask[k] for k in range(m.start(), m.end())):
+            yield m
+
+
+# --- the operators ----------------------------------------------------------
+#
+# Each yields (start, end, replacement, label). Deliberately small: an edit that
+# changes one decision is one the suite either notices or does not, and a bigger
+# one turns a survivor into a puzzle. Nothing here can produce a syntax error on
+# valid input, which is what makes an unattended run of hundreds worth doing.
+
+def _tok(pattern, new, label):
+    def op(src, mask):
+        for m in masked_finditer(pattern, src, mask):
+            yield m.start(), m.end(), new, label
+    return op
+
+
+def _num(src, mask):
+    """A numeric literal, to zero and to one more.
+
+    Skips 0 and 1 in the `0`/`1` direction where the edit would be a no-op, and
+    skips array-ish `[0]` to `[1]` only when the file has no such index -- which
+    it cannot know, so it does not skip it. An index mutation that survives is
+    worth reading either way.
+    """
+    for m in masked_finditer(r"\b(?<![\w.$])(0x[0-9a-fA-F]+|\d+)\b", src, mask):
+        text = m.group(1)
+        try:
+            value = int(text, 16 if text.lower().startswith("0x") else 10)
+        except ValueError:
+            continue
+        if value != 0:
+            yield m.start(), m.end(), "0", f"{text} to 0"
+        yield m.start(), m.end(), str(value + 1), f"{text} to {value + 1}"
+
+
+def _drop_negation(src, mask):
+    for m in masked_finditer(r"(?<![!=<>])!(?=[A-Za-z_$(])", src, mask):
+        yield m.start(), m.end(), "", "drop the !"
+
+
+OPERATORS = [
+    _tok(r"&&", "||", "&& to ||"),
+    _tok(r"\|\|", "&&", "|| to &&"),
+    _tok(r"===", "!==", "=== to !=="),
+    _tok(r"!==", "===", "!== to ==="),
+    _tok(r"(?<![<>=!])>=", ">", ">= to >"),
+    _tok(r"(?<![<>=!])<=", "<", "<= to <"),
+    _tok(r"(?<![<>=!-])>(?![>=])", ">=", "> to >="),
+    _tok(r"(?<![<>=!-])<(?![<=])", "<=", "< to <="),
+    _tok(r"\btrue\b", "false", "true to false"),
+    _tok(r"\bfalse\b", "true", "false to true"),
+    _tok(r"\bnull\b", "undefined", "null to undefined"),
+    _drop_negation,
+    _num,
+]
+
+
+def candidates(rel, src):
+    """Every mutation this tool can make to one file, with its line number."""
+    mask = code_mask(src)
+    starts = [0]
+    for i, ch in enumerate(src):
+        if ch == "\n":
+            starts.append(i + 1)
+
+    def line_of(pos):
+        lo, hi = 0, len(starts) - 1
+        while lo < hi:
+            mid = (lo + hi + 1) // 2
+            if starts[mid] <= pos:
+                lo = mid
+            else:
+                hi = mid - 1
+        return lo + 1
+
+    out = []
+    for op in OPERATORS:
+        for start, end, new, label in op(src, mask):
+            if src[start:end] == new:
+                continue
+            line = line_of(start)
+            text = src[starts[line - 1]:src.find("\n", start) if
+                       src.find("\n", start) > 0 else len(src)]
+            out.append({
+                "file": rel, "line": line, "start": start, "end": end,
+                "new": new, "label": label, "context": text.strip()[:90],
+            })
+    out.sort(key=lambda c: (c["start"], c["label"]))
+    return out
+
+
+# --- running them -----------------------------------------------------------
+
+def sources(targets):
+    """The .js files named, or every module in the four layers."""
+    if not targets:
+        targets = LAYERS
+    out = []
+    for t in targets:
+        p = (REPO / t)
+        if p.is_dir():
+            out += sorted(q for q in p.rglob("*.js"))
+        elif p.is_file():
+            out.append(p)
+        else:
+            raise SystemExit(f"not in this repository: {t}")
+    seen, uniq = set(), []
+    for p in out:
+        rel = p.relative_to(REPO).as_posix()
+        if rel not in seen:
+            seen.add(rel)
+            uniq.append(p)
+    return uniq
+
+
+def copy_tree(into):
+    subprocess.run(
+        ["rsync", "-a", "--exclude", ".git", "--exclude", "dev",
+         "--exclude", "node_modules", f"{REPO}/", f"{into}/"], check=True)
+
+
+def suite_ok(root, only):
+    """Run the suite once. `node` directly, not `./run-tests`.
+
+    `run-tests` wraps the suite in a watchdog subshell because an in-process
+    timer can be starved by a microtask loop -- which is a real hazard and
+    exactly what several mutations here provoke. It is also 1.2s of shell per
+    run against 0.3s of suite, and this tool makes hundreds of runs.
+
+    So the watchdog comes from `subprocess`, which is a separate process by
+    construction and cannot be starved by the one it is watching -- the same
+    argument `run-tests` makes for its subshell, satisfied a cheaper way. Four
+    times faster over a whole file.
+    """
+    argv = ["node", "tests/index.mjs"] + (["-k", only] if only else [])
+    try:
+        r = subprocess.run(argv, cwd=root, capture_output=True, text=True,
+                           timeout=RUN_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        return False, "hung"
+    return r.returncode == 0, ""
+
+
+# One tree per worker *process*, claimed once at start-up and kept.
+#
+# It was one tree per task index -- `roots[i % jobs]` -- which is a race and was
+# measured as one: two runs of the same file over the same code reported 69
+# caught and then 59. `imap_unordered` hands each worker a *chunk* of tasks, so
+# indices 0 and 8 can be live in different processes at the same moment, both
+# editing and restoring the same file. A tool whose answer is not reproducible
+# is worse than no tool, because it is believed once.
+_MINE = None
+
+
+def _claim(queue):
+    global _MINE
+    _MINE = queue.get()
+
+
+def _worker(job):
+    cand, only = job
+    root = _MINE
+    p = pathlib.Path(root) / cand["file"]
+    before = p.read_text()
+    p.write_text(before[:cand["start"]] + cand["new"] + before[cand["end"]:])
+    try:
+        ok, note = suite_ok(root, only)
+    finally:
+        p.write_text(before)
+    return cand, ok, note
+
+
+def main(argv):
+    ap = argparse.ArgumentParser(add_help=False)
+    ap.add_argument("targets", nargs="*")
+    ap.add_argument("--all", action="store_true",
+                    help="every mutation, no sampling")
+    ap.add_argument("--limit", type=int, default=120)
+    ap.add_argument("--seed", type=int, default=1)
+    ap.add_argument("--jobs", type=int, default=0)
+    ap.add_argument("-k", dest="only", default=None,
+                    help="only mutate lines whose text matches this")
+    ap.add_argument("--tests", dest="tests", default=None,
+                    help="pass -k to run-tests, for a fast targeted check")
+    ap.add_argument("--list", action="store_true",
+                    help="print the mutations and run nothing")
+    ap.add_argument("-h", "--help", action="store_true")
+    args = ap.parse_args(argv)
+    if args.help:
+        print(__doc__)
+        return 0
+
+    files = sources(args.targets)
+    pool = []
+    for p in files:
+        rel = p.relative_to(REPO).as_posix()
+        for c in candidates(rel, p.read_text()):
+            if args.only and args.only.lower() not in c["context"].lower():
+                continue
+            pool.append(c)
+
+    if not pool:
+        print("mutate: nothing to mutate here")
+        return 0
+
+    total = len(pool)
+    if not args.all and total > args.limit:
+        # Sampled per file rather than globally, so one big module cannot eat
+        # the whole budget and leave the small ones unmeasured.
+        by_file = {}
+        for c in pool:
+            by_file.setdefault(c["file"], []).append(c)
+        rng = random.Random(args.seed)
+        share = max(1, args.limit // len(by_file))
+        picked = []
+        for rel, cs in sorted(by_file.items()):
+            picked += rng.sample(cs, min(share, len(cs)))
+        rng.shuffle(picked)
+        pool = picked[:args.limit]
+
+    if args.list:
+        for c in pool:
+            print(f"  {c['file']}:{c['line']}  {c['label']}   {c['context']}")
+        print(f"\n{len(pool)} mutation(s) of {total} possible")
+        return 0
+
+    jobs = args.jobs or min(8, multiprocessing.cpu_count())
+    print(f"mutate: {len(pool)} of {total} possible mutation(s) across "
+          f"{len(files)} file(s), {jobs} at a time")
+
+    roots, tmps = [], []
+    try:
+        for _ in range(jobs):
+            t = tempfile.mkdtemp(prefix="mutate-")
+            tmps.append(t)
+            copy_tree(pathlib.Path(t))
+            roots.append(t)
+        # One clean run per tree, because a survivor means nothing if the suite
+        # was already failing -- and `check-checks` learned that the hard way.
+        import time
+        t0 = time.monotonic()
+        ok, _ = suite_ok(roots[0], args.tests)
+        clean = time.monotonic() - t0
+        if not ok:
+            print("  the suite does not pass on a clean tree; fix that first")
+            return 2
+        set_timeout(clean)
+        print(f"  clean run {clean:.1f}s, so a spin is anything over "
+              f"{RUN_TIMEOUT}s")
+
+        work = [(c, args.tests) for c in pool]
+        survivors, hung, done = [], 0, 0
+        queue = multiprocessing.Queue()
+        for r in roots:
+            queue.put(r)
+        with multiprocessing.Pool(jobs, _claim, (queue,)) as mp:
+            # chunksize 1 as well: a chunk is a batch one worker holds, and a
+            # long-running mutation at the end of somebody's batch is time the
+            # other workers spend idle.
+            for cand, alive, note in mp.imap_unordered(_worker, work, 1):
+                done += 1
+                if note == "hung":
+                    hung += 1
+                elif alive:
+                    survivors.append(cand)
+                if done % 20 == 0 or done == len(pool):
+                    print(f"  {done}/{len(pool)} … {len(survivors)} survived",
+                          flush=True)
+    finally:
+        for t in tmps:
+            shutil.rmtree(t, ignore_errors=True)
+
+    print()
+    if survivors:
+        survivors.sort(key=lambda c: (c["file"], c["line"]))
+        print(f"{len(survivors)} survivor(s) — the suite passed with these "
+              f"changes in place:\n")
+        for c in survivors:
+            print(f"  {c['file']}:{c['line']}  {c['label']}")
+            print(f"      {c['context']}")
+    else:
+        print("no survivors: every mutation was caught")
+    killed = len(pool) - len(survivors) - hung
+    score = 100 * (killed + hung) // len(pool)
+    print(f"\ncaught {killed + hung} of {len(pool)} ({score}%)"
+          + (f", {hung} by hanging" if hung else ""))
+    # Not a failing exit code. A survivor is a thing to read, not a broken
+    # build: this repository has guards that are deliberately belt to another's
+    # braces, and a tool that fails the tree for those would be turned off.
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
