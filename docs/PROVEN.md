@@ -339,15 +339,15 @@ second, which is there so the core's own waits finish, not to run a game.
 ## The audits, and how each defect was actually found
 
 Everything above was watched happening. This section was the exception, and the
-exception was the point of it: after the ROM-hack work shipped, **thirty-five**
-passes went looking for defects in code that already worked, and found **128** —
+exception was the point of it: after the ROM-hack work shipped, **thirty-six**
+passes went looking for defects in code that already worked, and found **137** —
 a handful of them created by a fix on the way, which are in the table in italics
 because they are a different kind of thing. None of them announced itself.
 
 **Reading found twenty-two**, more than any other single method, which is why it
 comes first in the table and why it is worth doing before touching the game. But
-the interesting number is the tail: the remaining hundred and six were found
-almost as many different ways, and almost every entry in that column is a sentence rather than
+the interesting number is the tail: the remaining hundred and fifteen were
+found almost as many different ways, and almost every entry in that column is a sentence rather than
 a category — *measuring the fix*, *asking a second tile*, *feeding it the wrong
 thing*, *writing a cartridge Crystal is not*, *a test, before the cartridge*,
 *playing the game*. Each change of method found what the one before it was
@@ -506,6 +506,15 @@ exactly why nothing failed.
 | 35 | the sweep did nothing at all on a route, because nobody was drawn yet | Clear, arriving at Route 31's western edge | playing the game |
 | 35 | the sweep's bound was measured off who was *drawn* while its comment claimed the map | the same edge, where that number is nought | reading the comment against the code |
 | 35 | four documentation anchors pointed at headings that no longer existed | any of the six links | **a check written for it** |
+| 36 | a map number past the end of its group read as a map, and returned another map's objects | asking the ROM about map 55 of a group that has ten | a sweep that wanted the Gyms |
+| 36 | the object count's sanity bound truncated and returned instead of giving up | the same sweep, in the one group nothing can bound | reading the numbers it gave back |
+| 36 | a Gym was walked into at 1 of 22 because the heal's answer was discarded | Gym, with the road to a Center shut | playing the game |
+| 36 | and with an empty bag, because nothing stocked it | Gym, at Lv13 and full HP | playing the game |
+| 36 | `clearHere` could never beat a gym leader — a leader is a *script* object, not a trainer | Gym, at any level | reading the object types in work RAM |
+| 36 | the badge was read before the speech that hands it over | Gym, immediately after winning | the badge saying no about a Gym that was beaten |
+| 36 | beating one of a map's three trainers reported as a finished job | Clear, inside a Gym | reading the sentence against the map |
+| 36 | *and a title claimed Falkner's badge opens Route 32, which it does not* | *Route 32, badge in hand* | *the thing it predicted not happening* |
+| 36 | a documented claim said the ROM has no map count, so walking every map is impossible | — | deriving one anyway |
 
 Five things in that table are worth more than the individual rows.
 
@@ -2467,6 +2476,80 @@ good links dead. Code spans are not links -- it failed on the line that
 documents it -- but masking them has to apply to the *link scan only*, because
 masking a heading strips its backticked half and reports four more good links
 dead.
+
+### A thirty-sixth pass: the badge, and the claim that came with it
+
+The pilot has been turned back from Route 32 since the pass it learned to find
+Pokémon Centers. Four passes of machinery pointed at one sentence a man says.
+This pass went and won the badge, and the badge did not open the road.
+
+**What worked.** In order, on the cartridge: healed, bought potions, walked
+Cherrygrove to Violet routing around an edge that refused, in through the Gym
+door, beat a Bird Keeper for ¥126 and evolved to QUILAVA, walked up to Falkner,
+won for ¥675 — and after his speech `wJohtoBadges` reads 1 and `hasBadge(0)` is
+true. Every step of that is a thing this app could not do a day earlier.
+
+**What was wrong.** The title said the badge `opens: 'the road south out of
+Violet'`. With the badge in hand, the man says *"Wait up! What's the hurry?"* and
+puts the player back — five times in a row, stepped by hand rather than through
+any of the walking code. The claim read well, it followed from what he says, and
+it is wrong. Whatever he wants, it is not that badge.
+
+That correction cost more than the field: `reopen` was justified on the strength
+of it, in a comment saying a badge is *precisely* the thing that opens one of
+these. The rule stands and its reason got smaller, which is the honest repair —
+**a badge is the strongest signal this app has that the world may have changed**,
+and re-trying on one costs a walk that would not have worked, against the same
+wall on every press.
+
+### Three defects the Gym found in the things it was built on
+
+- **A gym leader is not a trainer.** Read off Violet's Gym in work RAM: Falkner
+  is object 1 at (5,1) with type **0** — a script — while the two Bird Keepers
+  are type 2. `clearHere` fights what the map calls a trainer, so it beat the
+  Keepers, reported *everyone here has already been beaten*, and left without a
+  badge. His battle starts by being talked to. Which is also the sharpest answer
+  to why a Gym is declared rather than found: no signature could tell you where
+  the leader stands.
+- **The badge is handed over after the battle, not by it.** Falkner went down for
+  ¥675 and `hasBadge` still read false, with a script running and *"just because
+  you beat me!"* on the screen. The same shape as reading the ITEM pocket before
+  the game has put the thing in it, which this document already had a rule about
+  and which did not stop it happening again.
+- **And the heal's answer was discarded.** A lead at 1 of 22, a heal turned back
+  at the gate, and it walked in and lost the first battle — worse than not
+  going, because losing costs half the money, and the pilot knew before it set
+  off. Then at Lv13 and full HP it lost the *second* battle with an empty
+  pocket, because a Gym has no Center in it and nothing had stocked the bag.
+
+### And a claim in the code that cost a pass
+
+`docs/CODE.md` said the ROM carries no table of how many maps a group holds, so
+walking every map is impossible. The first half is true. The conclusion is not:
+`MapGroupPointers` is one pointer per group and the lists sit one after another,
+so the next group's pointer bounds this one — measured, the twenty-six pointers
+ascend by 126, 63, 819, 81 … 135 bytes, every one an exact multiple of the
+nine-byte header.
+
+What the claim cost was a reader with no bound on a map number, which the same
+file also documented and shrugged at. Harmless until `objectsOn` started being
+asked about whatever a warp pointed at — and then a sweep for the Gyms returned
+Violet's Gym under **six** group numbers and an object at (141,72) on a map
+twenty tiles wide.
+
+Three checks answer it, none of which can refuse a map that exists: the derived
+bound, permissive wherever the derivation does not hold; a coordinate check
+needing the map's size from the ROM (`sizeOf`, measured against two maps whose
+tile dimensions were already known); and a count that *reaches* the sanity bound
+being read as a bad read rather than a crowded map — `MAX_OBJECTS` was
+truncating and returning, which is how a map past the end of the last group
+answered with exactly thirty-two objects at plausible tiles.
+
+**The test fake caused this as much as the code did.** It spaced its group
+tables 0x400 apart, which is not a multiple of nine, so no count was derivable,
+the reader stayed permissive, and the whole invariant went untested. *A fake laid
+out more conveniently than the thing it stands for is a fake that cannot fail* —
+which is the thirty-fourth pass's lesson about tests, one level down.
 
 ## The part that had to be redesigned
 

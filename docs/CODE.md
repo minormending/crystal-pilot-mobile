@@ -1093,7 +1093,7 @@ point those coordinates mean somewhere else entirely.
 
 ## 5. Crossing to the next map
 
-<!-- covers: gen2/journey.js gen2/world.js @ b14938ede7b7 -->
+<!-- covers: gen2/journey.js gen2/world.js @ d5d73dcba7ee -->
 
 A connection spans only part of a shared edge, so "walk west until something
 happens" does not work. `crossEdge()` closes the distance in stages, then tries
@@ -1902,7 +1902,7 @@ flowchart TD
 
 ## 7a. Five that act on where you already are
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ d97aa3d1c48f -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ fea19b98a313 -->
 
 Grind, hunt and catch all go *looking* for something. These five do the obvious
 thing with the situation you are already in, and take no parameters:
@@ -2173,7 +2173,7 @@ said *trainer battle: lost* **seven times**. One loss, reported seven ways.
 
 ## 7d. The counter, and the money it takes
 
-<!-- covers: gen2/menus.js gen2/state.js titles/crystal.js @ 3f783318370e -->
+<!-- covers: gen2/menus.js gen2/state.js titles/crystal.js @ 3d5ac882ff81 -->
 
 Everything the pilot could do until now used what it found. **Shop** walks to a
 mart and buys, which is the first thing it does that spends rather than
@@ -2524,7 +2524,7 @@ because that failure is only otherwise discovered by reaching for the undo.
 
 ## 8. The errands
 
-<!-- covers: titles/crystal.js gen2/journey.js @ 02cd36addfe1 -->
+<!-- covers: titles/crystal.js gen2/journey.js @ 724acb3908cb -->
 
 Everything in this section is `crystal.js` — the only file in the app that names
 a Crystal map, a Crystal door or a Crystal NPC. What it stands on is
@@ -2856,7 +2856,7 @@ the bag" rather than "did we gain any".
 
 ## 8a. Finding the Centers and the Marts in the cartridge
 
-<!-- covers: gen2/world.js gen2/journey.js @ b14938ede7b7 -->
+<!-- covers: gen2/world.js gen2/journey.js @ d5d73dcba7ee -->
 
 The last thing in this app that had to be written out by hand. A title said
 where the Centers and the Marts were, so the pilot healed in the two towns
@@ -3008,7 +3008,7 @@ go](#8c-naming-a-city-is-a-feature).
 
 ## 8c. Naming a city is a feature
 
-<!-- covers: titles/crystal.js gen2/world.js @ fb75885f6950 -->
+<!-- covers: titles/crystal.js gen2/world.js @ 9cb0d8a2778b -->
 
 The map graph has always reached most of Johto. A flood over its exits from
 Route 31 finds sixty-odd maps in five legs — and every feature in this app was
@@ -3092,7 +3092,7 @@ by, which is the only leg it can measure.
 
 ## 8d. A route the game itself refuses
 
-<!-- covers: gen2/journey.js gen2/state.js @ 03cf54451876 -->
+<!-- covers: gen2/journey.js gen2/state.js @ 242f46dafcd0 -->
 
 The pass before this one taught the walk to *quote* the man who turns it back.
 This is the pilot doing something about it.
@@ -3199,7 +3199,7 @@ counting bytes reads a full case as one.
 
 ## 8e. Fighting everybody here
 
-<!-- covers: gen2/journey.js @ ff9c931462dc -->
+<!-- covers: gen2/journey.js @ 4fd0d71a7042 -->
 
 The primitive a Gym needs. The pilot has been stopped on Route 32 for three
 passes by a man who wants Falkner beaten first, and beating Falkner means
@@ -3300,7 +3300,7 @@ costs however long it takes somebody to notice their money is gone.
 
 ## 8f. Going and winning a badge
 
-<!-- covers: gen2/journey.js gen2/state.js titles/crystal.js @ 1c293ece5aec -->
+<!-- covers: gen2/journey.js gen2/state.js titles/crystal.js @ b60354cd93ab -->
 
 The pilot has been turned back from Route 32 since the pass it learned to find
 Pokémon Centers. `reopen` throws away every written-off road the moment a badge
