@@ -281,6 +281,16 @@ export class Journey {
   }
 
   async runScripts(maxTaps = 400, settle = 45) {
+    // **This presses A, and A answers questions.** Which is deliberate -- the
+    // intro's gender prompt and the ball's "do you want this one?" are both
+    // answered here, and both want yes -- and it is a hazard everywhere else,
+    // because the game puts questions up that yes is the wrong answer to.
+    //
+    // Measured, at a cost: left standing at a mart counter with "1 POKé BALL
+    // will be ¥200. OK?" on screen, this bought one every time a job ran, and
+    // the wallet went 3000 to 100. The callers that walk close a conversation
+    // with B before reaching here -- see `through` -- and any new caller that
+    // might run with a menu open should do the same rather than press into it.
     for (let i = 0; i < maxTaps; i++) {
       // Inside the loop, not only on the way in. This is the longest loop in
       // the file by its own account -- Mom's scene is about 190 taps -- and it
@@ -312,6 +322,20 @@ export class Journey {
       if (this.stopped) return false;
       const from = await this.mapKey();
       if (from === expect) return true;
+      // A window in the way is not a door that will not open, and until this
+      // pass every caller was told it was. Measured: left standing at a mart
+      // counter with the clerk's confirmation up, `travelTo` reported *could
+      // not get through to Cherrygrove City* eight times over -- and the
+      // `runScripts` below pressed A into that box on every one of them, which
+      // is how a wallet went from 3000 to 100 in Poké Balls nobody asked for.
+      //
+      // Backed out with B rather than pressed through with A, which is the
+      // whole point: A answers a question and B declines it, and a walk has no
+      // business answering anything.
+      if ((await this.snap()).windowOpen) {
+        this.say('closing what is on screen first');
+        await this.tasks.closeConversation();
+      }
       // A doorway is not always across a room. Mr. Pokémon's is at the top of
       // Route 30 and the walk to it starts fifty tiles south, through grass --
       // so the budget is a route's, not a room's, and whatever jumps out on the
@@ -468,7 +492,14 @@ export class Journey {
         this.say(`through to ${this.where(next.key)}`);
         if (!await this.through(next.tile, next.key)) {
           if (this.stopped) return { ok: false, message: 'stopped' };
-          return { ok: false, message: `could not get through to ${this.where(next.key)}` };
+          // Say what is actually in the way. A door that will not open and a
+          // conversation that will not end are different things to go and look
+          // at, and for eight tries this reported the first when it was the
+          // second.
+          const stuck = (await this.snap()).windowOpen
+            ? ' — something is still on screen' : '';
+          return { ok: false,
+                   message: `could not get through to ${this.where(next.key)}${stuck}` };
         }
         continue;
       }
@@ -900,7 +931,13 @@ export class Journey {
       return { ok: false, stats: {},
                message: `this cartridge has no item called ${wanted}` };
     }
-    const already = (before.items.find(([i]) => i === id) || [0, 0])[1];
+    // Both pockets, because a Poké Ball is not in the ITEM one. `want` means
+    // *have this many*, and reading only `items` made it mean *buy this many*
+    // for every ball -- which is the one thing anybody would ask this to fetch.
+    // Latent until something asked: the shipped caller buys heals, and heals
+    // are items.
+    const held = (pocket) => (pocket.find(([i]) => i === id) || [0, 0])[1];
+    const already = held(before.items) + held(before.balls);
     const buy = Math.max(0, want - already);
     if (!buy) {
       await this.tasks.closeMenus();
@@ -908,6 +945,10 @@ export class Journey {
                message: `already carrying ${already}` };
     }
     const got = await this.tasks.buyFromClerk(id, buy);
+    // Belt and braces: `buyFromClerk` ends by leaving the conversation, and a
+    // job that walks away from a counter with one open is the defect this pass
+    // spent a wallet finding.
+    await this.tasks.closeConversation();
     const after = await this.snap();
     return {
       ok: got.ok,

@@ -450,19 +450,19 @@ export function withMenus(Base) {
 
     // The clerk's greeting is text; the menu is behind it.
     if (!await this._pressUntilBox(e.menu)) {
-      await this.closeMenus();
+      await this.closeConversation();
       return { ok: false, bought: 0, spent: 0, message: 'the clerk never offered a menu' };
     }
     // BUY is row 1 of three, and the cursor opens on it -- asked for rather
     // than assumed, because SELL is the row under it.
     if (!await this._driveMenuCursor(1, 3)) {
-      await this.closeMenus();
+      await this.closeConversation();
       return { ok: false, bought: 0, spent: 0,
                message: await this.saying('could not reach BUY') };
     }
     await this.push('A', 6, 10);
     if (!await this._awaitBox(e.list)) {
-      await this.closeMenus();
+      await this.closeConversation();
       return { ok: false, bought: 0, spent: 0, message: 'the mart never showed its stock' };
     }
 
@@ -483,7 +483,7 @@ export function withMenus(Base) {
           await this.step(SETTLE_FRAMES);
           s = await this.snap();
           if (s.curItem === itemId) break;
-          await this.closeMenus();
+          await this.closeConversation();
           return { ok: bought > 0, bought, spent,
                    message: `the mart does not stock that (bought ${bought})` };
         }
@@ -503,7 +503,7 @@ export function withMenus(Base) {
       if (now.money >= had) {
         // Nothing was spent. Either it could not be afforded or the press went
         // somewhere else, and both are reasons to stop rather than press on.
-        await this.closeMenus();
+        await this.closeConversation();
         return { ok: bought > 0, bought, spent,
                  message: bought ? `bought ${bought}, then could not afford another`
                                  : 'could not afford it' };
@@ -514,7 +514,11 @@ export function withMenus(Base) {
       // it does not know how many boxes it is.
     }
 
-    await this.closeMenus();
+    // The *conversation*, not the box. A clerk whose boxes are closed puts
+    // another one up a moment later, and the pilot left standing in front of it
+    // buys a Poké Ball every time a later job presses A through text -- measured,
+    // the wallet went 3000 to 100 that way. See `closeConversation`.
+    await this.closeConversation();
     const end = await this.snap();
     return {
       ok: bought > 0,

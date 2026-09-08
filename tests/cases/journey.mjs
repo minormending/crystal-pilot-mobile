@@ -911,3 +911,61 @@ test('Stop ends it', async (t) => {
   t.false(await j.takeDefaultName(), 'and so does the answering');
   t.eq(j.log.length, 0, 'nothing was pressed');
 });
+
+// --- a window in the way is not a door that will not open -------------------
+
+/** A Journey at a doorway, with something on screen. */
+function atADoor({ windowOpen = true, closes = true } = {}) {
+  const sym = symbols();
+  const wram = worldRam(sym, {});
+  const at = (n) => sym.addr(n) - 0xc000;
+  wram[at('wWindowStackSize')] = windowOpen ? 1 : 0;
+  const log = [];
+  let here = 1;
+  const collision = { off: 0, calibrate: () => true, playerPos: () => [3, 3],
+                      mapSize: () => [12, 8], collisionAt: () => 0 };
+  const j = new Journey(new FakeGameBoy({ wram }), new GameState(sym), null,
+                        collision, {
+    mapKey: async () => here,
+    walkTo: async () => { log.push('walk'); here = 2; return { stopped: null }; },
+    step: async () => ({ blocked: false }),
+  }, () => {}, null, {});
+  j.said = [];
+  j.say = (m) => j.said.push(m);
+  j.escapeBattle = async () => true;
+  j.runScripts = async () => { log.push('runScripts'); return true; };
+  j.settled = async () => wram;
+  j.tasks = {
+    closeConversation: async () => {
+      log.push('closeConversation');
+      if (closes) wram[at('wWindowStackSize')] = 0;
+      return closes;
+    },
+  };
+  j.log = log;
+  return j;
+}
+
+test('a walk closes what is on screen before blaming the door', async (t) => {
+  // The defect, and it cost a wallet. Left standing at a mart counter with the
+  // clerk's confirmation up, `travelTo` reported *could not get through to
+  // Cherrygrove City* eight times over -- and the `runScripts` in the same loop
+  // pressed A into that box on every one of them. A on a shop confirmation is a
+  // purchase: 3000 to 100, in Poké Balls nobody asked for.
+  //
+  // Backed out with B rather than pressed through with A, which is the point: A
+  // answers a question and B declines it, and a walk has no business answering
+  // anything.
+  const j = atADoor({ windowOpen: true });
+  t.true(await j.through([2, 7], 2), 'it got through');
+  t.eq(j.log[0], 'closeConversation', 'the screen was cleared first');
+  t.true(j.log.indexOf('closeConversation') < j.log.indexOf('walk'),
+         'before a step was taken');
+  t.contains(j.said.join(' '), 'closing what is on screen', 'and it said so');
+});
+
+test('nothing on screen means nothing to close', async (t) => {
+  const j = atADoor({ windowOpen: false });
+  t.true(await j.through([2, 7], 2), 'it got through');
+  t.false(j.log.includes('closeConversation'), 'no pressing at all');
+});

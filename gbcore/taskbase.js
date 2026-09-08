@@ -101,6 +101,39 @@ export class TaskBase {
     return !(await this.snap()).windowOpen;
   }
 
+  /**
+   * Get out of a *conversation*, not just out of its box.
+   *
+   * `closeMenus` presses B until no window is open, which is the right answer
+   * for a menu the pilot opened itself. It is the wrong answer for a box the
+   * *game* is holding up, because the script behind it puts another one there:
+   * measured at a mart counter, the boxes closed, `wScriptMode` stayed non-zero,
+   * and the clerk's confirmation was back a moment later.
+   *
+   * That cost real money. Left standing at the counter with *"1 POKé BALL will
+   * be ¥200. OK?"* on screen, every later job ran `runScripts`, which presses A
+   * through text -- and A on that box is a purchase. The wallet went 3000 → 900
+   * → **100**, four unwanted Poké Balls at a time, and stopped only because
+   * ¥100 could not buy another. Meanwhile every walk failed with *could not get
+   * through to Cherrygrove City*, blaming a door for a window.
+   *
+   * So this waits for both: no window *and* no script. Bounded, and it reports
+   * which it could not clear, because "the conversation would not end" is a
+   * different thing to go and look at than "the box would not close".
+   */
+  async closeConversation(times = 12) {
+    for (let i = 0; i < times; i++) {
+      const s = await this.snap();
+      if (!s.windowOpen && !s.scriptRunning) return true;
+      await this.push('B', 5, 10);
+      // Settled between presses, because a script that is mid-box swallows one
+      // and the next press would land on whatever it draws.
+      await this.step(SETTLE_FRAMES);
+    }
+    const s = await this.snap();
+    return !s.windowOpen && !s.scriptRunning;
+  }
+
   /** Tap through whatever text is left until the game stops asking. */
   async settleText(taps = 40) {
     for (let i = 0; i < taps; i++) {

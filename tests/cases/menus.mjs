@@ -714,7 +714,62 @@ test('a clerk that never offers a menu is backed away from', async (t) => {
   const r = await tasks.buyFromClerk(POTION, 1);
   t.false(r.ok, 'nothing bought');
   t.contains(r.message, 'never offered a menu', 'and it says which');
-  t.contains(log.join(' '), 'close', 'having closed what it opened');
+  // B presses, not a `closeMenus` call: the shop leaves the *conversation*
+  // now, which is a different thing from closing its box. See the tests below.
+  t.contains(log.join(' '), 'B@', 'having backed away from the counter');
+});
+
+test('leaving a counter waits for the script, not just for the box',
+     async (t) => {
+  // The defect this closes, and it cost a wallet. `closeMenus` presses B until
+  // no window is open, which is right for a menu the pilot opened itself and
+  // wrong for a box the *game* is holding up: measured at a mart counter, the
+  // boxes closed, `wScriptMode` stayed non-zero, and the clerk's confirmation
+  // was back a moment later. Every later job then ran `runScripts`, which
+  // presses A through text -- and A on that box is a purchase. 3000 to 100, in
+  // Poké Balls nobody asked for.
+  const sym0 = symbols();
+  const wram = worldRam(sym0, {});
+  const at = (n) => sym0.addr(n) - 0xc000;
+  let presses = 0;
+  const gb = new FakeGameBoy({
+    wram,
+    onPress: (button) => {
+      if (button !== 'B') return;
+      presses++;
+      // The box closes at once and the script keeps going for three presses,
+      // which is the shape measured at the counter.
+      wram[at('wWindowStackSize')] = 0;
+      wram[at('wScriptMode')] = presses >= 3 ? 0 : 1;
+    },
+  });
+  wram[at('wWindowStackSize')] = 1;
+  wram[at('wScriptMode')] = 1;
+  const tasks = new Tasks(gb, new GameState(sym0), () => {}, fakeRom());
+  t.true(await tasks.closeConversation(), 'it got out');
+  t.eq(presses, 3, 'pressing until the script ended, not until the box closed');
+});
+
+test('a conversation that will not end is reported rather than assumed',
+     async (t) => {
+  const sym0 = symbols();
+  const wram = worldRam(sym0, {});
+  const at = (n) => sym0.addr(n) - 0xc000;
+  wram[at('wWindowStackSize')] = 0;
+  wram[at('wScriptMode')] = 1;                 // never clears
+  const gb = new FakeGameBoy({ wram });
+  const tasks = new Tasks(gb, new GameState(sym0), () => {}, fakeRom());
+  t.false(await tasks.closeConversation(4), 'it says so');
+});
+
+test('nothing on screen costs no presses', async (t) => {
+  const sym0 = symbols();
+  let presses = 0;
+  const gb = new FakeGameBoy({ wram: worldRam(sym0, {}),
+                               onPress: () => { presses++; } });
+  const tasks = new Tasks(gb, new GameState(sym0), () => {}, fakeRom());
+  t.true(await tasks.closeConversation(), 'already out');
+  t.eq(presses, 0, 'and it pressed nothing');
 });
 
 test('a box that is not the one expected stops the purchase', async (t) => {
