@@ -754,3 +754,57 @@ test('pacing with nothing open walks until something jumps out', async (t) => {
   t.true(!!got, 'it found a battle');
   t.true(pressed.length >= 4 && pressed.length < 50, 'after a few steps, not all of them');
 });
+
+// --- whiting out -------------------------------------------------------------
+
+test('a lost battle is pressed through, so "lost" means the battle is over',
+     async (t) => {
+  // The measurement this exists for: the egg errand passes exactly one trainer,
+  // and the log said "trainer battle: lost" **seven times**. One loss, reported
+  // seven ways -- `lost` came back with the battle still on screen and not a
+  // button pressed, so every caller that asks "are we in a battle?" was told
+  // yes, fought it again, read the same wiped party and lost again.
+  const { tasks } = pilot();
+  const wiped = { inBattle: true, party: [{ hp: 0, maxHp: 30 }],
+                  active: { hp: 0, maxHp: 30 }, menu: [1, 1] };
+  let presses = 0;
+  tasks.snap = async () => wiped;
+  tasks.pump = async () => {};
+  tasks.push = async () => { if (++presses >= 4) wiped.inBattle = false; };
+  tasks.coverFaint = async () => 'lost';
+  t.eq(await tasks.fightBattle(), 'lost', 'still a loss');
+  t.false(wiped.inBattle, 'and the battle has actually ended');
+  t.true(presses >= 4, 'because it pressed through the whiteout');
+});
+
+test('a whiteout that will not end is still called lost, not stuck', async (t) => {
+  // Bounded, and it reports the same word either way: a whiteout this could not
+  // sit through is still a whiteout, and trading a true answer for a vaguer one
+  // helps nobody.
+  const { tasks } = pilot();
+  let presses = 0;
+  tasks.snap = async () => ({ inBattle: true, party: [{ hp: 0, maxHp: 30 }],
+                              active: { hp: 0, maxHp: 30 } });
+  tasks.pump = async () => {};
+  tasks.push = async () => { presses++; };
+  tasks.coverFaint = async () => 'lost';
+  t.eq(await tasks.fightBattle(), 'lost', 'the honest answer');
+  t.true(presses > 20 && presses < 1000, 'after a bounded number of tries');
+});
+
+test('a wiped party found at the battle menu is pressed through too', async (t) => {
+  // The other way `lost` is reached -- the menu comes up with nothing standing
+  // -- and it had the same defect, which is why the fix is one helper and not
+  // one branch.
+  const { tasks } = pilot();
+  const wiped = { inBattle: true, party: [{ hp: 0, maxHp: 30 }],
+                  active: { hp: 5, maxHp: 30 } };
+  let presses = 0;
+  tasks.snap = async () => wiped;
+  tasks.pump = async () => {};
+  tasks.push = async () => { if (++presses >= 3) wiped.inBattle = false; };
+  tasks.coverFaint = async () => null;
+  tasks.awaitBattleMenu = async () => ({ party: [{ hp: 0, maxHp: 30 }] });
+  t.eq(await tasks.fightBattle(), 'lost', 'a loss');
+  t.false(wiped.inBattle, 'and over');
+});

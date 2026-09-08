@@ -26,6 +26,11 @@ const HEAL_IN_BATTLE_BELOW = 0.34, MAX_BATTLE_POTIONS = 3;
 const PACK_OPEN_TRIES = 4;
 // The party screen ignores the short presses the battle menu takes.
 const PARTY_HOLD = 12, PARTY_GAP = 24, PARTY_SETTLE = 40;
+// How long to press through a whiteout before giving up on it. The sequence is
+// several boxes -- the last Pokemon faints, "you have no Pokemon left", the
+// screen fades, the money is docked -- and it is text the whole way, so this is
+// generous: standing in it is harmless and returning while it runs is not.
+const WHITEOUT_TAPS = 200;
 // What the drawn battle menu measures, telling it from the pack over the top of
 // it: wMenuDataItems and wMenuBorderTopCoord.
 const BATTLE_MENU_ITEMS = gen2.battleMenu.items,
@@ -433,6 +438,31 @@ export function withBattle(Base) {
    * a fight that should have been run from, and spending the bag on it is worse
    * than losing it.
    */
+  /**
+   * Press through a whiteout, and only then call the battle lost.
+   *
+   * `lost` used to be returned the moment the party read as wiped, with the
+   * battle still on screen and not a button pressed -- so a caller that asks
+   * "are we in a battle?" was told yes, fought it again, read the same wiped
+   * party and lost again. Measured on the egg errand, which passes exactly one
+   * trainer: the log said "trainer battle: lost" **seven times**. One loss,
+   * reported seven ways, because every retry re-entered a battle nobody had
+   * left.
+   *
+   * So the word now means what a caller needs it to mean: we lost, and the
+   * battle is over. Bounded, and it returns 'lost' either way -- a whiteout
+   * this could not sit through is still a whiteout, and reporting 'stuck'
+   * would trade a true answer for a vaguer one.
+   */
+  async _whiteOut() {
+    for (let i = 0; i < WHITEOUT_TAPS; i++) {
+      if (!(await this.snap()).inBattle) break;
+      await this.push('A', 4, 6);
+      await this.pump();
+    }
+    return 'lost';
+  }
+
   async fightBattle(maxTurns = 40, { heals = null } = {}) {
     let potions = 0;
     for (let turn = 0; turn < maxTurns && !this.cancelled; turn++) {
@@ -443,14 +473,16 @@ export function withBattle(Base) {
       const pre = await this.snap();
       const covered = await this.coverFaint(pre);
       if (covered) {
-        if (covered === 'lost') return 'lost';
+        if (covered === 'lost') return this._whiteOut();
         if (covered === 'ended') return this._outcome();
         if (covered === 'stuck') return 'stuck';
         continue;
       }
       const menu = await this.awaitBattleMenu();
       if (menu === null) return this._outcome();
-      if (menu.party.length && menu.party.every((m) => m.hp === 0)) return 'lost';
+      if (menu.party.length && menu.party.every((m) => m.hp === 0)) {
+        return this._whiteOut();
+      }
       // Before the swing, not after the faint. `coverFaint` above is the
       // recovery; this is the avoidance, and it is cheaper by a Center.
       if (heals && potions < MAX_BATTLE_POTIONS && this.rom) {
