@@ -913,7 +913,8 @@ test('Stop ends the pressing before the party grows', async (t) => {
  * `battles` is how many wild encounters interrupt the walk before it arrives,
  * which is what a long walk through grass actually looks like.
  */
-function atADoor({ windowOpen = true, closes = true, battles = 0 } = {}) {
+function atADoor({ windowOpen = true, closes = true, battles = 0,
+                  refuses = 0, saying = '' } = {}) {
   const sym = symbols();
   const wram = worldRam(sym, {});
   const at = (n) => sym.addr(n) - 0xc000;
@@ -928,6 +929,7 @@ function atADoor({ windowOpen = true, closes = true, battles = 0 } = {}) {
     walkTo: async () => {
       log.push('walk');
       if (battles > 0) { battles--; return { stopped: 'battle' }; }
+      if (refuses > 0) { refuses--; return { stopped: 'refused' }; }
       here = 2;
       return { stopped: null };
     },
@@ -939,6 +941,7 @@ function atADoor({ windowOpen = true, closes = true, battles = 0 } = {}) {
   j.runScripts = async () => { log.push('runScripts'); return true; };
   j.settled = async () => wram;
   j.tasks = {
+    screenSaid: async () => saying,
     closeConversation: async () => {
       log.push('closeConversation');
       if (closes) wram[at('wWindowStackSize')] = 0;
@@ -996,6 +999,39 @@ test('nothing on screen means nothing to close', async (t) => {
   const j = atADoor({ windowOpen: false });
   t.true(await j.through([2, 7], 2), 'it got through');
   t.false(j.log.includes('closeConversation'), 'no pressing at all');
+});
+
+test('a walk turned back twice says who turned it back', async (t) => {
+  // Measured on the cartridge, and the reason this exists. The first Pokémon
+  // Center the pilot ever *found* rather than was told about is on Route 32 --
+  // and two tiles south of Violet a man says "Wait up! What's the hurry? Have
+  // you gone to the POKéMON GYM?" and puts you back where you started. The door
+  // is real and the ninety-six-step path to it is real; the game will not let
+  // anyone down that route without Falkner's badge.
+  //
+  // `walkTo` reports `refused` when every direction is blocked, which is what a
+  // running script looks like from outside, so the pilot pressed A and walked
+  // at the same tile eight times over and then said *could not heal*. That
+  // blames its own walking for a rule of the game, while the screen had the
+  // reason on it in words the whole time.
+  const j = atADoor({ windowOpen: false, refuses: 8, saying: 'Wait up! / What\'s the hurry?' });
+  t.false(await j.through([2, 7], 2), 'it gave up');
+  t.eq(j.log.filter((l) => l === 'walk').length, 2,
+       'after two attempts, not eight');
+  t.contains(j.said.join(' '), 'turned back', 'and it said it was turned back');
+  t.contains(j.said.join(' '), 'Wait up!', 'in the words on the screen');
+  t.eq(j.turnedBack, 'Wait up! / What\'s the hurry?', 'kept for the caller');
+});
+
+test('a refusal with nothing on screen is still just a refusal', async (t) => {
+  // The other side of the rule, and the reason it keys on the words rather than
+  // on the refusal. A tile somebody is standing on refuses too, and re-asking
+  // is how that gets walked around -- so a silent refusal must keep spending
+  // its tries the way it always did.
+  const j = atADoor({ windowOpen: false, refuses: 3, saying: '' });
+  t.true(await j.through([2, 7], 2), 'it got through on the fourth');
+  t.eq(j.log.filter((l) => l === 'walk').length, 4, 'having spent four tries');
+  t.eq(j.turnedBack, null, 'and nothing to name');
 });
 
 // --- a walk routes around a leg it cannot take ------------------------------

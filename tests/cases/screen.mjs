@@ -41,6 +41,29 @@ test('a tile that is not a letter reads as a space, not as nothing',
   t.eq(lines.length, 18, 'and there are eighteen of them');
 });
 
+test('a contraction is one tile and two characters', async (t) => {
+  // Measured off the cartridge, from the man at the top of Route 32 who turns
+  // the pilot back: his second line dumps as
+  //
+  //     96 a7 a0 b3 d4 7f b3 a7 a4 7f a7 b4 b1 b1 b8 e6
+  //     W  h  a  t  's _  t  h  e  _  h  u  r  r  y  ?
+  //
+  // so $d4 carries both characters. Gen 2 has no apostrophe in running text --
+  // it has a ligature tile per contraction -- and this matters now that a
+  // failure a person reads quotes the screen: *turned back on the way to ROUTE
+  // 32 — Wait up! / What's the hurry?* is the message, and "What  the hurry?"
+  // was what it said before.
+  const wram = showing(['What']);
+  wram[AT - 0xc000 + 4] = 0xd4;
+  const lines = screenLines(wram, AT);
+  t.eq(charOf(0xd4), '\u2019s', 'the tile is two characters');
+  t.contains(lines[0], 'What\u2019s', 'and the line reads as one word');
+  t.eq(lines[0].length, 21, 'so this row is twenty tiles and twenty-one characters');
+  // The reason that is safe: nothing here counts columns in a *string*.
+  t.eq(arrowAt(wram, AT), null, 'the arrow is found in the tiles, not the text');
+  t.true(screenSays(wram, AT, 'whats'), 'and matching folds the apostrophe away');
+});
+
 test('the readable lines are what the screen is saying, in order', async (t) => {
   const wram = showing(['', ' >PACK', '  SAVE', '', 'What do you want']);
   t.eq(screenText(wram, AT), [' >PACK', '  SAVE', 'What do you want'],

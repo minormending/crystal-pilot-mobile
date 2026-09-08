@@ -47,6 +47,11 @@ const DISCOVER_LEGS = 3;
 // ninety-six steps from its north end.
 const THROUGH_BATTLES = 40;
 
+// How many times a walk will be turned back by somebody talking before it
+// concludes that the way is *shut* rather than busy. Two, because one is an
+// ordinary greeting and the second is a pattern.
+const THROUGH_TURNS = 2;
+
 // How many refused legs one walk will write off before giving up. The `avoid`
 // set already terminates over a finite graph; this is the bound for a graph
 // nobody has seen, and it is generous because a refusal costs one crossing
@@ -366,7 +371,8 @@ export class Journey {
     // away, the Pokemon Center on Route 32 is ninety-six steps down a
     // ninety-tile route, and eight tries never got near it. `travelTo` learned
     // the same thing about a refused leg one pass earlier.
-    let fought = 0;
+    let fought = 0, turned = 0;
+    this.turnedBack = null;
     for (let i = 0; i < tries && fought < THROUGH_BATTLES;) {
       if (this.stopped) return false;
       const from = await this.mapKey();
@@ -395,7 +401,30 @@ export class Journey {
       i++;
       if (await this.mapKey() === expect) return true;
       if (res.stopped === 'refused') {
+        // **A refusal with words on the screen is somebody talking**, and the
+        // words are usually the reason. `walkTo` reports `refused` when every
+        // direction is blocked, which is what a running script looks like from
+        // the outside -- and the pilot used to answer that by pressing A and
+        // walking at the same tile eight times over.
+        //
+        // Measured on Route 32, where the first Pokémon Center the pilot ever
+        // *found* rather than was told about turned out to be behind a story
+        // gate: walk two tiles south of Violet and a man says "Wait up! What's
+        // the hurry? Have you gone to the POKéMON GYM?" and puts you back where
+        // you started. The door is real, the ninety-six-step path to it is
+        // real, and the game will not let anyone down that route without
+        // Falkner's badge. Eight identical attempts and *could not heal* is the
+        // worst possible answer to that: it blames the pilot's own walking for
+        // a rule of the game, and the screen said so in words the whole time.
+        const said = await this.tasks.screenSaid(2);
         await this.runScripts();
+        if (said) {
+          this.turnedBack = said;
+          if (++turned >= THROUGH_TURNS) {
+            this.say(`turned back: ${said}`);
+            return false;
+          }
+        }
         continue;
       }
       if (res.stopped === null) {
@@ -945,8 +974,16 @@ export class Journey {
       party: after.party.map((m) => `${m.hp}/${m.maxHp}`).join(' '),
     };
     if (!healed) {
-      return { ok: false, stats,
-               message: `could not heal (stopped in ${this.where(await this.mapKey())})` };
+      // **Name the gate when there was one.** "could not heal (stopped in
+      // ROUTE 32)" blames the walk for a rule of the game: the Center there is
+      // real and the route to it is shut until Falkner's badge, and the man who
+      // shuts it says so out loud. `through` keeps his words, so the failure a
+      // person reads can be the reason rather than the symptom.
+      const gate = this.turnedBack;
+      return { ok: false, stats: { ...stats, ...(gate ? { turnedBack: gate } : {}) },
+               message: gate
+                 ? `turned back on the way to ${stats.at} — ${gate}`
+                 : `could not heal (stopped in ${this.where(await this.mapKey())})` };
     }
     return { ok: true, stats,
              message: `healed ${hurt.length === 1 ? 'one Pokémon' : `${hurt.length} Pokémon`}`

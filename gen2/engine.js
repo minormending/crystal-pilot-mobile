@@ -172,6 +172,19 @@ export const gen2 = {
   //   $e6      ?       the end of that same question
   //   $ed      the cursor arrow, at rows 2,4,6,8,10 as the cursor read 1..5
   //   $6d      :       between the two halves of the save panel's "0:03"
+  //   $d4      's      "What's the hurry?" from the man at the top of Route 32
+  //
+  // **$d4 is one tile for two characters.** Gen 2 has no apostrophe key in
+  // running text: it has a ligature tile per contraction. Dumped from the
+  // gate script's second line, `96 a7 a0 b3 d4 7f b3 a7 a4` is
+  // `W h a t 's _ t h e` -- so the tile carries both characters and the
+  // decoder has to emit both.
+  //
+  // Its neighbours in $d0-$d6 are the other contractions and are deliberately
+  // *not* here: one of them is measured and the rest would be copied off a
+  // table without a screen to check them against. An unnamed tile reads as a
+  // space, so "don't" comes out "don t" -- clumsy, and readable, which is the
+  // right way round for a guess nobody has checked.
   //
   // **The arrow is a tile in a list menu and a sprite in a YES/NO box.** The
   // save confirmation was dumped with its panel up, "Would you like to save?"
@@ -191,7 +204,8 @@ export const gen2 = {
   charmap: {
     ranges: [[0x80, 0x99, 'A'], [0xa0, 0xb9, 'a'], [0xf6, 0xff, '0']],
     singles: { 0x7f: ' ', 0xf3: '/', 0xe6: '?', 0xe8: '.', 0xf4: ',',
-               0xe7: '!', 0xf0: '¥', 0xf1: 'x', 0xed: '>', 0x6d: ':' },
+               0xe7: '!', 0xf0: '¥', 0xf1: 'x', 0xed: '>', 0x6d: ':',
+               0xd4: '\u2019s' },
     // The arrow is named twice on purpose: once above so a dumped screen shows
     // which row is selected, and once here so `arrowAt` can find the tile
     // without knowing what character it was rendered as.

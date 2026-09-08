@@ -39,7 +39,15 @@ export function charOf(tile, engine = gen2) {
   return (cm.singles || {})[tile] || ' ';
 }
 
-/** The screen as `ROWS` strings of `COLS` characters. */
+/**
+ * The screen as `ROWS` strings, one per tilemap row.
+ *
+ * `COLS` tiles per row, but **not always `COLS` characters**: Gen 2 draws a
+ * contraction as a single ligature tile, so the `'s` in "What's" is one tile
+ * and two characters. Safe because nothing here indexes a line by column --
+ * `arrowAt` scans the raw tiles, `fold` strips punctuation before matching, and
+ * the rest trim whole lines.
+ */
 export function screenLines(wram, at, engine = gen2) {
   if (at === null || at === undefined || !wram) return [];
   const base = at - 0xc000;
