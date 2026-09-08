@@ -460,6 +460,31 @@ def main(argv):
         print("no survivors: every mutation was caught")
     killed = len(pool) - len(survivors) - hung
     score = 100 * (killed + hung) // len(pool)
+
+    # Per file, weakest first, whenever more than one was mutated. Which is the
+    # question this tool is usually being asked -- *where are the tests not?* --
+    # and it could only be answered by running it once per module and writing
+    # the numbers down.
+    #
+    # It is a different answer from `tools/coverage`, and the difference is the
+    # point. gen2/jobs.js was **72% of its lines run** by the suite and **35% of
+    # its mutations caught**: every line executed, and a third of what those
+    # lines decide could be changed without a single test noticing. Line
+    # coverage says the tests *visited*; this says they *looked*.
+    by_file = {}
+    for c in pool:
+        f = by_file.setdefault(c["file"], [0, 0])
+        f[0] += 1
+    for c in survivors:
+        by_file[c["file"]][1] += 1
+    if len(by_file) > 1:
+        print("\nper file, weakest first:")
+        rows = sorted(by_file.items(),
+                      key=lambda kv: (kv[1][0] - kv[1][1]) / kv[1][0])
+        for name, (total, lived) in rows:
+            pct = 100 * (total - lived) // total
+            print(f"  {pct:3}%  {name}  ({total - lived} of {total})")
+
     print(f"\ncaught {killed + hung} of {len(pool)} ({score}%)"
           + (f", {hung} by hanging" if hung else ""))
     # Not a failing exit code. A survivor is a thing to read, not a broken

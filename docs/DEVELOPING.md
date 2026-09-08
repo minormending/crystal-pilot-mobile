@@ -157,6 +157,16 @@ anything asserted on what it did. This changes one small thing — `&&` to `||`,
 number to zero, a `true` to `false` — runs the suite, and reports the changes
 nothing caught.
 
+Run over more than one file it also prints **a score per file, weakest first**,
+which is the question it is usually being asked: *where are the tests not?* That
+used to mean running it once per module and writing the numbers down by hand,
+which is how a pass picks its audit target by memory instead of by evidence.
+The two numbers disagree loudly and the disagreement is the point —
+`gen2/jobs.js` was **72% of its lines run** and **35% of its mutations caught**:
+every line executed, and a third of what those lines decide could be changed
+without a single test noticing. Line coverage says the tests *visited*; this
+says they *looked*.
+
 The first run of it made the case better than any argument could. `collision.js`
 sat at 51% line coverage, which sounds like a gap and reads as a plateau.
 Mutation said **18%**, in the module that decides where the pilot may walk: the
