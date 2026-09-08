@@ -2156,8 +2156,9 @@ export class Journey {
     // Bird Keepers are type 2. `clearHere` fights what the map calls a trainer,
     // so it beat the Keepers, reported *everyone here has already been beaten*,
     // and left without a badge. His battle starts by being talked to.
+    let fought = null;
     if (gym.leaderAt && !(await this.snap()).party.every((m) => m.hp === 0)) {
-      await this.leaderFight(gym);
+      fought = await this.leaderFight(gym);
     }
     // **The badge is handed over after the battle, not by it.** Measured:
     // Falkner went down for ¥675 and `hasBadge` still read false, with a script
@@ -2178,10 +2179,17 @@ export class Journey {
                message: `beat ${gym.leader || 'the leader'}`
                         + (gym.opens ? ` — that opens ${gym.opens}` : '') };
     }
-    // Not won, and the sweep's own answer is the useful half: it says whether
-    // the party ran out, the trainers ran out, or a battle was lost.
+    // **Not won, and the leader's answer is the useful half.** The sweep's was
+    // being reported instead, which named the wrong thing in the way this pass
+    // has been fixing all day: a Gym where the Bird Keepers had already been
+    // beaten and FALKNER then won read as *no badge yet — everyone here has
+    // already been beaten*. He is the reason there is no badge; they are not.
+    //
+    // The sweep still speaks when the leader was never reached -- a party that
+    // ran out on the way there is the sweep's story to tell.
+    const why = fought && fought.message ? fought.message : swept.message;
     return { ok: false, stats,
-             message: `no badge yet — ${swept.message}` };
+             message: `no badge yet — ${why}` };
   }
 
   /**

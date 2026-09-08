@@ -837,11 +837,40 @@ test('a Gym cleared without the badge is not a Gym beaten', async (t) => {
   // Everything the sweep reports, and no badge.
   j.clearHere = async () => ({ ok: true, stats: { won: 4, prize: 400 },
                                message: 'beat 4 trainers' });
+  j.leaderFight = async () => ({ ok: false, message: 'the battle lost' });
   const r = await j.beatGym((await j.gymList(2565))[0]);
   t.false(r.ok, 'not a win');
   t.eq(r.stats.won, 4, 'even with four battles won');
   t.contains(r.message, 'no badge yet', 'and it says so plainly');
-  t.contains(r.message, 'beat 4 trainers', "keeping the sweep's own answer");
+  t.contains(r.message, 'the battle lost', "keeping the leader's own answer");
+});
+
+test('the leader is who gets named when the leader is the problem', async (t) => {
+  // **Measured, and it is this pass's own mistake made once more.** A Gym whose
+  // Bird Keepers had already been beaten, and FALKNER then won, reported
+  // *no badge yet — everyone here has already been beaten*. He is the reason
+  // there is no badge; they are not.
+  const j = gymGoer();
+  j.clearHere = async () => ({ ok: true, stats: { won: 0, prize: 0 },
+                               message: 'everyone here has already been beaten' });
+  j.leaderFight = async () => ({ ok: false, message: 'the battle lost' });
+  const r = await j.beatGym((await j.gymList(2565))[0]);
+  t.contains(r.message, 'the battle lost', 'the leader is named');
+  t.false(r.message.includes('already been beaten'),
+          `and the sweep is not: ${r.message}`);
+});
+
+test('the sweep still speaks when the leader was never reached', async (t) => {
+  // A party that ran out on the way to him is the sweep's story to tell.
+  const j = gymGoer();
+  j.clearHere = async () => ({ ok: false, stats: { won: 1, prize: 100 },
+                               message: 'nobody fit to send out' });
+  // Nothing left standing, so `leaderFight` is not even tried.
+  j.snap = async () => ({ inBattle: false, money: 3000, wram: j.gb.wram,
+                          party: [{ hp: 0, maxHp: 22, level: 7 }],
+                          balls: [], items: [] });
+  const r = await j.beatGym((await j.gymList(2565))[0]);
+  t.contains(r.message, 'nobody fit to send out', "the sweep's reason stands");
 });
 
 test('a party that could not be healed does not go into the Gym', async (t) => {
