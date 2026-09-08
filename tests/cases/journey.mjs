@@ -572,3 +572,228 @@ test('a cartridge whose title lists no cures cures nothing', async (t) => {
                      items: [[12, 1]], cures: null });
   t.eq(await j.cureFromBag(), [], 'and says so by doing nothing');
 });
+
+// --- duels -------------------------------------------------------------------
+
+/**
+ * A Journey whose map has trainers on it and whose battles are scripted.
+ *
+ * `trainers` is a function so a test can move somebody between attempts, which
+ * is the one thing a trainer does that a ball never does. `starts` says whether
+ * pressing A actually brings a battle, and `outcome` what fightBattle makes of
+ * it -- the two failures a duel has that a pickup does not.
+ */
+function dueller({ trainers = () => [], at = [5, 5], starts = true,
+                   outcome = 'won', prize = 300, walkFails = () => null,
+                   open = () => true, battle = null } = {}) {
+  const sym = symbols();
+  const log = [];
+  let money = 1000, inBattle = !!battle, mode = battle || 0, level = 5;
+  const gb = new FakeGameBoy({ wram: worldRam(sym, {}) });
+  const collision = {
+    off: 0,
+    calibrate: () => true,
+    playerPos: () => at,
+    mapSize: () => [60, 60],
+    walkable: (x, y) => open(x, y),
+    trainers: () => trainers(),
+  };
+  const nav = {
+    mapKey: async () => 1,
+    walkTo: async (_c, to) => {
+      log.push(`walk ${to[0]},${to[1]}`);
+      const bad = walkFails(to);
+      if (!bad) { at = [...to]; return { stopped: null }; }
+      return { stopped: bad };
+    },
+    step: async (dir) => { log.push(`face ${dir}`); return { blocked: false }; },
+  };
+  const j = new Journey(gb, new GameState(sym), null, collision, nav, () => {},
+                        { route: () => null }, { heals: ['potion'] });
+  j.log = log;
+  j.said = [];
+  j.say = (m) => j.said.push(m);
+  j.settled = async () => gb.wram;
+  j.snap = async () => ({
+    inBattle, battleMode: mode, money,
+    party: [{ hp: 20, maxHp: 20, level }], balls: [], items: [],
+  });
+  j.tasks = {
+    flee: async () => { log.push('flee'); inBattle = false; mode = 0; return true; },
+    fightBattle: async (turns, opts) => {
+      log.push(`fight ${turns} heals=${opts && opts.heals ? opts.heals.join() : 'none'}`);
+      inBattle = false; mode = 0;
+      if (outcome === 'won') { money += prize; level += 1; }
+      return outcome;
+    },
+  };
+  j.gb = {
+    press: async () => {
+      log.push('press A');
+      if (starts) { inBattle = true; mode = 2; }
+    },
+  };
+  return j;
+}
+
+test('a trainer already in front of us is fought without walking anywhere',
+     async (t) => {
+  // Above the walk rather than below it, because this is how most duels start:
+  // a trainer with a sight range opens the battle the moment you cross their
+  // line, which on the way to one of them is the ordinary case.
+  const j = dueller({ battle: 2, trainers: () => [{ x: 9, y: 9, sprite: 39 }] });
+  const r = await j.duelHere();
+  t.true(r.ok, 'it was fought');
+  t.true(r.won, 'and won');
+  t.eq(j.log.filter((l) => l.startsWith('walk')).length, 0, 'and nothing walked');
+});
+
+test('a duel is priced in money, because only a trainer pays', async (t) => {
+  // The same rule the shop follows: money is the evidence. A wild Pokemon never
+  // pays out, so the prize is the one number that says the battle was both a
+  // trainer's and won -- HP says who fought and levels say what it was worth,
+  // and neither tells a win from any other ending.
+  const j = dueller({ trainers: () => [{ x: 9, y: 9, sprite: 39 }], prize: 448 });
+  const r = await j.duelHere();
+  t.true(r.ok, 'won');
+  t.eq(r.prize, 448, 'and the purse is the difference');
+  t.contains(r.message, '448', 'said out loud');
+  t.contains(r.message, 'Lv5 to Lv6', 'with what the lead got out of it');
+});
+
+test('the bag is offered to the fight, so a duel can heal mid-battle',
+     async (t) => {
+  const j = dueller({ trainers: () => [{ x: 9, y: 9, sprite: 39 }] });
+  await j.duelHere();
+  t.contains(j.log.join(' | '), 'heals=potion', "the title's own list");
+});
+
+test('a map with nobody near says so instead of walking', async (t) => {
+  // "Near", not "on this map", because near is all the game will tell us: it
+  // only loads an object you are close enough to draw, so this list is a local
+  // answer and a sentence about the whole map would be a claim it cannot make.
+  // The map's own total is the interface's business -- see rows.js, where it
+  // goes in the hint.
+  const j = dueller({ trainers: () => [] });
+  const r = await j.duelHere();
+  t.false(r.ok, 'nothing to do');
+  t.contains(r.message, 'nobody near enough', 'and says which');
+  t.eq(j.log.length, 0, 'and it did not move');
+});
+
+test('the nearest trainer is the one walked to', async (t) => {
+  const j = dueller({
+    at: [5, 5],
+    trainers: () => [{ x: 40, y: 5, sprite: 37 }, { x: 7, y: 5, sprite: 39 }],
+  });
+  await j.duelHere();
+  const first = j.log.find((l) => l.startsWith('walk'));
+  t.true(Number(first.split(' ')[1].split(',')[0]) < 10,
+         'the one two tiles away, not the one thirty-five');
+});
+
+test('the trainer list is re-read every attempt, because a trainer moves',
+     async (t) => {
+  // The difference from `takeHere`, and it is measured rather than tidy: a ball
+  // and a tree stay where the map put them, and on Route 30 a wanderer moved a
+  // tile while nothing else happened. So a tile read once and walked to twice
+  // is a tile nobody is standing on.
+  const spots = [[9, 9], [20, 20]];
+  let asked = 0;
+  const j = dueller({
+    // Standing at (9,9) the first time anybody looks, and at (20,20) after
+    // that. The walk refuses everything west of x=15, so the first attempt can
+    // only succeed if the second look happens.
+    trainers: () => {
+      const [x, y] = spots[Math.min(asked++, spots.length - 1)];
+      return [{ x, y, sprite: 39 }];
+    },
+    walkFails: (to) => (to[0] < 15 ? 'refused' : null),
+  });
+  const r = await j.duelHere();
+  t.true(asked > 1, 'it asked again');
+  t.true(r.ok, 'and caught up with them where they had gone');
+});
+
+test('something else in the way is run from, not fought', async (t) => {
+  // A Pidgey met on the way to a trainer is a delay, not the job -- the same
+  // rule escapeBattle follows, for the same reason.
+  const j = dueller({ battle: 1, trainers: () => [{ x: 9, y: 9, sprite: 39 }] });
+  const r = await j.duelHere();
+  t.contains(j.log.join(' | '), 'flee', 'the wild one was fled');
+  t.true(r.ok, 'and the duel still happened');
+});
+
+test('a trainer who will not fight reads as beaten, not as unreachable',
+     async (t) => {
+  // Two answers, and only one of them is about the map. Gen 2 leaves a trainer
+  // standing there for ever once they have lost, so a walk that arrives and a
+  // press that does nothing is the ordinary end state of this feature -- and
+  // saying "could not get to anyone" of it would blame the route.
+  const j = dueller({ trainers: () => [{ x: 9, y: 9, sprite: 39 }], starts: false });
+  const r = await j.duelHere();
+  t.false(r.ok, 'no battle happened');
+  t.contains(r.message, 'already beaten', 'and it says what that probably means');
+});
+
+test('a trainer nothing can walk to is a route problem, and says so',
+     async (t) => {
+  const j = dueller({ trainers: () => [{ x: 9, y: 9, sprite: 39 }],
+                      open: () => false });
+  const r = await j.duelHere();
+  t.false(r.ok, 'it did not happen');
+  t.contains(r.message, 'could not get to anyone', 'and blames the walk');
+  t.eq(j.log.filter((l) => l === 'press A').length, 0, 'nothing was pressed');
+});
+
+test('a duel that is lost is reported as lost, not as nothing happening',
+     async (t) => {
+  const j = dueller({ trainers: () => [{ x: 9, y: 9, sprite: 39 }],
+                      outcome: 'lost' });
+  const r = await j.duelHere();
+  t.false(r.ok, 'it went badly');
+  t.contains(r.message, 'lost', 'and says so');
+  t.eq(r.prize, 0, 'and nothing was won');
+});
+
+test('Stop ends a duel before it starts a battle', async (t) => {
+  const j = dueller({ trainers: () => [{ x: 9, y: 9, sprite: 39 }] });
+  j.tasks.cancelled = true;
+  const r = await j.duelHere();
+  t.false(r.ok, 'it stopped');
+  t.contains(r.message, 'stopped', 'saying that rather than blaming the map');
+});
+
+test('a trainer who would not fight is not asked again, so the next one is',
+     async (t) => {
+  // Measured on Route 30: standing at (3,28) there were two trainers in range,
+  // the near one already beaten and the far one not. Every attempt went to the
+  // nearer, so all six were spent on somebody who was never going to answer and
+  // the one who would was never approached.
+  const asked = [];
+  const j = dueller({
+    at: [3, 28],
+    trainers: () => [{ x: 2, y: 28, sprite: 39 }, { x: 5, y: 23, sprite: 39 }],
+    starts: false,
+  });
+  // Only the far one fights. `starts` is read on every press, so this stands in
+  // for a beaten trainer beside an unbeaten one.
+  const press = j.gb.press;
+  j.gb.press = async () => {
+    asked.push(j.log.filter((l) => l.startsWith('walk')).pop());
+    await press();
+  };
+  const r = await j.duelHere();
+  t.false(r.ok, 'neither fought, in this arrangement');
+  const tiles = [...new Set(asked)];
+  t.true(tiles.length > 1, 'but it did not spend every attempt on the same one');
+});
+
+test('once everybody near has refused, it says so rather than walking again',
+     async (t) => {
+  const j = dueller({ trainers: () => [{ x: 9, y: 9, sprite: 39 }], starts: false });
+  const r = await j.duelHere();
+  t.contains(r.message, 'already beaten', 'the ordinary end state of a route');
+  t.eq(j.log.filter((l) => l.startsWith('walk')).length, 1,
+       'and it only walked there once');
+});

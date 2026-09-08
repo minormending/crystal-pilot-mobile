@@ -34,6 +34,17 @@ const LONG_WALK_STEPS = 260;
 // because `takeHere` has to tell them apart: the first is what an item ball
 // somebody already took looks like -- the object stays in work RAM once the
 // item is in the bag -- and the second is a walk that failed.
+// A duel: how many times to try reaching somebody, how long to press through
+// their opening text, and how many turns to give the fight.
+//
+// The taps are the reason this is not one press: a trainer talked to answers
+// with a box and then an exclamation mark and then walks over, and a trainer
+// who spots you does all of that without being asked. Either way the battle
+// arrives several boxes after the button -- so this presses, then waits for
+// what it expected, which is the one lesson every menu in this app learned the
+// hard way.
+const DUEL_TRIES = 6, DUEL_START_TAPS = 40, DUEL_TURNS = 60;
+
 const NOTHING_THERE = 'nothing there to take';
 const OUT_OF_REACH = 'could not get to it';
 
@@ -979,6 +990,116 @@ export class Journey {
     }
     return { ok: true, got, missed,
              message: `nothing left to take here — tried ${order.length}` };
+  }
+
+  /**
+   * Fight a trainer standing on this map, and say what it paid.
+   *
+   * The trainers come from `collision.trainers`, which is both arrays at once:
+   * the game's own type byte for what an object is, and the live struct for
+   * whether it is here. That join is the whole of why this can be offered
+   * honestly -- a new save's Route 30 *places* three trainers and has spawned
+   * none of them, so a list read off the placements would have offered three
+   * walks to nobody.
+   *
+   * Re-read every attempt, and that is the difference from `takeHere`: a ball
+   * and a tree stay where the map put them, and a person does not. Measured on
+   * Route 30, a wanderer moved a tile while nothing else happened.
+   *
+   * Money is what says it went well. A trainer pays when they lose and a wild
+   * Pokemon never does, so the prize is the one number that distinguishes a won
+   * duel from every other way a battle can end -- the same rule as the shop,
+   * where money is the evidence of a purchase.
+   */
+  async duelHere({ tries = DUEL_TRIES } = {}) {
+    let reached = 0;
+    // Trainers that have been stood in front of and would not fight. Measured,
+    // and it is the difference between this working and not: standing at (3,28)
+    // on Route 30 there were two trainers in range -- the one at (2,28) already
+    // beaten, and the one at (5,23) not -- and every attempt went to the nearer
+    // one, so all six were spent on somebody who was never going to answer and
+    // the one who would was never approached.
+    //
+    // Keyed by tile rather than by identity because a tile is all there is: the
+    // structs carry no id that survives a walk out of range and back. A trainer
+    // who moves after refusing therefore gets asked once more, which is the
+    // safe way for this to be wrong.
+    const spent = new Set();
+    for (let attempt = 0; attempt < tries; attempt++) {
+      if (this.stopped) return { ok: false, message: 'stopped' };
+      // Above the walk rather than below it, because this is how most duels
+      // actually begin: a trainer with a sight range opens the battle itself
+      // the moment you cross their line, which on the way to one of them is
+      // the ordinary case and not a surprise.
+      const s = await this.snap();
+      if (s.inBattle && s.battleMode === this.state.e.trainerBattle) {
+        return this._fightDuel(s);
+      }
+      // Anything else in the way is not what was asked for, and is run from
+      // for the reason `escapeBattle` runs from it: a Pidgey met on the way to
+      // a trainer is a delay, not the job.
+      if (s.inBattle) await this.tasks.flee();
+      const wram = await this.settled();
+      if (!wram) continue;
+      const here = this.collision.trainers(wram)
+        .filter((o) => !spent.has(o.x + ',' + o.y));
+      if (!here.length) {
+        return { ok: false, won: false, prize: 0, message: reached
+          ? 'stood in front of them and no battle started — already beaten?'
+          : 'nobody near enough to fight' };
+      }
+      const at = this.collision.playerPos(wram);
+      const [pick] = [...here].sort(
+        (a, b) => Math.abs(a.x - at[0]) + Math.abs(a.y - at[1])
+                  - Math.abs(b.x - at[0]) - Math.abs(b.y - at[1]));
+      const from = await this._approach([pick.x, pick.y]);
+      if (!from) continue;
+      reached++;
+      await this.nav.step(from.face);
+      const met = await this._awaitDuel();
+      if (met) return this._fightDuel(met);
+      // Reached, asked, and nothing came of it. Written down before the next
+      // attempt so the one after this tries somebody else.
+      spent.add(pick.x + ',' + pick.y);
+    }
+    // Two answers, kept apart because only one of them is about the map: a
+    // trainer nothing can walk to is a route problem, and a trainer standing
+    // in front of you who will not fight has already been beaten -- Gen 2
+    // leaves them on the map for ever once they have lost, with the same type
+    // byte and the same sight range as one who has not, measured by beating
+    // one and reading both.
+    return { ok: false, won: false, prize: 0, message: reached
+      ? 'stood in front of them and no battle started — already beaten?'
+      : 'could not get to anyone here' };
+  }
+
+  /** Press until the battle the trainer owes us turns up. */
+  async _awaitDuel(taps = DUEL_START_TAPS) {
+    for (let i = 0; i < taps; i++) {
+      const s = await this.snap();
+      if (s.inBattle) return s;
+      await this.gb.press('A', 6, 12);
+    }
+    return null;
+  }
+
+  /** Fight the trainer battle that is on, and price it. */
+  async _fightDuel(before) {
+    const how = await this.tasks.fightBattle(
+      DUEL_TURNS, { heals: (this.title && this.title.heals) || null });
+    const after = await this.snap();
+    const prize = Math.max(0, (after.money || 0) - (before.money || 0));
+    const lead = after.party[0], was = before.party[0];
+    // The lead only. Which Pokemon gained what is the party card's business,
+    // and a line that lists six is not a line.
+    const grew = lead && was && lead.level > was.level
+      ? ` — Lv${was.level} to Lv${lead.level}` : '';
+    if (how !== 'won') {
+      return { ok: false, won: false, prize, message: `the battle ${how}` };
+    }
+    return { ok: true, won: true, prize,
+             message: prize ? `won the battle, ¥${prize}${grew}`
+                            : `won the battle${grew}` };
   }
 
   /** An item id as a name, where there is a ROM to ask. */
