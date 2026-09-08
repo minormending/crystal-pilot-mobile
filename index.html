@@ -8,6 +8,21 @@
 <meta name="theme-color" content="#16161c" id="themecolor">
 <link rel="manifest" href="./manifest.webmanifest">
 <title>crystal-pilot mobile</title>
+<!-- Pico CSS, MIT, vendored rather than linked from a CDN -- see
+     vendor/PICO-LICENSE. Cached in the service worker's shell for the same
+     reason every other file is: unlisted means served from the network, which
+     is invisible until somebody is on a train, and an offline app with no
+     stylesheet is worse than an ugly one.
+
+     The *classless* build on purpose. Pico's full build ships containers and a
+     grid, and this app's layout is a three-row grid tuned over thirty-seven
+     passes around a canvas that measures its own box. What is wanted from Pico
+     is the part that was actually missing: a type scale, control styling, and
+     a spacing rhythm. The classless build gives exactly that, to bare elements,
+     and imposes no layout.
+
+     Loaded *before* the app's own style block, so anything below wins. -->
+<link rel="stylesheet" href="./vendor/pico.classless.min.css">
 <style>
   /* Named by the job the colour does, not by where it happened to be used
      first. One --accent used to mean six unrelated things -- the primary
@@ -68,6 +83,68 @@
     --ink:#171a1f; --dim:#5c6470; --raise-ink:#4e5663;
     --action:#3358cc; --accent:#3a61d6;
     --ok:#1f7a47; --bad:#c0392f; --track:#d7dce4; --key:#dee5f0;
+  }
+
+  /* --- Pico, pointed at this app's palette -------------------------------
+     Pico ships its own colours and its own light/dark switch. Both are
+     replaced here rather than used, because the palette above is *measured*:
+     every pair in it is checked by `tools/check-app contrast` in both themes,
+     and one of them exists only because white on the old blue came to 3.80:1
+     and every Start button in the app failed. Adopting a second colour system
+     would mean two sources of truth for one question, and a check watching
+     only one of them.
+
+     So Pico supplies what was actually missing -- a type scale, control
+     styling, focus rings, a spacing rhythm -- and takes its colours from here.
+     Set on :root because the tokens on the right are themselves theme-swapped,
+     so one mapping serves both. */
+  :root {
+    --pico-background-color: var(--bg);
+    --pico-color: var(--ink);
+    --pico-muted-color: var(--dim);
+    --pico-muted-border-color: var(--line);
+    --pico-primary: var(--action);
+    --pico-primary-background: var(--action);
+    --pico-primary-border: var(--action);
+    --pico-primary-hover-background: var(--accent);
+    --pico-primary-hover-border: var(--accent);
+    --pico-primary-inverse: #fff;
+    --pico-primary-focus: color-mix(in srgb, var(--accent) 35%, transparent);
+    --pico-secondary: var(--dim);
+    --pico-secondary-background: var(--raise);
+    --pico-secondary-border: var(--line);
+    --pico-secondary-inverse: var(--ink);
+    --pico-card-background-color: var(--panel);
+    --pico-card-border-color: var(--line);
+    --pico-card-sectioning-background-color: var(--raise);
+    --pico-form-element-background-color: var(--raise);
+    --pico-form-element-border-color: var(--line);
+    --pico-form-element-color: var(--ink);
+    --pico-form-element-focus-color: var(--accent);
+    --pico-form-element-placeholder-color: var(--dim);
+    --pico-range-border-color: var(--track);
+    --pico-range-active-border-color: var(--accent);
+    --pico-range-thumb-color: var(--accent);
+    --pico-h1-color: var(--ink);
+    --pico-h2-color: var(--ink);
+    --pico-h3-color: var(--ink);
+    --pico-h4-color: var(--ink);
+    --pico-mark-background-color: var(--mark);
+    --pico-del-color: var(--bad);
+    --pico-ins-color: var(--ok);
+    --pico-border-color: var(--line);
+    --pico-code-background-color: var(--raise);
+    --pico-code-color: var(--ink);
+
+    /* Tighter than Pico's document rhythm on purpose. This is a control panel
+       on a phone with a Game Boy screen already taking half of it, not an
+       article. */
+    --pico-spacing: 0.75rem;
+    --pico-form-element-spacing-vertical: 0.5rem;
+    --pico-form-element-spacing-horizontal: 0.75rem;
+    --pico-border-radius: 10px;
+    --pico-typography-spacing-vertical: 0.75rem;
+    --pico-line-height: 1.45;
   }
   /* Follows the phone unless someone has said otherwise. */
   @media (prefers-color-scheme: light) {

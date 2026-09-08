@@ -8,7 +8,7 @@
 const CACHE = 'crystal-pilot-v163';
 const SHELL = [
   './', './index.html', './manifest.webmanifest', './icon.svg',
-  './vendor/wasmboy.umd.js',
+  './vendor/wasmboy.umd.js', './vendor/pico.classless.min.css',
   './app/main.js', './gbcore/cartridge.js', './gbcore/gb.js', './gen2/engine.js', './gen2/state.js',
   './gen2/symbols.js', './gen2/tasks.js', './gbcore/saves.js',
   './gbcore/taskbase.js', './gen2/menus.js', './gen2/battle.js', './gen2/jobs.js',

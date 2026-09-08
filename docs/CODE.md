@@ -3474,7 +3474,7 @@ This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ 33c3ac723a55 -->
+<!-- covers: app/main.js index.html @ 98cd3c1a7106 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -3512,6 +3512,16 @@ flowchart TD
     M --> PA["<b>pad</b><br/>.gamepad → .dpad .face · .menus"]
     ST -. "same area, higher z-index" .- SH
 ```
+
+**The stylesheet is Pico's; the colours and the layout are not.** [Pico CSS
+v2.1.1](https://picocss.com) (MIT) is vendored into `vendor/` and cached in the
+shell — a CDN link would be a stylesheet served from the network in an
+offline-first app. The *classless* build, so it styles bare elements and imposes
+no containers over a grid tuned around a self-measuring canvas. Its forty-odd
+colour variables are mapped onto the palette below rather than used, because
+that palette is contrast-checked in both themes and two colour systems would be
+two answers to one question. See [The
+interface](INTERFACE.md#the-stylesheet-is-somebody-elses-and-the-colours-are-not).
 
 **The machine is furniture; only the middle moves.** `main` is a three-row grid
 — the screen, the status line, the pad — sized in `dvh`, and the page itself

@@ -698,6 +698,39 @@ The control is three-state — auto, light, dark — and lives in the card with
 how fast the game is running; a theme is neither, and it is set once. Putting it
 there also overflowed 375px, wrapping the title and truncating the location.
 
+## The stylesheet is somebody else's, and the colours are not
+
+The app had no type scale, no control styling worth the name, and pale grey
+lozenges for a d-pad. **[Pico CSS](https://picocss.com) v2.1.1, MIT**, supplies
+the missing half: a type scale, real form controls, focus rings and a spacing
+rhythm.
+
+Three decisions in that, and each is a constraint of this app rather than a
+preference.
+
+**Vendored, not linked from a CDN.** This is an offline-first PWA whose service
+worker caches a shell list. An unlisted stylesheet is served from the network,
+which is invisible until somebody is on a train — and an offline app with no
+stylesheet is worse than an ugly one. So it sits in `vendor/` beside WasmBoy,
+with its licence, and is in the shell.
+
+**The classless build**, 71KB against 83KB. Pico's full build ships containers
+and a grid; the layout here is a three-row grid tuned around a canvas that
+measures its own box. The classless build styles bare elements and imposes no
+layout, which is exactly the half that was wanted.
+
+**And Pico's colours are replaced rather than used.** The palette above is
+measured — every pair checked in both themes, and one token exists only because
+white on the old blue came to 3.80:1 and every Start button failed. Two colour
+systems would be two sources of truth for one question, with the check watching
+one of them. So the `--pico-*` variables are mapped onto the tokens that already
+exist, on `:root`, because those tokens are themselves theme-swapped and one
+mapping serves both.
+
+Which leaves the honest summary: **Pico does the typography and the controls,
+this file does the colour and the layout**, and the contrast check is what makes
+the division safe to maintain.
+
 ## Keeping this page honest
 
 This is the page that went stale. It described a column-flex layout that
@@ -709,4 +742,4 @@ So this page carries a marker naming the files it describes and the hash they
 had when it was last read against them. `tools/docs-check` reports it when they
 move, and the pre-commit hook blocks on that report.
 
-<!-- covers: index.html app/main.js app/rows.js @ c0bced076667 -->
+<!-- covers: index.html app/main.js app/rows.js @ 1dfe3a72db27 -->
