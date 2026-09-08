@@ -40,6 +40,7 @@ and the code disagree, the code is right and the section is a bug — see
 6. [Battles](#6-battles)
 7. [Catching something](#7-catching-something)
    · [Four that act on where you are](#7a-four-that-act-on-where-you-already-are)
+   · [The counter, and the money it takes](#7d-the-counter-and-the-money-it-takes)
    · [Saving, and getting the save out](#7b-saving-and-getting-the-save-out)
    · [Slots, undo, and bringing a save in](#7c-slots-undo-and-bringing-a-save-in)
 8. [The errands](#8-the-errands)
@@ -424,7 +425,7 @@ watching.
 
 ### `symbols.js` — where things live
 
-<!-- covers: gen2/symbols.js @ 253e7d782f10 -->
+<!-- covers: gen2/symbols.js @ b3d26488c0e3 -->
 
 Parses the `.sym` file into `name → { bank, addr }`. First definition wins;
 later duplicates are aliases and locals.
@@ -452,7 +453,7 @@ enforces it, so it is a fact about the build rather than a habit.
 
 ### `state.js` — what the game is doing right now
 
-<!-- covers: gen2/state.js @ 28f487c581c1 -->
+<!-- covers: gen2/state.js @ 458defb6dc4e -->
 
 One snapshot, many answers: `inBattle`, `party`, `pos`, `onGrass`,
 `worldLoaded`, `menu`, `balls`, `items`, each party member's `status`, and the
@@ -541,7 +542,7 @@ and in `bootstrap.js`, with nothing able to notice if they drifted.
 
 ### `romdata.js` — what the cartridge knows
 
-<!-- covers: gen2/romdata.js @ f310e10d366a -->
+<!-- covers: gen2/romdata.js @ a34fbae90ae7 -->
 
 Species names, item names, wild-encounter tables, move power. All read out of
 the ROM, not shipped as a copy, so they cannot drift from the build being driven.
@@ -1013,7 +1014,7 @@ eight kilobytes a full snapshot copies, which is worth keeping distinct.
 
 ## 6. Battles
 
-<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 42dcc5d59b92 -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 410f4e8b846f -->
 
 ### Which move, and which question
 
@@ -1467,7 +1468,7 @@ fainted.
 
 ## 7. Catching something
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ b4a1a3f6ac1f -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ afe80396c6d4 -->
 
 Catching is the most involved loop, because a Poké Ball's odds turn on how much
 HP is left. Throwing at a full-health target is mostly throwing balls away.
@@ -1769,9 +1770,86 @@ to take here — tried 2* and stayed green.
 
 </details>
 
+## 7d. The counter, and the money it takes
+
+<!-- covers: gen2/menus.js gen2/state.js titles/crystal.js @ 0dbe57bea731 -->
+
+Everything the pilot could do until now used what it found. **Shop** walks to a
+mart and buys, which is the first thing it does that spends rather than
+collects.
+
+```mermaid
+flowchart TD
+    S["Shop"] --> T["travel to the town,<br/>through the door, to the counter"]
+    T --> G["press A: the clerk's greeting"]
+    G --> M["BUY / SELL / QUIT — 3 items at row 0"]
+    M --> L["the stock — 4 at row 3, wCurItem says which"]
+    L --> H["how many — 4 at row 15"]
+    H --> C["that'll be ¥300. OK? — 2 at row 7"]
+    C --> D["two text boxes, then the stock again"]
+    D --> L
+```
+
+Every box measured in Cherrygrove's Mart, buying two POTIONs at 300 each and
+watching the money fall 3000 → 2700 → 2400 while the pocket went 1 → 2 → 3.
+
+**The money is the evidence.** Not the presses landing, and not the pocket: the
+pocket lags a *use* — recorded three passes ago — and there is no reason to
+trust it more here, while the money moved on the same read as the item arriving
+in every measurement taken. `wMoney` is **three bytes, big-endian, plain
+binary**: a new game reads `[0x00, 0x0b, 0xb8]`, which is 3000. Worth stating,
+because the bytes next door are *not* — `wMartItem1BCD` and its siblings hold
+the prices as BCD, so the obvious generalisation is wrong in the direction that
+looks plausible.
+
+One item at a time, deliberately. The quantity box takes UP to raise the count,
+and getting that wrong buys ninety-nine of something; repeating a confirmed
+single purchase costs a few frames and cannot overshoot.
+
+<details>
+<summary><b>Advanced detail:</b> three ways a box can lie about being ready</summary>
+
+Driving this found the same lesson three times over, in three different shapes,
+and all three produced *honest reports of a job barely done* rather than
+anything that looked broken.
+
+- **A box being redrawn has the wrong shape.** The quantity box reads `4/15`
+  settled and **`4/0` mid-redraw**. A check that looked once landed on the
+  transient shape, decided the box was wrong, and reported *bought nothing* from
+  inside a working shop — and the first probe of the sequence caught that frame
+  while the second did not, which is what a race looks like in a log.
+  `_awaitBox` waits for the shape.
+- **A purchase is followed by two text boxes, not one.** Confirm, A, the price
+  line, A, the thanks, A, and only then the stock list. Pressing once and
+  waiting for the list stopped one box short: **one potion of four, reported
+  accurately.** `_pressUntilBox` presses until the shape arrives.
+- **And pressing while waiting presses into the thing you are waiting for.**
+  A press that lands on the stock list mid-redraw picks an item. So every press
+  is followed by a patient wait rather than a look — which the fake that models
+  the redraw caught *before the cartridge did*, and that is the first time in
+  this log the test found a hazard rather than recording one.
+
+`itemIdOf` is here for the same reason the shop is: it is the mirror of
+`itemName`, and the one question the app had never needed to ask. Everything
+until now started from an id the game had already given it, and buying starts
+from a *name* — the title says `potion` and the stock walk needs the number. The
+table is scanned once and cached, and the scan stops at the first entry with no
+name, which is what reading past the table gives.
+
+Where the mart is, and how to reach its counter, is the **title's** to say —
+`stand` and `face` rather than the clerk's tile, because a mart counter is a
+*wall*: measured in Cherrygrove, the clerk sits at (1,3) and the only place you
+can talk to it from is (3,3) facing LEFT, two tiles away across a corner.
+
+</details>
+
+**Measured end to end**, from where the bootstrap leaves you on Route 29 with
+¥3000 and one potion: it travelled to Cherrygrove, went in, walked to the
+counter and came away with **five potions and ¥1800**, in 49 seconds.
+
 ## 7b. Saving, and getting the save out
 
-<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 42dcc5d59b92 -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 410f4e8b846f -->
 
 ```mermaid
 flowchart TD
@@ -3200,7 +3278,7 @@ recorded at all, so the kept battery was restored into whatever ROM was picked
 next; and `pickKey` was *the only record, if there is exactly one*, which wrote
 this cartridge's save into the previous cartridge's record. Both failed
 silently, and both were on the paths nobody presses — see
-[Twenty-five audits](PROVEN.md#twenty-five-audits-and-how-each-defect-was-actually-found)
+[Twenty-six audits](PROVEN.md#twenty-six-audits-and-how-each-defect-was-actually-found)
 for why that is not a coincidence.
 
 `patchMeta` merges fields into the `meta` record, and it used to do that as a

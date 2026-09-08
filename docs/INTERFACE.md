@@ -216,6 +216,17 @@ decides what will fix it: a potion does nothing about poison, and poison goes on
 doing damage while you walk. HP still comes first where both are true, since HP
 is the thing that ends a job.
 
+**Shop is the seventh offer, and the only one about what you do not have yet.**
+Every other row reads the party, the bag or the map; this one reads the *wallet*
+and the gap between what is carried and what will be wanted. It sits last, below
+Travel, for that reason: a place is still there in a minute, and a thing you
+have not run out of yet is less urgent still.
+
+It says the money rather than the goods — *¥3,000 in hand · 4 more potion* —
+because the money is the finite thing. The app has counted knockouts since long
+before it could read the wallet, and a knockout in Gen 2 takes half of it; that
+number belonged on screen.
+
 **Take is the sixth offer, and the only one whose whole reason to exist is
 read off the map you are standing on.** Every other row is about your party, your
 bag or the graph; this one is about `wMapObjects`. It says what is *placed* here

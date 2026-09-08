@@ -608,6 +608,36 @@ against the Center's 53, and healing a fainted party took 1.8 seconds.
 Below about x=25 the answer swings back to Cherrygrove, which is the point of
 computing it rather than picking a favourite.
 
+## Shop: buying more of what runs out
+
+Everything the pilot could do until now used what it found — the potion in your
+bag, the berry on the tree, the ball in the grass. **Shop** goes and buys.
+
+The row says what you have and what it will get: *¥3,000 in hand · 4 more
+potion*. Press it and the pilot walks to the nearest mart it has been told
+about, in through the door, up to the counter, and buys until you have five —
+then tells you what it cost: *bought 4 for 1200 — 1800 left*.
+
+**Measured**, from where the pilot's own bootstrap leaves you on Route 29 with
+¥3,000 and one potion: Cherrygrove and back to the counter, **five potions and
+¥1,800**, in 49 seconds.
+
+It buys one at a time on purpose. The quantity box in a Gen 2 mart counts
+upward, and getting that wrong buys ninety-nine of something; buying one, four
+times, cannot overshoot.
+
+**And the money is finally on screen.** The pilot has been counting knockouts
+since long before it could read your wallet — and a knockout in this game takes
+**half of it**. That number is in the row now, which is the point: it is the one
+thing you have a finite amount of.
+
+Berries are skipped when shopping, because no mart sells them — they grow on the
+trees the Take row finds. So the shop asks for the cheapest thing a shop
+actually has.
+
+A cartridge nobody has described has no mart written down, so the row says so
+and is not offered — the same way it has no named maps and no scripted intro.
+
 ## Saving, and getting the save off the phone
 
 The pilot saves the game the way a person does — `START → SAVE → YES` — and

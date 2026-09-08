@@ -36,6 +36,11 @@ const PUNCTUATION = {
 // table rather than a size in it, and a cartridge that used a different one
 // would need a different scan, not a different number.
 const TABLE_END = 0xff;
+// How far to scan the item table when asked for an id by name. Crystal has 250
+// items; the scan stops early at the first entry with no name, which is what
+// reading past the table gives. A bound rather than a count, so it is here
+// rather than in the engine profile.
+const ITEM_SCAN_LIMIT = 256;
 
 /** The game's own character encoding, as far as names use it. */
 export function decodeText(bytes) {
@@ -179,6 +184,33 @@ export class RomData {
     return !this.e.lethalEffects.includes(m.effect);
   }
 
+
+  /**
+   * The id of an item, by folded name, or null.
+   *
+   * The mirror of `itemName`, and the one question the app had never needed to
+   * ask: everything until now started from an id the game had already given it.
+   * Buying starts from a *name* -- the title says "potion", and the pack walk
+   * needs the number -- so the table is scanned once and cached.
+   *
+   * Bounded by the same `speciesCount`-style honesty as everything else here:
+   * `itemName` walks terminators and answers '' past the end of the table, and
+   * that empty answer is the stop.
+   */
+  itemIdOf(name) {
+    const want = normalise(name || '');
+    if (!want) return null;
+    if (!this._itemIds) {
+      this._itemIds = new Map();
+      for (let id = 1; id <= ITEM_SCAN_LIMIT; id++) {
+        const got = this.itemName(id);
+        if (!got) break;
+        const key = normalise(got);
+        if (!this._itemIds.has(key)) this._itemIds.set(key, id);
+      }
+    }
+    return this._itemIds.get(want) || null;
+  }
 
   /**
    * The cheapest thing in a pocket that matches a list of names, or null.

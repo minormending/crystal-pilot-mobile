@@ -117,3 +117,28 @@ test('the party reader carries it', async (t) => {
   t.eq(s.party[1].status, [], 'and the well one');
   t.eq(s.party[0].hp, 20, 'at full HP, which is the case the app used to miss');
 });
+
+// --- the wallet --------------------------------------------------------------
+
+test('money is three bytes, big-endian, plain binary', async (t) => {
+  // Measured on a new game rather than inferred: [0x00, 0x0b, 0xb8] reads 3000,
+  // and 3000 is what Crystal starts you with. Worth pinning because the bytes
+  // next door are *not* the same encoding -- `wMartItem1BCD` and its siblings
+  // hold the mart's prices as BCD, so the obvious generalisation is wrong.
+  const sym = symbols();
+  const state = new GameState(sym);
+  const read = (money) => state.read(worldRam(sym, { money })).money;
+  t.eq(read(3000), 3000, 'a new game');
+  t.eq(read(0), 0, 'and a broke one');
+  t.eq(read(999999), 999999, 'up to the cap the game enforces');
+  t.eq(read(300), 300, 'and the price of a potion');
+});
+
+test('an engine profile with fewer money bytes reads fewer', async (t) => {
+  // The field exists so a hack that widened or narrowed the wallet says so
+  // rather than being read at Crystal's width.
+  const sym = symbols();
+  const two = new GameState(sym, { ...new GameState(sym).e, moneyBytes: 2 });
+  const s = two.read(worldRam(sym, { money: 0x0bb8 }));
+  t.eq(s.money, 0x000b, 'the top two of the three');
+});

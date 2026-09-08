@@ -98,3 +98,55 @@ test('the name is folded, so case and the accent cost nothing', async (t) => {
        'and the accent folds the way it does for a ball');
 });
 
+
+// --- an item's id, from its name ---------------------------------------------
+
+/** A RomData over a packed, "@"-terminated item table. */
+function itemTable(names) {
+  const bytes = [];
+  for (const n of names) {
+    for (const ch of n) {
+      if (ch === ' ') bytes.push(0x7f);
+      else bytes.push(0x80 + ch.charCodeAt(0) - 65);
+    }
+    bytes.push(0x50);
+  }
+  // Past the end: a zero, which `decodeText` turns into '' via the terminator
+  // check falling through to nothing readable.
+  bytes.push(0x50);
+  const gb = { romByte: (bank, addr) => bytes[addr] ?? 0x50 };
+  const symbols = { has: () => true, bank: () => 0, addr: () => 0 };
+  return new RomData(symbols, gb, []);
+}
+
+test('an item id is found by folded name', async (t) => {
+  // The mirror of `itemName`, and the one question the app had never needed to
+  // ask: everything until now started from an id the game had already given it.
+  // Buying starts from a name -- the title says "potion" and the stock walk
+  // needs the number.
+  const rd = itemTable(['MASTER BALL', 'ULTRA BALL', 'POTION']);
+  t.eq(rd.itemIdOf('potion'), 3, 'the third entry');
+  t.eq(rd.itemIdOf('POTION'), 3, 'case folds');
+  t.eq(rd.itemIdOf('master ball'), 1, 'and the first');
+});
+
+test('a name the table does not have is null rather than a guess', async (t) => {
+  const rd = itemTable(['POTION']);
+  t.eq(rd.itemIdOf('full restore'), null, 'not stocked here');
+  t.eq(rd.itemIdOf(''), null, 'nor is nothing a name');
+  t.eq(rd.itemIdOf(null), null, 'nor is null');
+});
+
+test('the scan stops at the end of the table rather than reading past it',
+     async (t) => {
+  // `itemName` answers '' past the end, and that empty answer is the stop. A
+  // scan that carried on would map whatever table follows onto item ids -- the
+  // same failure `speciesCount` exists to prevent one field over.
+  const rd = itemTable(['POTION', 'ANTIDOTE']);
+  t.eq(rd.itemIdOf('potion'), 1, 'the real entries are found');
+  t.eq(rd.itemIdOf('antidote'), 2, 'both of them');
+  // Ask twice: the second call reads the cache, and a cache built by a runaway
+  // scan would be enormous rather than two entries.
+  t.eq(rd.itemIdOf('antidote'), 2, 'and the cache agrees');
+  t.eq(rd._itemIds.size, 2, 'two entries, not two hundred and fifty-six');
+});

@@ -28,7 +28,7 @@ flowchart LR
 
 Every step of that is the first time it has been watched on a cartridge since
 the battle and job code was rewritten, and one of them failed the first time
-round — see [the eleventh pass](#twenty-five-audits-and-how-each-defect-was-actually-found).
+round — see [the eleventh pass](#twenty-six-audits-and-how-each-defect-was-actually-found).
 
 Proven, and visible in [the screenshot on the front page](../README.md):
 
@@ -332,7 +332,7 @@ second, which is there so the core's own waits finish, not to run a game.
   candidates and returned true standing three tiles clear of any. It checks the
   tile underfoot now.
 
-## Twenty-five audits, and how each defect was actually found
+## Twenty-six audits, and how each defect was actually found
 
 Everything above was watched happening. This section was the exception, and the
 exception was the point of it: after the ROM-hack work shipped, eleven passes
@@ -447,6 +447,10 @@ exactly why nothing failed.
 | 25 | and the grind never healed for one, so poison ticked until it looked like damage | walking with poison | reading the profile back |
 | 25 | the cure ran *after* the HP check, so a well-but-poisoned party returned early | the one party it exists for | **a test written before the code** |
 | 25 | and `useItemOn` judged success by HP, which no cure moves | an antidote | measuring the fix |
+| 26 | `wMoney` unread, while the app asserted a knockout costs half of it | asking what a claim needs | **reading the profile back, again** |
+| 26 | a box being redrawn has the wrong shape, so one look reported "bought nothing" | driving a fifth menu | **driving a menu it had never opened** |
+| 26 | a purchase is two text boxes, so pressing once bought one of four | the same, once more | driving a menu it had never opened |
+| 26 | and pressing while waiting presses *into* the box being waited for | a fake that models the redraw | **the test, before the cartridge** |
 
 Five things in that table are worth more than the individual rows.
 
@@ -457,12 +461,12 @@ device, a second cartridge, a second Pokémon. What it measures is how much of
 the world you have to *arrange*, not how much you have to own: the fifth pass
 needed no hardware at all, only a party with a corpse in slot one.
 
-**Two of the eighty-two were caught by a check**, and only after the fix
+**Two of the eighty-six were caught by a check**, and only after the fix
 had decided what to look for: the wiring group named the four modules still
 importing constants that had just been deleted. One more was caught by a *test*,
 and only because the test hung — the obvious `continue` for the party prompt
 advanced nothing in a loop bounded by balls thrown. That is the honest weight to
-give this repository's seventeen check groups and 329 tests: they hold a fix
+give this repository's seventeen check groups and 344 tests: they hold a fix
 down, and they catch the fix that is itself wrong. They do not find the fault.
 
 **Measuring also rules things out, which is half of what it is for.** The
@@ -1557,6 +1561,72 @@ Sleep is worth one more line, because it is the one the decode could have got
 wrong quietly. **It is a counter, not a flag**: the low three bits hold the turns
 remaining, so `byte & 0x04` is false of a Pokémon asleep for three more turns.
 The mask is `0x07`, and a test pins 1, 3 and 7 as all meaning asleep.
+
+### A twenty-sixth pass: the first thing the pilot spends
+
+Every capability so far used what the cartridge gave: the potion in the bag, the
+berry on the tree, the ball in the grass. Shop is the first that *spends* — and
+spending needs a number the app had never read.
+
+**`wMoney` was unread while the app asserted what it costs.** The grind has
+counted knockouts since the seventeenth pass, and the comment beside that count
+says a knockout takes half your money. It could not show the number. Which is
+last pass's question again — *what does the app claim that it cannot see?* — and
+it keeps paying:
+
+| | encoding | measured |
+| --- | --- | --- |
+| `wMoney` | three bytes, big-endian, **plain binary** | `[0x00, 0x0b, 0xb8]` on a new game — 3000 |
+| `wMartItem1BCD` | the mart's prices, **BCD** | the name says so, and it is the trap |
+
+Two adjacent fields, two encodings. A reader that inferred one from the other
+would be wrong in the direction that looks plausible.
+
+### Three ways a box lies about being ready
+
+The shop is five boxes deep, and driving it found the same lesson three times in
+three different shapes. What makes them worth writing down together is that
+**all three produced an honest report of a job barely done**, rather than
+anything that looked broken:
+
+```mermaid
+flowchart TD
+    A["look once"] --> B["the box is mid-redraw:<br/>4/0 rather than 4/15"]
+    B --> C["<i>bought nothing</i><br/>from inside a working shop"]
+    D["press once, then wait"] --> E["a purchase is <b>two</b> text boxes"]
+    E --> F["<i>bought 1 for 300</i><br/>— one of four, accurately"]
+    G["press while waiting"] --> H["the press lands <b>in</b> the stock list"]
+    H --> I["picks an item nobody asked for"]
+```
+
+The third is the one worth the pass, because of *how* it was found. The fake
+that models the redraw — added to make the second defect's test bite — produced
+the third defect immediately, in a test, **before the cartridge ever saw it**.
+Twenty-five passes of this log say some version of *the cartridge found it and
+the tests held it down*. This is the first entry that runs the other way.
+
+The rule all three want is one sentence: **press, then wait for what you
+expected** — and never look for a box and press in the same breath. That is
+`_packMoved`'s lesson from the eleventh pass, arriving in its third and fourth
+callers.
+
+### What it does now
+
+From where the bootstrap leaves you on Route 29 with ¥3,000 and one potion:
+travel to Cherrygrove, in through the Mart door, to the tile the profile says the
+counter can be reached from, and back out with **five potions and ¥1,800** — 49
+seconds, four purchases at 300 each, every one confirmed by the wallet rather
+than by the presses landing.
+
+One item at a time on purpose: the quantity box counts *upward*, and getting
+that wrong buys ninety-nine of something, while buying one four times cannot
+overshoot.
+
+And one detail that had to be declared rather than derived. A mart counter is a
+**wall**: the clerk sits at (1,3) in Cherrygrove and the only tile you can talk
+to it from is (3,3) facing LEFT — two away, across a corner. So the title says
+`stand` and `face` rather than the clerk's position, which is the opposite of how
+a healer is described, and the difference is measured rather than assumed.
 
 ## The part that had to be redesigned
 

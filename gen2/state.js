@@ -106,6 +106,7 @@ export class GameState {
       balls: symbols.addr('wBalls'),
       numItems: symbols.addr('wNumItems'),
       items: symbols.addr('wItems'),
+      money: symbols.addr('wMoney'),
       curPocket: symbols.addr('wCurPocket'),
       curItem: symbols.addr('wCurItem'),
       windowStack: symbols.addr('wWindowStackSize'),
@@ -187,6 +188,7 @@ export class GameState {
       party: this.party(wram),
       balls: this.balls(wram),
       items: this.items(wram),
+      money: this.money(wram),
       curPocket: b(wram, a.curPocket),
       curItem: b(wram, a.curItem),
       windowOpen: b(wram, a.windowStack) > 0,
@@ -198,6 +200,27 @@ export class GameState {
       menuItems: b(wram, a.menuItems),
       menuTop: b(wram, a.menuTop),
     };
+  }
+
+  /**
+   * What is in the wallet.
+   *
+   * Three bytes, big-endian, plain binary -- measured, not inferred: a new game
+   * reads `[0x00, 0x0b, 0xb8]`, which is 3000, and 3000 is what Crystal starts
+   * you with. The bytes next door hold the *mart's prices* as BCD, so this is
+   * one of those places where the obvious generalisation is wrong.
+   *
+   * Read for the first time in twenty-six passes, and the app has been
+   * asserting what it costs the whole time: every knockout takes half of it,
+   * and the grind has counted knockouts since the seventeenth pass without ever
+   * saying what one was worth.
+   */
+  money(wram) {
+    let out = 0;
+    for (let i = 0; i < (this.e.moneyBytes || 3); i++) {
+      out = (out << 8) | b(wram, this.a.money + i);
+    }
+    return out;
   }
 
   /**

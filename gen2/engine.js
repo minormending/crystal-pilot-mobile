@@ -178,6 +178,39 @@ export const gen2 = {
     partyPick: { items: 4, top: 0 },
   },
 
+  // --- money, and the counter it is spent at -------------------------------
+  // wMoney is **three bytes, big-endian, plain binary** -- measured on a new
+  // game: [0x00, 0x0b, 0xb8] is 3000, which is exactly what Crystal starts you
+  // with. Worth stating because the bytes next door are not: `wMartItem1BCD`
+  // and its siblings hold the *prices* as BCD, so a reader that inferred one
+  // encoding from the other would be wrong in the direction that looks
+  // plausible.
+  moneyBytes: 3,
+
+  // The five boxes between the clerk and a bought item, in the order they
+  // appear. Measured in Cherrygrove's Mart, buying two POTIONs at 300 each and
+  // watching the money fall 3000 -> 2700 -> 2400:
+  //
+  //   menu     BUY / SELL / QUIT, three items at row 0, BUY on row 1
+  //   list     what the mart stocks, four items at row 3; wCurItem says which
+  //   howMany  the quantity box, four items at row 15
+  //   confirm  "that'll be N. OK?", two items at row 7, YES on row 1
+  //   done     the thanks, two items at row 0; A returns to the list
+  //
+  // `confirm` is the *third* box in this app measuring two items at row 7 --
+  // `learnMove` and `battlePack.use` are the others -- and `done` is the same
+  // shape as `battlePack.applied`. Three boxes sharing a signature is fine and
+  // only because the contexts cannot overlap: a shop box exists only while the
+  // shop is being driven, which is a claim the code has to keep rather than a
+  // property it gets.
+  shop: {
+    menu: { items: 3, top: 0 },
+    list: { items: 4, top: 3 },
+    howMany: { items: 4, top: 15 },
+    confirm: { items: 2, top: 7 },
+    done: { items: 2, top: 0 },
+  },
+
   // --- the intro's NAME menu ----------------------------------------------
   // ChrisNameMenuHeader: five items drawn in the top-left ten columns, matched
   // on shape because the cursor still holds whatever the gender prompt left in

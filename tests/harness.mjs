@@ -188,6 +188,7 @@ const WRAM_NAMES = [
   ['wEnemyMonSpecies', 1], ['wEnemyMonLevel', 1], ['wEnemyMonHP', 2],
   ['wEnemyMonMaxHP', 2], ['wBattleMonHP', 2], ['wBattleMonMaxHP', 2],
   ['wNumBalls', 1], ['wBalls', 40], ['wNumItems', 1], ['wItems', 40],
+  ['wMoney', 3],
   ['wCurPocket', 1], ['wCurItem', 1],
   ['wWindowStackSize', 1],
   // The map, so a CollisionMap can be built at all. wOverworldMapBlocks is the
@@ -291,7 +292,8 @@ const w16 = (wram, addr, v) => {
 export function worldRam(sym, {
   party = [], battleMode = 0, map = [24, 3], pos = [5, 5], mapStatus = 2,
   scriptMode = 0, tile = 0, menu = [0, 0], battleCursor = 0, windowStack = 0,
-  enemy = null, active = null, balls = [], items = [], curPocket = 0, curItem = 0,
+  enemy = null, active = null, balls = [], items = [], money = 0,
+  curPocket = 0, curItem = 0,
   menuItems = 0, menuTop = 0, menuRight = 0,
   // The map's size in *blocks*; a block is two tiles each way. `objects` are
   // MAPOBJECT entries, whose coordinates the cartridge stores four higher than
@@ -353,6 +355,11 @@ export function worldRam(sym, {
     w8(wram, sym.addr('wBalls') + i * 2, id);
     w8(wram, sym.addr('wBalls') + i * 2 + 1, qty);
   });
+  // Three bytes, big-endian, plain binary -- the encoding measured on a new
+  // game, where [0x00, 0x0b, 0xb8] reads 3000.
+  w8(wram, sym.addr('wMoney'), (money >> 16) & 0xff);
+  w8(wram, sym.addr('wMoney') + 1, (money >> 8) & 0xff);
+  w8(wram, sym.addr('wMoney') + 2, money & 0xff);
   w8(wram, sym.addr('wNumItems'), items.length);
   items.forEach(([id, qty], i) => {
     w8(wram, sym.addr('wItems') + i * 2, id);
