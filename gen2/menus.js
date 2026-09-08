@@ -42,6 +42,11 @@ const BOX_TRIES = 8;
 // this is inside a loop that will press again -- the waiting is only to avoid
 // pressing into a box that is arriving.
 const PRESS_SETTLES = 3;
+// How many times to re-press a menu direction that did not move the cursor.
+// Three, because the press that gets dropped is the first one -- the menu is
+// not interactive the instant a cursor reads non-zero -- and by the second the
+// box has always been up.
+const MENU_STEP_TRIES = 3;
 
 export function withMenus(Base) {
   // Named, so a stack trace says which of these a frame came from.
@@ -219,9 +224,21 @@ export function withMenus(Base) {
    */
   async _openPack(tries = 8) {
     if (!await this._openStartMenu()) return false;
+    const shape = this.state.e.field && this.state.e.field.pack;
+    // Ask the screen first. PACK is the row that says PACK, which is a fact
+    // about the menu rather than about how far the game has got -- and the
+    // shape is still checked afterwards, because a row that says the right
+    // thing and opens the wrong box is exactly the kind of thing this app
+    // stopped believing several passes ago.
+    if (await this._driveToSaying('PACK')) {
+      await this.push('A', 6, 10);
+      await this.step(SETTLE_PACK);
+      if (this._isBox(await this.snap(), shape)) return true;
+      await this.closeMenus();
+      if (!await this._openStartMenu()) return false;
+    }
     const count = await this._menuRowCount();
     if (!count) return false;
-    const shape = this.state.e.field && this.state.e.field.pack;
     for (let row = 1; row <= Math.min(count, tries); row++) {
       if (!await this._openStartMenu()) return false;
       if (!await this._driveMenuCursor(row, count)) continue;
@@ -257,7 +274,7 @@ export function withMenus(Base) {
 
     if (!await this._openPack()) {
       await this.closeMenus();
-      return { ok: false, message: 'could not open the pack' };
+      return { ok: false, message: await this.saying('could not open the pack') };
     }
     // The pack remembers which pocket it was left in, so this is a walk to the
     // right one rather than an assumption about where it opens.
@@ -285,13 +302,15 @@ export function withMenus(Base) {
     }
     if (s.curItem !== itemId) {
       await this.closeMenus();
-      return { ok: false, message: 'could not find it in the pack' };
+      return { ok: false,
+               message: await this.saying('could not find it in the pack') };
     }
 
     await this.push('A', 6, 10);
     if (!await this._awaitBox(e.itemUse)) {
       await this.closeMenus();
-      return { ok: false, message: 'the USE box never appeared' };
+      return { ok: false,
+               message: await this.saying('the USE box never appeared') };
     }
     // USE is row 1 and the cursor opens on it, so this is a confirm rather than
     // a walk -- but it is asked for rather than assumed, because GIVE and TOSS
@@ -303,7 +322,8 @@ export function withMenus(Base) {
     await this.push('A', 6, 10);
     if (!await this._awaitBox(e.partyPick)) {
       await this.closeMenus();
-      return { ok: false, message: 'the party never came up' };
+      return { ok: false,
+               message: await this.saying('the party never came up') };
     }
     if (!await this._driveMenuCursor(on + 1, 6)) {
       await this.closeMenus();
@@ -606,6 +626,16 @@ export function withMenus(Base) {
     await this.closeMenus(3);
     if (!await this._openStartMenu()) return false;
 
+    // The screen knows which row says SAVE, and that is worth asking before
+    // any counting: it is right whether or not the POKeDEX row exists yet, and
+    // it does not care that the menu grows. The count below is kept for the
+    // cartridge whose symbol file does not name the tilemap -- and for the day
+    // this reads the word and the row turns out to open something else.
+    if (await this._trySaveByName()) return true;
+    await this.closeMenus(4);
+    await this.step(SETTLE_FRAMES);
+    if (!await this._openStartMenu()) return false;
+
     const count = await this._menuRowCount();
     if (count < 3) return false;
     // The last three rows are always SAVE, OPTION, EXIT, so SAVE is count-2
@@ -635,7 +665,18 @@ export function withMenus(Base) {
   async _trySaveRow(row, count) {
     if (!await this._openStartMenu()) return false;
     if (!await this._driveMenuCursor(row, count)) return false;
+    return this._confirmSave();
+  }
 
+  /** The row that says SAVE, wherever the menu has put it. */
+  async _trySaveByName() {
+    if (!await this._openStartMenu()) return false;
+    if (!await this._driveToSaying('SAVE')) return false;
+    return this._confirmSave();
+  }
+
+  /** Press A on whatever SAVE row is selected, and answer the box behind it. */
+  async _confirmSave() {
     await this.push('A', 5, 10);
     await this.step(SAVE_PROMPT_FRAMES);
 
@@ -698,22 +739,117 @@ export function withMenus(Base) {
    * Bails out if the player turns out to be walking -- that means the menu was
    * never open and these presses are moving us through the grass, which starts
    * a battle and makes saving impossible.
+   *
+   * **A swallowed press used to read as a one-row menu**, and this is the
+   * primitive two features stand on. It pressed DOWN and looked once: the menu
+   * is not interactive the instant `_openStartMenu` sees a live cursor, so the
+   * first press is the likeliest of the lot to be dropped -- and a dropped
+   * press leaves the cursor where it was, which this read as the wrap. One row.
+   * `_openPack` then tried row 1 only and reported *the pack never opened*, and
+   * `saveGame` tried row 1 only and could not find SAVE, both from a menu that
+   * was working perfectly.
+   *
+   * So it presses and *waits for the cursor to move*, and only calls it a wrap
+   * when the value it moved to is one already seen. Which is `_packMoved`'s
+   * lesson from the eleventh pass, arriving in its fifth caller and its first
+   * counting one.
    */
   async _menuRowCount(limit = 12) {
     const start = (await this.snap()).pos;
     const seen = [];
+    let cur = await this.menuCursor();
+    const walkedOff = async () => {
+      const now = (await this.snap()).pos;
+      if (now[0] === start[0] && now[1] === start[1]) return false;
+      this.say('the START menu was not open — the player moved');
+      return true;
+    };
     for (let i = 0; i < limit; i++) {
-      const cur = await this.menuCursor();
       if (seen.includes(cur)) break;
       seen.push(cur);
-      await this.push('DOWN', 5, 8);
-      const now = (await this.snap()).pos;
-      if (now[0] !== start[0] || now[1] !== start[1]) {
-        this.say('the START menu was not open — the player moved');
-        return 0;
+      let moved = null;
+      for (let go = 0; go < MENU_STEP_TRIES && moved === null; go++) {
+        const s = await this._packMoved('DOWN', (x) => x.menu[1]);
+        if (await walkedOff()) return 0;
+        if (s.menu[1] !== cur) moved = s.menu[1];
       }
+      // Genuinely will not move. A one-row menu is a real thing, so this is a
+      // count rather than a failure -- and it is now reached only after the
+      // press has been given several goes.
+      if (moved === null) break;
+      cur = moved;
     }
     return seen.length ? Math.max(...seen) : 0;
+  }
+
+  /**
+   * Press a direction and wait for the *drawn* arrow to move.
+   *
+   * The generalisation of `_packMoved` to every box there is, and the reason
+   * this pass exists. `_packMoved` waits on a variable, which works for the
+   * pack because the pack keeps its index in one. Measured on the bedroom PC's
+   * BILL'S-PC submenu, eight DOWN presses over six hundred frames moved
+   * `wMenuCursorY` not at all -- a work-RAM diff across a press turned up
+   * thirty-seven changed bytes, every one of them in the sprite buffer, and the
+   * only named change was the game clock. That box keeps its selection
+   * somewhere this app cannot find.
+   *
+   * The arrow is *drawn*, so it is in the tilemap whatever the box does with
+   * its bookkeeping -- and it is what a person is looking at. Measured against
+   * a box that does keep a variable, the two agree exactly: the arrow sat at
+   * tilemap rows 2, 4, 6, 8, 10 as the cursor read 1 through 5.
+   *
+   * False where the screen cannot be read at all, which a caller must treat as
+   * "cannot tell" and not as "the arrow will not move".
+   */
+  async _arrowMoved(button = 'DOWN', tries = MENU_STEP_TRIES) {
+    const where = async () => {
+      const sc = await this.screen();
+      if (!sc) return null;
+      const a = sc.arrow();
+      return a ? `${a.row},${a.col}` : '-';
+    };
+    const before = await where();
+    if (before === null) return false;
+    for (let go = 0; go < tries; go++) {
+      await this.push(button, 4, 8);
+      for (let i = 0; i < BOX_TRIES; i++) {
+        await this.step(SETTLE_FRAMES);
+        if (await where() !== before) return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Drive a menu's cursor to the row that *says* something.
+   *
+   * The row a thing sits on is not a fact about the game; the words on it are.
+   * The START menu grows -- no POKeDEX or POKeGEAR early on -- which is why
+   * `_openPack` opened rows one at a time asking each time whether the pack had
+   * appeared, and why `saveGame` counts SAVE from the bottom. Measured after
+   * the errand, the menu reads POKeDEX, POKeMON, PACK, POKeGEAR, CHRIS, SAVE,
+   * OPTION, EXIT -- eight rows, and PACK is the row that says PACK.
+   *
+   * Folded to letters and digits before matching, because the screen is not a
+   * string: POKeDEX draws its accented letter as a tile this charmap does not
+   * name, and POKeGEAR's logo is drawn as graphics entirely.
+   *
+   * False also means "could not read the screen", which is why every caller
+   * keeps the search it had.
+   */
+  async _driveToSaying(word, tries = 12) {
+    for (let i = 0; i < tries; i++) {
+      const sc = await this.screen();
+      // No arrow means no menu to drive, and pressing anyway is how this would
+      // do harm: DOWN in an overworld is a step into the grass. So a screen
+      // with nothing selected is "cannot tell" and costs no presses at all --
+      // which is also what a cartridge whose tilemap cannot be read looks like.
+      if (!sc || !sc.arrow()) return false;
+      if (sc.selectedSays(word)) return true;
+      if (!await this._arrowMoved()) return false;
+    }
+    return false;
   }
 
   async _driveMenuCursor(target, count) {

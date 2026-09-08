@@ -3,7 +3,8 @@
 // menus.js had no tests, and it is the module that saves your game. The parts
 // that need a real screen cannot be tested here; the order of operations can,
 // and that is where the fault was.
-import { FakeGameBoy, fakeRom, symbols, test, worldRam } from '../harness.mjs';
+import { FakeGameBoy, fakeRom, paintScreen, symbols, test,
+         worldRam } from '../harness.mjs';
 import { GameState } from '../../gen2/state.js';
 import { Tasks } from '../../gen2/tasks.js';
 
@@ -87,7 +88,49 @@ test('a row count that says the menu never opened stops the attempt', async (t) 
 //   the cursor is 0        whenever nothing is open, not a stale row
 //   re-opening resets      left on row 3, 6 or 2, it came back on row 1 each time
 //   six rows, not eight    early on there is no POKeDEX or POKeGEAR
-function cartridgeMenu({ rows = 6, saveRow = 4, startOpen = false } = {}) {
+/**
+ * `swallow` drops that many of the first DOWN presses, which is what the
+ * cartridge does while the box is still being drawn: `_openStartMenu` returns
+ * as soon as a cursor reads non-zero, and the menu is not interactive yet.
+ */
+/**
+ * A menu that draws itself, and keeps its selection nowhere this app can read.
+ *
+ * Which is a real box, measured: the bedroom PC's BILL'S-PC submenu took eight
+ * DOWN presses over six hundred frames without `wMenuCursorY` moving once. The
+ * arrow moved every time, because the arrow is drawn.
+ */
+function drawnMenu({ items = ['POKEDEX', 'POKEMON', 'PACK', 'SAVE'],
+                     tracksCursor = false, swallow = 0 } = {}) {
+  const sym = symbols();
+  const state = new GameState(sym);
+  const wram = worldRam(sym, { pos: [5, 5] });
+  const at = (name) => sym.addr(name) - 0xc000;
+  const world = { row: 0, presses: 0 };
+  const draw = () => {
+    const lines = ['', ...items.map((it, i) =>
+      `${i === world.row ? '>' : ' '}${it}`)];
+    paintScreen(wram, sym, lines);
+    wram[at('wWindowStackSize')] = 1;
+    wram[at('wMenuCursorY')] = tracksCursor ? world.row + 1 : 1;
+  };
+  draw();
+  const gb = new FakeGameBoy({
+    wram,
+    onPress: (button) => {
+      world.presses++;
+      if (button === 'DOWN') {
+        if (swallow > 0) { swallow--; return; }
+        world.row = (world.row + 1) % items.length;
+      }
+      draw();
+    },
+  });
+  return { tasks: new Tasks(gb, state, () => {}, fakeRom()), world };
+}
+
+function cartridgeMenu({ rows = 6, saveRow = 4, startOpen = false,
+                         swallow = 0 } = {}) {
   const sym = symbols();
   const state = new GameState(sym);
   const wram = worldRam(sym, { pos: [5, 5] });
@@ -110,6 +153,7 @@ function cartridgeMenu({ rows = 6, saveRow = 4, startOpen = false } = {}) {
       } else if (button === 'B') {
         world.open = false; world.confirm = false; world.cursor = 0;
       } else if (button === 'DOWN') {
+        if (swallow > 0) { swallow--; write(); return; }
         if (world.open) world.cursor = (world.cursor % rows) + 1;
         else { world.walked++; wram[at('wYCoord')] += 1; }   // the player walks
       } else if (button === 'A') {
@@ -157,6 +201,29 @@ test('an open menu is counted, and the count is its last row', async (t) => {
   t.eq(await tasks._menuRowCount(), 6, 'six rows, as measured early in the game');
   const { tasks: grown } = cartridgeMenu({ rows: 8, startOpen: true });
   t.eq(await grown._menuRowCount(), 8, 'and eight once the menu has grown');
+});
+
+test('a swallowed first press is not a one-row menu', async (t) => {
+  // The defect this closes, in the primitive two features stand on. It pressed
+  // DOWN and looked once -- and the menu is not interactive the instant
+  // `_openStartMenu` sees a live cursor, so the first press is the likeliest of
+  // the lot to be dropped. A dropped press leaves the cursor where it was,
+  // which read as the wrap: one row. `_openPack` then tried row 1 only and
+  // reported *the pack never opened*; `saveGame` tried row 1 only and could not
+  // find SAVE. Both from a menu that was working perfectly.
+  const { tasks } = cartridgeMenu({ rows: 7, startOpen: true, swallow: 1 });
+  t.eq(await tasks._menuRowCount(), 7, 'all seven rows, first press dropped');
+
+  const { tasks: worse } = cartridgeMenu({ rows: 7, startOpen: true, swallow: 2 });
+  t.eq(await worse._menuRowCount(), 7, 'and two dropped');
+});
+
+test('a menu that really has one row is counted as one', async (t) => {
+  // The other half, and the reason this is a count rather than a retry loop
+  // that gives up: a one-row menu is a real thing, and it is reached only after
+  // the press has been given several goes.
+  const { tasks } = cartridgeMenu({ rows: 1, startOpen: true });
+  t.eq(await tasks._menuRowCount(), 1, 'one row, and no waiting for ever');
 });
 
 test('the cursor is driven to the row asked for, and says so if it cannot',
@@ -701,4 +768,51 @@ test('a second purchase survives the box still closing behind the first',
   const r = await tasks.buyFromClerk(POTION, 3);
   t.eq(r.bought, 3, 'all three');
   t.eq(at.money, 2100, 'and nine hundred spent');
+});
+
+// --- driving a menu by what it says ------------------------------------------
+
+test('the row wanted is the row that says so, whatever number it is',
+     async (t) => {
+  // The START menu grows -- no POKeDEX or POKeGEAR early on -- which is why
+  // opening the pack used to try rows one at a time and ask each time whether
+  // the pack had appeared. Measured after the errand it reads POKeDEX, POKeMON,
+  // PACK, POKeGEAR, CHRIS, SAVE, OPTION, EXIT: PACK is the row that says PACK.
+  const { tasks } = drawnMenu({ items: ['POKEDEX', 'POKEMON', 'PACK', 'SAVE'] });
+  t.true(await tasks._driveToSaying('PACK'), 'it got there');
+  const sc = await tasks.screen();
+  t.true(sc.selectedSays('PACK'), 'and the arrow is on it');
+});
+
+test('a box that keeps its selection nowhere readable is still driven',
+     async (t) => {
+  // The measurement this whole module exists for. `_packMoved` waits on a
+  // variable; this box has none, so the arrow is the only answer there is.
+  const { tasks } = drawnMenu({ items: ['WITHDRAW', 'DEPOSIT', 'CHANGE BOX'],
+                                tracksCursor: false });
+  t.true(await tasks._driveToSaying('DEPOSIT'), 'the arrow moved to it');
+  const sc = await tasks.screen();
+  t.eq(sc.selected(), '>DEPOSIT', 'and it is what is selected');
+});
+
+test('a swallowed press does not end the search', async (t) => {
+  const { tasks } = drawnMenu({ items: ['POKEDEX', 'POKEMON', 'PACK'],
+                                swallow: 2 });
+  t.true(await tasks._driveToSaying('PACK'), 'it kept pressing');
+});
+
+test('a word that is not on the menu is not found, and it stops looking',
+     async (t) => {
+  // Bounded by the wrap: once the arrow has been round the menu the answer is
+  // no, and pressing on would be pressing for ever.
+  const { tasks, world } = drawnMenu({ items: ['POKEDEX', 'POKEMON', 'PACK'] });
+  t.false(await tasks._driveToSaying('BICYCLE'), 'not there');
+  t.true(world.presses < 40, `and it gave up after ${world.presses} presses`);
+});
+
+test('a screen with no arrow costs no presses at all', async (t) => {
+  // Because DOWN in an overworld is a step into the grass, and this is asked
+  // before anything is known to be open.
+  const { tasks } = pilot();
+  t.false(await tasks._driveToSaying('PACK'), 'nothing to drive');
 });
