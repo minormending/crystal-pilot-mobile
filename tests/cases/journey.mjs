@@ -999,6 +999,21 @@ test('escapeBattle is what notices, driven rather than stubbed', async (t) => {
   t.false(won.stuckInBattle, 'and the walk goes on');
 });
 
+test('a battle nothing can play is not reported as a door problem', async (t) => {
+  // **Measured.** A Cyndaquil with no PP left a box on the screen, and the
+  // window check in the warp branch read it as a conversation in the way:
+  // *could not get through to DARK CAVE -- something is still on screen*. The
+  // door was never the problem and the sentence sent the reader at it.
+  const j = atADoor({ windowOpen: true });
+  j.nav.mapKey = async () => 1;
+  j.world = { route: () => [{ kind: 'warp', tile: [2, 7], key: 2 }] };
+  j.escapeBattle = async () => { j.battleStuck = true; j.stuckReason = 'nopp'; return false; };
+  const r = await j.travelTo(2);
+  t.false(r.ok, 'the walk stops');
+  t.contains(r.message, 'out of PP', 'and names the battle');
+  t.false(r.message.includes('still on screen'), 'not the door');
+});
+
 test('a doorway gives up on one too, and says so', async (t) => {
   const j = atADoor({ windowOpen: false });
   j.escapeBattle = async () => { j.battleStuck = true; return false; };

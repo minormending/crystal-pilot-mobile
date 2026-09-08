@@ -67,6 +67,36 @@ test('the battle menu is live at every cursor it has, and nowhere else',
   t.false(at(1, 3), 'nor y past the bottom row');
 });
 
+test('having PP is not the same as having a move that can win', async (t) => {
+  // **Measured on Route 31, and it cost forty turns and a walk each time.**
+  // Cyndaquil at Lv11 with TACKLE on 0 of 35, LEER and SMOKESCREEN full, and a
+  // Lv2 CATERPIE at 1 HP in a *trainer* battle -- so no fleeing either. The
+  // pilot lowered the Caterpie's defence forty times and reported 'stuck',
+  // which is true and says nothing anybody can act on.
+  //
+  // Driven through the real move table, because a stub of "does this move do
+  // damage" would only be testing the stub -- and the power byte is the part
+  // that can be wrong.
+  const { tasks } = pilot();
+  const outOfPP = { moves: [33, 43, 108, 0], pp: [0, 30, 20, 0] };
+  t.eq(tasks.canStillWin(outOfPP), false,
+       'TACKLE is spent and the rest cannot end a battle');
+
+  const fine = { moves: [33, 43, 108, 0], pp: [5, 30, 20, 0] };
+  t.eq(tasks.canStillWin(fine), true, 'one hit left is enough');
+
+  const allSpent = { moves: [33, 43, 0, 0], pp: [0, 0, 0, 0] };
+  t.eq(tasks.canStillWin(allSpent), false,
+       'and nothing at all is certainly not enough');
+
+  // Null rather than false where there is no ROM to price moves with: "cannot
+  // say" and "no" send a caller different places.
+  const blind = pilot();
+  blind.tasks.rom = null;
+  t.eq(blind.tasks.canStillWin(fine), null, 'no table, no answer');
+  t.eq(blind.tasks.canStillWin(null), null, 'and nothing to ask about');
+});
+
 test('weakening never reaches for a move whose power byte lies about it', async (t) => {
   // Driven through the real RomData against a real byte layout, because a stub
   // of isChipMove would only be testing the stub.

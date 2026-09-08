@@ -33,6 +33,10 @@ const PARTY_HOLD = 12, PARTY_GAP = 24, PARTY_SETTLE = 40;
 const WHITEOUT_TAPS = 200;
 // What the drawn battle menu measures, telling it from the pack over the top of
 // it: wMenuDataItems and wMenuBorderTopCoord.
+// How often the wait for the battle menu presses B instead of A. Every fourth,
+// which is often enough to leave a submenu within a few frames and rare enough
+// that a long text scene is still driven mostly by A.
+const BACK_OUT_EVERY = 4;
 const BATTLE_MENU_ITEMS = gen2.battleMenu.items,
       BATTLE_MENU_TOP = gen2.battleMenu.top;
 // Those two and BALL_POCKET above are read from the *stock* profile at import
@@ -195,7 +199,21 @@ export function withBattle(Base) {
       const s = await this.snap();
       if (!s.inBattle) return null;
       if (menuIsLive(s)) return s;
-      await this.push('A', 4, 6);   // push through text
+      // **A answers a question and B declines it, and this has no business
+      // answering anything.** It pressed A only, described as pushing through
+      // text -- which is right for text and wrong for a *submenu*, where A is
+      // a selection. Measured on Route 31: Cyndaquil out of PP on its only
+      // damaging move, the move menu open with `TYPE/NORMAL` and `0/35` on
+      // screen, and A re-selecting the move the game had just refused. The
+      // panel redrew, the cursor stayed at nought, and 150 tries later this
+      // answered 'stuck' -- forever, because every walk asks again.
+      //
+      // So it alternates. B advances text in Gen 2 as well as A does, and it
+      // is the only one of the two that can get *out* of a box; A stays in
+      // because the loop has been driven by it for thirty passes and the
+      // prompts it does answer are not worth rediscovering. Neither a text box
+      // nor a submenu is a dead end now.
+      await this.push(i % BACK_OUT_EVERY === BACK_OUT_EVERY - 1 ? 'B' : 'A', 4, 6);
     }
     return null;
   }
@@ -273,6 +291,29 @@ export function withBattle(Base) {
    * answer: with only status moves left there is no winning move to prefer, and
    * `grind` treats that as a reason to go and heal.
    */
+  /**
+   * Has this Pokemon any move left that could actually end a battle?
+   *
+   * **A different thing from having PP**, and the difference is a battle that
+   * cannot be won. Measured on Route 31: Cyndaquil at Lv11 with TACKLE on 0 of
+   * 35, LEER and SMOKESCREEN with plenty, and a Lv2 CATERPIE at 1 HP in a
+   * *trainer* battle -- which cannot be fled. Forty turns of lowering the
+   * Caterpie's defence later, `fightBattle` reported 'stuck', which is true and
+   * says nothing a person can act on.
+   *
+   * Answers null where there is no ROM to price the moves with, so a caller can
+   * tell "no" from "cannot say".
+   */
+  canStillWin(mon) {
+    if (!this.rom || !mon || !mon.moves) return null;
+    for (let i = 0; i < mon.moves.length; i++) {
+      if (!mon.moves[i] || !(mon.pp[i] > 0)) continue;
+      const info = this.rom.move(mon.moves[i]);
+      if (info && info.power > 0) return true;
+    }
+    return false;
+  }
+
   strongest(usable, mon) {
     const power = (i) => {
       const info = this.rom && this.rom.move(mon.moves[i]);
@@ -317,7 +358,7 @@ export function withBattle(Base) {
     return idx;
   }
 
-  /** Play out one wild battle. -> 'won' | 'lost' | 'ended' | 'stuck' */
+  /** Play out one wild battle. -> 'won' | 'lost' | 'ended' | 'stuck' | 'nopp' */
   /**
    * How a battle that has ended actually ended.
    *
@@ -483,6 +524,14 @@ export function withBattle(Base) {
       if (menu.party.length && menu.party.every((m) => m.hp === 0)) {
         return this._whiteOut();
       }
+      // **Nothing left that can end this.** Asked here rather than after forty
+      // turns, because forty turns of lowering a Caterpie's defence is time
+      // nobody gets back and 'stuck' is not a thing a person can act on.
+      // Measured: Cyndaquil at Lv11 with TACKLE on 0 of 35, LEER and
+      // SMOKESCREEN full, and a Lv2 CATERPIE at 1 HP in a trainer battle -- so
+      // no fleeing either. `nopp` says the one useful thing: the answer is
+      // Ethers, or a Center, or a different Pokemon.
+      if (this.canStillWin(onField(menu)) === false) return 'nopp';
       // Before the swing, not after the faint. `coverFaint` above is the
       // recovery; this is the avoidance, and it is cheaper by a Center.
       if (heals && potions < MAX_BATTLE_POTIONS && this.rom) {

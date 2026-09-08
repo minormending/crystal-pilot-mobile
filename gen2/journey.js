@@ -608,6 +608,16 @@ export class Journey {
    * you on the way -- Mom does, on the way out of the house -- and the walk
    * ends early with the text still up.
    */
+  /** What a walk says when a battle has made it pointless. */
+  _stuckMessage() {
+    return { ok: false,
+             message: this.stuckReason === 'nopp'
+               ? 'out of PP on anything that does damage — nothing else will '
+                 + 'work until that is dealt with'
+               : 'stuck in a battle nothing can finish — nothing else will '
+                 + 'work until it is dealt with' };
+  }
+
   /**
    * A battle nothing can do anything with, met on the way somewhere.
    *
@@ -653,7 +663,9 @@ export class Journey {
       // way is dealt with rather than counted as the door being unreachable.
       await this.escapeBattle();
       if (this.stuckInBattle) {
-        this.say('stuck in a battle nothing can finish');
+        this.say(this.stuckReason === 'nopp'
+          ? 'out of PP on anything that does damage'
+          : 'stuck in a battle nothing can finish');
         return false;
       }
       const res = await this.nav.walkTo(this.collision, goal, this.longWalk);
@@ -909,17 +921,19 @@ export class Journey {
         };
       }
       if (!route.length) return this._arrived(started);
-        if (this.stuckInBattle) {
-        return { ok: false,
-                 message: 'stuck in a battle nothing can finish — nothing else '
-                          + 'will work until it is dealt with' };
-      }
+        if (this.stuckInBattle) return this._stuckMessage();
       const next = route[0];
       if (next.kind === 'warp') {
         this.say(`through to ${this.where(next.key)}`);
         const before = here;
         if (!await this.through(next.tile, next.key)) {
           if (this.stopped) return { ok: false, message: 'stopped' };
+          // **Before blaming the door.** A battle nothing can play leaves a box
+          // on the screen, so the window check below reads it as a conversation
+          // in the way -- measured: *could not get through to DARK CAVE --
+          // something is still on screen*, about a Cyndaquil with no PP. The
+          // door was never the problem and the sentence sent the reader at it.
+          if (this.stuckInBattle) return this._stuckMessage();
           // Say what is actually in the way. A door that will not open and a
           // conversation that will not end are different things to go and look
           // at, and for eight tries this reported the first when it was the
@@ -1648,7 +1662,13 @@ export class Journey {
       // on calling it. `grind` bounds its own stuck run at five; the walks had
       // no such bound because they never knew the difference between a battle
       // that was lost and one that could not be played.
-      if (how === 'stuck') this.battleStuck = true;
+      // 'nopp' is the same to a walk as 'stuck' -- there is nothing to be done
+      // from here -- and different to whoever reads the message, which is the
+      // whole reason it is its own word.
+      if (how === 'stuck' || how === 'nopp') {
+        this.battleStuck = true;
+        this.stuckReason = how;
+      }
       return how === 'won';
     }
     return this.tasks.flee();

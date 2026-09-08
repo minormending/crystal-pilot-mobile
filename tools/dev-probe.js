@@ -135,6 +135,60 @@
     },
 
     /**
+     * Re-import the modules and put the new methods on the live objects.
+     *
+     * **The thing this session has typed most.** Verifying an edit against the
+     * cartridge means either reloading the page -- which loses the running game
+     * and costs a `keep`/`load` round trip -- or hand-listing every method that
+     * changed and copying it off a fresh prototype. The hand-list is what gets
+     * it wrong: a method left off the list runs its old body, the run behaves
+     * oddly, and half an hour goes on a defect that was fixed already.
+     *
+     * So this takes the whole prototype. `?v=` because a module already
+     * imported is cached for the life of the page, and a stale import is the
+     * same trap one level up.
+     *
+     * Only methods, and only own ones: a getter is left alone because copying
+     * one evaluates it, and an inherited method is somebody else's business.
+     */
+    async patch(tag = String(Date.now())) {
+      const P2 = window.PILOT;
+      const took = { journey: [], world: [], title: null };
+      const J = await import(`../gen2/journey.js?v=${tag}`);
+      const proto = J.Journey.prototype;
+      // The live driver is a title subclass, so its *own* overrides have to
+      // survive this -- copying the base over them would undo the title.
+      const ownToTitle = new Set(
+        Object.getOwnPropertyNames(Object.getPrototypeOf(P2.boot)));
+      for (const name of Object.getOwnPropertyNames(proto)) {
+        if (name === 'constructor') continue;
+        const d = Object.getOwnPropertyDescriptor(proto, name);
+        if (typeof d.value !== 'function') continue;   // leave getters be
+        if (ownToTitle.has(name)) continue;            // the title's own
+        P2.boot[name] = d.value;
+        took.journey.push(name);
+      }
+      const W = await import(`../gen2/world.js?v=${tag}`);
+      for (const name of Object.getOwnPropertyNames(W.World.prototype)) {
+        if (name === 'constructor') continue;
+        const d = Object.getOwnPropertyDescriptor(W.World.prototype, name);
+        if (typeof d.value !== 'function') continue;
+        P2.world[name] = d.value;
+        took.world.push(name);
+      }
+      // And the title's data, which is where declared places live.
+      try {
+        const T = await import(`../titles/crystal.js?v=${tag}`);
+        P2.boot.title = { ...P2.boot.title, ...T.crystal };
+        took.title = Object.keys(T.crystal).length;
+      } catch (e) { took.title = `not this title (${e.message})`; }
+      return { journey: took.journey.length, world: took.world.length,
+               title: took.title,
+               note: 'title-owned overrides left alone: '
+                     + [...ownToTitle].filter((n) => n !== 'constructor').length };
+    },
+
+    /**
      * The collision map around the player, as a picture.
      *
      * Because reading twenty numbers per row and working out which one is under
