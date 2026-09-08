@@ -45,6 +45,12 @@ const LONG_WALK_STEPS = 260;
 // hard way.
 const DUEL_TRIES = 6, DUEL_START_TAPS = 40, DUEL_TURNS = 60;
 
+// Reaching the nickname question: how many presses to spend getting there, and
+// how long to let the screen settle between them. The text ahead of it is two
+// pages, so a handful is plenty -- and each poll is cheap because it is a read
+// rather than a press.
+const NAME_TRIES = 12, NAME_SETTLE = 20;
+
 const NOTHING_THERE = 'nothing there to take';
 const OUT_OF_REACH = 'could not get to it';
 
@@ -201,6 +207,79 @@ export class Journey {
    * wScriptMode itself, and the A taps that followed went into the menu it had
    * just opened.
    */
+  /**
+   * Press through a script, and stop the moment the party grows.
+   *
+   * Half of the fix for a starter's name, and the half that decides *which*
+   * question is being answered. Gen 2 asks two on the way out of the lab and A
+   * is right for only one of them: "Do you want CYNDAQUIL, the fire POKeMON?"
+   * wants yes, and "Give a nickname to the CYNDAQUIL you received?" wants no.
+   * The party growing is the line between them -- the Pokemon is ours, so the
+   * next box is the one that must not be pressed through. `watchThrow` has used
+   * that same signal to decline the same box since catching worked.
+   */
+  async runUntilParty(maxTaps = 400, settle = 45) {
+    const before = (await this.snap()).party.length;
+    for (let i = 0; i < maxTaps; i++) {
+      if (this.stopped) return false;
+      // Before the press, not after: the whole point is that the press which
+      // would follow is the one the next question receives.
+      if ((await this.snap()).party.length > before) return true;
+      if (!await this.scriptRunning()) {
+        await this.gb.run(settle);
+        if (!await this.scriptRunning()) return true;
+      }
+      await this.gb.press('A', 4, 8);
+      await this.tasks.pump();
+    }
+    return !await this.scriptRunning();
+  }
+
+  /**
+   * Take the game's own name for a Pokemon it has just handed over.
+   *
+   * The other half, and the whole of it is one button. **B on the nickname
+   * question is the default species name** -- measured, by pausing a new game
+   * on that box and pressing it: `wPartyMon1Nickname` went from ten 'A's to
+   * `82 98 8d 83 80 90 94 88 8b 50` — CYNDAQUIL.
+   *
+   * Getting *to* the box is the part five earlier attempts got wrong, and the
+   * trace says why. When the party grows the question's text has barely begun
+   * -- the screen reads `G` -- and it then **stops and waits for a button**
+   * with `wWindowStackSize` reading zero. One press finishes it and draws the
+   * choice, which is up and stable from that frame on. So an A press issued
+   * the instant the party grows only hurries the text, and a look taken
+   * straight afterwards sees no box and gives up; that is exactly what
+   * `declineNickname` did, twelve runs in a row.
+   *
+   * Which makes this a loop rather than a sequence: press A, look, and press B
+   * the moment a choice is on screen. Every A lands on text and every B lands
+   * on the box, whatever the timing.
+   *
+   * The box is identified by both halves where the screen can be read -- a
+   * window open *and* YES and NO on it -- because a window open on its own is
+   * also true of the text that precedes it on some boxes. A cartridge whose
+   * tilemap cannot be read falls back to the window alone, which is what this
+   * had before there was anything better.
+   */
+  async takeDefaultName(tries = NAME_TRIES) {
+    for (let i = 0; i < tries; i++) {
+      if (this.stopped) return false;
+      const wram = await this.gb.readWram();
+      const s = this.state.read(wram);
+      const sc = this.state.screen(wram);
+      if (s.windowOpen && (!sc || (sc.says('YES') && sc.says('NO')))) {
+        this.say('keeping the name the game gave it');
+        await this.gb.press('B', 6, 12);
+        await this.tasks.pump();
+        return true;
+      }
+      await this.gb.press('A', 4, 8);
+      await this.gb.run(NAME_SETTLE);
+    }
+    return false;
+  }
+
   async runScripts(maxTaps = 400, settle = 45) {
     for (let i = 0; i < maxTaps; i++) {
       // Inside the loop, not only on the way in. This is the longest loop in

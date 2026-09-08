@@ -467,18 +467,18 @@ export class Crystal extends Journey {
       await this.nav.walkTo(this.collision, [ballX, 4], this.walkOpts);
       await this.nav.step('UP');
       await this.gb.press('A', 6, 12);
-      await this.runScripts();
-      // "Do you want this one?" defaults to yes, which is what we want here --
-      // unlike the nickname box that follows it.
+      // Two questions on the way out, and A is right for only one of them.
+      // "Do you want CYNDAQUIL, the fire POKeMON?" wants yes, which is what
+      // pressing through gives -- so the pressing runs until the Pokemon is
+      // ours and stops there. "Give a nickname to the CYNDAQUIL you received?"
+      // wants no, and B on it is the game's own name for the thing.
       //
-      // **And the nickname box is not in fact declined**, which the
-      // twenty-eighth pass measured and could not fix. Every starter this app
-      // takes is named AAAAAAAAAA: the A presses above answer the question and
-      // then type the letter under the cursor, and `declineNickname` returns
-      // false because the box is not drawn when it looks. Twelve runs, five
-      // approaches, and the account of each is in
-      // [what is proven](../docs/PROVEN.md). It is cosmetic and it is real.
-      await this.tasks.declineNickname();
+      // For twenty-eight passes this was one `runScripts` that answered both,
+      // walked into the naming screen and typed the letter under the cursor:
+      // every starter this app took was called AAAAAAAAAA.
+      await this.runUntilParty();
+      await this.takeDefaultName();
+      await this.runScripts();
       await this.runScripts();
       const s = await this.snap();
       if (s.party.length > 0) return null;

@@ -6,7 +6,8 @@
 // before, and it is the piece most likely to be quietly wrong -- a cost model
 // that picks the wrong Center costs a minute of walking and looks like a bug in
 // the walk.
-import { FakeGameBoy, fakeRom, symbols, test, worldRam } from '../harness.mjs';
+import { FakeGameBoy, fakeRom, paintScreen, symbols, test,
+         worldRam } from '../harness.mjs';
 import { GameState } from '../../gen2/state.js';
 import { Journey } from '../../gen2/journey.js';
 
@@ -796,4 +797,117 @@ test('once everybody near has refused, it says so rather than walking again',
   t.contains(r.message, 'already beaten', 'the ordinary end state of a route');
   t.eq(j.log.filter((l) => l.startsWith('walk')).length, 1,
        'and it only walked there once');
+});
+
+// --- the name the game gives -------------------------------------------------
+
+/**
+ * A ball script that hands over a Pokemon and then asks about a nickname.
+ *
+ * The shape is measured rather than invented. When the party grows the
+ * question's text has barely begun -- the screen reads `G` -- and it then
+ * *stops and waits for a button* with `wWindowStackSize` reading zero. One
+ * press finishes it and draws the choice, which is up and stable from that
+ * frame on. `pagesOfText` is how many presses that takes.
+ */
+function ballScript({ growsAt = 3, pagesOfText = 2 } = {}) {
+  const sym = symbols();
+  const at = (name) => sym.addr(name) - 0xc000;
+  const wram = worldRam(sym, {});
+  const log = [];
+  let pressed = 0, party = 0, page = 0, answered = null, running = true;
+  const show = (lines, open) => {
+    paintScreen(wram, sym, lines);
+    wram[at('wWindowStackSize')] = open ? 1 : 0;
+  };
+  show([], false);
+  const j = new Journey(new FakeGameBoy({ wram }), new GameState(sym), null, {},
+                        { mapKey: async () => 1 }, () => {}, null, {});
+  j.said = [];
+  j.say = (m) => j.said.push(m);
+  j.scriptRunning = async () => running;
+  j.snap = async () => ({
+    ...new GameState(sym).read(wram),
+    party: Array.from({ length: party }, () => ({ hp: 20 })),
+  });
+  j.gb = {
+    readWram: async () => wram,
+    press: async (button) => {
+      pressed++;
+      log.push(button);
+      if (party === 0) {
+        if (pressed >= growsAt) { party = 1; show([' G'], false); }
+        return;
+      }
+      if (button === 'B') {
+        // The measured answer: B on the choice keeps the species name.
+        answered = 'default';
+        show([], false);
+        running = false;
+        return;
+      }
+      // A hurries the text, and the press after the last page draws the choice.
+      page++;
+      if (page >= pagesOfText) show([' >YES', '  NO', ' Give a nickname'], true);
+      else show([' Give a nickname to', ' the CYNDAQUIL you'], false);
+    },
+    run: async () => {},
+  };
+  j.tasks = { pump: async () => {} };
+  j.log = log;
+  j.answered = () => answered;
+  return j;
+}
+
+test('the pressing stops the moment the party grows', async (t) => {
+  // The line between the two questions. "Do you want CYNDAQUIL?" wants yes,
+  // which pressing through gives; the nickname question wants no, and is the
+  // next box.
+  const j = ballScript({ growsAt: 3 });
+  t.true(await j.runUntilParty(), 'it got that far');
+  t.eq(j.log.length, 3, 'three presses, and not the fourth');
+  t.eq(j.log.filter((b) => b !== 'A').length, 0, 'all of them A');
+});
+
+test('B on the nickname question keeps the name the game gave it', async (t) => {
+  // Measured by pausing a new game on that box and pressing it:
+  // wPartyMon1Nickname went from ten 'A's to 82 98 8d 83 80 90 94 88 8b 50 --
+  // CYNDAQUIL. Every starter this app took for twenty-eight passes was called
+  // AAAAAAAAAA, because the pressing answered the question and then typed the
+  // letter under the cursor.
+  const j = ballScript({ growsAt: 1, pagesOfText: 2 });
+  await j.runUntilParty();
+  t.true(await j.takeDefaultName(), 'it answered');
+  t.eq(j.answered(), 'default', 'with B, on the choice');
+  t.contains(j.said.join(' '), 'the name the game gave', 'and said so');
+});
+
+test('A is pressed until the choice is drawn, however long the text is',
+     async (t) => {
+  // The part five earlier attempts got wrong: an A issued the instant the party
+  // grows only hurries the text, and a look taken straight afterwards sees no
+  // box. So this is a loop -- press, look, press -- rather than a sequence.
+  const j = ballScript({ growsAt: 1, pagesOfText: 4 });
+  await j.runUntilParty();
+  t.true(await j.takeDefaultName(), 'it still got there');
+  const after = j.log.slice(1);
+  t.eq(after[after.length - 1], 'B', 'B last');
+  t.eq(after.slice(0, -1).filter((b) => b !== 'A').length, 0,
+       'and A for every page before it');
+});
+
+test('a question that never comes is given up on rather than pressed for ever',
+     async (t) => {
+  const j = ballScript({ growsAt: 1, pagesOfText: 99 });
+  await j.runUntilParty();
+  t.false(await j.takeDefaultName(), 'it gave up');
+  t.false(j.log.includes('B'), 'without pressing B at nothing');
+});
+
+test('Stop ends it', async (t) => {
+  const j = ballScript({ growsAt: 99 });
+  j.tasks.cancelled = true;
+  t.false(await j.runUntilParty(), 'the pressing stops');
+  t.false(await j.takeDefaultName(), 'and so does the answering');
+  t.eq(j.log.length, 0, 'nothing was pressed');
 });
