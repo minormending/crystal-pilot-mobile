@@ -590,6 +590,29 @@ Two things worth knowing before you press it:
 - **Losing costs you.** A whiteout takes half your money and sends you to the
   last Pokémon Center. Heal first if the row above this one is offering to.
 
+## The pilot knows what everywhere is called
+
+Travel used to offer the handful of places somebody had written into this app —
+about ten — and call the rest *map 26.1*. It reads the cartridge's own names
+now: every map in the game belongs to a **landmark**, which is the place with a
+name on the town map, and the game carries a table of them.
+
+So from Route 29 the list runs to two dozen entries: Cherrygrove City, Route 30,
+Violet City, then DARK CAVE, ROUTE 32, SPROUT TOWER, BLACKTHORN CITY, TOHJO
+FALLS, VIRIDIAN CITY. The ones in capitals are the game's own spelling; the ones
+in mixed case are the few this app names itself, because a hand-written name is
+sometimes better — *Elm's lab* rather than *NEW BARK TOWN*, which is the town the
+lab is in.
+
+One row per place, not per map: a city, its Mart and its Center all belong to the
+city, so you get the city.
+
+**Being on the list means the map graph can get there, not that the pilot can
+walk it.** Route 46 is one leg north of Route 29 as far as the cartridge's map
+data is concerned, and you cannot get up there from where the pilot stands — so
+Travel will try, refuse that leg, and go round or tell you. That is the honest
+version of a list this long.
+
 ## How far the pilot can go
 
 Violet City is on the list now, with its Pokémon Center and its Mart — so
@@ -937,7 +960,7 @@ deployed, which is not the question you are asking when a bug you saw fixed is
 still in front of you. `tools/check-app` asserts that number matches the service
 worker's cache name, because a version display that lies is worse than none.
 
-<!-- covers: sw.js @ 8a19fe8e35be -->
+<!-- covers: sw.js @ af87607847e3 -->
 
 The worker fetches **network first, falling back to the cache**. That is the
 opposite of the usual offline-first advice, on purpose.

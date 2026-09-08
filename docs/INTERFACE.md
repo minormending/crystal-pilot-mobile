@@ -301,6 +301,18 @@ No third ink. The two lines are told apart by italic and by the game's own
 monospace, because a third step of grey would have to stay legible in three
 palettes for the sake of a distinction two typefaces already make.
 
+### Travel offers what the cartridge knows, not what somebody typed
+
+The destinations used to be the title profile's list — about ten. They are the
+game's own **landmarks** now, one row per place, nearest first, and bounded at
+two dozen because six legs from Route 29 reaches forty. The few in mixed case
+are the ones this app names itself, because a hand-written name is sometimes
+better than the cartridge's: *Elm's lab* rather than *NEW BARK TOWN*.
+
+Being on the list means the map graph can get there, not that the pilot can walk
+it. That is deliberate: the alternative is a shorter list that hides places the
+walk would in fact reach, and Travel already routes around a leg that refuses.
+
 ## A battle is answered where the battle is
 
 Fight and Throw are not offers. They answer what is in front of you rather than

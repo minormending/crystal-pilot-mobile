@@ -336,7 +336,7 @@ second, which is there so the core's own waits finish, not to run a game.
   candidates and returned true standing three tiles clear of any. It checks the
   tile underfoot now.
 
-## Thirty-one audits, and how each defect was actually found
+## Thirty-two audits, and how each defect was actually found
 
 Everything above was watched happening. This section was the exception, and the
 exception was the point of it: after the ROM-hack work shipped, eleven passes
@@ -475,6 +475,10 @@ exactly why nothing failed.
 | 31 | `heal()` had one town baked into it, so a second Center was a second copy | naming a second Center | **naming a city** |
 | 31 | a route was shortest by legs and gave up on a leg the walk could not take | naming a city the short way runs through Route 46 | naming a city |
 | 31 | `restock` used `marts[0]`, so it walked back to Cherrygrove past a nearer Mart | standing in the new city | naming a city |
+| 32 | the place you are standing in was offered as somewhere to walk to | a gate that shares its town's landmark | **a test, before the cartridge** |
+| 32 | a map the title had named was offered again under its landmark | Elm's lab, in New Bark Town | a test, before the cartridge |
+| 32 | a refused leg spent the walk budget, so a two-leg walk ran out of twelve | walking to a place only the cartridge names | walking there |
+| 32 | *and arriving on the last leg of the budget reported too many legs* | *a walk given exactly the legs it needed* | *a test, before the cartridge* |
 
 Five things in that table are worth more than the individual rows.
 
@@ -485,14 +489,14 @@ device, a second cartridge, a second Pokémon. What it measures is how much of
 the world you have to *arrange*, not how much you have to own: the fifth pass
 needed no hardware at all, only a party with a corpse in slot one.
 
-**Three of the hundred and six were caught by a check**, and only after the fix
+**Three of the hundred and ten were caught by a check**, and only after the fix
 had decided what to look for: the wiring group named the four modules still
 importing constants that had just been deleted, and the symbol group refused a
 new address that had not been added to the list that travels between devices.
 One more was caught by a *test*, and only because the test hung — the obvious
 `continue` for the party prompt advanced nothing in a loop bounded by balls
 thrown. That is the honest weight to give this repository's seventeen check
-groups and 433 tests: they hold a fix down, and they catch the fix that is
+groups and 445 tests: they hold a fix down, and they catch the fix that is
 itself wrong. They do not find the fault.
 
 **Measuring also rules things out, which is half of what it is for.** The
@@ -2121,6 +2125,72 @@ Violet City at the east gate and the Mart's door is forty-one steps west, which
 is a long walk inside `through`'s eight tries. The door and the map data are
 right — `through([9,17], 10.6)` returns true and lands in 10.6 — so this is a
 budget that is marginal on a city rather than a coordinate that is wrong.
+
+### A thirty-second pass: asking the cartridge what its places are called
+
+The feature is the one table that **retires** hand-written data rather than
+adding to it. A map used to be called whatever the title profile said, and
+everything else was `map 26.1` — ten names out of two hundred and fifty. Gen 2
+knows all of them.
+
+Both halves were measured rather than read off a macro.
+
+**Byte 5 of the nine-byte map header is the landmark**, found by *grouping*:
+
+| maps | byte 5 |
+| --- | --- |
+| Violet City, its Mart, its Center | 6, 6, 6 |
+| Cherrygrove City, its Mart, its Center | 3, 3, 3 |
+| Elm's lab | 1 — which is New Bark Town's |
+
+No other byte in the header groups that way. And **the break inside a landmark
+name is `$1f`**, not the `$4e` ordinary text uses:
+
+```
+8d 84 96 7f 81 80 91 8a 1f 93 8e 96 8d 50
+N  E  W  ␣  B  A  R  K  ⏎  T  O  W  N  @
+```
+
+so it sits exactly where the two-line sign wraps. Reading it as an unknown byte
+put a question mark in the middle of half the towns in Johto — caught by looking
+at the output rather than by a test, because the test would have been written
+against the same wrong table.
+
+**The offer list stopped being a list somebody wrote.** From Route 29 it went
+from thirteen entries to forty: DARK CAVE, TOHJO FALLS, BLACKTHORN CITY,
+VIRIDIAN CITY, SILVER CAVE, VICTORY ROAD. Bounded twice — six legs and the
+nearest two dozen — because forty rows is a map of Johto rather than an offer.
+
+### Three defects, and two of them the tests caught first
+
+**The place you are standing in was offered as somewhere to go.** `routesFrom`
+excludes *this map*, which is not the same thing: a gate one leg from Route 29
+carries Route 29's own landmark, so the list offered to walk to ROUTE 29 from
+Route 29.
+
+**A map the title had named was offered again under its landmark** — Elm's lab,
+then NEW BARK TOWN. The dedupe is by key *and* by folded name now, which also
+makes a title's "New Bark Town" and a cartridge's "NEW BARK TOWN" one place.
+
+**And a refused leg was spending the walk budget.** This one the cartridge
+caught: the first walk to DARK CAVE — two legs away through the Route 46
+connection the pilot cannot use — spent one of its twelve legs on every refusal
+and gave up in Cherrygrove with *too many legs*. A refused leg is not a leg
+walked; the budget counts arrivals now and refusals have their own bound.
+
+Which turned up an off-by-one the new test found: **arriving on the last leg of
+the budget is arriving.** The check at the top of the loop was the only one there
+was, so a walk that spent its whole budget getting there reported *too many
+legs* from the doorstep.
+
+The walk to DARK CAVE now gives the answer it should. It is two legs away
+through the Route 46 connection and there is no way to it this save can walk, so
+the pilot tried six different legs, wrote each of them off, and said:
+
+> no way from New Bark Town to DARK CAVE that this can walk (6 leg(s) refused)
+
+which is a different sentence from *there is no route*, and the difference is
+the whole point of the pass before's `avoid` set.
 
 ## The part that had to be redesigned
 

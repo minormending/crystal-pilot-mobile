@@ -427,7 +427,7 @@ watching.
 
 ### `symbols.js` — where things live
 
-<!-- covers: gen2/symbols.js @ bf560292b9d1 -->
+<!-- covers: gen2/symbols.js @ 0674dce58c3e -->
 
 Parses the `.sym` file into `name → { bank, addr }`. First definition wins;
 later duplicates are aliases and locals.
@@ -544,7 +544,7 @@ and in `bootstrap.js`, with nothing able to notice if they drifted.
 
 ### `romdata.js` — what the cartridge knows
 
-<!-- covers: gen2/romdata.js @ a34fbae90ae7 -->
+<!-- covers: gen2/romdata.js @ 4aced1675a89 -->
 
 Species names, item names, wild-encounter tables, move power. All read out of
 the ROM, not shipped as a copy, so they cannot drift from the build being driven.
@@ -886,7 +886,7 @@ Two more things the map alone will not tell you:
 
 ### `world.js` — which map adjoins which
 
-<!-- covers: gen2/world.js @ 6d214a1e2071 -->
+<!-- covers: gen2/world.js @ 64685a832ab4 -->
 
 The map graph, read out of the cartridge: edge connections *and* warps, so it can
 route out of a building rather than only across a route.
@@ -1034,7 +1034,7 @@ point those coordinates mean somewhere else entirely.
 
 ## 5. Crossing to the next map
 
-<!-- covers: gen2/journey.js gen2/world.js @ 930dcf225799 -->
+<!-- covers: gen2/journey.js gen2/world.js @ da86e163d1a1 -->
 
 A connection spans only part of a shared edge, so "walk west until something
 happens" does not work. `crossEdge()` closes the distance in stages, then tries
@@ -1660,7 +1660,7 @@ fainted.
 
 ## 7. Catching something
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ d604b5f4b6fe -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ 75f59da52054 -->
 
 Catching is the most involved loop, because a Poké Ball's odds turn on how much
 HP is left. Throwing at a full-health target is mostly throwing balls away.
@@ -1797,7 +1797,7 @@ flowchart TD
 
 ## 7a. Five that act on where you already are
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ 2d0f690e67cd -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ fed4210d4bd2 -->
 
 Grind, hunt and catch all go *looking* for something. These five do the obvious
 thing with the situation you are already in, and take no parameters:
@@ -2419,7 +2419,7 @@ because that failure is only otherwise discovered by reaching for the undo.
 
 ## 8. The errands
 
-<!-- covers: titles/crystal.js gen2/journey.js @ 9cd5c5a19312 -->
+<!-- covers: titles/crystal.js gen2/journey.js @ f2d01b0be593 -->
 
 Everything in this section is `crystal.js` — the only file in the app that names
 a Crystal map, a Crystal door or a Crystal NPC. What it stands on is
@@ -2749,9 +2749,84 @@ the bag" rather than "did we gain any".
 
 ---
 
-## 8a. Naming a city is a feature
+## 8a. Asking the cartridge what its places are called
 
-<!-- covers: titles/crystal.js gen2/world.js @ a79e5c7be233 -->
+<!-- covers: gen2/romdata.js gen2/world.js @ e18266e8baeb -->
+
+The one table that **retires** hand-written data rather than adding to it. A map
+used to be called whatever the title profile said, and everything else was
+`map 26.1` — ten names out of two hundred and fifty. Gen 2 knows all of them.
+
+```mermaid
+flowchart LR
+    H["the map header<br/><i>nine bytes</i>"] -->|"byte 5"| ID["landmark id"]
+    ID --> T["Landmarks<br/><i>four bytes each</i>"]
+    T -->|"x, y"| TM["where it sits on the town map"]
+    T -->|"pointer"| N["the name"]
+    N --> W["Journey.where(key)"]
+    TITLE["the title's own names"] --> W
+    W --> OUT["“Elm's lab”, “VIOLET CITY”, “map 26.1”"]
+```
+
+Both halves were measured rather than read off a macro.
+
+**Byte 5 of the nine is the landmark**, found by *grouping*: Violet City, its
+Mart and its Center all read 6; Cherrygrove's three all read 3; and Elm's lab
+reads 1, which is New Bark Town's — because Elm's lab is in New Bark Town. No
+other byte in the header groups that way.
+
+**The break inside a landmark name is `$1f`**, not the `$4e` that ordinary text
+uses. `NEW BARK TOWN` is
+
+```
+8d 84 96 7f 81 80 91 8a 1f 93 8e 96 8d 50
+N  E  W  ␣  B  A  R  K  ⏎  T  O  W  N  @
+```
+
+so the break sits exactly where the sign wraps — and reading it as an unknown
+byte put a question mark in the middle of half the towns in Johto.
+
+Two readers, in the two modules that own the halves: `world.landmarkOf` reads
+the map header because it already parses one, and `romdata.landmarkName` reads
+the name table because it already decodes the game's text. `Journey.where`
+combines them, **title first** — a hand-written name can be better: *Elm's lab*
+against the cartridge's *NEW BARK TOWN*.
+
+<details>
+<summary><b>Advanced detail:</b> and the offer list stopped being a list somebody wrote</summary>
+
+`placesFrom` used to be the title's `names`, filtered to what the graph can
+reach. It now walks outward as well and takes the **nearest map of each new
+landmark** — which is both the one you would name and one row per place rather
+than three for a city and its shops.
+
+Measured from Route 29 it went from thirteen entries to forty: BLACKTHORN CITY,
+DARK CAVE, TOHJO FALLS, VIRIDIAN CITY, SILVER CAVE, VICTORY ROAD. So it is
+bounded twice — **six legs**, and the **nearest two dozen** — because forty rows
+is a map of Johto rather than an offer, which this file already says about two
+hundred rows of `map 26.4`.
+
+Two things the tests caught that the cartridge would have caught later:
+
+- **The place you are standing in was offered as somewhere to go.**
+  `routesFrom` excludes *this map*, which is not the same thing: a gate one leg
+  from Route 29 carries Route 29's own landmark, so the list offered to walk to
+  ROUTE 29 from Route 29.
+- **A map the title had named was offered again under its landmark** — Elm's
+  lab, then NEW BARK TOWN. So the dedupe is by key *and* by folded name, which
+  also makes a title's "New Bark Town" and a cartridge's "NEW BARK TOWN" one
+  place.
+
+Reachable here means *the graph can get there*, not *the pilot can walk it* —
+Route 46 is on the list and the pilot cannot get up there. That is honest rather
+than optimistic: Travel tries, and [routes around a leg that will not
+go](#8b-naming-a-city-is-a-feature).
+
+</details>
+
+## 8b. Naming a city is a feature
+
+<!-- covers: titles/crystal.js gen2/world.js @ 80a0ff8efd54 -->
 
 The map graph has always reached most of Johto. A flood over its exits from
 Route 31 finds sixty-odd maps in five legs — and every feature in this app was
