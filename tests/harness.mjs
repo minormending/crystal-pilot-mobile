@@ -309,6 +309,9 @@ export function worldRam(sym, {
     w16(wram, base + 0x24, mon.maxHp ?? 20);
     (mon.moves || []).forEach((m, k) => w8(wram, base + 0x02 + k, m));
     (mon.pp || []).forEach((p, k) => w8(wram, base + 0x17 + k, p));
+    // The status byte, given as the raw byte the cartridge holds so a test can
+    // say "asleep for three turns" and mean 3.
+    w8(wram, base + 0x20, mon.statusByte ?? 0);
   });
   w8(wram, sym.addr('wBattleMode'), battleMode);
   w8(wram, sym.addr('wMapGroup'), map[0]);

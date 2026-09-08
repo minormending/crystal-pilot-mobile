@@ -45,6 +45,32 @@ export const gen2 = {
   // rather than sending it to a box this does not handle.
   maxParty: 6,
 
+  // --- what is wrong with a Pokemon besides its HP ------------------------
+  // The status byte at mon.status, from constants/pokemon_data_constants.asm.
+  // Sleep is a *counter* in the low three bits rather than a flag, which is why
+  // it is a mask and not a single bit: a Pokemon asleep for three more turns
+  // reads 3, and asking `byte & 0x04` of that is false.
+  //
+  // Declared here since the engine profile was written and read by nothing for
+  // ten passes. What that cost: poison ticks a Pokemon while you *walk*, so a
+  // grind or a journey with a poisoned lead loses HP per step -- and the walk to
+  // a Center could kill the thing it was going to heal, with the app reporting
+  // only that the party was hurt.
+  //
+  // **The bit values here are from the disassembly, not from the cartridge**,
+  // and that is worth saying plainly. What was measured is the *offset*: on a
+  // Lv13 Cyndaquil at 35 of 37, byte 0x1f read 13, 0x22-0x23 read 35 and
+  // 0x24-0x25 read 37 -- so 0x20 is bracketed by two fields already known to be
+  // right, and it reads 0, which is what a well Pokemon should hold.
+  //
+  // No *non-zero* status has been seen. Getting one needs a wild Pokemon to
+  // land a status move, and the only one on the routes this save can reach is
+  // Weedle's Poison Sting -- which needs a Weedle to get a turn, which an
+  // over-levelled lead never gives it. Sixty battles on Route 30 produced none.
+  // So this is the same kind of gap as the remote-play picture: honest, written
+  // down, and waiting on a situation rather than on more reading.
+  statusBits: { slp: 0x07, psn: 0x08, brn: 0x10, frz: 0x20, par: 0x40 },
+
   // --- species -------------------------------------------------------------
   // The highest id PokemonNames has an entry for. Reading past it reads
   // whatever table follows, so a hack that added species has to say so -- and

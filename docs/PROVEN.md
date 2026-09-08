@@ -28,7 +28,7 @@ flowchart LR
 
 Every step of that is the first time it has been watched on a cartridge since
 the battle and job code was rewritten, and one of them failed the first time
-round — see [the eleventh pass](#twenty-four-audits-and-how-each-defect-was-actually-found).
+round — see [the eleventh pass](#twenty-five-audits-and-how-each-defect-was-actually-found).
 
 Proven, and visible in [the screenshot on the front page](../README.md):
 
@@ -332,7 +332,7 @@ second, which is there so the core's own waits finish, not to run a game.
   candidates and returned true standing three tiles clear of any. It checks the
   tile underfoot now.
 
-## Twenty-four audits, and how each defect was actually found
+## Twenty-five audits, and how each defect was actually found
 
 Everything above was watched happening. This section was the exception, and the
 exception was the point of it: after the ROM-hack work shipped, eleven passes
@@ -442,6 +442,11 @@ exactly why nothing failed.
 | 24 | `closeMenus` cannot succeed in a battle, so it always exhausts its budget | any battle path that fails | following a feature |
 | 24 | and routing every grind heal through the bag broke the loop's only exit | grinding to Lv14 | measuring the fix |
 | 24 | `heals` collided with a counter that had never counted heals | naming a new option | reading the collision |
+| 25 | `mon.status` was in the engine profile and read by nothing, for ten passes | asking what the profile declares | **reading the profile back** |
+| 25 | so a party at full HP that was poisoned read as "at full health" | a status the app could not see | reading the profile back |
+| 25 | and the grind never healed for one, so poison ticked until it looked like damage | walking with poison | reading the profile back |
+| 25 | the cure ran *after* the HP check, so a well-but-poisoned party returned early | the one party it exists for | **a test written before the code** |
+| 25 | and `useItemOn` judged success by HP, which no cure moves | an antidote | measuring the fix |
 
 Five things in that table are worth more than the individual rows.
 
@@ -452,12 +457,12 @@ device, a second cartridge, a second Pokémon. What it measures is how much of
 the world you have to *arrange*, not how much you have to own: the fifth pass
 needed no hardware at all, only a party with a corpse in slot one.
 
-**Two of the seventy-seven were caught by a check**, and only after the fix
+**Two of the eighty-two were caught by a check**, and only after the fix
 had decided what to look for: the wiring group named the four modules still
 importing constants that had just been deleted. One more was caught by a *test*,
 and only because the test hung — the obvious `continue` for the party prompt
 advanced nothing in a loop bounded by balls thrown. That is the honest weight to
-give this repository's seventeen check groups and 309 tests: they hold a fix
+give this repository's seventeen check groups and 329 tests: they hold a fix
 down, and they catch the fix that is itself wrong. They do not find the fault.
 
 **Measuring also rules things out, which is half of what it is for.** The
@@ -1465,6 +1470,93 @@ tell: **it has never counted heals.** The bag mends things without one. It count
 Seventy-nine out of seventy-nine is the number worth keeping. A perfect record
 over a grind is what healing *before* the faint buys, and it is the first time
 this log has one.
+
+### A twenty-fifth pass: reading the profile back
+
+Twenty-four passes have added fields to the engine profile. This one asked the
+reverse question — *what does the profile declare that nothing reads?* — and
+found the answer in one line:
+
+```
+mon: {
+  species: 0x00, moves: 0x02, pp: 0x17, level: 0x1f,
+  status: 0x20, hp: 0x22, maxHp: 0x24,      ← status, for ten passes
+},
+```
+
+`party()` read species, level, HP, maxHp, moves and PP, and stepped over
+`status`. Which is the mirror of the twentieth pass's finding — *methods with no
+caller* — asked of data instead of code, and it turns out to be the more
+productive direction: a method nobody calls is dead weight, and a **field nobody
+reads is a blind spot**.
+
+```mermaid
+flowchart LR
+    A["a Pokémon at 20/20<br/>and poisoned"] --> B["the app reads HP"]
+    B --> C["<i>everyone is at full health</i>"]
+    C --> D["a grind starts"]
+    D --> E["poison ticks per step"]
+    E --> F["<b>HP falls to a quarter</b>"]
+    F --> G["<i>1 hurt — off to a Center</i>"]
+    G --> H["a trip an ANTIDOTE<br/>would have saved"]
+```
+
+Three defects fall straight out of that drawing, and the third is the one worth
+the pass:
+
+1. **The Heal row called it full health**, because it counted HP.
+2. **The grind never healed for a status**, so poison was only noticed once its
+   ticking looked like ordinary damage.
+3. **And the trip it earned was the wrong answer**, because the thing that
+   needed fixing was never the HP.
+
+### Two of the five were mine, and one was caught by writing the test first
+
+**The cure ran after the HP check.** `healFromBag` computed the hurt list,
+returned early if it was empty, and only then cured — so a party at *full HP*
+that was poisoned took the early return. The one party the status reader exists
+for was the one that never reached the cure. Found by a test written from the
+feature's own description rather than from the code, which is the first time
+this log can say that.
+
+**And `useItemOn` judged success by HP.** An ANTIDOTE moves none. Every cure
+would have reported a failure — and that failure is what stops the loop reaching
+for the next item, which is a shape two earlier passes have already paid for.
+Its evidence is now HP *or* a status going away, and the waiting is still done
+on the pocket, because the pocket is the slowest of the three: by the time it has
+caught up, the other two certainly have.
+
+### What was measured, and what was not
+
+**The offset was measured.** On a Lv13 Cyndaquil at 35 of 37: byte `0x1f` read
+13, `0x22`–`0x23` read 35, `0x24`–`0x25` read 37, and `0x20` — bracketed by two
+fields already known to be right — read `0`, which is what a well Pokémon holds.
+
+**No non-zero status has been seen.** Getting one needs a wild Pokémon to land a
+status move, and the only one on the routes this save can reach is Weedle's
+Poison Sting. That needs a Weedle to get a turn, which an over-levelled lead
+never gives it: sixty battles on Route 30 produced no status at all, and a run
+that chipped *gently* at Weedles specifically to keep them alive found no Weedle
+in eight encounters.
+
+So the five bit values come from `constants/pokemon_data_constants.asm` and are
+pinned by tests over synthetic bytes, and the cure path is exercised through the
+same `useItemOn` measured on the cartridge two passes ago. **This is the third
+standing gap in this document**, beside the remote-play picture and the ROM hack,
+and it has the same character: it is waiting on a *situation* rather than on more
+reading. The list is worth keeping in one place, because it is the honest answer
+to "what would you do next if you could".
+
+| Gap | What it needs |
+| --- | --- |
+| the remote-play picture | two real devices on one wifi |
+| a title profile that is not Crystal | a `.gbc` and a `.sym` from a real hack |
+| a non-zero status byte | a wild Pokémon that gets a turn |
+
+Sleep is worth one more line, because it is the one the decode could have got
+wrong quietly. **It is a counter, not a flag**: the low three bits hold the turns
+remaining, so `byte & 0x04` is false of a Pokémon asleep for three more turns.
+The mask is `0x07`, and a test pins 1, 3 and 7 as all meaning asleep.
 
 ## The part that had to be redesigned
 

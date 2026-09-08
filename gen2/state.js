@@ -10,6 +10,28 @@ const b = GameBoy.byteAt, w = GameBoy.wordAt;
 // in its own header that this app's caution is not a fact about the machine.
 const POCKET_KINDS = 20;
 
+/**
+ * The status byte as a list of keys: `['psn']`, `['slp']`, `[]`.
+ *
+ * A list rather than one value because the byte is a set of flags and Gen 2 can
+ * hold more than one at once -- burned and paralysed together, for instance.
+ * **Sleep is a counter, not a flag**: the low three bits hold how many turns are
+ * left, so it is a mask, and `byte & 0x04` is false of a Pokemon asleep for
+ * three more turns. Which is the sort of thing that reads as working until it
+ * does not.
+ *
+ * Keys rather than words, because what to call it is the interface's business
+ * and which item cures it is the title's, and neither of those is this file's.
+ */
+export function statusOf(byte, engine = gen2) {
+  const bits = engine.statusBits || {};
+  const out = [];
+  for (const [key, mask] of Object.entries(bits)) {
+    if (byte & mask) out.push(key);
+  }
+  return out;
+}
+
 // Collision values that roll for a wild encounter (COLL_LONG_GRASS $14,
 // COLL_TALL_GRASS $18, and the two unused mirrors the engine still treats
 // as grass).
@@ -232,6 +254,9 @@ export class GameState {
         moves: [0, 1, 2, 3].map((k) => b(wram, base + mon.moves + k)),
         // Low 6 bits are current PP; the top two are PP Up count.
         pp: [0, 1, 2, 3].map((k) => b(wram, base + mon.pp + k) & 0x3f),
+        // What is wrong with it besides its HP. The byte was in the engine
+        // profile for ten passes with nothing reading it -- see `statusOf`.
+        status: statusOf(b(wram, base + mon.status), this.e),
       });
     }
     return out;

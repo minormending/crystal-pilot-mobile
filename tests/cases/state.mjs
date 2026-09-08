@@ -2,7 +2,7 @@
 // about. Cheap to test and worth testing, because everything downstream trusts
 // it -- a misread here shows up much later as a bad decision.
 import { FakeGameBoy, symbols, test, worldRam, markSaved } from '../harness.mjs';
-import { GameState } from '../../gen2/state.js';
+import { GameState, statusOf } from '../../gen2/state.js';
 import { gen2 } from '../../gen2/engine.js';
 
 test('a party is read back with levels, HP and moves intact', async (t) => {
@@ -72,4 +72,48 @@ test('the shared constants are the ones the game uses', async (t) => {
   // title that changed one had it honoured in `party()` and nowhere else.
   t.eq(gen2.trainerBattle, 2, 'wBattleMode 2 is a trainer');
   t.eq(gen2.maxParty, 6, 'six party slots');
+});
+
+// --- what is wrong besides the HP -------------------------------------------
+
+test('the status byte reads as a list of keys', async (t) => {
+  // Declared in the engine profile since it was written, and read by nothing
+  // for ten passes. What that cost: poison ticks a Pokémon while you *walk*,
+  // so a grind or a journey with a poisoned lead bleeds HP per step -- and the
+  // walk to a Center could kill the thing it was going to heal, with the app
+  // reporting only that the party was hurt.
+  t.eq(statusOf(0x00), [], 'a well Pokémon');
+  t.eq(statusOf(0x08), ['psn'], 'poisoned');
+  t.eq(statusOf(0x40), ['par'], 'paralysed');
+  t.eq(statusOf(0x10), ['brn'], 'burned');
+  t.eq(statusOf(0x20), ['frz'], 'frozen');
+});
+
+test('sleep is a counter, not a flag', async (t) => {
+  // The low three bits hold how many turns are left, so `byte & 0x04` is false
+  // of a Pokémon asleep for three more turns -- which is the sort of thing that
+  // reads as working until it does not.
+  t.eq(statusOf(0x03), ['slp'], 'asleep for three more turns');
+  t.eq(statusOf(0x01), ['slp'], 'and for one');
+  t.eq(statusOf(0x07), ['slp'], 'and for seven, which is the whole mask');
+});
+
+test('two things can be wrong at once', async (t) => {
+  t.eq(statusOf(0x50).sort(), ['brn', 'par'], 'burned and paralysed');
+});
+
+test('a cartridge whose profile names no status bits reports none', async (t) => {
+  t.eq(statusOf(0xff, { statusBits: {} }), [], 'nothing declared, nothing read');
+});
+
+test('the party reader carries it', async (t) => {
+  const sym = symbols();
+  const state = new GameState(sym);
+  const s = state.read(worldRam(sym, { party: [
+    { hp: 20, maxHp: 20, statusByte: 0x08 },
+    { hp: 12, maxHp: 20, statusByte: 0x00 },
+  ] }));
+  t.eq(s.party[0].status, ['psn'], 'the poisoned one');
+  t.eq(s.party[1].status, [], 'and the well one');
+  t.eq(s.party[0].hp, 20, 'at full HP, which is the case the app used to miss');
 });

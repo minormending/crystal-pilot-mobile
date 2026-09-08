@@ -208,6 +208,14 @@ Pokémon at 0 HP in Gen 2. Offering the bag there would be a promise the row
 cannot keep — which is the same standard the Take row holds itself to when it
 counts what is placed rather than naming what you will get.
 
+**And it says what is wrong, not just how much.** A party at full HP that is
+poisoned read as *everyone is at full health* for twenty-four versions, because
+the row was counting HP. It names the condition now — *poisoned · ANTIDOTE in
+the bag* — and names it rather than counting it, because **which** thing is wrong
+decides what will fix it: a potion does nothing about poison, and poison goes on
+doing damage while you walk. HP still comes first where both are true, since HP
+is the thing that ends a job.
+
 **Take is the sixth offer, and the only one whose whole reason to exist is
 read off the map you are standing on.** Every other row is about your party, your
 bag or the graph; this one is about `wMapObjects`. It says what is *placed* here

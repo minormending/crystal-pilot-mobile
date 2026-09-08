@@ -551,6 +551,38 @@ Which items count is read from a list for your cartridge, so a hack that renamed
 POTION loses this and keeps everything else — and gets it back the moment
 somebody writes the name down.
 
+### Poisoned is not "hurt", and the row says which
+
+The pilot read your party's HP and nothing else for twenty-four versions, which
+means a Pokémon at full health that happened to be **poisoned** read as
+perfectly fine. It is not: poison takes HP off while you walk, so a grind or a
+long journey with a poisoned lead is losing ground on every step — and the walk
+to a Pokémon Center could kill the thing it was going to heal.
+
+The Heal row names it now: *poisoned · ANTIDOTE in the bag*, or *paralysed ·
+nearest is Elm's lab* when nothing you are carrying will do. Two of them reads
+*2 poisoned*, and something asleep and something burned reads *2 asleep and
+burned*.
+
+**Cures come before potions**, because a potion spent before the antidote is a
+potion spent into a leak. And the specific cure comes before the general one, so
+a FULL HEAL is not spent on a poisoning an ANTIDOTE would have fixed — the same
+rule the pilot follows with Poké Balls and with potions. Berries lead every
+list, because Crystal grows them on the trees the Take row finds: there is a
+PSNCUREBERRY on Route 30.
+
+A fainted Pokémon has no status worth curing — the faint is the problem, and
+only a Center answers that.
+
+**One honest limit.** The five conditions are read from the byte the game keeps
+them in, at an offset confirmed against the level and HP either side of it, and
+the bit values come from the disassembly. But no *actual* poisoning has been
+seen: getting one needs a wild Pokémon to land a status move, and a pilot that
+one-shots everything on the route never gives it a turn. Sixty battles on Route
+30 produced none. So this is read and reasoned rather than watched, and it is
+written down that way.
+
+
 ## Two places to heal, when the bag will not do
 
 Elm has a healing machine in his lab, and it works from the moment you take a

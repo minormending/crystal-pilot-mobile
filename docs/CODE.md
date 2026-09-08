@@ -106,7 +106,7 @@ of the subtleties in sections 6 and 7.
 
 ## 2. The shape of it
 
-<!-- covers-api: app/main.js gen2/journey.js titles/crystal.js gen2/tasks.js gen2/nav.js gen2/world.js gen2/collision.js gen2/state.js gen2/romdata.js gen2/symbols.js gbcore/gb.js @ 8b54fb0643e3 -->
+<!-- covers-api: app/main.js gen2/journey.js titles/crystal.js gen2/tasks.js gen2/nav.js gen2/world.js gen2/collision.js gen2/state.js gen2/romdata.js gen2/symbols.js gbcore/gb.js @ 676f0dc0075d -->
 
 Twenty-seven modules, in four directories, and the directories are the design:
 **an import may point down this list and never up.**
@@ -452,10 +452,50 @@ enforces it, so it is a fact about the build rather than a habit.
 
 ### `state.js` — what the game is doing right now
 
-<!-- covers: gen2/state.js @ faeb565ec922 -->
+<!-- covers: gen2/state.js @ 28f487c581c1 -->
 
 One snapshot, many answers: `inBattle`, `party`, `pos`, `onGrass`,
-`worldLoaded`, `menu`, `balls`, `items`, and the enemy's HP.
+`worldLoaded`, `menu`, `balls`, `items`, each party member's `status`, and the
+enemy's HP.
+
+**`status` is the field that was declared and never read**, for ten passes. The
+engine profile has carried `mon.status: 0x20` since it was written; `party()`
+read species, level, HP, moves and PP and stepped over it. What that cost is the
+sort of thing HP alone cannot show: **poison ticks a Pokémon while you walk**, so
+a grind or a journey with a poisoned lead bleeds HP per step — and the walk to a
+Center could kill the thing it was going to heal, with the app reporting only
+that the party was hurt.
+
+`statusOf(byte, engine)` answers with a list of keys — `['psn']`, `[]`, or
+`['brn', 'par']`, because Gen 2 can hold two at once. Two things about that
+decode are worth stating:
+
+- **Sleep is a counter, not a flag.** The low three bits hold how many turns are
+  left, so it is a *mask*: `byte & 0x04` is false of a Pokémon asleep for three
+  more turns. That is the shape of a bug that reads as working.
+- **Keys, not words.** What to call it belongs to the interface and which item
+  cures it belongs to the title, and neither of those is this file's business.
+
+<details>
+<summary><b>Advanced detail:</b> what was measured, and what was not</summary>
+
+**The offset was measured; the bit values were not.** On a Lv13 Cyndaquil at 35
+of 37, byte `0x1f` read 13, `0x22`–`0x23` read 35 and `0x24`–`0x25` read 37 — so
+`0x20` sits bracketed by two fields already known to be right, and it reads `0`,
+which is what a well Pokémon holds. The five masks come from
+`constants/pokemon_data_constants.asm` and are pinned by tests over synthetic
+bytes.
+
+**No non-zero status has been seen on the cartridge.** Getting one needs a wild
+Pokémon to land a status move, and the only one on the routes this save can
+reach is Weedle's Poison Sting — which needs a Weedle to get a turn, which an
+over-levelled lead never gives it. Sixty battles on Route 30 produced none, and
+a run that chipped gently at Weedles specifically found no Weedle in eight
+encounters. So this is the same kind of gap as the remote-play picture: written
+down rather than glossed, and waiting on a *situation* rather than on more
+reading.
+
+</details>
 
 **`items` is the ITEM pocket, read for the first time in twenty-two versions**,
 and the pocket next door had been read since the beginning. Both go through one
@@ -973,7 +1013,7 @@ eight kilobytes a full snapshot copies, which is worth keeping distinct.
 
 ## 6. Battles
 
-<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ b9c96f290214 -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 8067e91dbdf5 -->
 
 ### Which move, and which question
 
@@ -1591,6 +1631,41 @@ flowchart TD
     V -- no --> W
 ```
 
+**And it cures what a potion cannot, first.** Poison and a burn take HP off
+between battles and while walking, so a potion spent before the antidote is a
+potion spent into a leak.
+
+```mermaid
+flowchart TD
+    H["Heal"] --> C["cureFromBag: status first"]
+    C --> Q{"anyone hurt?"}
+    Q -- no --> D{"anything cured?"}
+    D -- yes --> OK1["cured, without moving a tile"]
+    D -- no --> N["nothing the bag can mend"]
+    Q -- yes --> M["healFromBag: worst first, cheapest item"]
+    M --> OK2["mended"]
+```
+
+Three things about that order were defects, and two of them were mine:
+
+- **The cure ran after the HP check**, so a party at *full HP* that was
+  poisoned returned early with *nothing the bag can mend* — the one party the
+  status reader exists for was the one that never reached the cure.
+- **`useItemOn` judged success by HP**, and an ANTIDOTE moves none. Every cure
+  would have reported a failure, and that failure is what stops the loop
+  reaching for the next item. Its evidence is now HP *or* a status going away.
+- **The grind's heal condition ignored status entirely**, so a poisoned lead was
+  only noticed once the ticking had brought its HP down far enough to look like
+  ordinary damage — by which point a Center trip had been earned that an
+  ANTIDOTE would have saved.
+
+Which item cures what is the **title's** map, `cures`, keyed by the same keys
+`statusOf` returns and weakest-first within each. The specific cure comes before
+the general one, so a FULL HEAL is not spent on a poisoning an ANTIDOTE would
+have fixed — the ball preference's rule, in a third pocket. Crystal's lists lead
+with berries, because it grows them on the trees the Take row finds:
+PSNCUREBERRY on Route 30, and four more elsewhere.
+
 Which item is `cheapestHeal`, and which items count is the **title's** list, not
 the engine's: an id is layout and a name is content, and content is what a hack
 changes. Weakest first, matched through the same `normalise` fold the ball
@@ -1696,7 +1771,7 @@ to take here — tried 2* and stayed green.
 
 ## 7b. Saving, and getting the save out
 
-<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ b9c96f290214 -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 8067e91dbdf5 -->
 
 ```mermaid
 flowchart TD
@@ -3125,7 +3200,7 @@ recorded at all, so the kept battery was restored into whatever ROM was picked
 next; and `pickKey` was *the only record, if there is exactly one*, which wrote
 this cartridge's save into the previous cartridge's record. Both failed
 silently, and both were on the paths nobody presses — see
-[Twenty-four audits](PROVEN.md#twenty-four-audits-and-how-each-defect-was-actually-found)
+[Twenty-five audits](PROVEN.md#twenty-five-audits-and-how-each-defect-was-actually-found)
 for why that is not a coincidence.
 
 `patchMeta` merges fields into the `meta` record, and it used to do that as a
