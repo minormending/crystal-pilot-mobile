@@ -455,7 +455,7 @@ enforces it, so it is a fact about the build rather than a habit.
 
 ### `state.js` — what the game is doing right now
 
-<!-- covers: gen2/state.js @ c4c94c998b52 -->
+<!-- covers: gen2/state.js @ 12cc839bad6c -->
 
 One snapshot, many answers: `inBattle`, `party`, `pos`, `onGrass`,
 `worldLoaded`, `menu`, `balls`, `items`, each party member's `status`, and the
@@ -1034,7 +1034,7 @@ point those coordinates mean somewhere else entirely.
 
 ## 5. Crossing to the next map
 
-<!-- covers: gen2/journey.js gen2/world.js @ 359d4b6274a8 -->
+<!-- covers: gen2/journey.js gen2/world.js @ 02e88bcb06e9 -->
 
 A connection spans only part of a shared edge, so "walk west until something
 happens" does not work. `crossEdge()` closes the distance in stages, then tries
@@ -1196,7 +1196,7 @@ eight kilobytes a full snapshot copies, which is worth keeping distinct.
 
 ## 6. Battles
 
-<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 87287aa2d841 -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ b49261341b3c -->
 
 ### Which move, and which question
 
@@ -1660,7 +1660,7 @@ fainted.
 
 ## 7. Catching something
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ 69365d67d1ef -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ d604b5f4b6fe -->
 
 Catching is the most involved loop, because a Poké Ball's odds turn on how much
 HP is left. Throwing at a full-health target is mostly throwing balls away.
@@ -1755,9 +1755,49 @@ raises: you are on the wrong route. Both messages now end with
 three, and the `#seen` line is painted by one function with two callers rather
 than by one handler that happened to have the data.
 
+**A full party is no longer a refusal.** Gen 2 sends a caught Pokémon to the
+box and says so, which the app spent five passes calling a thing it does not
+handle. Measured with six carried:
+
+```
+Gotcha! PIDGEY was caught!
+Give a nickname to PIDGEY?
+AAAAAAAAAA was sent to BILL's PC.
+```
+
+The party never moved off six and one ball left the bag — so **the party is the
+wrong evidence**, and with the party as the only evidence a boxed catch and a
+getaway are identical. The screen is the evidence, and the phrase to watch for
+is the **title's** to say, because words are content: `phrases.boxed` sits
+beside `heals` and `cures`, and a hack in another language changes one field. A
+cartridge that has not said it keeps the refusal, and the refusal now names the
+fact that is missing rather than claiming the app cannot do it.
+
+That third line is the other half of the finding. `watchThrow`'s party check
+used to sit behind *a window with a live cursor* — which is the waiting that
+made `declineNickname` work — so the nickname question after a **boxed** catch
+was never reached, and every one of them would have been called AAAAAAAAAA.
+The same defect as the starter's, in the second place it can happen, found by
+making the path work at all. Both callers share `keepDefaultName` now, which
+moved to `taskbase.js` for exactly that reason: naming a primitive after its
+first caller is how the second ends up with a copy.
+
+```mermaid
+flowchart TD
+    T["throwBall"] --> W{"watchThrow"}
+    W -- "party grew" --> N["keepDefaultName"]
+    W -- "screen says<br/><i>sent to BILL</i>" --> N
+    W -- "battle over,<br/>neither" --> G["gone"]
+    W -- "menu is back" --> B["broke free"]
+    N --> C["caught"]
+    C --> R{"did it join?"}
+    R -- yes --> J["caught SENTRET Lv3"]
+    R -- no --> X["caught PIDGEY — sent to the box"]
+```
+
 ## 7a. Five that act on where you already are
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ a330ba11df31 -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ 3d3ccd97ab32 -->
 
 Grind, hunt and catch all go *looking* for something. These five do the obvious
 thing with the situation you are already in, and take no parameters:
@@ -2028,7 +2068,7 @@ said *trainer battle: lost* **seven times**. One loss, reported seven ways.
 
 ## 7d. The counter, and the money it takes
 
-<!-- covers: gen2/menus.js gen2/state.js titles/crystal.js @ afca91fa5630 -->
+<!-- covers: gen2/menus.js gen2/state.js titles/crystal.js @ 2a41aa35737a -->
 
 Everything the pilot could do until now used what it found. **Shop** walks to a
 mart and buys, which is the first thing it does that spends rather than
@@ -2099,13 +2139,45 @@ can talk to it from is (3,3) facing LEFT, two tiles away across a corner.
 
 </details>
 
+### Leaving the counter is not closing its box
+
+The most expensive defect in this log, and it was quietly spending money.
+
+`closeMenus` presses B until no window is open. That is right for a menu the
+pilot opened itself and **wrong for a box the game is holding up**: measured at
+Cherrygrove's counter, the boxes closed, `wScriptMode` stayed non-zero, and the
+clerk's confirmation was back a moment later.
+
+The pilot was then standing in front of *"1 POKé BALL will be ¥200. OK?"* — and
+every later job runs `runScripts`, which presses A through text. **A on that box
+is a purchase.**
+
+| | measured |
+| --- | --- |
+| after the shop reported success | ¥900, confirm box open, `wScriptMode` non-zero |
+| after three more jobs' walks | **¥100**, four unwanted Poké Balls |
+| why it stopped | ¥100 could not buy another |
+| what every walk said | *could not get through to Cherrygrove City*, eight tries at a time |
+
+Three fixes, one cause. `closeConversation` waits for **no window and no
+script**, and reports which it could not clear. `through()` closes what is on
+screen with **B** before walking — B rather than A because A answers a question
+and B declines it, and a walk has no business answering anything — and says
+*something is still on screen* when it cannot. And `restock` reads **both**
+pockets: a Poké Ball is not in the ITEM one, so `want` meant *buy this many*
+rather than *have this many* for the one thing anybody would ask it to fetch.
+
+Verified by re-running the sequence that lost the money: *bought 7 for 1400 —
+1900 left*, twelve balls exactly, no window, no script, and the walk out
+arrived on Route 29 with **¥1900 untouched**.
+
 **Measured end to end**, from where the bootstrap leaves you on Route 29 with
 ¥3000 and one potion: it travelled to Cherrygrove, went in, walked to the
 counter and came away with **five potions and ¥1800**, in 49 seconds.
 
 ## 7b. Saving, and getting the save out
 
-<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 87287aa2d841 -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ b49261341b3c -->
 
 ```mermaid
 flowchart TD
@@ -2347,7 +2419,7 @@ because that failure is only otherwise discovered by reaching for the undo.
 
 ## 8. The errands
 
-<!-- covers: titles/crystal.js gen2/journey.js @ cc01490e2690 -->
+<!-- covers: titles/crystal.js gen2/journey.js @ bb6d76b4d5aa -->
 
 Everything in this section is `crystal.js` — the only file in the app that names
 a Crystal map, a Crystal door or a Crystal NPC. What it stands on is
@@ -2683,7 +2755,7 @@ This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ 3a7290692a94 -->
+<!-- covers: app/main.js index.html @ 9157aae25e86 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -3212,7 +3284,7 @@ seconds by a page whose loop was supposedly running.
 
 ### One thing at a time
 
-<!-- covers: app/main.js @ ea96dbb45b4f -->
+<!-- covers: app/main.js @ b9bc965869d6 -->
 
 One Game Boy, one joypad, one canvas — so a great deal of this app is about
 making sure two things are never driving them at once. There are three claims,
@@ -3845,7 +3917,7 @@ they have been installed.
 
 ### Watching the other device's screen
 
-<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ 337ee96ec883 -->
+<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ 18b1682423ed -->
 
 One device shows its screen; the other watches it, and plays it if the first
 one says so. The picture goes straight between them over WebRTC and never

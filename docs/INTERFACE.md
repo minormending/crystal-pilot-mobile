@@ -326,6 +326,17 @@ The offers list is therefore empty during a battle, by design, and the hint says
 where the two actions went. An empty list with no explanation reads as broken
 rather than as modal.
 
+### Catch this one no longer refuses a full party
+
+The row used to read *the party is full* once you carried six, because the app
+could not tell a boxed catch from one that got away. It reads the game's own
+message now, so the row offers it and the report says where the Pokémon went —
+*caught PIDGEY with 1 POKé BALL — sent to the box*.
+
+The refusal survives for a cartridge whose title has not written that phrase
+down, which is the same rule the healing items follow: a fact about *words* is
+the title's, and without it the honest thing is to say which fact is missing.
+
 ## The party is one line, above the jobs it decides
 
 The party had a card of its own: a heading, a row and an HP bar per member — six
@@ -629,4 +640,4 @@ So this page carries a marker naming the files it describes and the hash they
 had when it was last read against them. `tools/docs-check` reports it when they
 move, and the pre-commit hook blocks on that report.
 
-<!-- covers: index.html app/main.js app/rows.js @ 86d5b1835802 -->
+<!-- covers: index.html app/main.js app/rows.js @ bfcee0a48fe3 -->

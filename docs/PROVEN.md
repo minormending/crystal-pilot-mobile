@@ -336,7 +336,7 @@ second, which is there so the core's own waits finish, not to run a game.
   candidates and returned true standing three tiles clear of any. It checks the
   tile underfoot now.
 
-## Twenty-nine audits, and how each defect was actually found
+## Thirty audits, and how each defect was actually found
 
 Everything above was watched happening. This section was the exception, and the
 exception was the point of it: after the ROM-hack work shipped, eleven passes
@@ -467,6 +467,11 @@ exactly why nothing failed.
 | 29 | six more box failures that could have quoted the screen and did not | asking who else should read a one-pass-old mechanism | **asking who calls what** |
 | 29 | the bar's screen reader could overlap its own reads and miscount a dwell | reading it back | reading it back |
 | 29 | *and the starter's name, fixed by a button nobody had asked about* | *being told* | **being told** |
+| 30 | the shop walked away from the counter with its confirmation open, and every later job pressed A into it — ¥3000 to ¥100 | buying anything, then doing anything | **buying something** |
+| 30 | and every walk then blamed a door for a window, eight tries at a time | the same | buying something |
+| 30 | `restock` read only the ITEM pocket, so `want` meant *buy this many* for a ball | asking it for balls | asking it for balls |
+| 30 | `watchThrow` could not see a catch that went to the box, so the app refused to try | a party of six | **filling the party** |
+| 30 | and the nickname question after a boxed catch was never answered | the same | filling the party |
 
 Five things in that table are worth more than the individual rows.
 
@@ -477,14 +482,14 @@ device, a second cartridge, a second Pokémon. What it measures is how much of
 the world you have to *arrange*, not how much you have to own: the fifth pass
 needed no hardware at all, only a party with a corpse in slot one.
 
-**Three of the ninety-eight were caught by a check**, and only after the fix
+**Three of the one hundred and three were caught by a check**, and only after the fix
 had decided what to look for: the wiring group named the four modules still
 importing constants that had just been deleted, and the symbol group refused a
 new address that had not been added to the list that travels between devices.
 One more was caught by a *test*, and only because the test hung — the obvious
 `continue` for the party prompt advanced nothing in a loop bounded by balls
 thrown. That is the honest weight to give this repository's seventeen check
-groups and 408 tests: they hold a fix down, and they catch the fix that is
+groups and 420 tests: they hold a fix down, and they catch the fix that is
 itself wrong. They do not find the fault.
 
 **Measuring also rules things out, which is half of what it is for.** The
@@ -1958,6 +1963,91 @@ One more measurement, small and easy to get wrong. A Gen 2 screen has *columns*:
 one tilemap row on the START menu carries `Save your` on the left and `EXIT` on
 the right, so collapsing whitespace reads as one sentence that says neither. A
 gap of three spaces or more is kept, as `Save your · EXIT progress`.
+
+### A thirtieth pass: the one that was spending money
+
+The feature was catching with a full party. Getting a party of six meant buying
+Poké Balls, and buying them turned up the most expensive defect in this
+document.
+
+**The pilot was left standing at a mart counter with the clerk's confirmation
+open**, and every later job pressed A through it. `buyFromClerk` ended with
+`closeMenus`, which presses B until no window is open — right for a menu the
+pilot opened itself, wrong for a box the *game* is holding up. Measured at
+Cherrygrove's counter: the boxes closed, `wScriptMode` stayed non-zero, and the
+confirmation was back a moment later.
+
+| | measured |
+| --- | --- |
+| the shop reported | *bought 12 for 2400 — 900 left* |
+| after three more jobs | **¥100**, and four Poké Balls nobody asked for |
+| why it stopped | ¥100 could not buy another |
+| what every walk said | *could not get through to Cherrygrove City*, blaming a door for a window |
+
+A on a shop confirmation is a purchase, and `runScripts` presses A through text.
+That is deliberate — the intro's questions are answered there and want yes — and
+it is a hazard everywhere else, which is now written beside it.
+
+Three fixes, one cause: `closeConversation` waits for no window **and** no
+script; `through()` backs out with **B** before walking, because A answers a
+question and B declines it and a walk has no business answering anything; and
+`restock` reads **both** pockets, since a Poké Ball is not in the ITEM one and
+`want` therefore meant *buy this many* rather than *have this many* for the one
+thing anybody would ask it to fetch.
+
+Re-run on the same sequence: *bought 7 for 1400 — 1900 left*, twelve balls
+exactly, no window, no script, and the walk out arrived on Route 29 with **¥1900
+untouched**.
+
+### And the feature it was in the way of
+
+**A full party does not stop a catch.** Measured with six carried:
+
+```
+Gotcha! PIDGEY was caught!
+Give a nickname to PIDGEY?
+AAAAAAAAAA was sent to BILL's PC.
+```
+
+The party never moved off six and one ball left the bag. So the refusal the app
+had carried since the seventeenth pass — *a caught Pokémon would go to the PC,
+which this does not handle* — was about the app's **evidence**, not about the
+game: with the party as the only signal, a boxed catch and a getaway are
+identical. The screen is the evidence now, and the phrase is the title's to say,
+because words are content. A cartridge that has not said it keeps the refusal,
+and the refusal names the missing fact.
+
+That third line is the rest of the finding. `watchThrow`'s party check sat
+behind *a window with a live cursor*, which is the waiting that made
+`declineNickname` work — so the nickname question after a **boxed** catch was
+never reached, and every one of them would have been named AAAAAAAAAA. The same
+defect as the starter's, in the second place it can happen, and it could only be
+found by making the path work at all.
+
+Measured end to end: **caught PIDGEY with 1 POKé BALL — sent to the box**, party
+still six, balls eight to seven.
+
+### And the screen keeps earning its keep
+
+Two catches failed before that one, reporting *could not reach the ball in the
+pack* and *lost track of the battle*. The screen said **"There's no will to
+battle!"** both times — the game refusing a fainted Pokémon, which is a
+different thing to go and fix than either message suggests. A failed catch
+carries the screen now.
+
+### One claim re-tested rather than left standing
+
+The pass before concluded that **a Gen 2 Pokémon Center has no PC**, from an
+event-block parse and a sweep of the room's walls. Then the ROM turned out to
+contain Bill's PC menu — `WITHDRAW / DEPOSIT / CHANGE BOX / MOVE W/O MAIL /
+SEE YA!` at `0xe49d` — which made the claim worth doubting, and one object in
+the Center had never been faced.
+
+Re-tested: the object at (8,6), sprite 64, from both sides it can be reached
+from. Nothing, twice. So the claim stands, with the caveat it deserves: **that
+menu is in the ROM and this pass did not find what reaches it.** The bedroom
+PC's six rows are items, decoration and mail; Cherrygrove's Center has no bg
+events at all. Somewhere later in the game, presumably.
 
 ## The part that had to be redesigned
 

@@ -481,6 +481,22 @@ failure raises: you are on the wrong route for what you asked for.
 Until the twenty-eighth pass only **Hunt** did this. Catch ran the same walk
 through the same grass and threw the tally away.
 
+## Catching with a full party
+
+A caught Pokémon goes to the box when you already have six, and the pilot now
+knows that. It reports where it went:
+
+> **caught PIDGEY with 1 POKé BALL — sent to the box**
+
+For five versions the app refused to try, on the reasoning that it could not
+tell a boxed catch from one that got away — which was true, because the party
+is the only thing it was watching and the party does not grow. It reads the
+game's own message now: *"PIDGEY was sent to BILL's PC."*
+
+The refusal still exists for a cartridge nobody has described, because that
+phrase is written down per title, the same way the healing items are. It says
+which fact is missing rather than pretending the job is impossible.
+
 ## What the game is saying, while the pilot works
 
 The status line under the screen has always shown the pilot's newest step —
@@ -725,6 +741,19 @@ actually has.
 
 A cartridge nobody has described has no mart written down, so the row says so
 and is not offered — the same way it has no named maps and no scripted intro.
+
+### It leaves the counter now
+
+Worth knowing because the old behaviour cost money. A clerk whose box you close
+puts another one up, so the pilot used to walk away from the counter with *"1
+POKé BALL will be ¥200. OK?"* still on screen — and every job after that
+pressed A through it, buying one at a time until the wallet was empty. ¥3000 to
+¥100, and every walk in between failed with *could not get through to
+Cherrygrove City*, blaming a door for a window.
+
+If you ever see a job report *something is still on screen*, that is this guard
+working: the pilot found a box in the way, backed out of it with B, and told you
+rather than pressing into it.
 
 ## Saving, and getting the save off the phone
 
