@@ -177,3 +177,297 @@ test('the whole flow saves, through the real menu code', async (t) => {
   t.true(world.saved, 'and the confirm box was actually answered');
   t.eq(world.walked, 0, 'without ever walking the player');
 });
+
+// --- using an item out of the pack -------------------------------------------
+
+const POTION = 18, BERRY = 154;
+
+/**
+ * A pilot whose pack is a scripted state machine.
+ *
+ * The four boxes between the START menu and a healed Pokémon are matched on
+ * shape, so the fake's whole job is to be the right shape at the right moment
+ * and the wrong one when asked to be. `heals` says how much HP the item gives,
+ * so "the item was spent and nothing healed" and "it would have had no effect"
+ * are both reachable.
+ */
+function packing({ pocket = [[POTION, 1]], party = [{ hp: 10, maxHp: 40 }],
+                   packRow = 2, rows = 7, heals = 20, consumes = true,
+                   boxes = null, curPocket = 0, startItem = POTION,
+                   // How many reads of the pocket happen before the removal is
+                   // written back. The real cartridge lags: measured, a berry
+                   // was still in `wItems` long after it had healed ten HP.
+                   lag = 0 } = {}) {
+  const sym = symbols();
+  const state = new GameState(sym);
+  const gb = new FakeGameBoy({ wram: worldRam(sym, {}) });
+  const tasks = new Tasks(gb, state, () => {}, fakeRom({
+    items: { 18: 'POTION', 154: 'BERRY' },
+  }));
+  const E = tasks.state.e.field;
+  const at = { box: 'start', cursor: 1, pocket: curPocket, item: startItem, row: 1 };
+  const bag = pocket.map(([id, n]) => [id, n]);
+  const mons = party.map((m) => ({ species: 155, level: 5, moves: [33, 0, 0, 0],
+                                   pp: [35, 0, 0, 0], ...m }));
+  const log = [];
+  // The write-back the pocket owes, and when it lands.
+  let pending = null, reads = 0;
+  const shapeOf = () => (boxes ? boxes(at) : ({
+    start: { items: rows, top: 0 },
+    pack: E.pack,
+    use: E.itemUse,
+    party: E.partyPick,
+    closed: null,
+  })[at.box]);
+
+  tasks.step = async () => {};
+  tasks.settleText = async () => {};
+  tasks.snap = async () => {
+    reads++;
+    if (pending && reads >= pending.after) {
+      const e = bag.find(([id]) => id === pending.id);
+      if (e && --e[1] <= 0) bag.splice(bag.indexOf(e), 1);
+      pending = null;
+    }
+    const shape = shapeOf();
+    return {
+      ...state.read(worldRam(sym, { party: mons, items: bag })),
+      windowOpen: at.box !== 'closed',
+      menuItems: shape ? shape.items : 0,
+      menuTop: shape ? shape.top : 0,
+      menu: [1, at.row],
+      curPocket: at.pocket,
+      curItem: at.item,
+    };
+  };
+  tasks.push = async (button) => {
+    log.push(`${button}@${at.box}`);
+    if (button === 'B') { at.box = at.box === 'start' ? 'closed' : 'start'; return; }
+    if (button === 'DOWN') { at.row++; return; }
+    if (button === 'UP') { at.row = Math.max(1, at.row - 1); return; }
+    if (button === 'RIGHT') { at.pocket = (at.pocket + 1) % 4; return; }
+    if (button !== 'A') return;
+    if (at.box === 'start') { at.box = at.row === packRow ? 'pack' : 'start'; at.row = 1; return; }
+    if (at.box === 'pack') { at.box = 'use'; at.row = 1; return; }
+    if (at.box === 'use') { at.box = 'party'; at.row = 1; return; }
+    if (at.box === 'party') {
+      const mon = mons[at.row - 1];
+      if (mon && heals && mon.hp < mon.maxHp) {
+        mon.hp = Math.min(mon.maxHp, mon.hp + heals);
+      }
+      // Consumption is independent of healing on purpose: the cartridge spends
+      // an item that turns out to do nothing, and refuses one that would have
+      // no effect at all, and those are two different states.
+      if (consumes) pending = { id: at.item, after: reads + lag };
+      at.box = 'closed';
+    }
+  };
+  tasks._openStartMenu = async () => { if (at.box === 'closed') { at.box = 'start'; at.row = 1; } return true; };
+  tasks._menuRowCount = async () => rows;
+  tasks.menuCursor = async () => at.row;
+  return { tasks, log, bag, mons, at };
+}
+
+test('the pack row is found by trying and looking, not by counting', async (t) => {
+  // The START menu grows -- no POKéDEX or POKéGEAR early on -- so PACK sits at a
+  // different index depending on how far the game has got. Measured on a fresh
+  // Route 29 save it is row 2 of 7; nothing here believes that.
+  const { tasks, log } = packing({ packRow: 4 });
+  t.true(await tasks._openPack(), 'it found the pack');
+  t.true(log.filter((l) => l === 'A@start').length >= 2,
+         'it pressed into more than one row before finding it');
+});
+
+test('a pack that never opens is reported rather than pressed into', async (t) => {
+  const { tasks } = packing({ packRow: 99 });
+  t.false(await tasks._openPack(), 'no row was the pack');
+});
+
+test('using a potion is confirmed by the bag going down and the HP going up',
+     async (t) => {
+  const { tasks, bag, mons } = packing({ party: [{ hp: 10, maxHp: 40 }] });
+  const r = await tasks.useItemOn(POTION, 0);
+  t.true(r.ok, 'it worked');
+  t.eq(r.gained, 20, 'and says how much');
+  t.eq(bag.length, 0, 'the potion is gone');
+  t.eq(mons[0].hp, 30, 'and the HP moved');
+});
+
+test('a full-health Pokémon is not a heal, however many presses landed',
+     async (t) => {
+  // Measured on the cartridge: at full HP the game takes every press, says the
+  // item would have no effect, spends nothing, and drops back to the pack. A
+  // press-counting version calls that a heal.
+  // At full HP the cartridge spends nothing, which is what tells this apart
+  // from an item that went and did nothing.
+  const { tasks, bag } = packing({ party: [{ hp: 40, maxHp: 40 }], heals: 0,
+                                   consumes: false });
+  const r = await tasks.useItemOn(POTION, 0);
+  t.false(r.ok, 'not a heal');
+  t.contains(r.message, 'no effect', 'and it says which');
+  t.eq(bag[0][1], 1, 'the potion is still there');
+});
+
+test('an item spent for nothing is said differently from one never spent',
+     async (t) => {
+  const { tasks } = packing({ party: [{ hp: 10, maxHp: 40 }], heals: 0, consumes: true });
+  const r = await tasks.useItemOn(POTION, 0);
+  t.false(r.ok, 'still not a heal');
+  t.contains(r.message, 'spent and nothing healed', 'the bag moved, so this is the other one');
+});
+
+test('a pocket that catches up late is waited for, briefly', async (t) => {
+  // The bound is on waiting, not a promise that it arrives -- but where it does
+  // arrive, `spent` should say so rather than reporting a heal the bag has not
+  // seen.
+  const { tasks } = packing({ party: [{ hp: 10, maxHp: 40 }], lag: 6 });
+  const r = await tasks.useItemOn(POTION, 0);
+  t.true(r.ok, 'the HP moved');
+  t.true(r.spent, 'and the pocket was waited for rather than read once');
+  t.eq(r.message, '+20 HP', 'so the message carries no caveat');
+});
+
+test('a heal the bag has not caught up with is still a heal', async (t) => {
+  // Measured on the cartridge, and it cost a working heal to find out: a BERRY
+  // used on a Cyndaquil at 7/23 took it to 17/23 -- ten HP, exactly a BERRY --
+  // and `wItems` still read the berry forty seconds later. The removal was not
+  // written back until the pack was next opened, when both that berry and the
+  // potion used after it disappeared together.
+  //
+  // HP is the evidence. Judging on the pocket made a heal that worked report a
+  // failure, and that failure then stopped the loop from reaching for a second
+  // item.
+  const { tasks } = packing({ party: [{ hp: 10, maxHp: 40 }], consumes: false });
+  const r = await tasks.useItemOn(POTION, 0);
+  t.true(r.ok, 'the HP moved, so it healed');
+  t.eq(r.gained, 20, 'by that much');
+  t.false(r.spent, 'and it says the bag has not caught up');
+  t.contains(r.message, 'not caught up', 'in the message too');
+});
+
+test('an item that is not in the bag is refused before any menu opens',
+     async (t) => {
+  const { tasks, log } = packing({ pocket: [[POTION, 1]] });
+  const r = await tasks.useItemOn(BERRY, 0);
+  t.false(r.ok, 'refused');
+  t.contains(r.message, 'not in the bag', 'and says why');
+  t.eq(log.length, 0, 'and nothing was pressed');
+});
+
+test('an empty party slot is refused the same way', async (t) => {
+  const { tasks } = packing({ party: [{ hp: 10, maxHp: 40 }] });
+  const r = await tasks.useItemOn(POTION, 3);
+  t.false(r.ok, 'refused');
+  t.contains(r.message, 'slot 4 is empty', 'counting slots the way a person does');
+});
+
+test('a box that is not the one expected stops the sequence', async (t) => {
+  // The USE box never appearing means the press went somewhere else, and
+  // pressing on into it is how a pilot ends up choosing TOSS.
+  const E = new Tasks(new FakeGameBoy({ wram: worldRam(symbols(), {}) }),
+                      new GameState(symbols()), () => {}, fakeRom()).state.e.field;
+  const { tasks } = packing({
+    boxes: (at) => (at.box === 'use' ? { items: 9, top: 9 } : ({
+      start: { items: 7, top: 0 }, pack: E.pack, party: E.partyPick, closed: null,
+    })[at.box]),
+  });
+  const r = await tasks.useItemOn(POTION, 0);
+  t.false(r.ok, 'it stopped');
+  t.contains(r.message, 'USE box never appeared', 'naming the box that was wrong');
+});
+
+test('the ITEMS pocket is walked to rather than assumed', async (t) => {
+  const { tasks, log } = packing({ curPocket: 2 });
+  const r = await tasks.useItemOn(POTION, 0);
+  t.true(r.ok, 'it still worked');
+  t.true(log.filter((l) => l.startsWith('RIGHT')).length >= 2,
+         'the pocket was switched, twice, from where the pack had been left');
+});
+
+// --- backing out of a menu, and checking that it closed ----------------------
+
+test('closing a menu presses until it is shut, not a fixed number of times',
+     async (t) => {
+  // The defect, and it was in the primitive every other primitive falls back
+  // to. Four blind B presses; what that costs is not a menu left open, it is
+  // that every directional press afterwards drives a menu cursor instead of the
+  // player. Measured three boxes deep in the pack: closeMenus returned, then
+  // 400 paces of paceUntilBattle moved the START menu's cursor, and the grind
+  // reported "no wild Pokemon appeared -- are you standing in grass?" from a
+  // tile whose collision byte is $18, with onGrass true.
+  const { tasks } = pilot();
+  let depth = 3;
+  const pressed = [];
+  tasks.snap = async () => ({ windowOpen: depth > 0 });
+  tasks.push = async (b) => { pressed.push(b); if (b === 'B' && depth > 0) depth--; };
+  t.true(await tasks.closeMenus(), 'it closed');
+  t.eq(pressed.length, 3, 'three presses for three boxes, and not one more');
+});
+
+test('a box that swallows presses is pressed at again, up to a bound',
+     async (t) => {
+  // Four was not even the wrong number: a box swallows a press while it
+  // animates, so the count that closes three levels is not three or four or any
+  // number.
+  const { tasks } = pilot();
+  let depth = 3, swallow = 2;
+  const pressed = [];
+  tasks.snap = async () => ({ windowOpen: depth > 0 });
+  tasks.push = async (b) => {
+    pressed.push(b);
+    if (b !== 'B') return;
+    if (swallow-- > 0) return;
+    if (depth > 0) depth--;
+  };
+  t.true(await tasks.closeMenus(), 'it still got there');
+  t.eq(pressed.length, 5, 'two swallowed, three that landed');
+});
+
+test('a menu that will not close says so rather than pretending', async (t) => {
+  const { tasks } = pilot();
+  tasks.snap = async () => ({ windowOpen: true });
+  tasks.push = async () => {};
+  t.false(await tasks.closeMenus(4), 'the answer is no');
+});
+
+test('nothing is pressed when nothing is open', async (t) => {
+  const { tasks } = pilot();
+  const pressed = [];
+  tasks.snap = async () => ({ windowOpen: false });
+  tasks.push = async (b) => pressed.push(b);
+  t.true(await tasks.closeMenus(), 'already shut');
+  t.eq(pressed.length, 0, 'and a press into the overworld is a step');
+});
+
+test('the message is tapped through, and the pack is not', async (t) => {
+  // `settleText` taps A for as long as any window is open, and after a heal the
+  // pack is one of those -- so with two Potions in the bag that press lands on
+  // the next item and uses it. Which is the stray-press failure `watchThrow`
+  // has warned about in the neighbouring file since it was written.
+  const { tasks } = pilot();
+  const E = tasks.state.e.field;
+  const boxes = [{ items: 9, top: 9 }, { items: 9, top: 9 }, E.pack, E.pack];
+  let at = 0;
+  const pressed = [];
+  tasks.step = async () => {};
+  tasks.pump = async () => {};
+  tasks.snap = async () => ({ windowOpen: true, scriptRunning: false,
+                              menuItems: boxes[Math.min(at, boxes.length - 1)].items,
+                              menuTop: boxes[Math.min(at, boxes.length - 1)].top });
+  tasks.push = async (b) => { pressed.push(b); at++; };
+  t.true(await tasks._pastTheMessage(), 'it got past');
+  t.eq(pressed.length, 2, 'two taps for two message boxes, and it stopped at the pack');
+});
+
+test('a message that never clears is given up on rather than tapped for ever',
+     async (t) => {
+  const { tasks } = pilot();
+  const pressed = [];
+  tasks.step = async () => {};
+  tasks.pump = async () => {};
+  tasks.snap = async () => ({ windowOpen: true, scriptRunning: false,
+                              menuItems: 9, menuTop: 9 });
+  tasks.push = async (b) => pressed.push(b);
+  t.false(await tasks._pastTheMessage(5), 'the answer is no');
+  t.eq(pressed.length, 5, 'and it is bounded');
+});

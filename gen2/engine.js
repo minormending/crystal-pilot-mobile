@@ -114,6 +114,26 @@ export const gen2 = {
   // thirty-four at row 12, so the row is what tells them apart.
   learnMove: { items: 2, top: 7 },
   ballPocket: 1,
+  itemPocket: 0,
+
+  // --- the three boxes between the START menu and a healed Pokemon ---------
+  // Measured on the cartridge, in the order they appear. Every one of them is a
+  // box signature rather than a press count, for the reason `learnMove` gives:
+  // the cursor keeps its previous value, so the *shape* of the box is what says
+  // which box it is.
+  //
+  //   pack        the pack itself, five items at row 1 -- the same box the
+  //               battle pack draws, which is why `throwBall` already knew it
+  //   itemUse     USE / GIVE / TOSS / QUIT, four items at row 3, USE on row 1
+  //   partyPick   which Pokemon, four items at row 0, the lead on row 1
+  //
+  // `itemUse` and `partyPick` both measure four items and are told apart by the
+  // row, exactly as the pack mid-throw is told from the battle menu.
+  field: {
+    pack: { items: 5, top: 1 },
+    itemUse: { items: 4, top: 3 },
+    partyPick: { items: 4, top: 0 },
+  },
 
   // --- the intro's NAME menu ----------------------------------------------
   // ChrisNameMenuHeader: five items drawn in the top-left ten columns, matched

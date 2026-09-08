@@ -24,6 +24,17 @@ const SAVE_PROMPT_FRAMES = 40;
 const SAVE_CONFIRM_TRIES = 60;
 // Polls waiting for the START menu's cursor to appear.
 const MENU_OPEN_TRIES = 25;
+// How long the pack and its boxes take to draw. Measured: fifty frames is
+// enough for the pack to be readable after A, and reading sooner gives the box
+// that was there before -- which is the whole reason these are matched on shape.
+const SETTLE_PACK = 50;
+// DOWN past the last entry in a pocket lands here and stays: the list does not
+// wrap, so an overshoot has to be walked back.
+const CANCEL = 0xff;
+// How long to wait for the ITEM pocket to be written back after a use. The
+// pocket lags -- see `useItemOn` for the measurement -- and this is a bound on
+// waiting for it, not a promise that it will arrive.
+const BAG_SETTLE_TRIES = 10;
 
 export function withMenus(Base) {
   // Named, so a stack trace says which of these a frame came from.
@@ -149,6 +160,202 @@ export function withMenus(Base) {
       if (row === 2) { await this.push('A', 6, 10); return true; }
       if (row === 0) { await this.step(6); continue; }
       await this.push('DOWN', 4, 6);
+    }
+    return false;
+  }
+
+  /**
+   * Is the box on screen the one this shape describes?
+   *
+   * The cursor keeps its previous value between boxes, so "a window is open" and
+   * "the cursor is somewhere" are both true of the wrong box. The shape --
+   * `menuItems` and `menuTop` -- is what identifies one, which is the lesson
+   * `learnMove` and the battle pack both already carry, arriving here for the
+   * three boxes between the START menu and a healed Pokemon.
+   */
+  _isBox(s, shape) {
+    return !!shape && s.windowOpen
+           && s.menuItems === shape.items && s.menuTop === shape.top;
+  }
+
+  /**
+   * Open the pack from the START menu, by trying rows and checking.
+   *
+   * The row is not fixed and cannot be counted to. The START menu grows -- no
+   * POKeDEX or POKeGEAR early on -- so PACK sits at a different index depending
+   * on how far the game has got, and `saveGame` learned the same thing about
+   * SAVE. Measured on a fresh Route 29 save it is row 2 of 7; the point is that
+   * nothing here believes that. It drives to a row, presses A, and asks whether
+   * the pack's own box is what appeared.
+   */
+  async _openPack(tries = 8) {
+    if (!await this._openStartMenu()) return false;
+    const count = await this._menuRowCount();
+    if (!count) return false;
+    const shape = this.state.e.field && this.state.e.field.pack;
+    for (let row = 1; row <= Math.min(count, tries); row++) {
+      if (!await this._openStartMenu()) return false;
+      if (!await this._driveMenuCursor(row, count)) continue;
+      await this.push('A', 6, 10);
+      await this.step(SETTLE_PACK);
+      if (this._isBox(await this.snap(), shape)) return true;
+      // Not the pack. Back out of whatever it was -- which is what
+      // `closeMenus` is for, and it checks now, so a row that opened something
+      // sticky cannot leave the next row's press driving that instead.
+      await this.closeMenus();
+    }
+    return false;
+  }
+
+  /**
+   * Use an item in `slot` of the ITEM pocket on party member `on`.
+   *
+   * Four boxes deep, and every one of them is confirmed by its shape before
+   * anything is pressed into it. The evidence of success is not the presses
+   * landing: it is **the item count going down and the HP going up**, which is
+   * the same standard `saveGame` holds itself to, and for the same reason --
+   * measured at full HP, the game takes the presses, says the item would have
+   * no effect, spends nothing, and drops back to the pack. A press-counting
+   * version calls that a heal.
+   */
+  async useItemOn(itemId, on = 0) {
+    const e = this.state.e.field || {};
+    const before = await this.snap();
+    const had = (before.items.find(([id]) => id === itemId) || [0, 0])[1];
+    if (!had) return { ok: false, message: 'that is not in the bag' };
+    const target = before.party[on];
+    if (!target) return { ok: false, message: `party slot ${on + 1} is empty` };
+
+    if (!await this._openPack()) {
+      await this.closeMenus();
+      return { ok: false, message: 'could not open the pack' };
+    }
+    // The pack remembers which pocket it was left in, so this is a walk to the
+    // right one rather than an assumption about where it opens.
+    let s = await this.snap();
+    for (let i = 0; i < 8 && s.curPocket !== this.state.e.itemPocket; i++) {
+      s = await this._packMoved('RIGHT', (x) => x.curPocket);
+    }
+    if (s.curPocket !== this.state.e.itemPocket) {
+      await this.closeMenus();
+      return { ok: false, message: 'could not reach the ITEMS pocket' };
+    }
+    // DOWN past the last entry lands on CANCEL and stays there, so an overshoot
+    // is walked back rather than pressed through -- the same shape `throwBall`
+    // found in the ball pocket.
+    for (let i = 0; i < 24 && s.curItem !== itemId; i++) {
+      if (s.curItem === CANCEL) {
+        await this.push('UP', 4, 8);
+        await this.step(SETTLE_FRAMES);
+        s = await this.snap();
+        if (s.curItem === itemId) break;
+        await this.closeMenus();
+        return { ok: false, message: 'walked past it in the pack' };
+      }
+      s = await this._packMoved('DOWN', (x) => x.curItem);
+    }
+    if (s.curItem !== itemId) {
+      await this.closeMenus();
+      return { ok: false, message: 'could not find it in the pack' };
+    }
+
+    await this.push('A', 6, 10);
+    await this.step(SETTLE_PACK);
+    if (!this._isBox(await this.snap(), e.itemUse)) {
+      await this.closeMenus();
+      return { ok: false, message: 'the USE box never appeared' };
+    }
+    // USE is row 1 and the cursor opens on it, so this is a confirm rather than
+    // a walk -- but it is asked for rather than assumed, because GIVE and TOSS
+    // are the two rows under it and TOSS throws the item away.
+    if (!await this._driveMenuCursor(1, 4)) {
+      await this.closeMenus();
+      return { ok: false, message: 'could not reach USE' };
+    }
+    await this.push('A', 6, 10);
+    await this.step(SETTLE_PACK);
+    if (!this._isBox(await this.snap(), e.partyPick)) {
+      await this.closeMenus();
+      return { ok: false, message: 'the party never came up' };
+    }
+    if (!await this._driveMenuCursor(on + 1, 6)) {
+      await this.closeMenus();
+      return { ok: false, message: `could not reach party slot ${on + 1}` };
+    }
+    await this.push('A', 6, 10);
+    await this._pastTheMessage();
+    await this.closeMenus();
+
+    // **HP is the evidence; the bag is corroboration, and it lags.**
+    //
+    // Measured, and it cost a working heal to find out: a BERRY used on a
+    // Cyndaquil at 7/23 took it to 17/23 -- ten HP, exactly a BERRY -- and
+    // `wItems` still read `POTION 2, BERRY 1` forty seconds later. The removal
+    // was not written back until the pack was next opened, at which point *both*
+    // that BERRY and the POTION just used disappeared together.
+    //
+    // Which is the same warning this repository already carries about the other
+    // pocket -- *wBalls does not settle until a battle ends* -- and the note
+    // added one pass ago saying it settles immediately out on the map was
+    // wrong. So the pocket is polled for, briefly, and its silence is reported
+    // rather than believed: a heal that moved the HP is a heal.
+    const healed = (await this._bagSettles(itemId, had)).party[on];
+    const gained = healed ? healed.hp - target.hp : 0;
+    const left = (await this.snap()).items.find(([id]) => id === itemId);
+    const spentIt = !left || left[1] < had;
+    if (gained > 0) {
+      return { ok: true, gained, spent: spentIt,
+               message: spentIt ? `+${gained} HP`
+                                : `+${gained} HP (the bag has not caught up)` };
+    }
+    // Nothing healed. Now the pocket is the question, because the two ways of
+    // getting here are different states: at full HP the game takes every press,
+    // says the item would have no effect and spends nothing -- measured -- and
+    // an item that went and did nothing is a different problem.
+    return { ok: false, gained: 0, spent: spentIt,
+             message: spentIt ? 'the item was spent and nothing healed'
+                              : 'it would have had no effect' };
+  }
+
+  /**
+   * Give the item pocket a chance to catch up, and hand back a fresh snapshot.
+   *
+   * Bounded, and it returns whatever it has rather than failing: the pocket not
+   * settling is a thing to report, not a reason to stop.
+   */
+  async _bagSettles(itemId, had, tries = BAG_SETTLE_TRIES) {
+    let s = await this.snap();
+    for (let i = 0; i < tries; i++) {
+      const entry = s.items.find(([id]) => id === itemId);
+      if (!entry || entry[1] < had) return s;
+      await this.step(SETTLE_FRAMES);
+      s = await this.snap();
+    }
+    return s;
+  }
+
+  /**
+   * Tap through the message a heal leaves, and *only* the message.
+   *
+   * Not `settleText`, which taps A for as long as any window is open -- and
+   * after a heal the pack is still one of those. With two Potions in the bag
+   * that press lands on the next item and uses it, which is the stray-press
+   * failure `watchThrow` has warned about in this file's neighbour since it was
+   * written: *a stray press while the battle menu is up picks FIGHT, and the
+   * next throw spends a ball the count never sees.*
+   *
+   * So the stopping condition is a shape rather than a flag: stop as soon as
+   * the box on screen is the pack or the party list again, because those are
+   * boxes to back out of and not text to advance.
+   */
+  async _pastTheMessage(taps = 20) {
+    const e = this.state.e.field || {};
+    for (let i = 0; i < taps; i++) {
+      const s = await this.snap();
+      if (!s.windowOpen && !s.scriptRunning) return true;
+      if (this._isBox(s, e.pack) || this._isBox(s, e.partyPick)) return true;
+      await this.push('A', 4, 8);
+      await this.pump();
     }
     return false;
   }

@@ -1418,7 +1418,7 @@ precedes it defaults to yes, which is what we want; the nickname box does not.
 
 ## 7a. Four that act on where you already are
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ c08e2ee77072 -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ 80d34579e7e9 -->
 
 Grind, hunt and catch all go *looking* for something. These four do the obvious
 thing with the situation you are already in, and take no parameters:
