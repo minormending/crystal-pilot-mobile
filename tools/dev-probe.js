@@ -21,6 +21,8 @@
 //     await DEV.at()           where, who, how hurt -- always a fresh read
 //     await DEV.watch(fn, 60)  run a job and report what it said and did
 //     await DEV.grid(9)        the collision map around the player, as a picture
+//     await DEV.rom()          put the cartridge in from dev/, no file picker
+//     await DEV.plan()         the ranked list, and what Run the list would press
 //     DEV.clipped()            every line on screen that is cut off
 //
 // Not part of the app: nothing imports it, `?dev=1` does not load it, and the
@@ -195,6 +197,65 @@
     },
 
     /**
+     * Put the cartridge in, from `dev/`, without touching a file picker.
+     *
+     * The app takes its ROM and its symbol file from two `<input type=file>`
+     * elements, which is right for a phone and impossible from a console: a
+     * file input cannot be filled by script for the obvious security reason.
+     * It *can* be handed a `FileList`, though, and `DataTransfer` is where one
+     * comes from -- so this fetches both files off the same origin that is
+     * serving the app and hands them over exactly as a person would.
+     *
+     * Written after typing the same fifteen lines from memory twice in one
+     * session, the second time after a reload lost the game. `dev/` is
+     * gitignored and served, which is the whole reason this works.
+     */
+    async rom(dir = '/dev', gbc = 'pokecrystal.gbc', sym = 'pokecrystal.sym') {
+      const put = async (sel, name, type) => {
+        const res = await fetch(`${dir}/${name}`);
+        if (!res.ok) throw new Error(`${dir}/${name}: ${res.status}`);
+        const buf = await res.arrayBuffer();
+        const dt = new DataTransfer();
+        dt.items.add(new File([buf], name, { type }));
+        const el = document.querySelector(sel);
+        el.files = dt.files;
+        // `change`, and bubbling, because that is the event a person's pick
+        // fires and the app listens for nothing else.
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+        return buf.byteLength;
+      };
+      const romBytes = await put('#romFile', gbc, 'application/octet-stream');
+      // The ROM is read and hashed before the symbols are wanted, and handing
+      // both over in the same tick had the second one arrive mid-read.
+      await new Promise((r) => setTimeout(r, 1500));
+      const symBytes = await put('#symFile', sym, 'text/plain');
+      return { rom: romBytes, sym: symBytes };
+    },
+
+    /**
+     * The ranked list, and what "Run the list" would do with it.
+     *
+     * The ranking is computed every refresh and shown as an order and one
+     * accent rail, which is the right amount on a phone and not enough to
+     * reason about: *why* is Grind above Heal here, and which of the nine is
+     * the runner going to press? Both answers are one call now.
+     */
+    async plan() {
+      const s = await P.tasks.snap();
+      const list = [...document.querySelectorAll('.job')]
+        .filter((el) => !el.classList.contains('hide'))
+        .sort((a, b) => (+getComputedStyle(a).order) - (+getComputedStyle(b).order))
+        .map((el) => ({
+          row: el.id.replace('job-', ''),
+          lead: el.classList.contains('lead'),
+          says: el.querySelector('.jstate')?.textContent,
+          can: !el.querySelector('button.jgo')?.disabled,
+        }));
+      return { where: await where(), party: s.party.map((m) => `${m.hp}/${m.maxHp}`),
+               money: s.money, badges: s.badges, list };
+    },
+
+    /**
      * Every line on screen that is cut off, and what it says in full.
      *
      * A `jstate` is one nowrap line with an ellipsis, which is the right shape
@@ -256,5 +317,5 @@
   };
 
   window.DEV = DEV;
-  return 'DEV ready — keep, load, at, watch, grid, clipped';
+  return 'DEV ready — rom, keep, load, at, watch, plan, grid, clipped';
 })();
