@@ -742,6 +742,33 @@ with words — a guard, a closed gate, an NPC who wants a conversation first.
 If you see it, the answer is usually a badge: go and win the one for the town
 you came from, and the route opens.
 
+**And the pilot only needs telling once.** Having been turned back, it writes
+that leg off and stops offering it — so the next press of Heal picks somewhere it
+can actually get to. Standing on Route 32 with one hurt Pokémon and no badge:
+
+* first press — *turned back on the way to ROUTE 32 — Wait up! / What's the hurry?*
+* second press — **healed one Pokémon at Violet City**, in two seconds.
+
+Which is the same thing Travel does. A place behind a leg the game refused comes
+off the Travel list rather than being offered with a walking time that is a
+fiction, and Shop stops claiming a mart is within reach when the road to it is
+shut.
+
+Two things about the remembering are worth knowing, because they are choices
+rather than accidents:
+
+* **It forgets the moment you win a badge** — any badge. The pilot has no way to
+  know which badge opens which road, so it re-tries everything rather than
+  guessing. Worst case that costs one walk that would not have worked.
+* **It is the *road* it writes off, not the place.** Turned back at Route 32's
+  southern edge, the pilot walked north and UNION CAVE was on the Travel list
+  again — because from Route 36 it is reached a different way. A place is not
+  written off for being behind one shut door.
+
+The write-offs last as long as the tab does. Reload and the pilot will go and
+find out again, which is the right way round: the game may have changed its
+mind, and it is the only one who knows.
+
 ### Poisoned is not "hurt", and the row says which
 
 The pilot read your party's HP and nothing else for twenty-four versions, which
@@ -1015,7 +1042,7 @@ deployed, which is not the question you are asking when a bug you saw fixed is
 still in front of you. `tools/check-app` asserts that number matches the service
 worker's cache name, because a version display that lies is worse than none.
 
-<!-- covers: sw.js @ 5825deb1972f -->
+<!-- covers: sw.js @ 64e45c5ba228 -->
 
 The worker fetches **network first, falling back to the cache**. That is the
 opposite of the usual offline-first advice, on purpose.

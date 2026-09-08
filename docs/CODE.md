@@ -427,7 +427,7 @@ watching.
 
 ### `symbols.js` — where things live
 
-<!-- covers: gen2/symbols.js @ 0674dce58c3e -->
+<!-- covers: gen2/symbols.js @ 5f840d77cfc0 -->
 
 Parses the `.sym` file into `name → { bank, addr }`. First definition wins;
 later duplicates are aliases and locals.
@@ -455,11 +455,21 @@ enforces it, so it is a fact about the build rather than a habit.
 
 ### `state.js` — what the game is doing right now
 
-<!-- covers: gen2/state.js @ 12cc839bad6c -->
+<!-- covers: gen2/state.js @ e34a25f71209 -->
 
 One snapshot, many answers: `inBattle`, `party`, `pos`, `onGrass`,
-`worldLoaded`, `menu`, `balls`, `items`, each party member's `status`, and the
-enemy's HP.
+`worldLoaded`, `menu`, `balls`, `items`, each party member's `status`, the
+enemy's HP, and `badges`.
+
+**`badges` is a count, not a set**, and that is the whole of what it is for:
+the only question this app asks of a badge is *has anything changed since a
+route turned me back* — see [a route the game itself
+refuses](#8d-a-route-the-game-itself-refuses) — and a count answers that for
+every badge without a table saying which badge opens which route, which is a
+thing no cartridge writes down. Counted in *bits* across both bytes, because
+eight Johto badges live in one byte and anything counting bytes reads a full
+case as one. Optional, like the tilemap: `null` and `0` are kept apart, since a
+cartridge that cannot say is not a cartridge with a new game.
 
 **`status` is the field that was declared and never read**, for ten passes. The
 engine profile has carried `mon.status: 0x20` since it was written; `party()`
@@ -1034,7 +1044,7 @@ point those coordinates mean somewhere else entirely.
 
 ## 5. Crossing to the next map
 
-<!-- covers: gen2/journey.js gen2/world.js @ 29b02f3570a7 -->
+<!-- covers: gen2/journey.js gen2/world.js @ 5cd86d5ead6d -->
 
 A connection spans only part of a shared edge, so "walk west until something
 happens" does not work. `crossEdge()` closes the distance in stages, then tries
@@ -1107,6 +1117,17 @@ forty — and only a walk that came back for some other reason spends a try. The
 allowance is what keeps *not counted* from meaning *forever*. It has not been
 seen to rescue a walk on the cartridge yet; it is a budget that was measured
 against the wrong thing, fixed on the way past.
+
+**A gate at an edge is not a phone call.** `crossEdge` answers a refusal by
+running the scripts and asking again, because out there a refusal usually *is*
+somebody talking — Elm phones the moment you leave Mr. Pokémon's, and treating
+that as terrain ended the walk home. A gate answers the same way and never
+stops: measured driving at Route 32's southern connection with no badge, twelve
+staged advances and then thirty attempts for each edge opening, each walking the
+length of a ninety-tile route — **over two and a half minutes, and still going**.
+From outside, a job that had hung. Counted rather than repeated, the same walk
+takes 5.7 seconds and writes off two legs. See [a route the game itself
+refuses](#8d-a-route-the-game-itself-refuses).
 
 **A refusal with words on the screen is somebody talking.** `walkTo` reports
 `refused` when three steps in a row are blocked, and that is exactly what a
@@ -1231,7 +1252,7 @@ eight kilobytes a full snapshot copies, which is worth keeping distinct.
 
 ## 6. Battles
 
-<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ b49261341b3c -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ cf0dab4c9167 -->
 
 ### Which move, and which question
 
@@ -1832,7 +1853,7 @@ flowchart TD
 
 ## 7a. Five that act on where you already are
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ e581a4dfb88e -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ 765b3d6763f8 -->
 
 Grind, hunt and catch all go *looking* for something. These five do the obvious
 thing with the situation you are already in, and take no parameters:
@@ -2103,7 +2124,7 @@ said *trainer battle: lost* **seven times**. One loss, reported seven ways.
 
 ## 7d. The counter, and the money it takes
 
-<!-- covers: gen2/menus.js gen2/state.js titles/crystal.js @ 0f69d03f7597 -->
+<!-- covers: gen2/menus.js gen2/state.js titles/crystal.js @ 5be3d9d92c83 -->
 
 Everything the pilot could do until now used what it found. **Shop** walks to a
 mart and buys, which is the first thing it does that spends rather than
@@ -2212,7 +2233,7 @@ counter and came away with **five potions and ¥1800**, in 49 seconds.
 
 ## 7b. Saving, and getting the save out
 
-<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ b49261341b3c -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ cf0dab4c9167 -->
 
 ```mermaid
 flowchart TD
@@ -2454,7 +2475,7 @@ because that failure is only otherwise discovered by reaching for the undo.
 
 ## 8. The errands
 
-<!-- covers: titles/crystal.js gen2/journey.js @ 385c37ca35b5 -->
+<!-- covers: titles/crystal.js gen2/journey.js @ 1e4757d5b685 -->
 
 Everything in this section is `crystal.js` — the only file in the app that names
 a Crystal map, a Crystal door or a Crystal NPC. What it stands on is
@@ -2786,7 +2807,7 @@ the bag" rather than "did we gain any".
 
 ## 8a. Finding the Centers and the Marts in the cartridge
 
-<!-- covers: gen2/world.js gen2/journey.js @ 29b02f3570a7 -->
+<!-- covers: gen2/world.js gen2/journey.js @ 5cd86d5ead6d -->
 
 The last thing in this app that had to be written out by hand. A title said
 where the Centers and the Marts were, so the pilot healed in the two towns
@@ -2857,7 +2878,9 @@ can: the collision map, the warps and the object list all describe a route that
 is walkable, and the rule lives in a script. So discovery does not try to
 predict this, and the pilot finds out the way a person does — by being told, at
 the tile, in words. What [the walk does with those
-words](#5-crossing-to-the-next-map) is the other half of this feature.
+words](#5-crossing-to-the-next-map) is the other half of this feature, and what
+it does about them *the second time* is [the pass
+after](#8d-a-route-the-game-itself-refuses).
 
 ## 8b. Asking the cartridge what its places are called
 
@@ -3018,13 +3041,120 @@ by, which is the only leg it can measure.
 
 </details>
 
+## 8d. A route the game itself refuses
+
+<!-- covers: gen2/journey.js gen2/state.js @ 2a75d11fba75 -->
+
+The pass before this one taught the walk to *quote* the man who turns it back.
+This is the pilot doing something about it.
+
+**A route can be shut, and no map data says so.** Route 32's Pokémon Center is
+real, its door at (11,73) is real, the ninety-six-step path to it is real — and
+two tiles south of Violet a man says *"Wait up! What's the hurry? Have you gone
+to the POKéMON GYM?"* and puts the player back where they started. Falkner's
+badge opens that route and nothing else does. The collision map, the warps and
+the object list all describe a walkable route, because the rule lives in a
+script.
+
+So the pilot does not predict it. It finds out the way a person does — by being
+told, at the tile, in words — and then remembers.
+
+```mermaid
+flowchart TD
+    W["a walk is refused<br/><i>three blocked steps</i>"] --> R{"words on<br/>the screen?"}
+    R -- no --> T["a tile somebody is standing on:<br/>spend a try, re-ask, route around"]
+    R -- yes --> C{"twice?"}
+    C -- "first time" --> T2["press the scripts through,<br/>try again"]
+    C -- "again" --> S["<b>write the leg off</b><br/><i>shut: from&gt;to, the words, the badge count</i>"]
+    S --> Q["<i>turned back on the way to<br/>ROUTE 32 — Wait up! …</i>"]
+    S --> U["nearestPlace · placesFrom · travelTo<br/>all skip it from now on"]
+    B["a badge is won"] --> RE["<b>reopen</b><br/>every write-off, no exceptions"]
+    RE --> U
+```
+
+**Keyed by leg, not by destination.** *Shut from here* is what was measured, and
+the difference is not academic: after being turned back at Route 32's south
+edge, the pilot walked north and UNION CAVE was offered again from Route 36 —
+because the leg that is shut is not the leg that reaches it from there. A
+destination-keyed record would have written off a place that is perfectly
+reachable.
+
+**Re-opened by any badge, because the pilot cannot know which one.** Each entry
+remembers the badge count at the time; win one and every write-off goes. Guessing
+which badge opened which route would need a table no cartridge writes down. The
+asymmetry is deliberate: being wrong this way costs one walk that would have
+worked, and being wrong the other way costs the same wall on every press.
+
+<details>
+<summary><b>Advanced detail:</b> the four defects this took to get right</summary>
+
+**The leg was keyed on something nothing writes.** A healer entry names two
+maps — `map` is the town, `inside` is the room behind the door — and
+`healAtCenter` walks `through(door, inside)`, so the leg written off is
+`2561>2573`. The filter asked about `2561>2561`. It read correctly, and it
+passed a test, because the fake healer had been written with one map and no
+`inside`: a test built to match the mistake. **This is the argument for driving
+a feature against the cartridge before believing it**, and nothing else in this
+document makes the case as plainly.
+
+**Then the same mistake one field along.** The two lists of places name their two
+maps the *opposite* way round:
+
+| | the town | the room |
+| --- | --- | --- |
+| `healers` | `map` | `inside` |
+| `marts` | `from` | `map` |
+
+So `place.map` means different things in the two lists, and a reader that
+guesses gets one of them wrong every time — which it did, in turn, within the
+hour. `Journey.doorTo` names the room by which *other* field the entry carries.
+Kept as a reader rather than fixed in the profiles, because both shapes are
+declared data somebody may already have written; the asymmetry is a wart and the
+comment there admits it rather than working around it silently.
+
+**A place is out of reach two ways and only one was asked about.** The door is
+one; the road to the town is the other. `world.route` already takes legs it may
+not use, so the same set does both.
+
+**And the row that explains it is hidden exactly when it applies.** A row earns
+its place on the offers list by being `enabled`, and a shut route is precisely
+when Heal is not — so the sentence written into the row text was never read.
+[The species picker did the identical thing](#9-the-interface) eight passes
+earlier. The explanation is a hint, and there is a test that fails if it moves
+back into the row.
+
+**Both walks report it the same way.** `through` at the doorways and `crossEdge`
+at the edges each read the screen *on the refusal* and leave the words in
+`turnedBack`. Asking afterwards does not work: a gate script finishes — the man
+says his piece, moves the player back and stops running — so by the time the
+retries are done `runScripts` has pressed the whole conversation away and the
+tilemap is blank. The first version of the edge half asked there, found nothing,
+and wrote off nothing: a mechanism that reads correctly and does nothing at all.
+
+**And a gate at an edge used to look like a hang.** `crossEdge` answers a
+refusal by running the scripts and asking again, because out there a refusal is
+usually a phone call — Elm rings the moment you leave Mr. Pokémon's. A gate
+answers the same way and never stops: measured driving at Route 32's southern
+connection, twelve staged advances and then thirty attempts per edge opening,
+each walking the length of a ninety-tile route, **over two and a half minutes and
+still going**. Counted instead of repeated, the same walk takes 5.7 seconds and
+writes off two legs.
+
+**The badge count is optional, like the tilemap.** `wJohtoBadges` may not be in a
+cartridge's symbol file, and null is kept apart from zero: one means the pilot
+cannot tell, and a write-off that never expires is the safe reading of that.
+Bits rather than bytes, because eight Johto badges live in one byte and anything
+counting bytes reads a full case as one.
+
+</details>
+
 ## 9. The interface
 
 This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ e552a7832888 -->
+<!-- covers: app/main.js index.html @ 3ab72592bd4a -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -3295,6 +3425,16 @@ Ranking is a `style.order` and a `hide`, not generated markup: every row keeps
 its id, its handler and its line in `check-app`'s wiring check, and what changed
 is which are drawn and in what order.
 
+**And the corollary, which this app has now got wrong twice: a reason written
+into a row is not read when the reason is why the row is hidden.** `enabled` is
+what puts a row on the list, so any sentence explaining an offer's *absence*
+belongs in the hint. The species picker went first — a hint pointing at a picker
+that is hidden whenever the hint applies — and then the shut-route line eight
+passes later, written into the Heal row's text at exactly the moment Heal leaves
+the list. The hint is the channel for *why nothing is offered*; the row text is
+for choosing between things that are. Both now have tests that fail if the
+sentence moves back.
+
 <details>
 <summary><b>Advanced detail:</b> reordering a list that four other things
 assumed was fixed</summary>
@@ -3553,7 +3693,7 @@ seconds by a page whose loop was supposedly running.
 
 ### One thing at a time
 
-<!-- covers: app/main.js @ 3df5029ed821 -->
+<!-- covers: app/main.js @ 7c7dec1a41da -->
 
 One Game Boy, one joypad, one canvas — so a great deal of this app is about
 making sure two things are never driving them at once. There are three claims,
@@ -4186,7 +4326,7 @@ they have been installed.
 
 ### Watching the other device's screen
 
-<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ d4f88b1147e2 -->
+<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ fac514b0f71f -->
 
 One device shows its screen; the other watches it, and plays it if the first
 one says so. The picture goes straight between them over WebRTC and never

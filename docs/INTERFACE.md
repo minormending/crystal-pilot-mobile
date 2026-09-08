@@ -248,6 +248,14 @@ hurry?* — because the pilot's own walking is the first thing a person blames,
 and here it was the one thing that was working. See [when the game says
 no](USING.md#when-the-game-says-no-the-pilot-tells-you-what-it-said).
 
+**And a row that has been told no stops offering.** Shop and Heal both price a
+list of places and walk to the nearest; a road the game has refused is not a
+road, so it comes off both lists and the row names somewhere reachable instead.
+Which puts a rule under the wording: *within reach of here* is a claim about a
+walk, and the row may only make it about a walk the pilot would actually
+complete. That is why a shut road changes the sentence rather than only the
+outcome.
+
 **Take is the sixth offer, and the only one whose whole reason to exist is
 read off the map you are standing on.** Every other row is about your party, your
 bag or the graph; this one is about `wMapObjects`. It says what is *placed* here
@@ -666,4 +674,4 @@ So this page carries a marker naming the files it describes and the hash they
 had when it was last read against them. `tools/docs-check` reports it when they
 move, and the pre-commit hook blocks on that report.
 
-<!-- covers: index.html app/main.js app/rows.js @ 103a435b2c8a -->
+<!-- covers: index.html app/main.js app/rows.js @ 521e9a1a9d7a -->

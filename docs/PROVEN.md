@@ -336,18 +336,18 @@ second, which is there so the core's own waits finish, not to run a game.
   candidates and returned true standing three tiles clear of any. It checks the
   tile underfoot now.
 
-## Thirty-three audits, and how each defect was actually found
+## Thirty-four audits, and how each defect was actually found
 
 Everything above was watched happening. This section was the exception, and the
 exception was the point of it: after the ROM-hack work shipped, thirty-three
-passes went looking for defects in code that already worked, and found **113** —
+passes went looking for defects in code that already worked, and found **119** —
 a handful of them created by a fix on the way, which are in the table in italics
 because they are a different kind of thing. None of them announced itself.
 
-**Reading found twenty-one**, more than any other single method, which is why it
+**Reading found twenty-two**, more than any other single method, which is why it
 comes first in the table and why it is worth doing before touching the game. But
-the interesting number is the tail: the remaining ninety were found ninety
-different ways, and almost every entry in that column is a sentence rather than
+the interesting number is the tail: the remaining ninety-seven were found almost
+as many different ways, and almost every entry in that column is a sentence rather than
 a category — *measuring the fix*, *asking a second tile*, *feeding it the wrong
 thing*, *writing a cartridge Crystal is not*, *a test, before the cartridge*,
 *playing the game*. Each change of method found what the one before it was
@@ -491,6 +491,12 @@ exactly why nothing failed.
 | 33 | a wild encounter spent one of the eight tries a doorway gets | a door at the far end of a route full of grass | reading, on the way past |
 | 33 | a walk turned back by a person blamed the door, eight times over | Heal, standing on Route 32 with no badge | playing the game |
 | 33 | the screen read "What  the hurry?" — a contraction is one tile, two characters | any quoted screen text with an apostrophe in it | the message it had just printed |
+| 34 | the write-off was keyed on a leg nothing ever writes, so the feature did nothing | Heal, standing on Route 32 with no badge | the cartridge, after a test agreed with the bug |
+| 34 | *and then the same mistake one field along, because the two place lists name their maps opposite ways* | *Shop, in the same spot* | *reading the profile after the first fix* |
+| 34 | the row explaining a shut road is hidden exactly when it applies | any shut road, in the offers list | recognising a defect from eight passes ago |
+| 34 | the edge half read the screen after `runScripts` had pressed the words away | Travel, at a gated route edge | asking what order the reads happen in |
+| 34 | a gate at an edge was ground at for over two and a half minutes and looked hung | Travel to ROUTE 33 from Route 32, no badge | playing the game, and waiting |
+| 34 | a predicate that deleted the entry it was asked about, while a caller iterated it | nothing yet — read, not seen | reading |
 
 Five things in that table are worth more than the individual rows.
 
@@ -2276,6 +2282,86 @@ charmap. Its neighbours in `$d0-$d6` are the other contractions and are
 deliberately left out, because they would be copied off a table with no screen
 to check them against, and an unnamed tile reads as a space: *don t* is clumsy
 and readable, which is the right way round for a guess nobody has checked.
+
+### A thirty-fourth pass: the test that agreed with the bug
+
+The pass before found out *why* the pilot could not heal on Route 32 — a man
+turns you back until Falkner is beaten — and taught the walk to quote him. This
+pass was meant to be the easy follow-on: remember it, and stop walking at the
+same wall. It took six defects, and the first one is the one worth keeping.
+
+**The feature did nothing at all, and a test said it worked.**
+
+A healer entry names two maps. `map` is the town you stand in, `inside` is the
+room behind the door — Route 32 is 2561 and its Pokémon Center is 2573 — and
+`healAtCenter` walks `through(door, inside)`, so the leg written off is
+`2561>2573`. The filter asked about `2561>2561`, which nothing ever writes.
+
+It read correctly. It passed a test. **The test passed because the fake healer
+had been written to match the mistake**: one map, no `inside`, because that was
+the shape in my head when I wrote both. Nothing in the suite could have caught
+it, because the suite and the code shared an author's wrong assumption in the
+same hour.
+
+What caught it was asking the cartridge. And then the same mistake again, one
+field along:
+
+| | the town | the room |
+| --- | --- | --- |
+| `healers` | `map` | `inside` |
+| `marts` | `from` | `map` |
+
+`place.map` means different things in the two lists. A reader that guesses at
+field names gets one of them wrong every time, and it did — in turn, within the
+hour. `Journey.doorTo` names the room by which *other* field the entry carries.
+
+**Four more, and two of them were repeats of lessons this document already
+holds.**
+
+- **The row explaining a shut road is hidden exactly when it applies.** A row
+  earns its place on the offers list by being `enabled`; a shut road is
+  precisely when Heal is not. The species picker did the identical thing eight
+  passes ago and the fix went into the hint for exactly this reason. Writing the
+  same defect again, having documented it, is the strongest argument in here for
+  tests over memory: there is one now, and it fails if the sentence moves back.
+- **The edge half read the screen after the words were gone.** A gate script
+  *finishes* — the man says his piece, moves the player back and stops — so by
+  the time three retries are done `runScripts` has pressed the whole
+  conversation away and the tilemap is blank. A mechanism that reads correctly
+  and does nothing.
+- **A gate at an edge looked like a hang.** `crossEdge` answers a refusal by
+  running the scripts and asking again, because out there a refusal is usually
+  Elm phoning. A gate answers the same way and never stops: twelve staged
+  advances, then thirty attempts per edge opening, each walking the length of a
+  ninety-tile route. Over two and a half minutes and still going when it was
+  killed. Counted rather than repeated: 5.7 seconds.
+- **A predicate that wrote.** `isShut` deleted the entry it was asked about, and
+  one caller iterated the map while asking. Safe in JavaScript today, and the
+  only one of the six found by plain reading.
+
+**What the feature does now, measured.** Standing on Route 32 at 1 of 22 HP with
+no badge:
+
+| press | answer | time |
+| --- | --- | --- |
+| Heal | *turned back on the way to ROUTE 32 — Wait up! / What's the hurry?* | 0.8 s |
+| Heal again | **healed one Pokémon at Violet City** — 22 of 22 | 2.1 s |
+
+And the write-off is of a *road*, not a place: turned back at Route 32's southern
+edge, the pilot walked north and UNION CAVE was on the Travel list again, because
+from Route 36 it is reached a different way. Every write-off is thrown away the
+moment any badge is won, since which badge opens which road is not something a
+cartridge records.
+
+**The method note.** Six defects, and the split is the finding: one found by
+reading, one by recognising a documented mistake, one by reasoning about the
+order of two reads — and three by driving the real cartridge, including the one
+that made the whole feature inert while every test agreed with it. The
+[thirty-third pass](#a-thirty-third-pass-the-diagnosis-that-was-wrong-twice) said
+no one method is the method. This is the sharper version of the same claim:
+**a test written in the same hour as the code it tests inherits the code's
+assumptions**, and only something outside the author's head — the cartridge,
+here — can refuse them.
 
 ## The part that had to be redesigned
 
