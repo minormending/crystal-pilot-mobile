@@ -15,6 +15,15 @@ const BALL_POCKET = gen2.ballPocket;
 const CANCEL_ITEM = 0xff;
 // Party slots to try when sending out a replacement.
 const MAX_SEND_TRIES = 6;
+// How long a pack box takes to draw, and how many presses the result of using
+// an item is worth. Both are this app's patience rather than facts about the
+// cartridge, which is why they are here and not in the engine profile.
+const SETTLE_PACK = 50, ITEM_RESULT_TAPS = 10;
+// When the thing on the field is worth a potion, and how many one battle gets.
+// A fight that needs four is a fight that should have been run from.
+const HEAL_IN_BATTLE_BELOW = 0.34, MAX_BATTLE_POTIONS = 3;
+// How many times the PACK press is worth repeating when the turn's text eats it.
+const PACK_OPEN_TRIES = 4;
 // The party screen ignores the short presses the battle menu takes.
 const PARTY_HOLD = 12, PARTY_GAP = 24, PARTY_SETTLE = 40;
 // What the drawn battle menu measures, telling it from the pack over the top of
@@ -128,8 +137,27 @@ export function withBattle(Base) {
     return menuIsLive(s);
   }
 
-  /** Walk back and forth until a wild battle starts. */
+  /**
+   * Walk back and forth until a wild battle starts.
+   *
+   * It refuses to start with a window open, and that guard is the whole reason
+   * this docstring is longer than the function. A directional press with a menu
+   * on screen moves a *cursor*, and this presses four hundred of them: the pass
+   * before last, a menu left open by a `closeMenus` that never checked turned
+   * this into four hundred presses against the START menu, after which the
+   * grind reported "no wild Pokemon appeared -- are you standing in grass?"
+   * from a tile of tall grass. The reading was confident and the diagnosis was
+   * wrong, and one line here would have said so.
+   *
+   * `closeMenus` verifies now, so this should never fire. That is exactly when
+   * a guard is worth having: it is the difference between a bug that reports
+   * itself and a bug that blames the map.
+   */
   async paceUntilBattle(maxSteps = 400) {
+    if ((await this.snap()).windowOpen) {
+      this.say('a menu is open — not pacing into it');
+      return null;
+    }
     let dir = 'LEFT';
     for (let i = 0; i < maxSteps && !this.cancelled; i++) {
       await this.push(dir, 10, 4);
@@ -388,7 +416,25 @@ export function withBattle(Base) {
     return this.sendOut();
   }
 
-  async fightBattle(maxTurns = 40) {
+  /**
+   * Fight it out, and reach for the bag before the thing on the field faints.
+   *
+   * `heals` is the title's list of healing item names -- passed in rather than
+   * read here, because an item name is content and this file is the engine.
+   * Without it the behaviour is exactly what it was for twenty-three passes:
+   * FIGHT every turn until something drops.
+   *
+   * Which is what it cost. A knockout in Gen 2 takes half your money and puts
+   * you back at a Center, and the grind's answer to one has always been to heal
+   * up and carry on -- *after* the fact. The pilot was carrying potions through
+   * every one of them, because nothing in this loop had ever opened the pack.
+   *
+   * Bounded per battle, and low, on purpose: a fight that needs four potions is
+   * a fight that should have been run from, and spending the bag on it is worse
+   * than losing it.
+   */
+  async fightBattle(maxTurns = 40, { heals = null } = {}) {
+    let potions = 0;
     for (let turn = 0; turn < maxTurns && !this.cancelled; turn++) {
       await this.pump();
       // Before anything else, because a fainted lead means the game is waiting
@@ -405,6 +451,26 @@ export function withBattle(Base) {
       const menu = await this.awaitBattleMenu();
       if (menu === null) return this._outcome();
       if (menu.party.length && menu.party.every((m) => m.hp === 0)) return 'lost';
+      // Before the swing, not after the faint. `coverFaint` above is the
+      // recovery; this is the avoidance, and it is cheaper by a Center.
+      if (heals && potions < MAX_BATTLE_POTIONS && this.rom) {
+        const mon = onField(menu);
+        const low = mon && mon.maxHp > 0 && mon.hp > 0
+                    && mon.hp / mon.maxHp <= HEAL_IN_BATTLE_BELOW;
+        const pick = low ? this.rom.cheapestOf(menu.items, heals) : null;
+        if (pick) {
+          potions++;
+          this.say(`${mon.hp}/${mon.maxHp} — using ${pick.name}`);
+          const used = await this.useItemInBattle(pick.id);
+          this.say(used.ok ? `${pick.name}: ${used.message}`
+                           : `${pick.name} did nothing: ${used.message}`);
+          // Using an item *is* the turn, so the enemy has moved and the next
+          // pass round the loop starts from a fresh menu. Nothing is swung
+          // this turn either way -- including when the item failed, because
+          // pressing on from an unknown box is how a pilot picks TOSS.
+          continue;
+        }
+      }
       await this.chooseAction(FIGHT);
       await this.step(30);
       let inMoves = await this.snap();
@@ -649,6 +715,131 @@ export function withBattle(Base) {
     await this.push('A', 6, 10);
     await this.step(40);
     return true;
+  }
+
+  /**
+   * Open the pack from the battle menu, and ask again if the press was eaten.
+   *
+   * Measured, and it cost a knockout: three attempts in one battle came back
+   * *the pack never opened* -- which was an accurate reading and a wrong
+   * conclusion. The pack itself opens in under twenty frames, measured
+   * separately; what happens is that the A press lands while the turn's text is
+   * still running and is swallowed, leaving the battle menu drawn. Giving up on
+   * that spends one of three chances the battle gets, and three of them spent
+   * the lot: the Pokemon fought on at 4 of 18 and fainted.
+   *
+   * So: press, look, press again -- the discipline `_packMoved` already applies
+   * one level down. Returns the snapshot with the pack on screen, or null.
+   */
+  async _openBattlePack(tries = PACK_OPEN_TRIES) {
+    for (let i = 0; i < tries; i++) {
+      await this.chooseAction(PACK);
+      await this.step(SETTLE_PACK);
+      const s = await this.snap();
+      if (!s.inBattle) return null;
+      if (!menuIsLive(s)) return s;
+    }
+    return null;
+  }
+
+  /**
+   * Back out of the pack, leaving the battle menu up.
+   *
+   * Not `closeMenus`, and that is the point: it presses B until *no window is
+   * open*, and in a battle the battle menu is a window that B will not close.
+   * So it can only ever exhaust its budget and report failure -- which is
+   * honest and useless. The resting state in a battle is the battle menu, so
+   * that is what this presses toward.
+   */
+  async _backToBattleMenu(tries = 6) {
+    for (let i = 0; i < tries; i++) {
+      const s = await this.snap();
+      if (!s.inBattle || menuIsLive(s)) return true;
+      await this.push('B', 5, 10);
+      await this.step(SETTLE_FRAMES);
+    }
+    return menuIsLive(await this.snap());
+  }
+
+  /**
+   * Use a healing item on whoever is on the field, without leaving the battle.
+   *
+   * The same pack `throwBall` drives, a different pocket, and one box fewer:
+   * in a battle there is no *which Pokemon* -- it applies to the one that is
+   * out. Measured on a Cyndaquil at 9 of 21: PACK draws 5/1, the item draws
+   * USE/QUIT at 2/7, confirming draws 2/0, and **the HP moves on the press
+   * after that** while the pocket is not written back until the box closes.
+   *
+   * So HP is the evidence, again, and for the reason the field version records:
+   * the pocket lags what it is evidence of. The answer is `{ ok, gained }`
+   * where `ok` means the thing on the field has more HP than it did.
+   */
+  async useItemInBattle(itemId) {
+    const e = this.state.e;
+    const menu = await this.awaitBattleMenu();
+    if (menu === null) return { ok: false, gained: 0, message: 'no battle menu' };
+    const was = onField(menu);
+    if (!was) return { ok: false, gained: 0, message: 'nothing on the field' };
+    const had = ((menu.items || []).find(([id]) => id === itemId) || [0, 0])[1];
+    if (!had) return { ok: false, gained: 0, message: 'that is not in the bag' };
+
+    let s = await this._openBattlePack();
+    if (!s) {
+      await this._backToBattleMenu();
+      return { ok: false, gained: 0, message: 'the pack never opened' };
+    }
+    for (let i = 0; i < 8 && s.curPocket !== e.itemPocket; i++) {
+      s = await this._packMoved('RIGHT', (x) => x.curPocket);
+    }
+    if (s.curPocket !== e.itemPocket) {
+      await this._backToBattleMenu();
+      return { ok: false, gained: 0, message: 'could not reach the ITEMS pocket' };
+    }
+    for (let i = 0; i < 24 && s.curItem !== itemId; i++) {
+      if (s.curItem === CANCEL_ITEM) {
+        await this.push('UP', 4, 8);
+        await this.step(SETTLE_FRAMES);
+        s = await this.snap();
+        if (s.curItem === itemId) break;
+        await this._backToBattleMenu();
+        return { ok: false, gained: 0, message: 'walked past it in the pack' };
+      }
+      s = await this._packMoved('DOWN', (x) => x.curItem);
+    }
+    if (s.curItem !== itemId) {
+      await this._backToBattleMenu();
+      return { ok: false, gained: 0, message: 'could not find it in the pack' };
+    }
+
+    await this.push('A', 6, 10);
+    await this.step(SETTLE_PACK);
+    if (!this._isBox(await this.snap(), e.battlePack && e.battlePack.use)) {
+      await this._backToBattleMenu();
+      return { ok: false, gained: 0, message: 'the USE box never appeared' };
+    }
+    await this.push('A', 6, 10);
+    await this.step(SETTLE_PACK);
+    // From here it is the result being written and read out: press through it
+    // until the field shows more HP or the box goes away. Not `settleText`,
+    // which would tap on into whatever is drawn next -- the lesson the field
+    // version of this learned the hard way.
+    for (let i = 0; i < ITEM_RESULT_TAPS; i++) {
+      const now = await this.snap();
+      if (!now.inBattle) break;
+      const mon = onField(now);
+      if (mon && mon.hp > was.hp) break;
+      if (!now.windowOpen) break;
+      await this.push('A', 4, 8);
+      await this.pump();
+    }
+    const after = await this.snap();
+    const mon = onField(after);
+    const gained = mon ? mon.hp - was.hp : 0;
+    return {
+      ok: gained > 0,
+      gained,
+      message: gained > 0 ? `+${gained} HP` : 'nothing changed on the field',
+    };
   }
 
   /**

@@ -474,3 +474,283 @@ test('a box that will not close is reported rather than pressed at for ever',
   // the point -- that it is a number at all is.
   t.true(presses <= 60, `bounded at ${presses} presses`);
 });
+
+// --- reaching for the bag before the thing on the field faints --------------
+
+const POTION = 18, BERRY = 173;
+const HEALS = ['berry', 'potion'];
+
+/**
+ * A pilot in a battle whose pack is a scripted state machine.
+ *
+ * The boxes are the ones measured on the cartridge — the pack at 5/1, USE/QUIT
+ * at 2/7, the result written over 2/0 — because what is under test is whether
+ * each is confirmed before anything is pressed into it.
+ */
+function fighting({ active = { hp: 6, maxHp: 21 }, pocket = [[POTION, 2]],
+                    heals = 20, packOpens = true, useBox = true,
+                    pickAction = () => {} } = {}) {
+  const sym = symbols();
+  const state = new GameState(sym);
+  const gb = new FakeGameBoy({ wram: worldRam(sym, {}) });
+  const tasks = new Tasks(gb, state, () => {},
+                          fakeRom({ items: { 18: 'POTION', 173: 'BERRY' } }));
+  const mon = { species: 155, level: 7, moves: [33, 0, 0, 0], pp: [35, 0, 0, 0], ...active };
+  const bag = pocket.map(([id, n]) => [id, n]);
+  const at = { box: 'battle', pocket: 0, item: bag.length ? bag[0][0] : 0xff, row: 1, linger: 0 };
+  const log = [];
+  const SHAPES = {
+    battle: gen2.battleMenu,
+    pack: gen2.battlePack ? { items: 5, top: 1 } : null,
+    use: gen2.battlePack.use,
+    applied: gen2.battlePack.applied,
+  };
+  tasks.step = async () => {};
+  tasks.pump = async () => {};
+  tasks.closeMenus = async () => { at.box = 'battle'; log.push('close'); return true; };
+  tasks.snap = async () => {
+    const shape = SHAPES[at.box] || { items: 0, top: 0 };
+    return {
+      ...state.read(worldRam(sym, { battleMode: 1, party: [mon], items: bag,
+                                    enemy: { species: 16, level: 3, hp: 9, maxHp: 12 } })),
+      windowOpen: at.box !== 'battle',
+      menuItems: shape.items, menuTop: shape.top, menu: [1, at.row],
+      curPocket: at.pocket, curItem: at.item,
+    };
+  };
+  tasks.awaitBattleMenu = async () => { at.box = 'battle'; return tasks.snap(); };
+  // `packOpens` may be a boolean or a function of how many times PACK has been
+  // pressed, because a press swallowed by the turn's text is exactly what the
+  // retry exists for.
+  let packPresses = 0;
+  tasks.chooseAction = async (which) => {
+    log.push(`action ${which}`);
+    pickAction(which);
+    if (which !== gen2.battleAction.pack) return;
+    const opens = typeof packOpens === 'function' ? packOpens(++packPresses) : packOpens;
+    at.box = opens ? 'pack' : 'battle';
+  };
+  tasks._packMoved = async (button, of) => {
+    log.push(button);
+    if (button === 'RIGHT') at.pocket = (at.pocket + 1) % 4;
+    if (button === 'DOWN') {
+      const i = bag.findIndex(([id]) => id === at.item);
+      at.item = i + 1 < bag.length ? bag[i + 1][0] : 0xff;
+    }
+    return tasks.snap();
+  };
+  tasks.push = async (b) => {
+    log.push(b);
+    if (b !== 'A') return;
+    if (at.box === 'pack') { at.box = useBox ? 'use' : 'applied'; return; }
+    if (at.box === 'use') { at.box = 'applied'; return; }
+    if (at.box === 'applied') {
+      if (heals && mon.hp < mon.maxHp) {
+        mon.hp = Math.min(mon.maxHp, mon.hp + heals);
+        const e = bag.find(([id]) => id === at.item);
+        if (e && --e[1] <= 0) bag.splice(bag.indexOf(e), 1);
+        // The box does *not* go away when the HP moves. Measured: it stayed at
+        // 2/0 for three more presses before closing, which is why the loop
+        // stops on the HP rather than on the window -- and why removing that
+        // check has to fail a test.
+        at.linger = 3;
+        return;
+      }
+      if (at.linger > 0) { at.linger--; return; }
+      at.box = 'battle';
+    }
+  };
+  return { tasks, log, mon, bag, at };
+}
+
+test('a potion is used on whoever is on the field, and confirmed by the HP',
+     async (t) => {
+  // Measured on the cartridge at 9 of 21: PACK draws 5/1, the item draws
+  // USE/QUIT at 2/7, confirming draws 2/0, and the HP moves on the press after
+  // that -- while the pocket is not written back until the box closes. So HP is
+  // the evidence, the same as in the field.
+  const { tasks, mon, at } = fighting({ active: { hp: 6, maxHp: 21 } });
+  const r = await tasks.useItemInBattle(POTION);
+  t.true(r.ok, 'it healed');
+  t.eq(r.gained, 15, 'up to full, and it says by how much');
+  t.eq(mon.hp, 21, 'on the field');
+  // It stopped on the HP rather than waiting the box out: the box was still
+  // open, as it is on the cartridge for three more presses.
+  t.true(at.linger > 0, 'and it did not tap on into whatever came next');
+});
+
+test('an item not in the bag is refused before the pack is opened', async (t) => {
+  const { tasks, log } = fighting({ pocket: [[POTION, 1]] });
+  const r = await tasks.useItemInBattle(BERRY);
+  t.false(r.ok, 'refused');
+  t.contains(r.message, 'not in the bag', 'and says why');
+  t.eq(log.length, 0, 'nothing was pressed');
+});
+
+test('a swallowed PACK press is asked again, not given up on', async (t) => {
+  // Measured, and it cost a knockout: three attempts in one battle came back
+  // "the pack never opened" -- an accurate reading and a wrong conclusion. The
+  // pack opens in under twenty frames, measured separately; what happens is the
+  // A press landing while the turn's text is still running and vanishing.
+  // Three of those spent the whole per-battle allowance, and the Pokémon fought
+  // on at 4 of 18 and fainted.
+  const { tasks, mon, log } = fighting({ packOpens: (n) => n >= 3 });
+  const r = await tasks.useItemInBattle(POTION);
+  t.true(r.ok, 'the third press landed and it healed');
+  t.eq(mon.hp, 21, 'up to full');
+  t.eq(log.filter((l) => l === 'action 3').length, 3, 'two eaten, one landed');
+});
+
+test('a pack that never opens is backed out to the battle menu', async (t) => {
+  // Not `closeMenus`: that presses B until no window is open, and in a battle
+  // the battle menu *is* a window that B will not close -- so it could only
+  // ever exhaust its budget and report failure. The resting state in a battle
+  // is the battle menu.
+  const { tasks, log } = fighting({ packOpens: false });
+  const r = await tasks.useItemInBattle(POTION);
+  t.false(r.ok, 'it stopped');
+  t.contains(r.message, 'never opened', 'naming what went wrong');
+  t.eq(log.filter((l) => l === 'close').length, 0, 'and it did not call closeMenus');
+  t.eq(log.filter((l) => l === 'action 3').length, 4,
+       'having asked four times first');
+});
+
+test('the USE box is confirmed before it is confirmed', async (t) => {
+  // The box after the item is USE/QUIT, and the two rows a mispress reaches in
+  // the field version of this are GIVE and TOSS. Here the wrong box means the
+  // press went somewhere unknown, and pressing on is how a pilot throws a ball
+  // it did not mean to.
+  const { tasks } = fighting({ useBox: false });
+  const r = await tasks.useItemInBattle(POTION);
+  t.false(r.ok, 'it stopped');
+  t.contains(r.message, 'USE box never appeared', 'naming the box');
+});
+
+test('the ITEMS pocket is walked to, and the item within it', async (t) => {
+  const { tasks, log, mon } = fighting({ pocket: [[BERRY, 1], [POTION, 1]] });
+  const r = await tasks.useItemInBattle(POTION);
+  t.true(r.ok, 'it got there');
+  t.contains(log.join(' '), 'DOWN', 'past the berry to the potion');
+  t.eq(mon.hp, 21, 'and used it');
+});
+
+test('the battle loop reaches for the bag before it swings', async (t) => {
+  // A knockout takes half your money and puts you back at a Center, and the
+  // grind's answer to one has always been to heal up and carry on -- after the
+  // fact. The pilot was carrying potions through every one of them, because
+  // nothing in this loop had ever opened the pack.
+  const actions = [];
+  const { tasks, mon } = fighting({ active: { hp: 6, maxHp: 21 },
+                                    pickAction: (w) => actions.push(w) });
+  tasks._outcome = async () => 'won';
+  // One turn: after the item is used the loop comes round, HP is full, and
+  // FIGHT is chosen. Ending the battle then stops it.
+  let turns = 0;
+  const realSnap = tasks.snap;
+  tasks.snap = async () => {
+    const s = await realSnap();
+    return turns++ > 6 ? { ...s, inBattle: false } : s;
+  };
+  await tasks.fightBattle(3, { heals: HEALS });
+  t.eq(actions[0], gen2.battleAction.pack, 'the pack came first');
+  t.eq(mon.hp, 21, 'and the thing on the field was mended');
+});
+
+test('a healthy Pokémon is not given a potion', async (t) => {
+  const actions = [];
+  const { tasks, bag } = fighting({ active: { hp: 20, maxHp: 21 },
+                                    pickAction: (w) => actions.push(w) });
+  tasks._outcome = async () => 'won';
+  let turns = 0;
+  const realSnap = tasks.snap;
+  tasks.snap = async () => {
+    const s = await realSnap();
+    return turns++ > 4 ? { ...s, inBattle: false } : s;
+  };
+  await tasks.fightBattle(2, { heals: HEALS });
+  t.eq(actions[0], gen2.battleAction.fight, 'it swung');
+  t.eq(bag[0][1], 2, 'and the potions are untouched');
+});
+
+test('without a list of healing items it fights exactly as it did', async (t) => {
+  // The behaviour for twenty-three passes, and it has to stay the behaviour for
+  // a cartridge nobody has described: an item name is content, and this file is
+  // the engine.
+  const actions = [];
+  const { tasks, bag } = fighting({ active: { hp: 2, maxHp: 21 },
+                                    pickAction: (w) => actions.push(w) });
+  tasks._outcome = async () => 'won';
+  let turns = 0;
+  const realSnap = tasks.snap;
+  tasks.snap = async () => {
+    const s = await realSnap();
+    return turns++ > 4 ? { ...s, inBattle: false } : s;
+  };
+  await tasks.fightBattle(2);
+  t.eq(actions[0], gen2.battleAction.fight, 'FIGHT, as always');
+  t.eq(bag[0][1], 2, 'and nothing spent');
+});
+
+test('one battle gets three potions and no more', async (t) => {
+  // A fight that needs four is a fight that should have been run from, and
+  // spending the bag on it is worse than losing it.
+  const actions = [];
+  const { tasks } = fighting({ active: { hp: 2, maxHp: 60 }, pocket: [[POTION, 9]],
+                               heals: 1, pickAction: (w) => actions.push(w) });
+  tasks._outcome = async () => 'won';
+  await tasks.fightBattle(8, { heals: HEALS });
+  const packs = actions.filter((w) => w === gen2.battleAction.pack).length;
+  t.eq(packs, 3, 'three, then it fights on with what it has');
+});
+
+test('backing out presses nothing when the battle menu is already up',
+     async (t) => {
+  // The resting state in a battle. A B press into it is not free: it is a press
+  // the game may read as something else on the next frame.
+  const { tasks, log } = fighting();
+  t.true(await tasks._backToBattleMenu(), 'already there');
+  t.eq(log.length, 0, 'so nothing was pressed');
+});
+
+test('backing out of the pack presses until the battle menu is back', async (t) => {
+  const { tasks, log, at } = fighting();
+  at.box = 'use';
+  // Two B presses to climb out of USE and the pack.
+  tasks.push = async (b) => {
+    log.push(b);
+    if (b !== 'B') return;
+    at.box = at.box === 'use' ? 'pack' : 'battle';
+  };
+  t.true(await tasks._backToBattleMenu(), 'it got back');
+  t.eq(log.filter((l) => l === 'B').length, 2, 'two boxes, two presses');
+});
+
+test('pacing refuses to start with a menu open', async (t) => {
+  // A directional press with a menu on screen moves a *cursor*, and this
+  // presses four hundred of them. The pass before last, a menu left open by a
+  // `closeMenus` that never checked turned this into four hundred presses
+  // against the START menu -- after which the grind reported "no wild Pokémon
+  // appeared -- are you standing in grass?" from a tile of tall grass. The
+  // reading was confident and the diagnosis was wrong.
+  const { tasks } = pilot();
+  const pressed = [];
+  const said = [];
+  tasks.say = (m) => said.push(m);
+  tasks.snap = async () => ({ windowOpen: true, inBattle: false });
+  tasks.push = async (b) => pressed.push(b);
+  t.eq(await tasks.paceUntilBattle(10), null, 'it declines');
+  t.eq(pressed.length, 0, 'without a single press');
+  t.contains(said.join(' '), 'a menu is open', 'and says why');
+});
+
+test('pacing with nothing open walks until something jumps out', async (t) => {
+  const { tasks } = pilot();
+  let steps = 0;
+  const pressed = [];
+  tasks.pump = async () => {};
+  tasks.snap = async () => ({ windowOpen: false, inBattle: steps > 3, party: [] });
+  tasks.push = async (b) => { pressed.push(b); steps++; };
+  const got = await tasks.paceUntilBattle(50);
+  t.true(!!got, 'it found a battle');
+  t.true(pressed.length >= 4 && pressed.length < 50, 'after a few steps, not all of them');
+});

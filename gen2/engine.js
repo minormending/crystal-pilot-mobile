@@ -116,6 +116,23 @@ export const gen2 = {
   ballPocket: 1,
   itemPocket: 0,
 
+  // --- the pack, from inside a battle -------------------------------------
+  // Measured on a Cyndaquil at 9 of 21, mid-encounter: PACK draws the same 5/1
+  // box the field pack does, selecting an item draws USE/QUIT, and confirming
+  // draws the box the result is written over.
+  //
+  // `use` is *the same shape as `learnMove`* -- two items at row 7 -- and that
+  // is written down rather than deduplicated, because they are two different
+  // questions that a snapshot cannot tell apart. Only the context can: the
+  // learn-move box appears while a turn is resolving, and this one only while
+  // the pack is being driven. Any code that could be in both states at once
+  // would answer the wrong one, so `useItemInBattle` finishes before the turn
+  // loop resumes.
+  battlePack: {
+    use: { items: 2, top: 7 },
+    applied: { items: 2, top: 0 },
+  },
+
   // --- the three boxes between the START menu and a healed Pokemon ---------
   // Measured on the cartridge, in the order they appear. Every one of them is a
   // box signature rather than a press count, for the reason `learnMove` gives:
