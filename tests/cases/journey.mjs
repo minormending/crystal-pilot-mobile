@@ -719,6 +719,117 @@ function dueller({ trainers = () => [], at = [5, 5], starts = true,
   return j;
 }
 
+// --- winning a badge --------------------------------------------------------
+//
+// The badge is the evidence and the only evidence there is. A Gym ends with the
+// leader beaten and the pilot standing in a room that looks like every other
+// room it has cleared, so counting won battles would say "fought four, won
+// four" about a run that never reached the leader.
+
+/** A Journey at a Gym, with a badge that the leader's loss would set. */
+function gymGoer({ badge = 0, has = false, inside = 2567, at = 2565,
+                   trainers = 2, wins = true, enter = true } = {}) {
+  const sym = symbols();
+  const title = { legCost: 25, heals: ['potion'],
+                  gyms: [{ map: at, inside, door: [18, 17],
+                           leader: 'FALKNER', badge, opens: 'the road south' }] };
+  let here = at, badges = has ? 1 << badge : 0;
+  const gb = new FakeGameBoy({ wram: worldRam(sym, {}) });
+  const j = new Journey(gb, new GameState(sym), null,
+                        { off: 0, calibrate: () => true, playerPos: () => [5, 5],
+                          mapSize: () => [10, 16], placedObjects: () => [] },
+                        { mapKey: async () => here }, () => {},
+                        { route: () => [] }, title);
+  j.said = [];
+  j.say = (m) => j.said.push(m);
+  j.settled = async () => gb.wram;
+  j.snap = async () => ({
+    inBattle: false, money: 3000, wram: gb.wram,
+    party: [{ hp: 20, maxHp: 20, level: 10 }], balls: [], items: [],
+  });
+  // The badge is read out of the same snapshot the real one is, so the bit has
+  // to actually be in work RAM.
+  const at8 = sym.addr('wJohtoBadges') - 0xc000;
+  gb.wram[at8] = badges;
+  j.state.hasBadge = (wram, bit) =>
+    bit === null || bit === undefined ? null : (wram[at8] & (1 << bit)) !== 0;
+  j.through = async () => { if (enter) here = inside; return enter; };
+  j.travelTo = async () => ({ ok: true, message: 'arrived' });
+  j.healNow = async () => ({ ok: true, message: 'healed' });
+  let fought = 0;
+  j.clearHere = async () => {
+    fought = trainers;
+    // Winning the last battle is what sets the bit, which is the game's own
+    // order of events.
+    if (wins) gb.wram[at8] |= 1 << badge;
+    return { ok: wins, stats: { won: trainers, prize: 100 * trainers },
+             message: wins ? `beat ${trainers} trainers` : 'nobody fit to send out' };
+  };
+  j.fought = () => fought;
+  return j;
+}
+
+test('a badge won is the evidence, and it says what it opens', async (t) => {
+  const j = gymGoer();
+  const r = await j.beatGym((await j.gymList(2565))[0]);
+  t.true(r.ok, `won: ${r.message}`);
+  t.eq(r.stats.badge, true, 'the bit is set');
+  t.contains(r.message, 'FALKNER', 'the leader is named');
+  t.contains(r.message, 'the road south', 'and what it opens');
+});
+
+test('a Gym cleared without the badge is not a Gym beaten', async (t) => {
+  // **The reason this reads a bit rather than counting wins.** A run that
+  // fights every trainer in the room and never reaches the leader looks
+  // identical from the inside: four battles, four wins, and a room that has
+  // been cleared.
+  const j = gymGoer({ wins: true });
+  // Everything the sweep reports, and no badge.
+  j.clearHere = async () => ({ ok: true, stats: { won: 4, prize: 400 },
+                               message: 'beat 4 trainers' });
+  const r = await j.beatGym((await j.gymList(2565))[0]);
+  t.false(r.ok, 'not a win');
+  t.eq(r.stats.won, 4, 'even with four battles won');
+  t.contains(r.message, 'no badge yet', 'and it says so plainly');
+  t.contains(r.message, 'beat 4 trainers', "keeping the sweep's own answer");
+});
+
+test('a Gym already beaten is not offered, and not walked to', async (t) => {
+  const j = gymGoer({ has: true });
+  t.eq(await j.gymList(2565), [], 'off the list');
+  const r = await j.beatGym({ map: 2565, inside: 2567, door: [18, 17],
+                              leader: 'FALKNER', badge: 0 });
+  t.true(r.ok, 'and asking anyway is not an error');
+  t.true(r.stats.already, 'it says it was already done');
+  t.eq(j.said.length, 0, 'having gone nowhere');
+});
+
+test('a Gym that will not let the pilot in says who stopped it', async (t) => {
+  const j = gymGoer({ enter: false });
+  j.turnedBack = 'the Gym is closed today';
+  const r = await j.beatGym((await j.gymList(2565))[0]);
+  t.false(r.ok, 'no badge');
+  t.contains(r.message, 'the Gym is closed today', 'quoting whoever said no');
+});
+
+test('a cartridge with no Gyms declared offers none', async (t) => {
+  const j = gymGoer();
+  j.title = { legCost: 25 };
+  t.eq(await j.gymList(2565), [], 'nothing to offer');
+  const r = await j.beatGym(null);
+  t.false(r.ok, 'and nothing to walk to');
+  t.contains(r.message, 'no Gym', 'said rather than crashed');
+});
+
+test('a cartridge that cannot read badges still offers the Gym', async (t) => {
+  // Null is "cannot tell", and offering the walk is the right answer to it: the
+  // worst case is a trip to a Gym already beaten, and the alternative is never
+  // offering one at all.
+  const j = gymGoer({ has: true });
+  j.state.hasBadge = () => null;
+  t.eq((await j.gymList(2565)).length, 1, 'still on the list');
+});
+
 // --- a whiteout looks exactly like success -----------------------------------
 
 test('a heal that was really a knockout says so', async (t) => {

@@ -1901,6 +1901,94 @@ export class Journey {
     return false;
   }
 
+  /**
+   * Gyms this cartridge has been told about, nearest first, unbeaten only.
+   *
+   * The badge is what makes "unbeaten" answerable without a walk, which is the
+   * whole reason this reads a *bit* rather than a count: a count says how many
+   * and a row has to say which.
+   */
+  async gymList(here) {
+    const declared = (this.title && this.title.gyms) || [];
+    if (!declared.length) return [];
+    const s = await this.snap();
+    return declared.filter((g) => {
+      const has = s.wram ? this.state.hasBadge(s.wram, g.badge) : null;
+      // Null is "cannot tell", and offering the walk is the right answer to
+      // that: the worst case is a trip to a Gym that has already been beaten,
+      // and the alternative is never offering one at all.
+      return has !== true;
+    }).map((g) => ({ ...g, from: g.map }));
+  }
+
+  /**
+   * Go and win a badge.
+   *
+   * **The badge is the evidence, and it is the only evidence there is.** A Gym
+   * ends with the leader beaten and the pilot standing in a room that looks
+   * like every other room it has cleared -- so counting won battles would say
+   * *fought four, won four* about a run that never reached the leader at all.
+   * `wJohtoBadges` gains a bit, or nothing happened.
+   *
+   * Which also closes a loop four passes in the making: the pilot has been
+   * turned back from Route 32 since it learned to find Centers, `reopen` throws
+   * away every written-off road the moment a badge is won, and this is the
+   * thing that wins one.
+   *
+   * The walk is `travelTo` to the town, `through` the door, and `clearHere`
+   * inside -- all of which already exist and none of which knows what a Gym is.
+   * What this adds is the badge, and knowing to heal on the way in.
+   */
+  async beatGym(gym) {
+    if (!gym || gym.inside === undefined || !gym.door) {
+      return { ok: false, message: 'no Gym this build knows about' };
+    }
+    const before = await this.snap();
+    const had = before.wram ? this.state.hasBadge(before.wram, gym.badge) : null;
+    if (had === true) {
+      return { ok: true, stats: { already: true },
+               message: `already beaten — ${gym.leader || 'the leader'} owes nothing` };
+    }
+    const where = this.where(gym.map);
+    // Full HP on the way in, because a Gym is several battles in a row with no
+    // Center between them and the bag is what `clearHere` has to work with.
+    if (before.party.some((m) => m.hp < m.maxHp)) {
+      this.say('healing before the Gym');
+      await this.healNow();
+    }
+    if (await this.mapKey() !== gym.inside) {
+      if (await this.mapKey() !== gym.map) {
+        this.say(`travelling to ${where}`);
+        const trip = await this.travelTo(gym.map);
+        if (!trip.ok) return { ok: false, stats: {}, message: trip.message };
+      }
+      this.say(`in through the door at ${where}`);
+      if (!await this.through(gym.door, gym.inside)) {
+        return { ok: false, stats: {},
+                 message: this.turnedBack
+                   ? `turned back at the Gym — ${this.turnedBack}`
+                   : `could not get into the Gym at ${where}` };
+      }
+    }
+    const swept = await this.clearHere();
+    const after = await this.snap();
+    const won = after.wram ? this.state.hasBadge(after.wram, gym.badge) : null;
+    const stats = {
+      at: where, won: swept.stats ? swept.stats.won : 0,
+      prize: swept.stats ? swept.stats.prize : 0,
+      badge: won === null ? 'unknown' : won,
+    };
+    if (won === true) {
+      return { ok: true, stats,
+               message: `beat ${gym.leader || 'the leader'}`
+                        + (gym.opens ? ` — that opens ${gym.opens}` : '') };
+    }
+    // Not won, and the sweep's own answer is the useful half: it says whether
+    // the party ran out, the trainers ran out, or a battle was lost.
+    return { ok: false, stats,
+             message: `no badge yet — ${swept.message}` };
+  }
+
   /** What `clearHere` has to say for itself. */
   _clearedMessage(stats, stoppedBy, placed) {
     const beat = stats.won === 1 ? 'beat one trainer'

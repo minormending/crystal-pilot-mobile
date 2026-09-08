@@ -196,6 +196,10 @@ let running = false, target = 5;
 let bootStage = 'start';
 // Where healing would go from here, worked out once per refresh.
 let healPlace = null, healShut = null;
+// The nearest Gym the pilot has not won a badge from, worked out once a refresh
+// the same way the nearest Center is. Null on a cartridge with no Gyms declared,
+// and null once they are all beaten -- the badge says which.
+let gymNext = null;
 let lastLead = null;   // the lead's level, for the relative grind presets
 // Whether this tab has committed a save. Only used for wording -- the
 // download checks the battery itself rather than trusting this.
@@ -1567,6 +1571,7 @@ const JOB_ROWS = {
   shop: ['#shopstate', '#shop', '#job-shop'],
   take: ['#takestate', '#take', '#job-take'],
   duel: ['#duelstate', '#duel', '#job-duel'],
+  gym: ['#gymstate', '#gym', '#job-gym'],
   travel: ['#travelstate', '#travel', '#job-travel'],
 };
 
@@ -1575,7 +1580,7 @@ function paintJobs(s) {
   // first Poké Balls is a scripted walk to particular places, and a cartridge
   // nobody has described has no such walk.
   const ctx = { rom: romdata, target, huntWanted, ballId, savedThisSession,
-                healPlace, healShut,
+                healPlace, healShut, gym: gymNext,
                 canFetch: typeof boot.eggErrand === 'function',
                 places: travelPlaces, travelTo, huntable, wilds,
                 hours, hourNow, takeables, trainers, trainersOnMap,
@@ -1703,6 +1708,19 @@ async function refresh() {
   // has refused is the difference. Heal got this from `nearestPlace`, which
   // both rows share; the Shop row asks a boolean of its own and was the caller
   // that mechanism never reached.
+  // Which Gym, and how far. `gymList` reads the badge bits, so a Gym that has
+  // been beaten simply is not in the list and the row goes with it.
+  if (boot && !s.inBattle && s.worldLoaded && typeof boot.gymList === 'function') {
+    try {
+      const here = s.map[0] * 256 + s.map[1];
+      const list = await boot.gymList(here);
+      const pick = await boot.nearestPlace(list, here, (g) => g.map);
+      gymNext = pick && pick.place
+        ? { ...pick.place, at: boot.where(pick.place.map),
+            legs: here === pick.place.map ? 0 : Math.max(1, Math.round((pick.cost || 0) / 25)) }
+        : null;
+    } catch (e) { gymNext = null; }
+  }
   if (boot && s.worldLoaded && typeof boot.martList === 'function') {
     const here = s.map[0] * 256 + s.map[1];
     martsNear = boot.martList(here)
@@ -2627,6 +2645,20 @@ $('#duel').onclick = async () => {
  * standing in grass. The stats line rather than a sentence, because what
  * somebody wants afterwards is how many and how much.
  */
+/**
+ * Go and win a badge.
+ *
+ * The one job whose result the game writes down permanently, which is why the
+ * progress line says the badge rather than the battles: *fought four, won four*
+ * is true of a run that never reached the leader.
+ */
+$('#gym').onclick = async () => {
+  if (!boot || !gymNext) return;
+  const res = await runTask('#gym', 'off to the Gym', () => boot.beatGym(gymNext));
+  progress(res && res.stats
+    ? Object.entries(res.stats).map(([k, v]) => `${k}=${v}`).join('  ') : '');
+};
+
 $('#clear').onclick = async () => {
   if (!boot) return;
   const res = await runTask('#duel', 'taking on the map',

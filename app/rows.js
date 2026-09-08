@@ -18,6 +18,7 @@
  *   ballId            the ball to throw, or null when there are none
  *   savedThisSession  whether this tab has committed a save
  *   healPlace         where healing would go, worked out once per refresh
+ *   gym               the nearest unbeaten Gym as {at, leader, legs}, or null
  *   healShut          what the game said last time it turned the pilot back
  *                     from that place, or null -- see `Journey.shut`
  *   places            named maps reachable from here, [{ key, name, legs }]
@@ -36,6 +37,7 @@ const SAYING_MAX = 46;
 export function describeRows(s, ctx = {}) {
   const { rom = null, target = 5, huntWanted = null, ballId = null,
           savedThisSession = false, healPlace = null, healShut = null,
+          gym = null,
           places = [], travelTo = null, wilds = null, takeables = [],
           bagHeal = null, bagCure = null, marts = false, shopFor = null,
           trainers = [], trainersOnMap = 0, canBox = false,
@@ -221,6 +223,18 @@ export function describeRows(s, ctx = {}) {
         : !marts ? 'no mart within reach of here'
         : `${money} in hand · ${shopFor || 'nothing named to buy'}`,
       enabled: afoot && !!marts && !!shopFor,
+    },
+    // Winning a badge, which is the one job whose result the game writes down
+    // permanently -- so this row can say whether it has been done rather than
+    // guessing from what the pilot remembers. A Gym that is beaten stops being
+    // offered at all, because the badge says so.
+    gym: {
+      text: s.inBattle ? 'finish the battle first'
+        : !gym ? 'no Gym this build knows about'
+        : !fit.length ? 'nobody fit to send out'
+        : `${gym.leader || 'the leader'} at ${gym.at}`
+          + (gym.legs ? ` · ${legsWord(gym.legs)}` : ' · here'),
+      enabled: afoot && !!gym && fit.length > 0,
     },
     // What the map is holding. Counted rather than named, because the app
     // cannot tell a ball somebody has already taken from one still lying there
@@ -501,7 +515,10 @@ export function describeOffers(s, ctx = {}) {
   // there and a trainer is beaten once, so a trainer here now is the more
   // perishable offer -- but a duel can also be lost, and grinding cannot.
   // Grind first, therefore, and Duel immediately after it.
-  order.push('catch', 'hunt', 'grind', 'duel', 'heal', 'take', 'travel', 'shop');
+  // Gym sits between Duel and Heal: it is the job that opens roads, so it is
+  // worth more than tidying up and less than being able to fight at all.
+  order.push('catch', 'hunt', 'grind', 'duel', 'gym', 'heal', 'take', 'travel',
+             'shop');
 
   const offered = [];
   for (const key of order) {

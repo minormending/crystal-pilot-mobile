@@ -54,6 +54,7 @@ const CHERRYGROVE_MART = key(26, 4);
 const VIOLET_CITY = key(10, 5);
 const VIOLET_POKECENTER = key(10, 10);
 const VIOLET_MART = key(10, 6);
+const VIOLET_GYM = key(10, 7);
 
 const MAP_NAMES = {
   [PLAYERS_HOUSE_2F]: 'your bedroom',
@@ -70,6 +71,7 @@ const MAP_NAMES = {
   [VIOLET_CITY]: 'Violet City',
   [VIOLET_POKECENTER]: "Violet's Pokémon Center",
   [VIOLET_MART]: "Violet's Mart",
+  [VIOLET_GYM]: "Violet's Gym",
 };
 
 // CherrygroveCity warp_events, and the nurse behind her counter.
@@ -149,6 +151,27 @@ export const crystal = {
       inside: CHERRYGROVE_POKECENTER, door: POKECENTER_DOOR, nurse: NURSE },
     { map: VIOLET_CITY, reach: 'healAtCenter',
       inside: VIOLET_POKECENTER, door: [31, 25], nurse: NURSE },
+  ],
+  // Where the badges are, and what each one opens. **Declared rather than
+  // discovered, and that is a measured decision rather than a gap.** A sweep of
+  // all 349 maps that carry objects found the gym guide's sprite -- 72 -- on
+  // twenty-four of them, and only about sixteen are Gyms: the Radio Tower, the
+  // Slowpoke Well and the Power Plant all have one too. Narrowing by where he
+  // stands (three rows up from the bottom wall, beside the door) gets fourteen
+  // Gyms and still lets in the Seafoam Islands and a Cerulean house, and misses
+  // Saffron.
+  //
+  // Which is not narrow enough to walk into. The Centers and the Marts were
+  // declared here for thirty passes before a signature good enough to trust
+  // turned up -- 21 of 23 and 13 of 26, with the misses costing nothing -- and
+  // this is the same bar, not yet met. See docs/CODE.md.
+  //
+  // `badge` is the bit `wJohtoBadges` sets when the leader loses. Measured:
+  // Falkner sets bit 0. Which bit means which badge is a fact about the story,
+  // so it belongs here; counting the bits is the engine's job.
+  gyms: [
+    { map: VIOLET_CITY, inside: VIOLET_GYM, door: [18, 17],
+      leader: 'FALKNER', badge: 0, opens: 'the road south out of Violet' },
   ],
   grassyMaps: [ROUTE_29, ROUTE_30, ROUTE_31],
   // Where things can be bought, and how to get to the counter.

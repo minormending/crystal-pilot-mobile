@@ -225,6 +225,24 @@ export class GameState {
    * Null and zero are different answers and are kept apart: a cartridge with no
    * `wJohtoBadges` in its symbol file cannot say, and a new game says none.
    */
+  /**
+   * Is a particular badge in the case?
+   *
+   * `bit` is an index across the badge bytes, low bit of the first byte first,
+   * and *which* bit is *which* badge is a fact about a cartridge's story --
+   * so a title declares it and this only counts. Measured on Crystal: beating
+   * Falkner sets bit 0 of `wJohtoBadges`.
+   *
+   * Null where the cartridge will not say, kept apart from false the same way
+   * `badgeCount` keeps null apart from nought: one means *cannot tell* and the
+   * other means *no*.
+   */
+  hasBadge(wram, bit) {
+    if (this.a.badges === null || bit === null || bit === undefined) return null;
+    const byte = b(wram, this.a.badges + (bit >> 3));
+    return (byte & (1 << (bit & 7))) !== 0;
+  }
+
   badgeCount(wram) {
     if (this.a.badges === null) return null;
     let n = 0;

@@ -152,6 +152,47 @@ test('badges are counted as bits, across both bytes', async (t) => {
   t.eq(read(9), 9, 'and the ninth is in the next one');
 });
 
+test('which badge is in the case, bit by bit and across both bytes',
+     async (t) => {
+  // **Driven through the real reader**, because the module that consumes this
+  // stubs it -- and the pass before found out what a stub is worth: it agrees
+  // with whoever wrote it. Sixteen of the seventeen mutations of these two
+  // lines survived while the only test was over a fake.
+  //
+  // Which bit means which badge is a fact about the story and belongs to a
+  // title; counting is this file's job. Measured on Crystal: Falkner sets bit
+  // 0 of `wJohtoBadges`.
+  const sym = symbols();
+  const state = new GameState(sym);
+  const at = sym.addr('wJohtoBadges') - 0xc000;
+  const withBytes = (johto, kanto = 0) => {
+    const wram = worldRam(sym, {});
+    wram[at] = johto;
+    wram[at + 1] = kanto;
+    return wram;
+  };
+
+  const one = withBytes(0b00000001);
+  t.true(state.hasBadge(one, 0), 'Falkner is bit 0');
+  t.false(state.hasBadge(one, 1), 'and the second badge is not in yet');
+  t.false(state.hasBadge(one, 7), 'nor the eighth');
+
+  const eighth = withBytes(0b10000000);
+  t.true(state.hasBadge(eighth, 7), 'the eighth is the top bit of the first byte');
+  t.false(state.hasBadge(eighth, 0), 'and the first is not set by it');
+
+  // The second byte, which is what the `>> 3` is for: bit 8 is the low bit of
+  // `wKantoBadges`, not the ninth bit of the first byte.
+  const kanto = withBytes(0, 0b00000101);
+  t.true(state.hasBadge(kanto, 8), 'bit 8 is the next byte along');
+  t.false(state.hasBadge(kanto, 9), 'bit 9 is not set');
+  t.true(state.hasBadge(kanto, 10), 'and bit 10 is');
+  t.false(state.hasBadge(kanto, 0), 'while the first byte is empty');
+
+  t.eq(state.hasBadge(one, null), null, 'no bit asked about is no answer');
+  t.eq(state.hasBadge(one, undefined), null, 'and neither is none');
+});
+
 test('a cartridge whose symbol file has no badges says so, and not zero',
      async (t) => {
   // Null and none are different answers and are kept apart on purpose: one
