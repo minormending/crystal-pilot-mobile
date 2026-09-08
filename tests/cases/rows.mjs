@@ -832,3 +832,50 @@ test('a full-health party says nothing about the bag', async (t) => {
   t.contains(r.heal.text, 'full health', 'the good state, and it is the good state');
   t.false(r.heal.enabled, 'and nothing to press');
 });
+
+// --- what is wrong besides the HP -------------------------------------------
+
+test('a poisoned Pokémon at full HP is not "at full health"', async (t) => {
+  // The row said it was, because the app read HP and never the status byte --
+  // and poison goes on doing damage while you walk.
+  const r = look({ party: [{ hp: 20, maxHp: 20, species: CYNDAQUIL, level: 5,
+                             statusByte: 0x08 }] },
+                 { bagCure: 'ANTIDOTE in the bag' });
+  t.contains(r.heal.text, 'poisoned', 'it says which');
+  t.contains(r.heal.text, 'ANTIDOTE', 'and what will fix it');
+  t.true(r.heal.enabled, 'and the row can be pressed');
+  t.eq(r.heal.ailing, 1, 'one of them');
+});
+
+test('the ailment is named, because which one decides what fixes it', async (t) => {
+  const one = (byte) => look({ party: [{ hp: 20, maxHp: 20, species: CYNDAQUIL,
+                                         level: 5, statusByte: byte }] }).heal.text;
+  t.contains(one(0x40), 'paralysed', 'paralysis');
+  t.contains(one(0x10), 'burned', 'a burn');
+  t.contains(one(0x20), 'frozen', 'frozen');
+  t.contains(one(0x03), 'asleep', 'and asleep, which is a counter not a flag');
+});
+
+test('two of them are counted rather than listed twice', async (t) => {
+  const r = look({ party: [
+    { hp: 20, maxHp: 20, species: CYNDAQUIL, level: 5, statusByte: 0x08 },
+    { hp: 18, maxHp: 18, species: CYNDAQUIL, level: 4, statusByte: 0x08 },
+  ] });
+  t.contains(r.heal.text, '2 poisoned', 'a count and the kind');
+});
+
+test('hurt outranks poisoned, because HP is the thing that ends a job',
+     async (t) => {
+  const r = look({ party: [{ hp: 4, maxHp: 20, species: CYNDAQUIL, level: 5,
+                             statusByte: 0x08 }] },
+                 { bagHeal: 'POTION' });
+  t.contains(r.heal.text, '1 hurt', 'the HP is said first');
+});
+
+test('a fainted Pokémon has no status worth curing', async (t) => {
+  const r = look({ party: [{ hp: 0, maxHp: 20, species: CYNDAQUIL, level: 5,
+                             statusByte: 0x08 }] },
+                 { healPlace: "Elm's lab" });
+  t.eq(r.heal.ailing, 0, 'the faint is the problem');
+  t.contains(r.heal.text, 'nearest is', 'and only a Center answers it');
+});

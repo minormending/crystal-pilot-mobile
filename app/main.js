@@ -66,6 +66,10 @@ let takeables = [];
 // from the same snapshot as everything else in a refresh, because the bag
 // changes as the pilot spends it.
 let bagHeal = null;
+// And the cheapest thing that would cure what is wrong besides HP, by name, or
+// null. Separate because a potion does not fix poison and the row has to say
+// which of the two it will reach for.
+let bagCure = null;
 let ballId = null;
 // Frames advanced per animation frame while nobody is driving. The steps are
 // powers of two because that is how it reads: 1x, 2x, 4x... and the last one is
@@ -1475,7 +1479,7 @@ function paintJobs(s) {
   const ctx = { rom: romdata, target, huntWanted, ballId, savedThisSession,
                 healPlace, canFetch: typeof boot.eggErrand === 'function',
                 places: travelPlaces, travelTo, huntable, wilds,
-                hours, hourNow, takeables, bagHeal,
+                hours, hourNow, takeables, bagHeal, bagCure,
                 engine: state.e };
   const rows = describeRows(s, ctx);
   const offers = describeOffers(s, ctx);
@@ -1577,6 +1581,17 @@ async function refresh() {
   const pick = romdata && title
     ? romdata.cheapestOf(s.items, title.heals) : null;
   bagHeal = pick ? pick.name : null;
+  // The cure for whatever the party is actually suffering from, rather than for
+  // every status there is: a bag full of BURN HEAL says nothing useful to a
+  // poisoned Pokémon.
+  bagCure = null;
+  if (romdata && title && title.cures) {
+    const wrong = [...new Set(s.party.flatMap((m) => (m.hp ? m.status : []) || []))];
+    for (const key of wrong) {
+      const cure = romdata.cheapestOf(s.items, title.cures[key] || []);
+      if (cure) { bagCure = `${cure.name} in the bag`; break; }
+    }
+  }
   // Remembered so the relative presets have something to be relative to.
   lastLead = s.party.length ? s.party[0].level : null;
   // Options that arrived from another device while a job was running.

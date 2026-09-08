@@ -193,3 +193,27 @@ test('a knockout always asks for a Centre', async (t) => {
   await tasks.grind(0, 15, { heal: async (why) => { reasons.push(why); return false; } });
   t.eq(reasons, ['dry'], 'whatever the bag holds');
 });
+
+test('a poisoned lead is worth healing before the HP looks bad', async (t) => {
+  // Poison and a burn take HP off between battles and while *walking*, so a
+  // lead carrying one loses ground on every step the grind takes. Left out of
+  // the condition, it was only noticed once the ticking had brought the HP down
+  // far enough to look like ordinary damage -- by which point a Center trip had
+  // been earned that an ANTIDOTE would have saved.
+  const reasons = [];
+  const { tasks } = grinder([
+    { species: CHIKORITA, level: 5, hp: 40, maxHp: 44, statusByte: 0x08 },
+  ]);
+  await tasks.grind(0, 10, { heal: async (why) => { reasons.push(why); return false; } });
+  t.eq(reasons, ['hurt'], 'and it is the bag’s kind of problem, not a Centre’s');
+});
+
+test('a well lead at full health is not healed for nothing', async (t) => {
+  const reasons = [];
+  const { tasks } = grinder([
+    { species: CHIKORITA, level: 5, hp: 44, maxHp: 44 },
+    { species: CHIKORITA, level: 6, hp: 44, maxHp: 44 },
+  ]);
+  await tasks.grind(0, 6, { heal: async (why) => { reasons.push(why); return false; } });
+  t.eq(reasons, [], 'nothing was asked for');
+});

@@ -27,7 +27,7 @@ export function describeRows(s, ctx = {}) {
   const { rom = null, target = 5, huntWanted = null, ballId = null,
           savedThisSession = false, healPlace = null,
           places = [], travelTo = null, wilds = null, takeables = [],
-          bagHeal = null,
+          bagHeal = null, bagCure = null,
           // The cartridge's own numbers. A party of six and a trainer battle of
           // 2 are Gen 2's, not this module's, and reading them from an import
           // meant the stock values reached here even when a title had changed
@@ -48,6 +48,11 @@ export function describeRows(s, ctx = {}) {
   // Fainted, separately from hurt. A Potion does nothing for a Pokémon at 0 HP
   // in Gen 2, so a party with one in it needs the walk whatever the bag holds.
   const down = s.party.filter((m) => m.hp === 0);
+  // And what is wrong besides the HP. Worth its own line rather than folding
+  // into "hurt", because a potion does not fix it and poison goes on doing
+  // damage while you walk: a party that is *only* poisoned reads as perfectly
+  // healthy on HP alone, which is what the app used to see.
+  const ailing = s.party.filter((m) => m.hp > 0 && (m.status || []).length);
 
   // Saving drives the START menu, and that menu does not open in a battle or
   // mid-script.
@@ -139,13 +144,19 @@ export function describeRows(s, ctx = {}) {
       // cannot keep.
       text: s.inBattle ? 'finish the battle first'
         : !s.party.length ? 'no party yet'
-        : !hurt.length ? 'everyone is at full health'
+        : !hurt.length && !ailing.length ? 'everyone is at full health'
+        // A party at full HP that is poisoned is not "at full health", and the
+        // row said it was. Named rather than counted, because *which* thing is
+        // wrong decides what will fix it.
+        : !hurt.length
+          ? `${ailWord(ailing)} · ${bagCure || healPlace || 'a Center'}`
         : bagHeal && !down.length
           ? `${hurt.length} hurt · ${bagHeal} in the bag`
           : `${hurt.length} hurt · nearest is ${healPlace || 'a Center'}`,
-      enabled: afoot && hurt.length > 0,
+      enabled: afoot && (hurt.length > 0 || ailing.length > 0),
       // Said so the row can be tested on the decision rather than the wording.
       fromBag: !!(bagHeal && !down.length),
+      ailing: ailing.length,
     },
     // Walking somewhere else, which the pilot could always do and was never
     // asked to. `places` is what the journey says is reachable and named from
@@ -318,6 +329,20 @@ export function hoursLine(hours, now) {
   const words = extra.slice(0, 2).map((e) => `${e.name} ${hourName(e.block)}`);
   const rest = extra.length - words.length;
   return `also here: ${words.join(', ')}${rest ? ` and ${rest} more` : ''}`;
+}
+
+// What each status is called, by the key `statusOf` hands over. Words rather
+// than the three-letter keys the cartridge thinks in, because this is the line
+// somebody reads.
+const AILMENTS = { psn: 'poisoned', par: 'paralysed', brn: 'burned',
+                   frz: 'frozen', slp: 'asleep' };
+
+/** "poisoned", or "2 poisoned", or "poisoned and asleep". */
+function ailWord(ailing) {
+  const kinds = [...new Set(ailing.flatMap((m) => m.status || []))]
+    .map((k) => AILMENTS[k] || k);
+  if (ailing.length > 1) return `${ailing.length} ${kinds.join(' and ')}`;
+  return kinds.join(' and ') || 'unwell';
 }
 
 /** "2-3", or just "4" where the grass gives only one level. */

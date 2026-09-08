@@ -528,7 +528,16 @@ export function withJobs(Base) {
       // battle it had not left. nav.step yields on a battle, so the walk failed
       // and the grind reported that healing did not work, which is not what
       // went wrong. In a battle there is nothing to do but finish it.
-      if (!s.inBattle && (dry || mon.hp / Math.max(1, mon.maxHp) < healBelow)) {
+      // Poison and a burn take HP off between battles, and *while walking*, so
+      // a lead carrying one is losing ground on every step the grind takes.
+      // Left out of this condition, it was only ever noticed once the ticking
+      // had brought the HP down far enough to look like ordinary damage -- by
+      // which point a Center trip had been earned that an ANTIDOTE would have
+      // saved. Sleep and freeze are in the list too: they cost turns rather
+      // than HP, and a lead asleep at the front of a grind loses every one.
+      const ailing = (mon.status || []).length > 0;
+      if (!s.inBattle
+          && (dry || ailing || mon.hp / Math.max(1, mon.maxHp) < healBelow)) {
         // Where the Pokemon Center is, and how to get there, is map knowledge
         // this file deliberately does not have -- the caller passes in a way to
         // heal, or the grind stops rather than training something to death.
@@ -553,6 +562,8 @@ export function withJobs(Base) {
             stats: { ...stats, levels: mon.level - startLevel },
           };
         }
+        // `dry` is the only one a Center has to answer; an ailment is the bag's
+        // to fix, and so is ordinary damage.
         const healed = heal ? await heal(dry ? 'dry' : 'hurt') : false;
         if (!healed) {
           return {
