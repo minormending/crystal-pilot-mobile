@@ -2,10 +2,11 @@
 import { readHeader } from '../gbcore/cartridge.js';
 import { GameBoy } from '../gbcore/gb.js';
 import { Symbols, sharedNames } from '../gen2/symbols.js';
-import { describeHandoff, describeOffers, describeParty, describeReplaced,
-         describeRoom, describeRows, describeScreen, describeSlot,
-         describeTitle, describeUndo, hoursLine, joinFailure,
-         otherHour } from './rows.js';
+import {
+  describeHandoff, describeOffers, describeParty, describeReplaced,
+  describeRoom, describeRows, describeSaying, describeScreen, describeSlot,
+  describeTitle, describeUndo, hoursLine, joinFailure, otherHour,
+} from './rows.js';
 import { VERSION } from '../gbcore/version.js';
 import { adoptable, forgetKept, keepBattery, keepRom, keepSym, keptMeta,
          readOpts, recall, sanitise, writeOpts } from '../gbcore/remember.js';
@@ -348,6 +349,15 @@ for (const id of ['#backfromfiles', '#backfromwatch', '#backfromabout']) {
 // "slot 1 is down - sending out slot 2" -- and a single label threw all but
 // the last one away. Three lines is enough to see progress without the card
 // growing under your thumb mid-run.
+// How often to re-read the screen for the game's own line while a job runs.
+// Four times a second: fast enough that a box does not flash past unread, slow
+// enough that it is not worth measuring against a task driving frames flat out.
+const SAYING_POLL_MS = 250;
+// And how many of those a line has to survive before it is worth reading. Four
+// is a second, which is about how long the game sits on something the pilot is
+// having trouble with -- and longer than it ever sits on a line it is pressing
+// through.
+const SAYING_HOLD = 4;
 const RUN_LOG_LINES = 3;
 let runLines = [];
 
@@ -1364,6 +1374,59 @@ function setMode(piloting) {
   tellInput();
 }
 
+/**
+ * Mirror what the *game* is saying onto the bar while a job runs.
+ *
+ * The bar has always carried the pilot's newest line -- "heading left", "using
+ * POTION" -- which says what the pilot is *doing*. This says what the game is
+ * doing, and until the screen could be read there was no way to show it: a
+ * ninety-second job showed a busy dot and the pilot's own commentary, and the
+ * screen it was driving might have been asking a question nobody could see.
+ *
+ * Polled rather than pushed, because nothing in the app owns the moment the
+ * game redraws. Four times a second against a task that drives frames as fast
+ * as it can is not worth measuring, and the read is the same one every snapshot
+ * takes.
+ *
+ * Stopped and cleared when the job ends. The pilot's last line stays -- it is
+ * the most useful thing on screen once the pilot stops -- and the game's does
+ * not, because by then it is whatever box the job happened to leave.
+ */
+let sayingTimer = null;
+function watchSaying(on) {
+  if (sayingTimer) { clearInterval(sayingTimer); sayingTimer = null; }
+  if (!on) { $('#saying').textContent = ''; return; }
+  // **What the game is showing that the pilot has not got past**, which is a
+  // narrower and more useful thing than a running commentary. Two goes at this
+  // said why: painting every change put "17/ 20 CYN" and ": Go! CYNDAQU" on the
+  // bar, because Gen 2 types its text a character at a time and most frames
+  // catch a sentence halfway; painting only what held still for one poll showed
+  // nothing at all through a four-second grind, because during one the screen
+  // never holds still.
+  //
+  // So the rule is a *dwell*. A line has to be there for a second before it is
+  // worth reading, and a second is exactly the length of something the pilot is
+  // stuck on -- a box it cannot identify, a question nobody can see, a walk
+  // refusing a tile. A job flying through battles shows nothing here and should:
+  // the pilot's own line is the informative one then, and it is right above.
+  let prev = null, held = 0, shown = null;
+  sayingTimer = setInterval(async () => {
+    if (!tasks || !gb.rom) return;
+    try {
+      const sc = await tasks.screen();
+      const { text } = describeSaying(sc ? sc.lines() : []);
+      held = text === prev ? held + 1 : 0;
+      prev = text;
+      if (held < SAYING_HOLD || text === shown) return;
+      shown = text;
+      $('#saying').textContent = text ? `\u201c${text}\u201d` : '';
+    } catch (e) {
+      // A read that lands mid-frame is not worth reporting: the next one is a
+      // quarter of a second away.
+    }
+  }, SAYING_POLL_MS);
+}
+
 async function runTask(id, busy, work,
                        { needsWorld = true, takeUndoPoint = true } = {}) {
   if (running) return null;
@@ -1421,6 +1484,7 @@ async function runTask(id, busy, work,
     // stayed disabled, with no way back but a reload. That is the exact failure
     // runTask exists to prevent, reintroduced by adding a step above it.
     if (takeUndoPoint) await snapshotForUndo(busy);
+    watchSaying(true);
     const res = await work();
     setStatus(res.message, res.ok ? 'ok' : 'bad');
     return res;
@@ -1438,6 +1502,10 @@ async function runTask(id, busy, work,
     setStatus(`${busy}: ${e && e.message ? e.message : e}`, 'bad');
     return null;
   } finally {
+    // Cleared here rather than beside the message, because the message is set
+    // on three different paths out of the try and this is the one place all
+    // three go through. The pilot's own last line stays.
+    watchSaying(false);
     running = false;
     setMode(false);
     $(id).disabled = false;

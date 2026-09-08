@@ -10,7 +10,7 @@ import { readCode } from '../../gbcore/room.js';
 import { describeHandoff, describeOffers, describeParty, describeReplaced,
          describeRoom, describeScreen, joinFailure, describeRows, describeSlot,
          betterGrind, betterHour, hoursLine, otherHour,
-         describeUndo } from '../../app/rows.js';
+         describeUndo, describeSaying } from '../../app/rows.js';
 
 const sym = symbols();
 const state = new GameState(sym);
@@ -969,4 +969,47 @@ test('a fainted party with a trainer in front of it is told what is in the way',
                       { trainers: [{ x: 2, y: 28, sprite: 39 }] });
   t.contains(list.hint, 'somebody fit to send out', 'said plainly');
   t.false(list.offered.includes('duel'), 'and the duel is not offered');
+});
+
+
+// --- what the game itself is saying -----------------------------------------
+
+test("the game's own line is the bottom of its screen", async (t) => {
+  // Where Gen 2 puts its text box: the menu rows sit above it, and when there
+  // is no text the bottom of a menu is the next most useful thing.
+  const said = describeSaying([
+    ' SENTRET', '       3', '   CYNDAQUIL', '       5', '    20/ 20',
+    ' >FIGHT', '  PACK  RUN',
+  ]);
+  t.eq(said.text, '>FIGHT PACK RUN', 'the two lines a person is choosing from');
+  t.false(said.hidden, 'and it is shown');
+});
+
+test('an empty screen says nothing, and is hidden rather than blank',
+     async (t) => {
+  // Which is most of the time a walk is running: an overworld has an empty
+  // tilemap. A bar element that is present-but-empty pushes the line it shares.
+  const said = describeSaying([]);
+  t.eq(said.text, '', 'nothing to say');
+  t.true(said.hidden, 'so nothing is shown');
+  t.true(describeSaying(null).hidden, 'and a screen that cannot be read is the same');
+});
+
+test('a long line is cut rather than allowed to push the bar', async (t) => {
+  const said = describeSaying([' CHRIS turned on the PC and looked at every item']);
+  t.true(said.text.length <= 46, `it fits: ${said.text.length}`);
+  t.contains(said.text, '…', 'and says that it was cut');
+});
+
+test('the screen is twenty columns of padding, and it collapses', async (t) => {
+  const said = describeSaying(['  Give  a nickname  to  ', '  the CYNDAQUIL  ']);
+  t.eq(said.text, 'Give a nickname to the CYNDAQUIL', 'one space between words');
+});
+
+test('a gap wide enough to be a column stays one', async (t) => {
+  // Measured on the START menu: one tilemap row carries "Save your" on the left
+  // and "EXIT" on the right, and collapsing the gap between them reads as one
+  // sentence that says neither.
+  const said = describeSaying(['Save your          EXIT', 'progress']);
+  t.contains(said.text, 'Save your · EXIT', 'the columns stay apart');
 });

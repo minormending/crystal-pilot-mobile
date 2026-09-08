@@ -259,7 +259,7 @@
               min-height:40px;padding:6px 2px;background:none;border:0;
               box-shadow:none;text-align:left;color:var(--ink)}
   .door .lines{flex:1 1 auto;min-width:0}
-  .door #status,.door #steps{display:block;overflow:hidden;
+  .door #status,.door #steps,.door #saying{display:block;overflow:hidden;
                              text-overflow:ellipsis;white-space:nowrap}
   /* The last thing the pilot said, on the outside of the door. A job takes
      ninety seconds and the log is behind the door it just closed; without this
@@ -267,6 +267,13 @@
   .door #steps{font-family:ui-monospace,Menlo,monospace;font-size:12px;
                color:var(--dim);margin-top:2px}
   .door #steps:empty{display:none}
+  /* And what the *game* is saying, which is a different thing from what the
+     pilot is doing. Quoted rather than labelled -- the bar has no room for
+     "the game says" -- and italic, so the two lines read as two voices without
+     a third ink to keep legible in three palettes. */
+  .door #saying{font-family:ui-monospace,Menlo,monospace;font-size:12px;
+                color:var(--dim);margin-top:2px;font-style:italic}
+  .door #saying:empty{display:none}
   /* The word matters as much as the arrow. A chevron alone at 11px was a mark
      nobody would read as a door, and this line is the only way into the menu. */
   .chev{flex:0 0 auto;color:var(--dim);font-size:12px;font-weight:600;
@@ -691,6 +698,7 @@
         <span class="lines">
           <span id="status">waiting for a ROM and a .sym</span>
           <span id="steps"></span>
+          <span id="saying"></span>
         </span>
         <span class="chev" id="chev" aria-hidden="true">Menu ▴</span>
       </button>

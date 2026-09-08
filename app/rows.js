@@ -25,6 +25,11 @@
  *   trainers          who is near enough to fight, [{ x, y, sprite }]
  *   trainersOnMap     how many the map places anywhere, near or not
  */
+// How much of the game's own line fits on the bar beside the pilot's. Measured
+// against the narrowest layout this app supports rather than chosen: the bar is
+// one line on a 320px phone.
+const SAYING_MAX = 46;
+
 export function describeRows(s, ctx = {}) {
   const { rom = null, target = 5, huntWanted = null, ballId = null,
           savedThisSession = false, healPlace = null,
@@ -574,6 +579,41 @@ export function describeOffers(s, ctx = {}) {
     rank: Object.fromEntries(offered.map((key, i) => [key, i + 1])),
     // Two clauses at most. A third is a paragraph, and this is a line.
     hint: hint.slice(0, 2).join(' · '),
+  };
+}
+
+/**
+ * What the game itself is saying, as one line for the status bar.
+ *
+ * The bar already mirrors the *pilot's* newest line -- "heading left", "using
+ * POTION" -- which says what the pilot is doing. This says what the **game** is
+ * doing, which is a different thing and was invisible: a ninety-second job
+ * showed a busy dot and the pilot's own commentary, and the screen it was
+ * driving might have been asking a question nobody could see.
+ *
+ * The last two readable lines, because that is where Gen 2 puts its text box --
+ * the menu rows sit above it, and when there is no text the bottom of a menu is
+ * the next most useful thing. Whitespace collapses, because the screen is
+ * twenty columns of padding.
+ *
+ * Hidden rather than blank when there is nothing to say. An overworld has an
+ * empty tilemap, which is most of the time a walk is running, and a bar element
+ * that is present-but-empty pushes the line it shares.
+ */
+export function describeSaying(lines, { max = SAYING_MAX } = {}) {
+  // A run of spaces is kept as a separator rather than collapsed, because a
+  // Gen 2 screen has *columns*: measured on the START menu, one tilemap row
+  // carries "Save your" on the left and "EXIT" on the right, and collapsing the
+  // gap between them reads as one sentence that says neither. Three spaces or
+  // more is a gap somebody put there.
+  const said = (lines || [])
+    .map((l) => String(l).replace(/ {3,}/g, ' · ').replace(/\s+/g, ' ').trim())
+    .filter(Boolean);
+  if (!said.length) return { text: '', hidden: true };
+  const text = said.slice(-2).join(' ');
+  return {
+    text: text.length > max ? `${text.slice(0, max - 1)}…` : text,
+    hidden: false,
   };
 }
 
