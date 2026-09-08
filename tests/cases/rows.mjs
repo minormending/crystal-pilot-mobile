@@ -833,6 +833,31 @@ test('a Heal row with nowhere open says what turned the pilot back',
   t.false(r.heal.enabled, 'and does not offer a walk it knows will fail');
 });
 
+test('the shut explanation survives the row being hidden', async (t) => {
+  // **The trap this repository has fallen into twice.** A row earns its place
+  // on the offers list by being `enabled`, and a route the game has refused is
+  // exactly when Heal is not -- so the sentence written into the row text is
+  // never read by anybody. The species picker did the same thing eight passes
+  // ago: a hint pointing at a picker that is hidden whenever the hint applies.
+  //
+  // So the explanation has to be in the hint, and this test is here to fail if
+  // it ever moves back into the row.
+  const hurt = { party: [{ hp: 10, maxHp: 40, species: CYNDAQUIL, level: 5 }] };
+  const o = offers(hurt, { healPlace: 'ROUTE 32',
+                           healShut: "Wait up! / What's the hurry?" });
+  t.eq(o.rank.heal, undefined, 'the row is off the list, as it must be');
+  t.contains(o.hint, 'every way to heal is shut', 'and the hint carries it');
+  t.contains(o.hint, 'Wait up!', 'with the words the game used');
+});
+
+test('nothing is said about a shut route while nobody is hurt', async (t) => {
+  // The rule every hint here follows: explaining the absence of an offer
+  // nobody wanted is the noise this whole list exists to replace.
+  const o = offers({ party: [{ hp: 40, maxHp: 40, species: CYNDAQUIL, level: 5 }] },
+                   { healPlace: 'ROUTE 32', healShut: 'somebody said no' });
+  t.false(o.hint.includes('shut'), 'no hurt, no line');
+});
+
 test('a shut route does not take the bag away', async (t) => {
   // The bag comes first and is free, so a route being shut is irrelevant while
   // a POTION can answer -- and disabling the row would have taken a working

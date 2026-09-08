@@ -179,23 +179,41 @@ export class Journey {
   }
 
   /**
-   * Is this leg one the game has refused, given the badges held now?
+   * Throw away every write-off that a badge since has earned another try.
    *
-   * `badges` is null on a cartridge whose symbol file will not say, and then an
-   * entry never expires -- which is the safe way round. Believing a stale
-   * write-off costs one walk that would have worked; forgetting a real one
-   * costs the same walk over and over.
+   * **Its own sweep rather than a side effect of asking.** The predicate used
+   * to delete the entry it was asked about, which made a question that reads
+   * pure into a write -- and one caller iterates `shut` while asking, so it was
+   * deleting from a Map it was walking. Safe in JavaScript today and exactly
+   * the kind of thing that stops being safe when somebody adds a second loop.
+   *
+   * `badges` is null on a cartridge whose symbol file will not say, and then
+   * nothing ever expires -- the safe way round. Believing a stale write-off
+   * costs one walk that would have worked; forgetting a real one costs the same
+   * walk over and over.
    */
-  isShut(from, to, badges) {
-    const at = this.shut.get(World.leg(from, to));
-    if (!at) return false;
-    if (badges !== null && badges !== undefined
-        && at.badges !== null && at.badges !== undefined
-        && badges > at.badges) {
-      this.shut.delete(World.leg(from, to));
-      return false;
+  reopen(badges) {
+    if (badges === null || badges === undefined) return 0;
+    let gone = 0;
+    for (const [leg, at] of [...this.shut]) {
+      if (at.badges !== null && at.badges !== undefined && badges > at.badges) {
+        this.shut.delete(leg);
+        gone++;
+      }
     }
-    return true;
+    return gone;
+  }
+
+  /**
+   * Is this leg one the game has refused?
+   *
+   * A question, and only a question: call `reopen` first if the badges may have
+   * changed since. Two steps rather than one because the sweep is per *session*
+   * and this is asked per *place* -- folding them together meant a list of six
+   * healers swept six times, and a predicate that wrote.
+   */
+  isShut(from, to) {
+    return this.shut.has(World.leg(from, to));
   }
 
   /**
@@ -644,11 +662,11 @@ export class Journey {
     // route every time. `shut` only holds legs where something *said* no, and it
     // re-opens every one of them the moment a badge is won, so this is a head
     // start rather than a permanent belief.
-    const badges = (await this.snap()).badges;
-    for (const leg of this.shut.keys()) {
-      const [f, t] = leg.split('>').map(Number);
-      if (this.isShut(f, t, badges)) avoid.add(leg);
-    }
+    // Swept once, up front, rather than asked leg by leg -- which also means
+    // the keys can be copied straight across instead of being parsed back into
+    // a pair of map numbers and rebuilt.
+    this.reopen((await this.snap()).badges);
+    for (const leg of this.shut.keys()) avoid.add(leg);
     // **A refused leg is not a leg walked**, and counting it as one is how the
     // first walk to a landmark-only place failed: DARK CAVE is two legs from
     // Route 29 through Route 46, the pilot cannot get up there, and every
@@ -705,6 +723,14 @@ export class Journey {
       // refusal is not an answer -- it is worth asking again from wherever we
       // ended up.
       let crossed = false;
+      // **Read the screen where the words still are.** A gate script finishes:
+      // the man says his piece, moves the player back, and stops running -- so
+      // by the time the retries are done, `runScripts` has pressed the whole
+      // conversation away and the screen is blank. Asking afterwards finds
+      // nothing and writes off nothing, which is how the first version of this
+      // was ineffective while looking correct. The doorway path gets this for
+      // free by asking on the refusal itself.
+      let said = '';
       for (let go = 0; go < 3 && !crossed; go++) {
         if (go) {
           await this.escapeBattle();
@@ -712,6 +738,7 @@ export class Journey {
           this.say(`trying ${next.dir.toLowerCase()} again`);
         }
         crossed = await this.crossEdge(next.dir, next.key);
+        if (!crossed && !said) said = await this.wordsOnScreen();
         if (!crossed && await this.mapKey() !== here) break;   // somewhere new
       }
       if (!crossed && await this.mapKey() === here) {
@@ -723,7 +750,6 @@ export class Journey {
         // something is on the screen* is somebody saying no, not a wall, and
         // the words are the reason. Written off so the next press asks for a
         // route without this leg in it rather than walking here again.
-        const said = await this.wordsOnScreen();
         if (said) {
           this.shutLeg(here, next.key, said, (await this.snap()).badges);
           this.say(`turned back: ${said}`);
@@ -1667,8 +1693,8 @@ export class Journey {
     // in.** Standing on Route 32, the Center on Route 32 costs nothing and is
     // shut; Violet City is one leg north and open. Asked before the distance,
     // because a zero-cost answer used to short-circuit the whole search.
-    const badges = wram ? this.state.badgeCount(wram) : null;
-    const open = places.filter((p) => !this.isShut(from, mapOf(p), badges));
+    if (wram && this.state) this.reopen(this.state.badgeCount(wram));
+    const open = places.filter((p) => !this.isShut(from, mapOf(p)));
     // Everything is shut, so there is nothing better to say than the last one
     // and no cost -- the same answer this gives when it has no graph to ask.
     if (!open.length) return { place: last, cost: undefined };

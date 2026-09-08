@@ -1044,7 +1044,7 @@ test('a refusal with nothing on screen is still just a refusal', async (t) => {
  *
  * `refuse` is the edge that will not go, named the way a failure names it.
  */
-function ringWalker({ refuse = null } = {}) {
+function ringWalker({ refuse = null, saying = '', badges = 0 } = {}) {
   const sym = symbols();
   const [a, b, c, d, e] = [1, 2, 3, 4, 5];
   const edges = { [a]: { RIGHT: b, LEFT: e }, [b]: { LEFT: a, RIGHT: c },
@@ -1072,9 +1072,10 @@ function ringWalker({ refuse = null } = {}) {
       return null;
     },
   };
-  const j = new Journey(new FakeGameBoy({ wram: worldRam(sym, {}) }),
+  const j = new Journey(new FakeGameBoy({ wram: worldRam(sym, { badges }) }),
                         new GameState(sym), null, {},
                         { mapKey: async () => here }, () => {}, world, {});
+  j.tasks = { screenSaid: async () => saying };
   j.said = [];
   j.say = (m) => j.said.push(m);
   j.escapeBattle = async () => true;
@@ -1100,6 +1101,35 @@ test('a leg that will not go is routed around, not given up on', async (t) => {
   t.true(r.ok, `it arrived: ${r.message}`);
   t.contains(j.said.join(' '), 'trying another way', 'and said what it did');
   t.true(j.log.length > 2, 'having gone the long way round');
+});
+
+test('an edge somebody is refusing is written off, not just retried',
+     async (t) => {
+  // The other half of the write-off, and it needed the read moved. A gate
+  // script *finishes* -- the man says his piece, moves the player back, and
+  // stops -- so by the time three retries are done `runScripts` has pressed
+  // the whole conversation away and the screen is blank. Asked afterwards it
+  // found nothing and wrote off nothing, which is a mechanism that looks
+  // correct and does nothing. Asked on the refusal, it works.
+  const j = ringWalker({ refuse: '1>2', saying: 'Wait up! / no badge, no road' });
+  const r = await j.travelTo(3);
+  t.true(r.ok, `it still arrived the long way: ${r.message}`);
+  t.true(j.isShut(1, 2), 'and the leg is written off for next time');
+  t.contains(j.said.join(' '), 'turned back', 'said in those words');
+  t.contains(j.said.join(' '), 'no badge, no road', 'quoting the game');
+});
+
+test('a written-off leg is not walked at again on the next press', async (t) => {
+  // The point of remembering. Without this the pilot rediscovers the gate on
+  // every press, at the cost of a walk across a route each time.
+  const j = ringWalker({ refuse: '1>2', saying: 'somebody said no' });
+  await j.travelTo(3);
+  const first = j.log.length;
+  j.log.length = 0;
+  const again = await j.travelTo(3);
+  t.true(again.ok, 'still arrives');
+  t.false(j.log.includes('1>2'), 'without trying the shut leg at all');
+  t.true(j.log.length < first, `fewer legs than the first time (${j.log.length} < ${first})`);
 });
 
 test('the short way is still the way when it works', async (t) => {
@@ -1184,6 +1214,22 @@ test('a place the game turned us back from is not offered again', async (t) => {
        'and the words are kept, for a row that has to explain itself');
 });
 
+test('choosing a place sweeps the write-offs itself', async (t) => {
+  // Nobody calls `reopen` before pressing Heal, so the caller that reads the
+  // badge count out of work RAM has to be the one that asks -- and a test that
+  // sweeps by hand first proves the sweep and not the caller. This one does
+  // not touch it: one badge in the snapshot, an entry written off at none, and
+  // the near place has to come back on its own.
+  const title = { legCost: 25, healers: [{ map: 2, reach: 'healAtFar' },
+                                         { map: 1, reach: 'healAtNear' }] };
+  const j = walker({ title, routes: { 2: [{ kind: 'warp' }] },
+                     world: { party: [{ hp: 4, maxHp: 20 }], badges: 1 } });
+  j.shutLeg(1, 1, 'a man with a rite of passage', 0);
+  const picked = await j.nearestPlace(title.healers, 1);
+  t.eq(picked.place.map, 1, 'the near one, re-opened by the badge');
+  t.eq(j.shut.size, 0, 'and the entry swept away by the asking');
+});
+
 test('a badge re-opens every route that was written off', async (t) => {
   // Because the pilot has no idea which badge opened which route, and guessing
   // would be worse than asking again. One walk that would have worked is the
@@ -1194,7 +1240,8 @@ test('a badge re-opens every route that was written off', async (t) => {
   const j = walker({ title, routes: { 2: [{ kind: 'warp' }] },
                      world: { party: [{ hp: 4, maxHp: 20 }], badges: 1 } });
   j.shutLeg(1, 1, 'a man with a rite of passage', 0);
-  t.false(j.isShut(1, 1, 1), 'one badge beats the none it was shut with');
+  t.eq(j.reopen(1), 1, 'one badge beats the none it was shut with');
+  t.false(j.isShut(1, 1), 'so the leg is open again');
   const after = await j.nearestPlace(title.healers, 1);
   t.eq(after.place.map, 1, 'so the near one is offered again');
   t.eq(j.shut.size, 0, 'and the write-off is gone rather than merely ignored');
@@ -1207,8 +1254,9 @@ test('a cartridge that will not say how many badges keeps its write-offs',
   // have worked. Forgetting a real one costs that walk on every press.
   const j = walker({ title: {} });
   j.shutLeg(1, 2, 'somebody said no', null);
-  t.true(j.isShut(1, 2, null), 'no count, so nothing to compare');
-  t.true(j.isShut(1, 2, 3), 'and a count now cannot expire what had none');
+  t.eq(j.reopen(null), 0, 'no count now, so nothing to compare');
+  t.eq(j.reopen(3), 0, 'and a count now cannot expire an entry that had none');
+  t.true(j.isShut(1, 2), 'so it stays shut');
 });
 
 test('everything shut still gives an answer rather than nothing', async (t) => {

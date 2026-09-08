@@ -555,6 +555,18 @@ export function describeOffers(s, ctx = {}) {
   if (afoot && (ctx.trainers || []).length && !s.party.some((m) => m.hp > 0)) {
     hint.push('a trainer here would need somebody fit to send out');
   }
+  // **The row that explains a shut route is hidden exactly when it applies.**
+  // `enabled` is what puts a row on the list, and a route the game has refused
+  // is precisely when Heal cannot run -- so the sentence written into the row
+  // text is never read, which is the same trap the species picker fell into
+  // eight passes ago and the reason that fix went here rather than there.
+  //
+  // Worth a line because there *is* something to do about it, and it is not a
+  // button: a badge is what opens one of these, and the words the game used
+  // are what point at which one.
+  if (afoot && ctx.healShut && s.party.some((m) => m.hp < m.maxHp)) {
+    hint.push(`every way to heal is shut — ${ctx.healShut}`);
+  }
   // Nobody near, and somebody further on. This is the one hint that is purely
   // about distance, and it is here rather than in the row because the row is
   // hidden whenever it cannot run: the map's total is exactly the fact you
