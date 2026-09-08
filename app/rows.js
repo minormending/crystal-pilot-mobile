@@ -111,7 +111,10 @@ export function describeRows(s, ctx = {}) {
       // thirty-two of thirty-five battles for two levels and a knockout. The
       // app offered Lv20 as a preset and had nothing to say about that.
       text: !lead ? 'no party yet'
-        : wilds ? `${leadName} → Lv${target} · here: Lv${range(wilds)}`
+        // No lead name: it is in the party summary directly above this list,
+        // and printing it again in the one row that trains it was the same
+        // word twice within an inch of itself.
+        : wilds ? `→ Lv${target} · here Lv${range(wilds)}`
         : `${leadName} → Lv${target}`,
       enabled: !!lead && afoot,
       // The level presets are meaningless with nothing to level.
@@ -154,7 +157,10 @@ export function describeRows(s, ctx = {}) {
     export: {
       text: savedThisSession
         ? 'ready — the battery has this session in it'
-        : 'the battery save, for another emulator',
+        // Six words became two. What it is *for* -- another emulator -- is a
+        // thing somebody either already knows or does not need: the row is
+        // called "Download .sav" and the button says "Get".
+        : 'the battery save',
     },
     // The three below act on the situation you are already in, so what they can
     // do is decided by the game rather than by anything picked on this page.
@@ -200,7 +206,9 @@ export function describeRows(s, ctx = {}) {
         // are what a person can act on: a badge opens these.
         : walkOnly && healShut
           ? `${hurt.length} hurt · ${healPlace || 'a Center'} — turned back: ${healShut}`
-          : `${hurt.length} hurt · nearest is ${healPlace || 'a Center'}`,
+          // Not "N hurt": the party summary above says so, and this row's own
+          // glyph is a heart. What only this row can tell you is *where*.
+          : `${healPlace || 'a Center'}`,
       // A shut route does not disable the row while the bag can still answer,
       // and a fainted party is exactly when it cannot.
       enabled: afoot && (hurt.length > 0 || ailing.length > 0)
@@ -231,7 +239,11 @@ export function describeRows(s, ctx = {}) {
     shop: {
       text: s.inBattle ? 'finish the battle first'
         : !marts ? 'no mart within reach of here'
-        : `${money} in hand · ${shopFor || 'nothing named to buy'}`,
+        // No money here: it is in the header, where it belongs. It is global
+        // state -- a battle changes it -- and it was being printed in this row
+        // and the Duel row both, which is the same number twice and clutter in
+        // each. What this row is *for* is the thing it will buy.
+        : shopFor || 'nothing named to buy',
       enabled: afoot && !!marts && !!shopFor,
     },
     // Winning a badge, which is the one job whose result the game writes down
@@ -242,7 +254,7 @@ export function describeRows(s, ctx = {}) {
       text: s.inBattle ? 'finish the battle first'
         : !gym ? 'no Gym this build knows about'
         : !fit.length ? 'nobody fit to send out'
-        : `${gym.leader || 'the leader'} at ${gym.at}`
+        : `${gym.leader || 'the leader'} · ${gym.at}`
           + (gym.legs ? ` · ${legsWord(gym.legs)}` : ' · here'),
       enabled: afoot && !!gym && fit.length > 0,
     },
@@ -282,7 +294,7 @@ export function describeRows(s, ctx = {}) {
       text: s.inBattle ? 'finish the battle first'
         : !trainers.length ? 'nobody here wants a battle'
         : !fit.length ? 'nobody fit to send out'
-        : `${countWord(trainers.length)} nearby · ${money} in hand`,
+        : `${countWord(trainers.length)} nearby`,
       enabled: afoot && trainers.length > 0 && fit.length > 0,
       // **Clear is offered where there is more than one to clear.** One trainer
       // in front of you is what Fight is for, and a second button that does the
@@ -581,9 +593,12 @@ export function describeOffers(s, ctx = {}) {
   // unconditional on "no species chosen", which pointed at a picker that is
   // hidden whenever neither Hunt nor Catch is on the list -- see the ranking
   // above, which is where that is now fixed rather than papered over here.
-  if (afoot && !ctx.huntWanted && (ctx.huntable || 0) > 0) {
-    hint.push('pick something below to hunt or catch');
-  }
+  // **Gone, because the rows do it now.** This pointed at a picker somewhere
+  // below; the Hunt and Catch rows carry a slot that scrolls straight to it, so
+  // the sentence was describing a journey the person no longer has to make.
+  // Kept as a comment rather than deleted silently: the *ranking* rule it was
+  // paired with -- that a row waiting on a choice stays on the list, or the
+  // picker can never be reached -- is still load-bearing and still tested.
   // Only where it is the thing in the way: trainers on the map, and nobody
   // able to answer them. Worth a line because the fix is a job that *is* on the
   // list -- Heal is above this one, offered by the same fainted party -- and
@@ -639,13 +654,11 @@ export function describeOffers(s, ctx = {}) {
         : 'grinding here will be slow — everything is below your lead');
     }
   }
-  // Only when the row is drawn and waiting on a choice. A cartridge with no
-  // named places has no row and no hint -- there is nothing to do about it from
-  // here, and saying so would be nagging about a file somebody else has to
-  // write.
-  if (afoot && rows.travel.places.length && !ctx.travelTo) {
-    hint.push('or a place to walk to');
-  }
+  // **Gone for the same reason its sibling went**: the Travel row carries a
+  // slot that says *Choose a place* and scrolls to the list. A hint saying
+  // there is a place to choose, under a row already offering to choose it, is
+  // the app talking to itself. The condition it was guarded by -- that the row
+  // is drawn and waiting -- is now the condition that draws the slot.
   return {
     offered,
     rank: Object.fromEntries(offered.map((key, i) => [key, i + 1])),

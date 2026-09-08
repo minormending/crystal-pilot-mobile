@@ -810,6 +810,52 @@ be "a job always says what it would do", and it is now **"a job says something
 or offers a slot to fill"**. Silence with nothing to press is still the defect
 that test was written for.
 
+### What went, and what it cost
+
+| | before | after |
+| --- | --- | --- |
+| words on screen | 279 | **179** |
+| characters | 1,375 | **824** |
+| separate pieces of text | 107 | **91** |
+
+One screen, a game loaded, the menu open. The reductions, biggest first:
+
+* **Twenty-four place names became six and a chip.** The Travel picker was
+  *fifty-three* of those 279 words — more than every job row put together. The
+  list is sorted nearest first and the nearest handful is what somebody wants
+  nine times in ten, so the rest sit behind `+18 further`. A place chosen from
+  the far end stays visible after a repaint, because hiding the thing somebody
+  just picked is the worst kind of tidying.
+* **A forty-one word paragraph about save slots was collapsed** into the same
+  `details` the intro card already uses. Worth reading once; it was being shown
+  every visit.
+* **Money moved to the header.** It was printed in the Shop row *and* the Duel
+  row — the same number twice — and neither is where somebody looks to find out
+  how much money they have. It sits beside the place now, because both are
+  facts about the whole app rather than about one offer.
+* **Repeated subjects went.** The Grind row said `CYNDAQUIL → Lv8` with the
+  party summary an inch above it saying `CYNDAQUIL Lv7`; the Heal row counted
+  `1 hurt` under a line already counting it, beside its own heart. Each row says
+  the thing only it can say.
+* **Two hints went**, because the rows they pointed at now carry their own
+  slots. A hint saying there is a place to choose, under a row offering to
+  choose one, is the app talking to itself.
+
+**And the header got a row taller, which is the cost side of the ledger.** A
+name, a version, a place, the money, a speed slider and a gear measured 397px
+across a 375px phone. One line was tried and truncated the place to *RO…* and
+then wrapped the version to *v16 / 4*. So it wraps on purpose and in a chosen
+place: the facts, then the things you press. Left ungrouped the gear wrapped
+alone and read as a mistake.
+
+**A measurement note, because the first numbers here were wrong.** The count was
+taken with `offsetParent !== null`, and a closed `<details>` reports a real
+bounding box *and* a non-null offsetParent while being genuinely unrendered — so
+the collapsed paragraph was counted as visible and the improvement looked like
+13 words instead of 100. `checkVisibility()` tells the truth. The baseline was
+then re-measured against the pre-pass build on the same origin rather than
+trusted from memory.
+
 ## Keeping this page honest
 
 This is the page that went stale. It described a column-flex layout that
@@ -821,4 +867,4 @@ So this page carries a marker naming the files it describes and the hash they
 had when it was last read against them. `tools/docs-check` reports it when they
 move, and the pre-commit hook blocks on that report.
 
-<!-- covers: index.html app/main.js app/rows.js @ f76cc07995b5 -->
+<!-- covers: index.html app/main.js app/rows.js @ 1da965d74047 -->

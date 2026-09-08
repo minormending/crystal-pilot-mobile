@@ -223,8 +223,34 @@
      not shrink below its own text otherwise, and the location is the one item
      here that reads fine truncated -- the title is the app's name, and a
      version with letters missing is a version that lies. */
-  header .where{margin-left:auto;min-width:0;color:var(--dim);font-size:13px;
-                white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  /* Beside the place and shrinking with it. `.where` had `margin-left:auto`,
+     which put every later item in the header on the far side of a spring --
+     so adding one more pushed the gear onto a second line and made the header
+     twenty pixels taller. The spring belongs on the *pair*, so the two facts
+     about the whole app travel together and the controls stay put. */
+  header .purse{flex:0 0 auto;font-size:12px;color:var(--dim);
+      font-family:var(--pico-font-family-monospace);
+      font-variant-numeric:tabular-nums}
+  /* **Wrapping, on purpose, and the pair wraps together.** One line was tried
+     and cost more than it saved: with a name, a version, a place, the money, a
+     speed slider and a gear to fit on a 375px phone, forcing one row truncated
+     the place to "RO…" and then wrapped the version to "v16 / 4". Something has
+     to give on a narrow screen, and the honest answer is a row of height rather
+     than a fact chopped in half.
+     
+     What matters is that the place and the money stay *adjacent*: they are the
+     two things true of the whole app rather than of one offer, and a spring
+     between them would put them on opposite sides of the header. So they share
+     a container and the spring is in front of it. The version keeps `nowrap`
+     because it is a number, and a number split across two lines is not one. */
+  header .here{display:flex;align-items:baseline;gap:6px;margin-left:auto;
+      min-width:0;flex:0 1 auto}
+  header .tools{display:flex;align-items:center;gap:8px;flex:0 0 auto;
+      margin-left:auto}
+  header .vnum{white-space:nowrap}
+  header .where{min-width:0;color:var(--dim);
+                font-size:13px;white-space:nowrap;overflow:hidden;
+                text-overflow:ellipsis}
   /* Speed is status, not a task: it belongs beside where you are, not wedged
      between the screen and the buttons you press. */
   /* Not in the header: that row is for where you are and how fast the game is
@@ -463,6 +489,11 @@
   /* Species to hunt for: only the ones this route has at this hour. */
   .chips{display:flex;flex-wrap:wrap;gap:8px}
   .chips button{flex:0 1 auto;min-height:40px;padding:9px 14px;font-size:14px}
+  .chips button.folded{display:none}
+  /* The fold's own chip: quieter than a place, because it is a control rather
+     than a destination. */
+  .chips button.morechip{border-style:dashed;color:var(--dim);
+       background:transparent}
   .chips button.on{background:var(--action);border-color:var(--action);
                    color:#fff;font-weight:600}
   .seen{color:var(--dim);font-size:12px;margin-top:10px;line-height:1.5}
@@ -902,16 +933,31 @@
   <h1>crystal-pilot</h1>
   <span class="vnum" id="version">&mdash;</span>
   <button class="themebtn hide" id="update">Update</button>
-  <span class="where" id="where">no ROM loaded</span>
-  <span class="speed hide" id="speedbox">
-    <input type="range" id="speed" min="0" max="4" step="1" value="0"
-           aria-label="Emulator speed">
-    <span class="x" id="speedx">1×</span>
+  <!-- The two facts that are true of the whole app rather than of one offer,
+       kept adjacent so they wrap as a pair. The money was printed inside the
+       Shop row and the Duel row both -- the same number twice, clutter in each,
+       and neither of them is where somebody looks to find out how much money
+       they have. -->
+  <span class="here">
+    <span class="where" id="where">no ROM loaded</span>
+    <span class="purse hide" id="purse"></span>
   </span>
-  <!-- Not hidden behind a loaded game, like the card it opens: the device that
-       most needs the room code is the one with no ROM on it yet. -->
-  <button class="themebtn gear" id="gear" aria-label="Settings"
-          aria-expanded="false" aria-controls="setsheet">⚙</button>
+  <!-- The controls, grouped so they wrap *together*. A name, a version, a
+       place, the money, a speed slider and a gear do not fit across 375px --
+       measured at 397 -- so on a phone the header is two rows, and which two
+       is the choice being made here: the facts, then the things you press.
+       Left ungrouped the gear wrapped alone and read as a mistake. -->
+  <span class="tools">
+    <span class="speed hide" id="speedbox">
+      <input type="range" id="speed" min="0" max="4" step="1" value="0"
+             aria-label="Emulator speed">
+      <span class="x" id="speedx">1×</span>
+    </span>
+    <!-- Not hidden behind a loaded game, like the card it opens: the device
+         that most needs the room code is the one with no ROM on it yet. -->
+    <button class="themebtn gear" id="gear" aria-label="Settings"
+            aria-expanded="false" aria-controls="setsheet">⚙</button>
+  </span>
 </header>
 <main>
   <!-- The machine. The screen and the pad hold their places on the page; the
@@ -1235,8 +1281,7 @@
     <div class="job" id="job-import">
       <div class="what">
         <span class="jname">Load a .sav</span>
-        <span class="jstate" id="importstate">bring a game in from the desktop
-          pilot</span>
+        <span class="jstate" id="importstate">from the desktop pilot</span>
       </div>
       <label class="jgo file" id="importlabel">Choose<input type="file"
         id="importsav" accept=".sav"></label>
@@ -1263,10 +1308,17 @@
       <div class="slotrows" id="slotrows"></div>
     </div>
 
-    <footer>A slot holds the game&rsquo;s own battery save, so keeping one
-      saves the game first &mdash; and loading one puts you back at that save
-      point rather than at an exact moment. Nothing here leaves this tab until
-      you download it.</footer>
+    <!-- Collapsed, because it is a forty-six-word paragraph that is worth
+         reading exactly once and was being shown on every visit. The same
+         `details` pattern the intro card already uses: available to whoever
+         wants it, invisible to everybody who has read it. -->
+    <details class="how">
+      <summary>About slots</summary>
+      <p>A slot holds the game&rsquo;s own battery save, so keeping one saves
+        the game first &mdash; and loading one puts you back at that save point
+        rather than at an exact moment. Nothing here leaves this tab until you
+        download it.</p>
+    </details>
   </div>
 
   </div>

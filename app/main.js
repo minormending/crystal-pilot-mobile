@@ -1716,6 +1716,13 @@ async function refresh() {
   $('#where').textContent = s.inBattle
     ? `battle · ${romdata ? romdata.speciesName(s.enemy.species) : 'wild'} Lv${s.enemy.level}`
     : `${place}${s.onGrass ? ' · grass' : ''}`;
+  // Beside the place, because both are true of the whole app rather than of one
+  // offer. It was printed inside the Shop row and the Duel row, which is the
+  // same number twice and clutter in each -- and neither of those rows is where
+  // somebody looks to find out how much money they have.
+  const purse = $('#purse');
+  purse.classList.toggle('hide', !s.worldLoaded);
+  purse.textContent = `¥${(s.money || 0).toLocaleString('en')}`;
   // Nothing to summarise and nothing to expand: the hint under the offers
   // already says that most jobs want a Pokemon along.
   $('#panel').classList.toggle('hide', !s.party.length);
@@ -2235,12 +2242,53 @@ async function refreshPlaces(s) {
       && travelPlaces.some((pl) => pl.key === wanted.travel)) {
     travelTo = wanted.travel;
   }
+  foldPlaces();
   markPlaces();
 }
 
 function markPlaces() {
   for (const b of $('#places').children) {
+    // The "more" chip has no place on it, so it is never the chosen one --
+    // `undefined === "3"` is false and it looks after itself.
     b.classList.toggle('on', b.dataset.place === String(travelTo));
+  }
+}
+
+/**
+ * How many places to show before folding the rest away.
+ *
+ * **Twenty-four names in one flat wall is not a choice, it is a list.** The
+ * places are sorted nearest first, and the nearest handful is what somebody
+ * wants nine times in ten -- so the rest sit behind one chip that says how many
+ * there are. Measured: the picker was fifty-three of the screen's two hundred
+ * and seventy-nine words, more than every job row put together.
+ */
+const PLACES_SHOWN = 6;
+
+/** Fold the far places away, and give the fold a chip that opens it. */
+function foldPlaces() {
+  const list = $('#places');
+  const chips = [...list.children].filter((b) => b.dataset.place !== undefined);
+  const extra = chips.length - PLACES_SHOWN;
+  // A fold of one is not worth a chip: the chip costs the same room as the
+  // place it hides, and hiding one thing behind a control that says "1 more"
+  // is a worse read than the thing.
+  if (extra <= 1) return;
+  for (const b of chips.slice(PLACES_SHOWN)) b.classList.add('folded');
+  const more = document.createElement('button');
+  more.type = 'button';
+  more.className = 'morechip';
+  more.textContent = `+${extra} further`;
+  more.onclick = () => {
+    for (const b of chips) b.classList.remove('folded');
+    more.remove();
+  };
+  list.appendChild(more);
+  // A place chosen from the far end stays visible after a repaint, because
+  // hiding the thing somebody just picked is the worst kind of tidying.
+  if (travelTo !== null && chips.some(
+        (b) => b.dataset.place === String(travelTo) && b.classList.contains('folded'))) {
+    more.onclick();
   }
 }
 

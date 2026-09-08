@@ -111,8 +111,11 @@ test('heal counts who is hurt and names where it would go', async (t) => {
             { species: PIDGEY, level: 3, hp: 15, maxHp: 15 }],
   }, { healPlace: "Elm's computer" });
   t.true(r.heal.enabled, 'someone is hurt');
-  t.contains(r.heal.text, '1 hurt', 'counting only the hurt one');
-  t.contains(r.heal.text, "Elm's computer", 'and naming the destination');
+  // The count is *not* in this row, and that is deliberate: the party summary
+  // sits one line above it and says "1 hurt", and this row's own glyph is a
+  // heart. What only this row can tell you is where it would go.
+  t.false(r.heal.text.includes('1 hurt'), 'not counting what the party line counts');
+  t.contains(r.heal.text, "Elm's computer", 'naming the destination, which is its job');
 
   const well = look({ party: [{ hp: 20, maxHp: 20 }] });
   t.false(well.heal.enabled, 'nobody hurt means nothing to do');
@@ -344,15 +347,15 @@ test('the catch row survives having no balls, because it holds the errand',
 test('the hint only names things there is something to do about', async (t) => {
   const empty = offers({}, { huntable: 4 });
   t.contains(empty.hint, 'need a Pokémon', 'no party is worth saying');
-  t.contains(empty.hint, 'pick something', 'so is the picker below');
+  // **"pick something below" is gone from here**, because the Hunt and Catch
+  // rows carry a slot that scrolls straight to the picker: the sentence was
+  // describing a journey nobody has to make now. What it was paired with -- the
+  // ranking rule that keeps a row waiting on a choice *on* the list, or its
+  // picker can never be reached -- is still load-bearing, and is tested below.
+  t.false(empty.hint.includes('pick something'),
+          'the rows point at their own picker now');
 
-  // And not where there is nothing to pick. This used to be said unconditionally
-  // whenever no species was chosen, which indoors -- Elm's lab, a Pokémon
-  // Center, anywhere with no encounter table -- pointed at a picker holding
-  // "nothing wild appears here" and asked somebody to choose from it.
   const indoors = offers({}, { huntable: 0 });
-  t.false(indoors.hint.includes('pick something'),
-          'nowhere with anything wild in it, so nothing to pick');
   t.contains(indoors.hint, 'need a Pokémon', 'the rest of the line stands');
 
   const chosen = offers({ party: [{ species: CYNDAQUIL, level: 5, hp: 20, maxHp: 20 }] },
@@ -554,12 +557,23 @@ test('travel is last of the five, and gone in a battle', async (t) => {
        'finish the battle first', 'which the row says if it is looked at');
 });
 
-test('the hint offers a place only while one is worth picking', async (t) => {
-  t.contains(offers(PARTY, { places: PLACES }).hint, 'a place to walk to',
-             'asked when the row is drawn and waiting');
-  t.false(offers(PARTY, { places: PLACES, travelTo: PLACES[0].key })
-            .hint.includes('a place to walk to'),
-          'and silent once one is chosen');
+test('the Travel row offers its own slot instead of a hint', async (t) => {
+  // **The hint is gone, and the condition that guarded it now draws a slot.**
+  // It said "or a place to walk to" under a row already offering to choose one,
+  // which is the app talking to itself -- and it asked the reader to go and
+  // find a list that the row can now scroll to itself.
+  //
+  // The *rule* underneath is unchanged and is what this still checks: offered
+  // while the row is drawn and waiting, silent once a place is chosen.
+  const waiting = offers(PARTY, { places: PLACES });
+  t.false(waiting.hint.includes('a place to walk to'), 'no hint about it');
+  t.eq(describeRows(state.read(worldRam(sym, PARTY)),
+                    { rom, places: PLACES }).travel.needs,
+       'place', 'the row asks, in the row');
+
+  const chosen = describeRows(state.read(worldRam(sym, PARTY)),
+                              { rom, places: PLACES, travelTo: PLACES[0].key });
+  t.eq(chosen.travel.needs, null, 'and stops asking once one is chosen');
 });
 
 // --- what the grass here gives ----------------------------------------------
@@ -570,9 +584,9 @@ test('the grind row names the levels the grass actually gives', async (t) => {
   // level then species, and the species reader stepped over the first.
   const party = { party: [{ hp: 40, maxHp: 40, species: CYNDAQUIL, level: 15 }] };
   t.contains(look(party, { target: 20, wilds: { low: 2, high: 3 } }).grind.text,
-             'here: Lv2–3', 'a range reads as a range');
+             'here Lv2–3', 'a range reads as a range');
   t.contains(look(party, { target: 20, wilds: { low: 7, high: 7 } }).grind.text,
-             'here: Lv7', 'and one level reads as one level');
+             'here Lv7', 'and one level reads as one level');
   t.false(look(party, { target: 20, wilds: null }).grind.text.includes('here:'),
           'a map with no grass says nothing about levels rather than guessing');
 });
@@ -820,7 +834,7 @@ test('the Heal row names what it will spend, and prefers the bag', async (t) => 
 
   const without = look(hurt, { healPlace: "Elm's lab" });
   t.false(without.heal.fromBag, 'with nothing in the bag it is the walk');
-  t.contains(without.heal.text, "nearest is Elm's lab", 'and the walk is named');
+  t.contains(without.heal.text, "Elm's lab", 'and the walk is named');
 });
 
 test('a fainted party is a Centre’s job whatever the bag holds', async (t) => {
@@ -829,7 +843,7 @@ test('a fainted party is a Centre’s job whatever the bag holds', async (t) => 
   const r = look({ party: [{ hp: 0, maxHp: 40, species: CYNDAQUIL, level: 5 }] },
                  { bagHeal: 'POTION', healPlace: 'Cherrygrove City' });
   t.false(r.heal.fromBag, 'the bag is not offered');
-  t.contains(r.heal.text, 'nearest is Cherrygrove City', 'the walk is');
+  t.contains(r.heal.text, 'Cherrygrove City', 'the walk is');
 });
 
 test('a Heal row with nowhere open says what turned the pilot back',
@@ -953,7 +967,7 @@ test('a fainted Pokémon has no status worth curing', async (t) => {
                              statusByte: 0x08 }] },
                  { healPlace: "Elm's lab" });
   t.eq(r.heal.ailing, 0, 'the faint is the problem');
-  t.contains(r.heal.text, 'nearest is', 'and only a Center answers it');
+  t.contains(r.heal.text, "Elm's lab", 'and only a Center answers it');
 });
 
 // --- duels -------------------------------------------------------------------
@@ -968,7 +982,12 @@ test('the duel row counts who is near, and says how many are further on',
   const near = look({ party: [{ hp: 20, maxHp: 20 }], money: 3064 },
                        { trainers: [{ x: 2, y: 28, sprite: 39 }], trainersOnMap: 3 });
   t.contains(near.duel.text, 'one trainer nearby', 'who is here');
-  t.contains(near.duel.text, '3,064', 'and what is at stake');
+  // The money is *not* here any more, and that is the point. It is global
+  // state -- a battle changes it -- and it was printed in this row and the
+  // Shop row both: the same number twice, reading as clutter in each. It lives
+  // in the header now, beside the place name, which is the other thing that is
+  // true of the whole app rather than of one offer.
+  t.false(near.duel.text.includes('3,064'), 'and not the money, which is global');
   t.true(near.duel.enabled, 'and it can run');
 
   const far = look({ party: [{ hp: 20, maxHp: 20 }] },
