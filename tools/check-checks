@@ -115,6 +115,10 @@ def mutations(root):
         # so the save card's slot label went back beside the middle row.
         "deadcss": lambda: edit("index.html", sub(
             "  .param.slots{display:block}", "  .slots{display:block}")),
+        # A test added and the table left alone, which is exactly how the
+        # table came to claim 143 while 576 ran.
+        "testtable": lambda: edit("tests/cases/input.mjs", append(
+            "\ntest('probe', async (t) => { t.true(true); });\n")),
         # A row renamed out from under the runner, which builds the word it
         # prints from the key rather than from a table.
         "labels": lambda: edit("index.html", sub(

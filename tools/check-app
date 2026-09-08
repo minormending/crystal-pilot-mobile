@@ -1398,6 +1398,61 @@ def check_labels():
         if problems else ok(f"all {len(keys)} job rows are named after their key")
 
 
+TEST_ROW = re.compile(r"^\|\s*`([\w.]+\.mjs)`\s*\|\s*(\d+)\s*\|", re.M)
+TEST_TOTAL = re.compile(r"^(\d+) tests in (\d+) files", re.M)
+TEST_DEF = re.compile(r"^test\(", re.M)
+
+
+def check_test_table():
+    """docs/DEVELOPING.md's table of test files says what is actually there.
+
+    It said **143 tests in seventeen files** while 576 ran in twenty-three, and
+    the per-file counts were wrong by up to twenty times over -- `journey.mjs`
+    was listed with six and had a hundred and thirty. Two diagrams in the same
+    document disagreed with the prose and with each other (143 and 511).
+
+    `docs-check` could not see any of it: that tool watches sections whose
+    marker names the *source* files they describe, and no section claims to
+    cover `tests/`. So a table about the tests went three hundred passes of
+    growth out of date in silence, which is the precise failure the marker
+    system exists to prevent, one directory away from it.
+
+    A count in prose is a claim like any other. This is the check that keeps it
+    honest -- and it is cheap, because the tests declare themselves: one
+    `test(` at the start of a line each.
+    """
+    real = {}
+    for path in sorted((ROOT / "tests" / "cases").glob("*.mjs")):
+        real[path.name] = len(TEST_DEF.findall(path.read_text()))
+    if not real:
+        return fail("found no test files to count")
+    doc = (ROOT / "docs" / "DEVELOPING.md").read_text()
+    listed = {m.group(1): int(m.group(2)) for m in TEST_ROW.finditer(doc)}
+    problems = []
+    for name, n in sorted(real.items()):
+        if name not in listed:
+            problems.append(f"DEVELOPING.md  {name} has {n} tests and is not in the table")
+        elif listed[name] != n:
+            problems.append(f"DEVELOPING.md  {name} is listed with {listed[name]}"
+                            f" tests and has {n}")
+    for name in sorted(set(listed) - set(real)):
+        problems.append(f"DEVELOPING.md  {name} is in the table and is not a test file")
+    total = TEST_TOTAL.search(doc)
+    if not total:
+        problems.append("DEVELOPING.md  no 'N tests in M files' line to check")
+    else:
+        if int(total.group(1)) != sum(real.values()):
+            problems.append(f"DEVELOPING.md  says {total.group(1)} tests, "
+                            f"there are {sum(real.values())}")
+        if int(total.group(2)) != len(real):
+            problems.append(f"DEVELOPING.md  says {total.group(2)} files, "
+                            f"there are {len(real)}")
+    for p in problems:
+        print(f"        {p}")
+    return fail(f"{len(problems)} stale count(s) in the test table") if problems \
+        else ok(f"{sum(real.values())} tests in {len(real)} files, all tabled")
+
+
 CHECKS = {
     "syntax": check_syntax,
     "layers": check_layers,
@@ -1420,6 +1475,7 @@ CHECKS = {
     "deadcss": check_dead_css,
     "markers": check_markers,
     "labels": check_labels,
+    "testtable": check_test_table,
 }
 
 
