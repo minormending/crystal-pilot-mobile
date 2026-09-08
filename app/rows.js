@@ -154,13 +154,21 @@ export function describeRows(s, ctx = {}) {
         : 'not saved yet',
       enabled: canSave,
     },
+    // What the row is *for* -- another emulator -- is a thing somebody either
+    // already knows or does not need; the icon is an arrow leaving and the
+    // button says Download. So the line is spent on the one thing pressing it
+    // cannot tell you in advance: whether the file will have this session in
+    // it. It says "not this session" rather than "the older save", because a
+    // battery nobody has saved to holds no save at all, and a row asserting an
+    // older one exists would be wrong in exactly the way this repository keeps
+    // getting caught by. Pressing it on an empty battery says so plainly.
+    //
+    // Sixteen characters because the first draft was twenty-nine, and a jstate
+    // is one clipped line: `nothing from this session yet` reached the phone as
+    // "nothing from this sessi…", which is a sentence that has lost the half
+    // that mattered. Measured on the device, not counted in the editor.
     export: {
-      text: savedThisSession
-        ? 'ready — the battery has this session in it'
-        // Six words became two. What it is *for* -- another emulator -- is a
-        // thing somebody either already knows or does not need: the row is
-        // called "Download .sav" and the button says "Get".
-        : 'the battery save',
+      text: savedThisSession ? 'up to date' : 'not this session',
     },
     // The three below act on the situation you are already in, so what they can
     // do is decided by the game rather than by anything picked on this page.
@@ -254,8 +262,13 @@ export function describeRows(s, ctx = {}) {
       text: s.inBattle ? 'finish the battle first'
         : !gym ? 'no Gym this build knows about'
         : !fit.length ? 'nobody fit to send out'
-        : `${gym.leader || 'the leader'} · ${gym.at}`
-          + (gym.legs ? ` · ${legsWord(gym.legs)}` : ' · here'),
+        // Two facts, not three. `FALKNER · Violet City · one map away` measured
+        // 33px past the end of a clipped one-line state on a 375px phone and
+        // arrived as `FALKNER · Violet City · one map…`, so the fact it was
+        // cut off was the one nothing else on the card says. Where the Gym is
+        // stays -- that is what this row's Go acts on -- and the leg count
+        // goes, because the Travel row above is already counting legs.
+        : `${gym.leader || 'the leader'} · ${gym.legs ? gym.at : 'here'}`,
       enabled: afoot && !!gym && fit.length > 0,
     },
     // What the map is holding. Counted rather than named, because the app

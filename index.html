@@ -258,23 +258,61 @@
      overflowed 375px, wrapping the title and truncating the location.
      It says which of the three states is in force rather than showing a
      symbol to be guessed at. */
-  .slots{display:block}
+  /* `.param.slots`, not `.slots`: the label and the rows have to stack, and
+     `.param` sets `display:flex` two hundred lines further down this sheet.
+     Same specificity, later in the file, so it won -- and "SLOTS" had spent its
+     whole life beside the *middle* row of three, reading as that row's name.
+     Nothing could see it: the rule was there, correct, and dead. */
+  .param.slots{display:block}
   .slotrows{display:flex;flex-direction:column;gap:6px;margin-top:8px}
   .slotrow{display:flex;align-items:center;gap:8px;background:var(--raise);
            border:1px solid var(--line);border-radius:10px;padding:8px 10px}
+  /* Just the number now, so the column is one glyph wide rather than holding
+     room for a word the group's own label already says. */
   .slotrow .sname{flex:0 0 auto;font-weight:700;font-size:12px;
-                  color:var(--ink);min-width:3.4em}
+                  color:var(--ink);min-width:1.1em;text-align:center;
+                  font-variant-numeric:tabular-nums}
   .slotrow .sstate{flex:1 1 auto;font-size:12px;color:var(--raise-ink);
                    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .slotrow button{flex:0 0 auto;min-height:34px;padding:0 12px;font-size:12px;
                   border:1px solid var(--line);border-radius:8px;
                   background:var(--panel);color:var(--ink);font-weight:700}
   .slotrow button:disabled{opacity:.45}
+  /* So a glance finds the slots that have something in them. The number stays
+     full strength -- it is the row's name, and a name nobody can read is not a
+     tidier row, it is an unlabelled one. */
+  .slotrow.empty{background:transparent;border-style:dashed}
+  .slotrow.empty .sstate{color:var(--dim)}
   label.file.jgo{display:inline-flex;align-items:center;justify-content:center;
                  position:relative;overflow:hidden;cursor:pointer}
   label.file.jgo input{position:absolute;inset:0;opacity:0;cursor:pointer}
-  .themerow{display:flex;align-items:center;gap:10px}
+  /* Wraps, because these rows grew a glyph column and the Screen row carries
+     a sentence and two buttons: at 375px something has to give, and a button
+     on a second line is better than a row that runs off the side. */
+  .themerow{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
   .themerow .val{flex:1 1 auto;font-size:12px;color:var(--dim)}
+  /* A row that belongs to the row above it -- the code box under Devices, the
+     name box under a joined room -- indented by exactly the glyph column, so it
+     lines up with its parent's words rather than with its parent's icon. Two
+     unrelated-looking rows was how an unlabelled code box came to sit under
+     "not sharing" looking like a field somebody had already filled in. */
+  .themerow.sub{padding-left:29px}
+  /* **Three states, all three visible.** This was one button that said the
+     state it was in (`auto`) and cycled on press: nothing about it said there
+     were three, which they were, or which way round. A segment group is the
+     settings idiom for exactly this and costs the same width.
+
+     Pico already knows this shape -- `role="group"` joins the corners, laps the
+     borders by a pixel and lifts the focused one -- so what is written here is
+     only what it cannot know: the group is a control on a row rather than a
+     block on a page, so it neither fills the width nor leaves a 1rem gap under
+     itself, and *which* segment is in force is `aria-pressed`, which is also
+     what a screen reader reads. */
+  .seg{width:auto;margin-bottom:0}
+  .seg button{flex:0 0 auto;min-height:0;min-width:0;padding:6px 11px;
+              font-size:12px;font-weight:600;letter-spacing:.04em;
+              text-transform:uppercase;color:var(--dim);background:var(--panel)}
+  .seg button[aria-pressed=true]{background:var(--raise);color:var(--ink)}
   /* Last in the header and pushed to the edge, so it is in the same place
      whether or not a game is loaded and whatever the location line says. */
   header button.gear{min-width:0;padding:6px 9px;font-size:15px;line-height:1}
@@ -284,7 +322,12 @@
   .offerhint:empty{display:none}
   /* A room code is typed once per device and read off another screen, so it
      gets the whole row and a font that tells O from 0. */
-  .themerow input.code{flex:1 1 auto;min-width:0;font:12px ui-monospace,
+  /* `flex:1 1 0` and not `1 1 auto`: Pico gives every input `width:100%`, which
+     is the flex *basis* under `auto` -- so on a row that can wrap, the box
+     demanded the full width and the label above it and the button after it each
+     took a line of their own. A zero basis fits any line and still grows into
+     whatever is left. */
+  .themerow input.code{flex:1 1 0;width:auto;min-width:6em;font:12px ui-monospace,
                        SFMono-Regular,Menlo,monospace;letter-spacing:.02em;
                        padding:7px 9px;border-radius:8px;text-transform:uppercase;
                        border:1px solid var(--line);background:var(--panel);
@@ -481,9 +524,16 @@
                       letter-spacing:.04em;text-transform:uppercase;
                       font-weight:600;list-style:none}
   details.how summary::-webkit-details-marker{display:none}
-  details.how summary::before{content:"›";display:inline-block;
-                              width:1.1em;text-align:center}
-  details.how[open] summary::before{content:"⌄"}
+  /* **One marker, and it is the vendor's.** These summaries carried two: a
+     `›` written here beside the text, and Pico's own chevron -- which it draws
+     on every `summary` as a floated `::after` at the right edge of the row.
+     So "About slots" had an affordance next to the words and a second one 300px
+     away from them, and only the far one moved when the block opened. Pico's is
+     the better of the two (it rotates, and it transitions), so what is left
+     here is stopping it floating: the marker belongs where the text is when the
+     text is a short quiet label rather than a full-width row. */
+  details.how summary::after{float:none;display:inline-block;
+                             vertical-align:-3px;margin-inline-start:4px}
   details.how p{color:var(--dim);font-size:12px;line-height:1.5;margin:8px 0 0}
 
   /* Species to hunt for: only the ones this route has at this hour. */
@@ -610,7 +660,10 @@
        border:1px dashed var(--accent);border-radius:999px}
   .job .slot::after{content:"▾";font-size:9px;opacity:.8}
   .job .slot:hover{background:color-mix(in srgb,var(--accent) 10%,transparent)}
-  .job .jicon{width:19px;height:19px;flex:0 0 auto;color:var(--dim)}
+  /* Not scoped to `.job` any more: the settings rows and the save card carry
+     the same column, and a glyph that is 19px in one card and unstyled in the
+     next is worse than no glyph at all. */
+  .jicon{width:19px;height:19px;flex:0 0 auto;color:var(--dim)}
   .job.lead .jicon{color:var(--accent)}
   .job.blocked .jicon{opacity:.5}
   /* Whichever row ranks first wears no rule. This was `:first-of-type`, which
@@ -928,6 +981,33 @@
      stroke-linecap="round" stroke-linejoin="round">
     <path d="M3.5 3.5h8L14.5 6.5v8h-11Z"/><path d="M6 3.5v4h6v-4"/>
     <path d="M6 14.5v-4h6v4"/></g>
+  <g id="i-down" fill="none" stroke="currentColor" stroke-width="1.8"
+     stroke-linecap="round" stroke-linejoin="round">
+    <path d="M9 2.6v7.8"/><path d="M5.9 7.3 9 10.4l3.1-3.1"/>
+    <path d="M3.2 11.6v3.2h11.6v-3.2"/></g>
+  <g id="i-up" fill="none" stroke="currentColor" stroke-width="1.8"
+     stroke-linecap="round" stroke-linejoin="round">
+    <path d="M9 10.4V2.6"/><path d="M5.9 5.7 9 2.6l3.1 3.1"/>
+    <path d="M3.2 11.6v3.2h11.6v-3.2"/></g>
+  <g id="i-undo" fill="none" stroke="currentColor" stroke-width="1.8"
+     stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 7.4h6.4a4 4 0 0 1 0 8H7"/><path d="M6.7 4.5 3.6 7.4l3.1 2.9"/></g>
+  <g id="i-colour" fill="none" stroke="currentColor" stroke-width="1.8"
+     stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="9" cy="9" r="6"/>
+    <path d="M9 3a6 6 0 0 1 0 12Z" fill="currentColor" stroke="none"/></g>
+  <g id="i-devices" fill="none" stroke="currentColor" stroke-width="1.8"
+     stroke-linecap="round" stroke-linejoin="round">
+    <path d="M2.6 4.4h6.6v9.6H2.6Z"/><path d="M11.2 7.2h4.2v7.4h-4.2Z"/></g>
+  <g id="i-files" fill="none" stroke="currentColor" stroke-width="1.8"
+     stroke-linecap="round" stroke-linejoin="round">
+    <path d="M2.6 5.4h4.1l1.5 1.9h7.2v7.3H2.6Z"/></g>
+  <g id="i-screen" fill="none" stroke="currentColor" stroke-width="1.8"
+     stroke-linecap="round" stroke-linejoin="round">
+    <path d="M2.6 4.2h12.8v8.4H2.6Z"/><path d="M6.6 15.4h4.8"/></g>
+  <g id="i-cart" fill="none" stroke="currentColor" stroke-width="1.8"
+     stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4.6 4.7 6.4 2.9h7v12.2h-8.8Z"/><path d="M6.8 12.3h4.4"/></g>
 </defs></svg>
 <header>
   <h1>crystal-pilot</h1>
@@ -1258,46 +1338,60 @@
     <div class="seen" id="seen"></div>
   </div>
 
+  <!-- The same three columns the pilot's list uses, for the same reason: a
+       glyph, the thing, the verb. Every row name here used to carry the verb
+       *as well* -- "Save the game" beside a button saying Save, "Undo the last
+       job" beside a button saying Undo -- so the row was read twice to learn
+       one thing. The name is the noun now and the button is the only verb. -->
   <div class="card hide" id="savecard">
     <h2>Your save</h2>
 
     <div class="job" id="job-save">
+      <svg class="jicon" viewBox="0 0 18 18" aria-hidden="true"><use href="#i-save"/></svg>
       <div class="what">
-        <span class="jname">Save the game</span>
+        <span class="jname">Game save</span>
         <span class="jstate" id="savestate">&mdash;</span>
       </div>
       <button class="jgo" id="savegame">Save</button>
     </div>
 
+    <!-- Export and Import as a pair, with the arrows pointing opposite ways:
+         which direction a `.sav` is travelling is the only thing that
+         distinguishes these two rows, and it was carried by nothing but the
+         words "Download" and "Load" -- one letter apart in the shape a skimming
+         reader sees. -->
     <div class="job" id="job-export">
+      <svg class="jicon" viewBox="0 0 18 18" aria-hidden="true"><use href="#i-down"/></svg>
       <div class="what">
-        <span class="jname">Download .sav</span>
-        <span class="jstate" id="exportstate">the battery save, for another
-          emulator</span>
+        <span class="jname">Export</span>
+        <span class="jstate" id="exportstate">the battery save</span>
       </div>
-      <button class="jgo" id="exportsav">Get</button>
+      <button class="jgo" id="exportsav">Download</button>
     </div>
 
     <div class="job" id="job-import">
+      <svg class="jicon" viewBox="0 0 18 18" aria-hidden="true"><use href="#i-up"/></svg>
       <div class="what">
-        <span class="jname">Load a .sav</span>
-        <span class="jstate" id="importstate">from the desktop pilot</span>
+        <span class="jname">Import</span>
+        <span class="jstate" id="importstate">a .sav file</span>
       </div>
       <label class="jgo file" id="importlabel">Choose<input type="file"
         id="importsav" accept=".sav"></label>
     </div>
 
     <div class="job" id="job-undo">
+      <svg class="jicon" viewBox="0 0 18 18" aria-hidden="true"><use href="#i-undo"/></svg>
       <div class="what">
-        <span class="jname">Undo the last job</span>
+        <span class="jname">Last job</span>
         <span class="jstate" id="undostate">nothing to undo yet</span>
       </div>
       <button class="jgo" id="undo" disabled>Undo</button>
     </div>
 
     <div class="job hide" id="job-replaced">
+      <svg class="jicon" viewBox="0 0 18 18" aria-hidden="true"><use href="#i-undo"/></svg>
       <div class="what">
-        <span class="jname">Put back what a handoff replaced</span>
+        <span class="jname">Replaced save</span>
         <span class="jstate" id="replacedstate">&mdash;</span>
       </div>
       <button class="jgo" id="restorereplaced">Put back</button>
@@ -1334,41 +1428,69 @@
        most needs the room is the one with no game on it yet. -->
   <div class="card" id="speedcard">
     <h2>Settings</h2>
+    <!-- Three segments rather than one cycling button; the reasoning is with
+         `.seg` in the stylesheet. `role="group"` is Pico's, and it is what
+         joins them into one control. -->
     <div class="themerow">
+      <svg class="jicon" viewBox="0 0 18 18" aria-hidden="true"><use href="#i-colour"/></svg>
       <span class="lvlabel">Colour</span>
-      <button class="themebtn" id="theme" aria-label="Colour theme">auto</button>
+      <div class="seg" id="theme" role="group" aria-label="Colour theme">
+        <button data-theme="auto" aria-pressed="true">Auto</button>
+        <button data-theme="light" aria-pressed="false">Light</button>
+        <button data-theme="dark" aria-pressed="false">Dark</button>
+      </div>
     </div>
+    <!-- Two ways in, side by side: start a room, or join one. Join used to be
+         a code box sitting on its own row underneath with no label on it, which
+         read as a field somebody had already filled in -- the placeholder
+         `K7M2P` looks exactly like a code. The box is behind the Join button
+         now, indented under the row it belongs to, and labelled. -->
     <div class="themerow">
+      <svg class="jicon" viewBox="0 0 18 18" aria-hidden="true"><use href="#i-devices"/></svg>
       <span class="lvlabel">Devices</span>
       <span class="val" id="roomstate">not sharing</span>
+      <button class="themebtn" id="joinopen">Join</button>
       <button class="themebtn" id="share">Share</button>
     </div>
-    <div class="themerow hide" id="namerow">
+    <div class="themerow sub hide" id="joinrow">
+      <span class="lvlabel">Code</span>
+      <input class="code" id="joincode" spellcheck="false" autocomplete="off"
+             maxlength="7" placeholder="K7M2P" aria-label="Room code">
+      <button class="themebtn" id="joingo">Join</button>
+    </div>
+    <div class="themerow sub hide" id="namerow">
       <span class="lvlabel">Called</span>
       <input class="code" id="devicename" spellcheck="false" autocomplete="off"
              maxlength="24" placeholder="iPhone" aria-label="What to call this device">
       <button class="themebtn" id="rename">Set</button>
     </div>
-    <!-- Only when the cartridge is not fully described. A game the pilot knows
-         needs no announcement that it knows it. -->
-    <div class="themerow hide" id="titlerow">
-      <span class="lvlabel">Game</span>
-      <span class="val" id="titlestate">&mdash;</span>
-    </div>
-    <div class="themerow" id="screenrow">
+    <!-- Hidden until this device is in a room, which paintScreen has always
+         done -- but the markup said otherwise, so a first frame drew a row
+         offering to show a screen into a room that did not exist. -->
+    <div class="themerow hide" id="screenrow">
+      <svg class="jicon" viewBox="0 0 18 18" aria-hidden="true"><use href="#i-screen"/></svg>
       <span class="lvlabel">Screen</span>
       <span class="val" id="screenstate">not showing this screen</span>
       <button class="themebtn" id="screenmode">View only</button>
       <button class="themebtn" id="screenshare">Show</button>
     </div>
-    <div class="themerow hide" id="joinrow">
-      <input class="code" id="joincode" spellcheck="false" autocomplete="off"
-             maxlength="7" placeholder="K7M2P" aria-label="Room code">
-      <button class="themebtn" id="joingo">Join</button>
+    <!-- Only when the cartridge is not fully described. A game the pilot knows
+         needs no announcement that it knows it. -->
+    <div class="themerow hide" id="titlerow">
+      <svg class="jicon" viewBox="0 0 18 18" aria-hidden="true"><use href="#i-cart"/></svg>
+      <span class="lvlabel">Game</span>
+      <span class="val" id="titlestate">&mdash;</span>
     </div>
-    <div class="themerow">
+    <!-- And only when there is something kept to say something about. This row
+         spent most of its life reading "Files: re-picked each session" beside a
+         hidden button: a negative fact, with nothing to do about it, in the one
+         place somebody goes to change something. What it was really doing was
+         explaining a behaviour, and an explanation belongs in the block below
+         with the other explanations. -->
+    <div class="themerow hide" id="filerow">
+      <svg class="jicon" viewBox="0 0 18 18" aria-hidden="true"><use href="#i-files"/></svg>
       <span class="lvlabel">Files</span>
-      <span class="val" id="filestate">re-picked each session</span>
+      <span class="val" id="filestate">&mdash;</span>
       <button class="themebtn hide" id="forget">Forget</button>
     </div>
     <details class="how">
@@ -1388,6 +1510,11 @@
         throws. Only what this route has at this hour is offered. While a job
         runs the pad dims — it would be fighting the pilot for the same
         emulator — and one Stop sits under the screen.</p>
+      <p><b>Your files.</b> The ROM and symbol file you pick are kept on this
+        phone, so the next visit starts with the game already in and a
+        <em>Files</em> row appears above to forget them again. Nothing is
+        uploaded: the ROM never leaves this device, and a save travels only
+        while you are sharing.</p>
     </details>
   </div>
   </div>

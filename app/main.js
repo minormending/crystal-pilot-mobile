@@ -118,6 +118,11 @@ let room = null;
 let roomOpening = null;
 // Set when the Firebase SDK could not be fetched -- an offline first load.
 let roomUnavailable = false;
+// Whether somebody has asked to type a code. The box used to be on the row
+// underneath at all times, unlabelled, with `K7M2P` in it as a placeholder --
+// which is what a code looks like, so the row read as one already entered. A
+// field is a question, and a question nobody asked is worth a press to reach.
+let joinWanted = false;
 // Showing this screen to another device, or watching one. Never both: a device
 // that is watching has no game of its own to show.
 let host = null, watcher = null;
@@ -236,8 +241,12 @@ function applyTheme(choice) {
   const root = document.documentElement;
   if (choice === 'auto') root.removeAttribute('data-theme');
   else root.setAttribute('data-theme', choice);
-  const btn = $('#theme');
-  if (btn) btn.textContent = choice;
+  // Every segment says whether it is the one in force, which is both what
+  // paints it and what a screen reader reads. The old control wrote the state
+  // into its own label -- a button called `dark` that made it light.
+  for (const b of document.querySelectorAll('#theme button')) {
+    b.setAttribute('aria-pressed', String(b.dataset.theme === choice));
+  }
   // The address bar has its own copy of the ground colour, and the media-query
   // pair in the head cannot know about an override.
   const meta = $('#themecolor');
@@ -253,8 +262,11 @@ applyTheme(readTheme());
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
   if (themeChoice === 'auto') applyTheme('auto');   // refresh the address bar
 });
-$('#theme').onclick = () => {
-  applyTheme(THEMES[(THEMES.indexOf(themeChoice) + 1) % THEMES.length]);
+// Delegated, so the three segments are one listener and an unknown one is
+// ignored rather than cycling the theme by accident.
+$('#theme').onclick = (ev) => {
+  const want = ev.target.closest('button');
+  if (want && THEMES.includes(want.dataset.theme)) applyTheme(want.dataset.theme);
 };
 
 /**
@@ -628,14 +640,22 @@ async function saveIsInCartridge() {
  * not would send someone into a reload expecting their game back.
  */
 async function paintFiles() {
-  const el = $('#filestate'), btn = $('#forget');
+  const el = $('#filestate'), btn = $('#forget'), row = $('#filerow');
   if (!el) return;
   const meta = await keptMeta();
   if (!meta || !meta.romName || !meta.symName) {
-    el.textContent = 're-picked each session';
+    // No row at all, rather than a row saying nothing is kept. It said
+    // "re-picked each session" beside a hidden button: a fact with no action
+    // beside it, on the one screen somebody opens in order to change
+    // something. What it was doing was explaining a behaviour, and that
+    // sentence now lives in the block at the bottom of this card with the
+    // other explanations.
+    el.textContent = '\u2014';
     btn.classList.add('hide');
+    row.classList.add('hide');
     return;
   }
+  row.classList.remove('hide');
   const mb = meta.romBytes ? ` · ${(meta.romBytes / 1048576).toFixed(1)} MB` : '';
   el.textContent = `${meta.romName}, ${meta.symName}`
     + (meta.battery ? ' and your last save' : '') + mb;
@@ -3049,7 +3069,14 @@ function paintRoom() {
   const btn = $('#share');
   btn.textContent = said.button || 'Share';
   btn.classList.toggle('hide', !said.button);
-  $('#joinrow').classList.toggle('hide', !said.joining);
+  // The two ways in are the two buttons on the row above; the box appears
+  // under whichever one was pressed. `joining` still decides whether either is
+  // on offer at all -- a device already in a room joins nothing.
+  if (!said.joining) joinWanted = false;
+  $('#joinopen').classList.toggle('hide', !said.joining || joinWanted);
+  $('#joinrow').classList.toggle('hide', !said.joining || !joinWanted);
+  // The watch card is a guided flow with a sentence above the box telling you
+  // what to type in it, so there is nothing there for a press to reveal.
   $('#watchjoinrow').classList.toggle('hide', !said.joining);
 }
 
@@ -3168,6 +3195,11 @@ async function joinWith(btn, input) {
     paintRoom();
   }
 }
+$('#joinopen').onclick = () => {
+  joinWanted = true;
+  paintRoom();
+  $('#joincode').focus();
+};
 $('#joingo').onclick = () => joinWith($('#joingo'), $('#joincode'));
 $('#joingo2').onclick = () => joinWith($('#joingo2'), $('#joincode2'));
 
@@ -3309,14 +3341,24 @@ async function paintSlots() {
     const meta = all[id];
     const row = document.createElement('div');
     row.className = 'slotrow';
+    // A dashed, unfilled row for a slot with nothing in it, so a glance finds
+    // the ones worth loading.
+    row.classList.toggle('empty', !meta);
     const name = document.createElement('span');
     name.className = 'sname';
-    name.textContent = `Slot ${id}`;
+    // The number alone. "Slot" was printed four times on this card -- once as
+    // the group's label and once on each row -- and the label is the one that
+    // has to say it.
+    name.textContent = String(id);
     const stateEl = document.createElement('span');
     stateEl.className = 'sstate';
     stateEl.textContent = describeSlot(meta, romTag);
     const keep = document.createElement('button');
     keep.textContent = meta ? 'Replace' : 'Keep';
+    // Which is where the word goes instead: three buttons all called Keep are
+    // three identical announcements to anybody not looking at the screen.
+    keep.setAttribute('aria-label',
+      meta ? `Replace slot ${id}` : `Keep this game in slot ${id}`);
     keep.onclick = () => runTask('#savegame', `keeping slot ${id}`, async () => {
       const can = await tasks.canSave();
       if (!can.ok) return { ok: false, message: `cannot save: ${can.why}` };
@@ -3333,6 +3375,7 @@ async function paintSlots() {
     }, { takeUndoPoint: false });
     const load = document.createElement('button');
     load.textContent = 'Load';
+    load.setAttribute('aria-label', `Load slot ${id}`);
     load.disabled = !meta;
     load.onclick = () => loadSlot(id, `slot ${id}`);
     row.append(name, stateEl, keep, load);
