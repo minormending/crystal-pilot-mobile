@@ -718,6 +718,31 @@ If it comes back with *no badge yet*, the rest of the sentence is the sweep's ow
 reason: nobody fit to send out, a battle lost, or nobody left to fight. A lost
 one usually means levels — Grind is two rows up.
 
+## Reading the rows
+
+Each offer is a **glyph, a name, one line, and a button**. The glyph is there so
+that after one session you stop reading the name — you find Heal by its shape.
+The line says the thing only that row can say: Heal names *where*, because how
+many are hurt is in the party line above it; Grind names the levels, because
+whose levels is in the same place; Gym names the leader and the town.
+
+**A dashed chip means the row is waiting on a choice you make.** Tap *Choose a
+Pokémon* or *Choose a place* and it takes you to the list and puts the cursor on
+the first option. The row used to say "pick something below" instead, which is
+the same fact with the work left to you.
+
+**A blue rail down the left is the row the pilot would do first.** It is
+recomputed every second from what is actually true — somebody fainted, a species
+picked, a trainer nearby — so it moves. It is a suggestion, not a restriction:
+any offered row can be pressed.
+
+**A greyed button means not now, and the line says why.** *finish the battle
+first*, *no Poké Balls yet*, *nowhere named to walk to*. Those are not errors;
+they are the row telling you what would change its mind.
+
+Where you are and how much money you have live in the **header**, because they
+are true of the whole app rather than of any one offer.
+
 ## Clear: fighting everybody on this map
 
 The Duel row has two buttons. **Fight** takes on whoever is in front of you.
@@ -1155,7 +1180,7 @@ deployed, which is not the question you are asking when a bug you saw fixed is
 still in front of you. `tools/check-app` asserts that number matches the service
 worker's cache name, because a version display that lies is worse than none.
 
-<!-- covers: sw.js @ 3bbb7ebaf35f -->
+<!-- covers: sw.js @ 7b353cf4807c -->
 
 The worker fetches **network first, falling back to the cache**. That is the
 opposite of the usual offline-first advice, on purpose.
