@@ -1122,7 +1122,13 @@ function ringWalker({ refuse = null, saying = '', badges = 0 } = {}) {
   j.settled = async () => new Uint8Array(0x2000);
   j.crossEdge = async (dir, expect) => {
     log.push(`${here}>${expect}`);
-    if (refuse && `${here}>${expect}` === refuse) return false;
+    if (refuse && `${here}>${expect}` === refuse) {
+      // What the real one does on a gate: read the words on the refusal and
+      // leave them where `travelTo` looks.
+      j.turnedBack = saying || null;
+      return false;
+    }
+    j.turnedBack = null;
     here = expect;
     return true;
   };
@@ -1156,6 +1162,33 @@ test('an edge somebody is refusing is written off, not just retried',
   t.true(j.isShut(1, 2), 'and the leg is written off for next time');
   t.contains(j.said.join(' '), 'turned back', 'said in those words');
   t.contains(j.said.join(' '), 'no badge, no road', 'quoting the game');
+});
+
+test('a gate stops the crossing rather than being retried at', async (t) => {
+  // Measured on the cartridge, and it is why this exists: driving at Route 32's
+  // southern connection with no badge, `crossEdge` ground away for over two and
+  // a half minutes -- twelve staged advances, then thirty attempts per opening,
+  // each walking the length of a ninety-tile route -- and the job looked hung.
+  //
+  // A refusal out there is usually a phone call, which is why the loops answer
+  // one by running the scripts and asking again. A gate answers the same way
+  // and never stops. So the second one gives up.
+  const j = ringWalker({ refuse: '1>2', saying: 'Wait up! / no badge, no road' });
+  const r = await j.travelTo(3);
+  t.true(r.ok, `it went the other way: ${r.message}`);
+  t.eq(j.log.filter((l) => l === '1>2').length, 1,
+       'the shut leg was tried once, not three times over');
+});
+
+test('a leg that merely failed is still retried three times', async (t) => {
+  // The other side, and the reason this keys on the words. Measured long ago:
+  // the same leg failed on one run and worked on the next, so one silent
+  // refusal is not an answer -- it is worth asking again from wherever we
+  // ended up.
+  const j = ringWalker({ refuse: '1>2', saying: '' });
+  await j.travelTo(3);
+  t.eq(j.log.filter((l) => l === '1>2').length, 3, 'three attempts');
+  t.false(j.isShut(1, 2), 'and nothing written off, because nobody said no');
 });
 
 test('a written-off leg is not walked at again on the next press', async (t) => {

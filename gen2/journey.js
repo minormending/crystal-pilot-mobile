@@ -589,6 +589,27 @@ export class Journey {
     const wram = await this.settled();
     if (!wram) return false;
     const from = await this.mapKey();
+    this.turnedBack = null;
+    // **Somebody saying no, counted rather than repeated.** A refusal out here
+    // is usually a phone call or a passer-by, which is why the loops below
+    // answer one by running the scripts and asking again. A *gate* answers the
+    // same way and never stops: measured driving at Route 32's southern
+    // connection with no badge, the pilot ground away for over two and a half
+    // minutes -- twelve staged advances and then thirty attempts per opening,
+    // each walking the length of a ninety-tile route -- and the job looked hung.
+    //
+    // So the words are read before `runScripts` presses them away, and the
+    // second time the same thing happens this gives up and says who did it.
+    // `through` learned this one pass earlier at the doorways; this is the same
+    // rule at the edges, and `travelTo` reads `turnedBack` from either.
+    let turned = 0;
+    const refused = async () => {
+      const said = await this.wordsOnScreen();
+      await this.runScripts();
+      if (!said) return false;
+      this.turnedBack = said;
+      return ++turned >= THROUGH_TURNS;
+    };
 
     // First, get as far along the map as is actually reachable. On a long route
     // the opening is not in reach of one plan from the far end, so this closes
@@ -606,7 +627,10 @@ export class Journey {
       // "Refused" means the game stopped taking walking input, which out here
       // is almost always somebody talking: Elm phones the moment you leave
       // Mr. Pokémon's, and treating that as terrain ended the walk home.
-      if (res.stopped === 'refused') { await this.runScripts(); continue; }
+      if (res.stopped === 'refused') {
+        if (await refused()) return false;
+        continue;
+      }
       if (res.stopped !== null && res.stopped !== 'battle') break;
       // Nudge off the far edge: the last tile in the direction is usually the
       // one the connection is behind.
@@ -667,7 +691,7 @@ export class Journey {
         // had just completed.
         if (await this.mapKey() !== from) return await this.mapKey() === expect;
         if (res.stopped === null) arrived = true;
-        else if (res.stopped === 'refused') await this.runScripts();
+        else if (res.stopped === 'refused') { if (await refused()) return false; }
         else if (res.stopped !== 'battle') break;
       }
       if (!arrived) continue;
@@ -770,13 +794,18 @@ export class Journey {
       // refusal is not an answer -- it is worth asking again from wherever we
       // ended up.
       let crossed = false;
-      // **Read the screen where the words still are.** A gate script finishes:
-      // the man says his piece, moves the player back, and stops running -- so
-      // by the time the retries are done, `runScripts` has pressed the whole
-      // conversation away and the screen is blank. Asking afterwards finds
-      // nothing and writes off nothing, which is how the first version of this
-      // was ineffective while looking correct. The doorway path gets this for
-      // free by asking on the refusal itself.
+      // **The words come from whoever was standing there, not from the screen
+      // afterwards.** A gate script finishes: the man says his piece, moves the
+      // player back and stops running -- so by the time the retries are done,
+      // `runScripts` has pressed the whole conversation away and the tilemap is
+      // blank. The first version of this asked here and found nothing, which is
+      // a mechanism that reads correctly and does nothing at all.
+      //
+      // Both walks report it the same way instead: `crossEdge` and `through`
+      // each read the screen on the refusal itself and leave the words in
+      // `turnedBack`, so this has one thing to look at whichever kind of leg it
+      // was -- and a gate stops the crossing early rather than being ground at
+      // for two and a half minutes.
       let said = '';
       for (let go = 0; go < 3 && !crossed; go++) {
         if (go) {
@@ -785,7 +814,8 @@ export class Journey {
           this.say(`trying ${next.dir.toLowerCase()} again`);
         }
         crossed = await this.crossEdge(next.dir, next.key);
-        if (!crossed && !said) said = await this.wordsOnScreen();
+        if (!crossed && !said) said = this.turnedBack || '';
+        if (said) break;                      // somebody said no; asking again
         if (!crossed && await this.mapKey() !== here) break;   // somewhere new
       }
       if (!crossed && await this.mapKey() === here) {
