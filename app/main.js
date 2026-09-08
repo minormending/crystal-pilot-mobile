@@ -62,6 +62,11 @@ let hourNow = null;
 // destinations, this changes without the map changing, because taking a ball is
 // what changes it.
 let takeables = [];
+// Who is near enough to fight, and how many the map holds anywhere. Two
+// numbers because the game only spawns an object you are close to, so the first
+// is what a duel can reach and the second is what tells you to walk on.
+let trainers = [];
+let trainersOnMap = 0;
 // The cheapest thing in the bag that would mend somebody, by name, or null. Read
 // from the same snapshot as everything else in a refresh, because the bag
 // changes as the pilot spends it.
@@ -1476,6 +1481,7 @@ const JOB_ROWS = {
   heal: ['#healstate', '#heal', '#job-heal'],
   shop: ['#shopstate', '#shop', '#job-shop'],
   take: ['#takestate', '#take', '#job-take'],
+  duel: ['#duelstate', '#duel', '#job-duel'],
   travel: ['#travelstate', '#travel', '#job-travel'],
 };
 
@@ -1486,7 +1492,8 @@ function paintJobs(s) {
   const ctx = { rom: romdata, target, huntWanted, ballId, savedThisSession,
                 healPlace, canFetch: typeof boot.eggErrand === 'function',
                 places: travelPlaces, travelTo, huntable, wilds,
-                hours, hourNow, takeables, bagHeal, bagCure,
+                hours, hourNow, takeables, trainers, trainersOnMap,
+                bagHeal, bagCure,
                 marts: !!(title && title.marts && title.marts.length),
                 shopFor: shopFor(),
                 engine: state.e };
@@ -1584,6 +1591,17 @@ async function refresh() {
   // *taken*, which happens on the map you are standing on.
   takeables = collision && s.worldLoaded && s.wram
     ? collision.takeables(s.wram) : [];
+  // Read off the same snapshot, and both halves of it: `trainers` is the live
+  // structs -- who the game has actually loaded -- and the total is the map's
+  // own placement list, which is the only one that knows about the trainer
+  // twenty tiles further on.
+  trainers = collision && s.worldLoaded && s.wram
+    ? collision.trainers(s.wram) : [];
+  const trainerType = (state.e.objectTypes || {}).trainer;
+  trainersOnMap = collision && s.worldLoaded && s.wram && trainerType !== undefined
+    ? collision.placedObjects(s.wram)
+        .filter((o) => o.index !== 0 && o.type === trainerType).length
+    : 0;
   // Named in the Heal row before the row is pressed, the same way the nearer
   // Center is -- so the choice the pilot would make is visible rather than
   // discovered in the log afterwards.
@@ -2447,6 +2465,29 @@ $('#take').onclick = async () => {
 };
 
 /**
+ * Walk up to a trainer and fight them.
+ *
+ * The row counts who is *near*, because that is all the game will tell us: an
+ * object is only loaded once you are close enough to draw it, so a route with
+ * three trainers reads as empty from its far end. The map's own total goes in
+ * the row's text for exactly that reason -- "none nearby, three further along"
+ * is a reason to keep walking, and an empty row is not.
+ *
+ * Whether a trainer will actually fight is not knowable in advance, the same
+ * way an item ball's contents are not: Gen 2 leaves a beaten trainer standing
+ * on the map for ever, with the same type byte and the same sight range as an
+ * unbeaten one -- measured, by beating one and reading both. So the job walks
+ * up, presses A, and reports whether a battle started; "already beaten?" is an
+ * ordinary outcome rather than a failure of the walk.
+ */
+$('#duel').onclick = async () => {
+  if (!boot) return;
+  const res = await runTask('#duel', 'looking for a battle',
+                            () => boot.duelHere());
+  progress(res && res.won && res.prize ? `¥${res.prize} richer` : '');
+};
+
+/**
  * Walk to somewhere else on the map.
  *
  * `travelTo` is the only job here that does nothing when it arrives, which is
@@ -3219,6 +3260,11 @@ window.PILOT = {
   get nav() { return nav; },
   get romdata() { return romdata; },
   get boot() { return boot; },
+  // Here for the same reason the rest are, and added the pass a verification
+  // run lost a game to a page reload: the emulator's own battery is flushed on
+  // its own schedule, so a session that wants to survive a reload has to take
+  // one of *our* slots -- and there was no way to ask for one without clicking.
+  get saves() { return saves; },
   walkToTap,
   // Exposed for the same reason as the rest of this object: so the version
   // check can be driven and watched rather than reasoned about.

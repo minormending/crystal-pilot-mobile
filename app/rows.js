@@ -22,12 +22,15 @@
  *   travelTo          the map key chosen to walk to, or null
  *   huntable          how many species appear here at this hour
  *   wilds             the levels the grass gives here, { low, high } or null
+ *   trainers          who is near enough to fight, [{ x, y, sprite }]
+ *   trainersOnMap     how many the map places anywhere, near or not
  */
 export function describeRows(s, ctx = {}) {
   const { rom = null, target = 5, huntWanted = null, ballId = null,
           savedThisSession = false, healPlace = null,
           places = [], travelTo = null, wilds = null, takeables = [],
           bagHeal = null, bagCure = null, marts = false, shopFor = null,
+          trainers = [], trainersOnMap = 0,
           // The cartridge's own numbers. A party of six and a trainer battle of
           // 2 are Gen 2's, not this module's, and reading them from an import
           // meant the stock values reached here even when a title had changed
@@ -57,6 +60,11 @@ export function describeRows(s, ctx = {}) {
   // damage while you walk: a party that is *only* poisoned reads as perfectly
   // healthy on HP alone, which is what the app used to see.
   const ailing = s.party.filter((m) => m.hp > 0 && (m.status || []).length);
+  // Anyone who could actually be sent out. A duel is the one job that cannot
+  // start without one: every other job either walks (and a fainted party still
+  // walks) or refuses in a battle. `heal` reads `down` for the same party and
+  // asks the opposite question of it.
+  const fit = s.party.filter((m) => m.hp > 0);
 
   // Saving drives the START menu, and that menu does not open in a battle or
   // mid-script.
@@ -197,7 +205,43 @@ export function describeRows(s, ctx = {}) {
       enabled: afoot && takeables.length > 0,
       count: takeables.length,
     },
+    // Who on this map wants a battle. The count is the game's own answer and
+    // not a guess: an object is a trainer because the byte the engine branches
+    // on says so, and it is *here* because the game has spawned a struct for
+    // it. So an empty list means an empty map, and the row says so rather than
+    // offering a walk to somebody a flag is still hiding.
+    //
+    // A trainer pays and a wild Pokemon barely does, which is why this row
+    // shows the money: it is the one job whose point is the number beside it,
+    // and until the twenty-seventh pass nothing in this app could earn any.
+    duel: {
+      // "Nearby" is the honest word, and it is measured. Gen 2 only loads an
+      // object when you are close enough to draw it: standing at the south end
+      // of Route 30 the game had spawned nothing at all, and walking twenty
+      // tiles north brought a ball, a wanderer and a trainer into being one
+      // after another. So this count is who is *here*.
+      //
+      // The map's own total is not in this text, and that is a correction: it
+      // was, and the row is hidden whenever it cannot run -- so the sentence
+      // that told you to walk on could only ever appear when walking on was
+      // unnecessary. It lives in the hint below, which is where the things
+      // that would *add* to the list belong.
+      text: s.inBattle ? 'finish the battle first'
+        : !trainers.length ? 'nobody here wants a battle'
+        : !fit.length ? 'nobody fit to send out'
+        : `${countWord(trainers.length)} nearby · ${money} in hand`,
+      enabled: afoot && trainers.length > 0 && fit.length > 0,
+      count: trainers.length,
+      onMap: trainersOnMap,
+    },
   };
+}
+
+/** "one trainer", "three trainers". */
+function countWord(n) {
+  const words = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven',
+                 'eight', 'nine', 'ten'];
+  return `${words[n] || n} trainer${n === 1 ? '' : 's'}`;
 }
 
 /** "a ball and two trees", for what the map is holding. */
@@ -414,7 +458,12 @@ export function describeOffers(s, ctx = {}) {
   // Shop sits last, below Travel. It is the only offer that is never about
   // where you are or what is wrong -- it is about what you will need next, and
   // that is the least urgent thing on the list.
-  order.push('catch', 'hunt', 'grind', 'heal', 'take', 'travel', 'shop');
+  // Duel sits with the jobs that level things up, above Take and below Grind,
+  // and the order between those two is a judgement about cost: grass is always
+  // there and a trainer is beaten once, so a trainer here now is the more
+  // perishable offer -- but a duel can also be lost, and grinding cannot.
+  // Grind first, therefore, and Duel immediately after it.
+  order.push('catch', 'hunt', 'grind', 'duel', 'heal', 'take', 'travel', 'shop');
 
   const offered = [];
   for (const key of order) {
@@ -469,6 +518,21 @@ export function describeOffers(s, ctx = {}) {
   // above, which is where that is now fixed rather than papered over here.
   if (afoot && !ctx.huntWanted && (ctx.huntable || 0) > 0) {
     hint.push('pick something below to hunt or catch');
+  }
+  // Only where it is the thing in the way: trainers on the map, and nobody
+  // able to answer them. Worth a line because the fix is a job that *is* on the
+  // list -- Heal is above this one, offered by the same fainted party -- and
+  // without the sentence the two offers read as unrelated.
+  if (afoot && (ctx.trainers || []).length && !s.party.some((m) => m.hp > 0)) {
+    hint.push('a trainer here would need somebody fit to send out');
+  }
+  // Nobody near, and somebody further on. This is the one hint that is purely
+  // about distance, and it is here rather than in the row because the row is
+  // hidden whenever it cannot run: the map's total is exactly the fact you
+  // cannot see from the offer that is missing.
+  if (afoot && !rows.duel.count && rows.duel.onMap) {
+    hint.push(`${rows.duel.onMap} more trainer${rows.duel.onMap === 1 ? '' : 's'}`
+              + ' further along this map');
   }
   // Advice rather than state, so it goes here and the range itself stays in the
   // row. Only where a grind is actually on offer: on a map with no grass the

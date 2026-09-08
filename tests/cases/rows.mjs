@@ -879,3 +879,94 @@ test('a fainted Pokémon has no status worth curing', async (t) => {
   t.eq(r.heal.ailing, 0, 'the faint is the problem');
   t.contains(r.heal.text, 'nearest is', 'and only a Center answers it');
 });
+
+// --- duels -------------------------------------------------------------------
+
+test('the duel row counts who is near, and says how many are further on',
+     async (t) => {
+  // Two numbers because the game only loads an object you are close to.
+  // Measured: standing at the south end of Route 30 the game had spawned
+  // nothing, and twenty tiles north a ball, a wanderer and a trainer came into
+  // being one after another. Without the map's own total, a route with three
+  // trainers reads as empty until you are standing on one.
+  const near = look({ party: [{ hp: 20, maxHp: 20 }], money: 3064 },
+                       { trainers: [{ x: 2, y: 28, sprite: 39 }], trainersOnMap: 3 });
+  t.contains(near.duel.text, 'one trainer nearby', 'who is here');
+  t.contains(near.duel.text, '3,064', 'and what is at stake');
+  t.true(near.duel.enabled, 'and it can run');
+
+  const far = look({ party: [{ hp: 20, maxHp: 20 }] },
+                   { trainers: [], trainersOnMap: 3 });
+  t.contains(far.duel.text, 'nobody here', 'plainly, when nobody is near');
+  t.false(far.duel.enabled, 'and nothing to fight from here');
+  t.eq(far.duel.onMap, 3, 'while the map total is still carried');
+});
+
+test('trainers further along the map are said in the hint, not the row',
+     async (t) => {
+  // Because the row is hidden whenever it cannot run: a sentence in the row
+  // saying "three further along" could only ever be read once walking on had
+  // already happened, which is the moment it stops being useful. The hint is
+  // where the things that would *add* to the list live.
+  const list = offers({ party: [{ hp: 20, maxHp: 20 }] },
+                      { trainers: [], trainersOnMap: 3 });
+  t.false(list.offered.includes('duel'), 'no offer, because none is runnable');
+  t.contains(list.hint, '3 more trainers further along', 'but the reason is said');
+
+  const none = offers({ party: [{ hp: 20, maxHp: 20 }] },
+                      { trainers: [], trainersOnMap: 0 });
+  t.false(none.hint.includes('further along'),
+          'and a map with none stays silent about it');
+});
+
+test('a map with no trainers on it at all says so, not "none nearby"',
+     async (t) => {
+  // Measured on Route 29, whose every object reads type 0: there is nothing
+  // further along either, and pointing down an empty route would be a lie.
+  const rows = look({ party: [{ hp: 20, maxHp: 20 }] },
+                       { trainers: [], trainersOnMap: 0 });
+  t.contains(rows.duel.text, 'nobody here wants a battle', 'the plain truth');
+  t.false(rows.duel.enabled, 'and no offer');
+});
+
+test('a duel needs somebody who can be sent out', async (t) => {
+  // The one job that cannot start with a fainted party. Every other job either
+  // walks -- and a fainted party still walks -- or refuses in a battle.
+  const rows = look({ party: [{ hp: 0, maxHp: 20 }] },
+                       { trainers: [{ x: 2, y: 28, sprite: 39 }], trainersOnMap: 1 });
+  t.contains(rows.duel.text, 'nobody fit', 'and says which');
+  t.false(rows.duel.enabled, 'so it is not offered as runnable');
+});
+
+test('a duel is not offered in a battle, because a battle is already on',
+     async (t) => {
+  const rows = look({ party: [{ hp: 20, maxHp: 20 }], battleMode: 1,
+                         enemy: { species: 16 } },
+                       { trainers: [{ x: 2, y: 28, sprite: 39 }] });
+  t.contains(rows.duel.text, 'finish the battle first', 'the same as Take');
+  t.false(rows.duel.enabled, 'and it cannot run');
+});
+
+test('Duel is offered after Grind and before Take', async (t) => {
+  // Grass is always there and a trainer is beaten once, so a trainer here now
+  // is the more perishable offer -- but a duel can also be lost, and grinding
+  // cannot. Grind first, therefore, and Duel immediately after it.
+  const order = offers(
+    { party: [{ hp: 20, maxHp: 20, level: 5 }], map: [26, 1] },
+    { trainers: [{ x: 2, y: 28, sprite: 39 }],
+      takeables: [{ x: 8, y: 35, what: 'ball' }],
+      huntable: 2, wilds: { low: 4, high: 5 } }).offered;
+  t.true(order.indexOf('duel') > order.indexOf('grind'), 'below Grind');
+  t.true(order.indexOf('duel') < order.indexOf('take'), 'and above Take');
+});
+
+test('a fainted party with a trainer in front of it is told what is in the way',
+     async (t) => {
+  // Worth a line because the fix is a job that *is* on the list: Heal is
+  // offered by the same fainted party, and without the sentence the two read as
+  // unrelated.
+  const list = offers({ party: [{ hp: 0, maxHp: 20 }] },
+                      { trainers: [{ x: 2, y: 28, sprite: 39 }] });
+  t.contains(list.hint, 'somebody fit to send out', 'said plainly');
+  t.false(list.offered.includes('duel'), 'and the duel is not offered');
+});
