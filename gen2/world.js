@@ -19,6 +19,12 @@
 // The map header, from constants/map_data_constants.asm.
 const MAP_BYTES = 9;
 const MAP_ATTRIBUTES_BANK = 0, MAP_ATTRIBUTES = 3;
+// And the landmark this map belongs to, which is what the game itself calls the
+// place. Byte 5 of the nine, measured by grouping rather than guessed: Violet
+// City, its Mart and its Center all read 6; Cherrygrove's three all read 3; and
+// Elm's lab reads 1, which is New Bark Town's -- because Elm's lab is in New
+// Bark Town. No other byte in the header groups that way.
+const MAP_LANDMARK = 5;
 
 // The tail of a map-attributes block: a bitmask, then one struct per connection
 // in a fixed order, whatever subset of them is present.
@@ -137,6 +143,28 @@ export class World {
     }
     this.warpCache.set(id, out);
     return out;
+  }
+
+  /**
+   * Which landmark this map belongs to, or null.
+   *
+   * The game's own idea of *where you are*: a landmark is a place with a name
+   * on the town map, and every map header carries the id of the one it sits in.
+   * Several maps share one -- a city, its Mart and its Center are all the city
+   * -- which is exactly right for naming, and is why an offer list picks one
+   * map per landmark rather than one per map.
+   *
+   * Null on a map the ROM does not have, the same as every other reader here:
+   * a nonsense read is an absence rather than a crash.
+   */
+  landmarkOf(group, number) {
+    try {
+      const list = this._word(this.groups.bank, this.groups.addr + (group - 1) * 2);
+      const header = list + (number - 1) * MAP_BYTES;
+      return this.gb.romByte(this.groups.bank, header + MAP_LANDMARK);
+    } catch (e) {
+      return null;
+    }
   }
 
   /** Every way off this map, edges and doors alike. */

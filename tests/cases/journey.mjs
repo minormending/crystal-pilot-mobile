@@ -135,16 +135,31 @@ test('a script that finishes is still reported as finished', async (t) => {
 
 // --- where the interface can offer to walk ----------------------------------
 
-/** A Journey whose graph answers routesFrom, which is what placesFrom asks. */
-function traveller({ reachable = {}, names = null } = {}) {
+/**
+ * A Journey whose graph answers both questions `placesFrom` asks: which named
+ * maps it can reach, and what lies within a few legs.
+ *
+ * `landmarks` maps a map key to what the *cartridge* calls it, which is the
+ * half that needs no title data at all.
+ */
+function traveller({ reachable = {}, names = null, landmarks = {} } = {}) {
   const gb = new FakeGameBoy({ wram: worldRam(sym, {}) });
   const world = {
     routesFrom: (from, targets) => new Map(
       [...targets].filter((k) => k !== from && k in reachable)
         .map((k) => [k, new Array(reachable[k]).fill({ kind: 'edge' })])),
+    // A star: everything reachable is one leg from home, which is enough to
+    // exercise one-entry-per-landmark without modelling a map.
+    exits: (key) => (key === HOME
+      ? Object.keys(reachable).map((k) => ({ kind: 'edge', key: Number(k) }))
+      : []),
+    landmarkOf: (g, n) => (g * 256 + n) in landmarks ? g * 256 + n : 0,
   };
-  return new Journey(gb, new GameState(sym), null, null, { mapKey: async () => HOME },
-                     () => {}, world, names === null ? {} : { names });
+  const j = new Journey(gb, new GameState(sym), null, null,
+                        { mapKey: async () => HOME },
+                        () => {}, world, names === null ? {} : { names });
+  j.tasks = { rom: { landmarkName: (k) => landmarks[k] || '' } };
+  return j;
 }
 
 test('the places offered are the named ones the graph can reach', async (t) => {
@@ -1068,4 +1083,82 @@ test('a place under our feet costs nothing and wins outright', async (t) => {
 test('an empty list has no nearest anything', async (t) => {
   const j = walker({ title: {} });
   t.eq(await j.nearestPlace([], 1), null, 'nothing to choose between');
+});
+
+// --- the cartridge names its own places -------------------------------------
+
+test("a map the title never named is offered under the cartridge's own name",
+     async (t) => {
+  // The one table that retires hand-written data rather than adding to it.
+  // Until this pass a map was called whatever the title said and everything
+  // else was "map 26.1" -- ten names out of two hundred and fifty. Every map
+  // header carries a landmark id and `Landmarks` is a table of names, so the
+  // game knows all of them.
+  const j = traveller({
+    reachable: { 2: 1, 3: 2 },
+    names: { 2: "Elm's lab" },
+    landmarks: { 2: 'NEW BARK TOWN', 3: 'VIOLET CITY' },
+  });
+  const places = j.placesFrom(HOME);
+  t.eq(places.map((p) => p.name), ["Elm's lab", 'VIOLET CITY'],
+       'the title name, then the one nobody wrote down');
+});
+
+test("the title's name wins, because a hand-written one can be better",
+     async (t) => {
+  // "Elm's lab" against the cartridge's "NEW BARK TOWN", which is the town the
+  // lab is in: several maps share a landmark, and that is right for naming a
+  // place and wrong for naming a building.
+  const j = traveller({ reachable: { 2: 1 }, names: { 2: "Elm's lab" },
+                        landmarks: { 2: 'NEW BARK TOWN' } });
+  t.eq(j.where(2), "Elm's lab", 'the title');
+  t.eq(j.landmarkName(2), 'NEW BARK TOWN', 'and the cartridge, asked directly');
+});
+
+test('one entry per place, not one per map', async (t) => {
+  // A city, its Mart and its Center all carry the city's landmark. Offering
+  // three rows that say VIOLET CITY would be worse than offering one.
+  const j = traveller({
+    reachable: { 2: 1, 3: 1, 4: 2 },
+    landmarks: { 2: 'VIOLET CITY', 3: 'VIOLET CITY', 4: 'ROUTE 32' },
+  });
+  t.eq(j.placesFrom(HOME).map((p) => p.name), ['VIOLET CITY', 'ROUTE 32'],
+       'the nearest map of each');
+});
+
+test('a map with no landmark of its own is not offered', async (t) => {
+  // Landmark 0 is SPECIAL, which is what an indoor map with no place of its own
+  // gets -- and "SPECIAL" is not somewhere to walk to.
+  const j = traveller({ reachable: { 2: 1 }, landmarks: {} });
+  t.eq(j.placesFrom(HOME), [], 'nothing to offer');
+  t.eq(j.where(2), 'map 0.2', 'and it is still named by its numbers');
+});
+
+test('a graph that cannot list exits still offers what the title named',
+     async (t) => {
+  const j = traveller({ reachable: { 2: 1 }, names: { 2: 'Route 29' } });
+  j.world.exits = undefined;
+  t.eq(j.placesFrom(HOME).map((p) => p.name), ['Route 29'], 'the title half');
+});
+
+test('the place we are standing in is not offered as somewhere to go',
+     async (t) => {
+  // `routesFrom` already excludes *this map*, and that is not the same thing:
+  // measured from Route 29, a gate one leg away carries Route 29's own
+  // landmark, so the list offered to walk to "ROUTE 29" from Route 29.
+  const j = traveller({
+    reachable: { 2: 1, 3: 1 },
+    landmarks: { [HOME]: 'ROUTE 29', 2: 'ROUTE 29', 3: 'VIOLET CITY' },
+  });
+  t.eq(j.placesFrom(HOME).map((p) => p.name), ['VIOLET CITY'],
+       'the gate that shares our landmark is not a destination');
+});
+
+test('the list is bounded, because the graph is not', async (t) => {
+  // Six legs from Route 29 gives forty rows on the real cartridge, which is a
+  // data dump by this file's own standard. The nearest two dozen is an offer.
+  const reachable = {}, landmarks = {};
+  for (let k = 2; k < 60; k++) { reachable[k] = 1; landmarks[k] = `PLACE ${k}`; }
+  const j = traveller({ reachable, landmarks });
+  t.eq(j.placesFrom(HOME).length, 24, 'two dozen');
 });

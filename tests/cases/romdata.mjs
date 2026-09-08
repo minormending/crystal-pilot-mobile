@@ -150,3 +150,35 @@ test('the scan stops at the end of the table rather than reading past it',
   t.eq(rd.itemIdOf('antidote'), 2, 'and the cache agrees');
   t.eq(rd._itemIds.size, 2, 'two entries, not two hundred and fifty-six');
 });
+
+// --- what the cartridge calls a place ---------------------------------------
+
+test('a landmark name comes out of the cartridge, line break and all',
+     async (t) => {
+  // The one table that retires hand-written data rather than adding to it.
+  // A landmark name is written to fit a two-line sign, and the break inside it
+  // is $1f -- read off "NEW BARK TOWN", whose bytes are
+  // 8d 84 96 7f 81 80 91 8a 1f 93 8e 96 8d 50, so the break sits exactly where
+  // the sign wraps. Reading it as an unknown byte put a question mark in the
+  // middle of half the towns in Johto.
+  t.eq(decodeText([0x8d, 0x84, 0x96, 0x7f, 0x81, 0x80, 0x91, 0x8a,
+                   0x1f, 0x93, 0x8e, 0x96, 0x8d, 0x50]),
+       'NEW BARK TOWN', 'one place, two lines');
+  t.eq(decodeText([0x91, 0x8e, 0x94, 0x93, 0x84, 0x7f, 0xf8, 0xff, 0x50]),
+       'ROUTE 29', 'and one that needs no break');
+});
+
+test('the ordinary line breaks are spaces in a name too', async (t) => {
+  // Because a name is text, and one of them will turn up in a hack.
+  t.eq(decodeText([0x80, 0x4e, 0x81, 0x50]), 'A B', 'the text break');
+  t.eq(decodeText([0x80, 0x4f, 0x81, 0x50]), 'A B', 'and the paragraph one');
+});
+
+test('a cartridge with no landmark table names nothing, rather than guessing',
+     async (t) => {
+  // "Cannot read" so the caller falls back to what it had, which is the title's
+  // own names and then the map's numbers.
+  const rom = fakeRom({}, {});
+  rom.landmarks = null;
+  t.eq(rom.landmarkName(1), '', 'silence');
+});

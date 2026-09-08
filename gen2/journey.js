@@ -31,6 +31,11 @@ const BAG_HEALS_PER_MON = 4;
 // Steps for a walk that crosses a map. Route 30 is fifty-four tiles top to bottom.
 const LONG_WALK_STEPS = 260;
 
+// How far out to look for places worth offering. The graph reaches hundreds of
+// maps, and a list of two hundred rows is not an offer -- six legs is about as
+// far as any job walks in one press.
+const OFFER_LEGS = 6, OFFER_MOST = 24;
+
 // What `pickUp` answers with when it did not come away with anything. Named,
 // because `takeHere` has to tell them apart: the first is what an item ball
 // somebody already took looks like -- the object stays in work RAM once the
@@ -147,8 +152,38 @@ export class Journey {
    * sentences that name a place rather than saying "there".
    */
   where(k) {
-    return (this.title.names && this.title.names[k])
-           || `map ${k >> 8}.${k & 0xff}`;
+    const named = this.title.names && this.title.names[k];
+    if (named) return named;
+    // Then the cartridge's own name for the place. Every map header carries a
+    // landmark id and `Landmarks` is a table of names, so the game knows what
+    // to call all two hundred and fifty of its maps -- and until this pass the
+    // app used the ten a title had written down and said "map 26.1" for the
+    // rest. The title still wins, because a hand-written name can be *better*:
+    // "Elm's lab" against the cartridge's "NEW BARK TOWN", which is the town
+    // the lab is in.
+    const own = this.landmarkName(k);
+    return own || `map ${k >> 8}.${k & 0xff}`;
+  }
+
+  /**
+   * What the cartridge calls the landmark a map sits in, or ''.
+   *
+   * Two readers, in the two modules that own the halves: the world graph reads
+   * the map header, because it already parses one, and romdata reads the name
+   * table, because it already decodes the game's text. Nothing here knows how
+   * either is laid out.
+   */
+  landmarkName(k) {
+    const rom = this.tasks && this.tasks.rom;
+    if (!rom || !rom.landmarkName) return '';
+    // A graph that cannot read a map header is one this cannot ask. Guarded
+    // rather than assumed, because half the world stubs in this app answer one
+    // question and not the others -- and a name is the one thing every log line
+    // asks for, so a throw here would take a whole job down.
+    if (!this.world || typeof this.world.landmarkOf !== 'function') return '';
+    const id = this.world.landmarkOf(k >> 8, k & 0xff);
+    if (!id) return '';                 // 0 is SPECIAL, which names nothing
+    return rom.landmarkName(id);
   }
 
   /**
@@ -571,15 +606,81 @@ export class Journey {
    * one somebody probably wants. Ties keep the order the title wrote them in,
    * which is the author's own idea of importance.
    */
-  placesFrom(here) {
-    const names = (this.title && this.title.names) || null;
-    if (!names || !this.world) return [];
-    const keys = Object.keys(names).map(Number).filter((k) => Number.isFinite(k));
+  placesFrom(here, { maxLegs = OFFER_LEGS } = {}) {
+    if (!this.world) return [];
+    const named = (this.title && this.title.names) || {};
+    const keys = Object.keys(named).map(Number).filter((k) => Number.isFinite(k));
+    const out = [];
+    // Not the place we are standing in. `routesFrom` already excludes *this
+    // map*, and that is not the same thing: measured from Route 29, a gate one
+    // leg away carries Route 29's own landmark, so the list offered to walk to
+    // "ROUTE 29" from Route 29.
+    const hereName = this.landmarkName(here);
+    // Two ways of already having it, and both are needed. By **key**, because a
+    // map the title named would otherwise be offered a second time under its
+    // landmark -- Elm's lab, then NEW BARK TOWN, which is the town it is in. By
+    // **name**, folded, because several maps share a landmark and because a
+    // title's "New Bark Town" and a cartridge's "NEW BARK TOWN" are one place.
+    const fold = (s) => String(s).toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const seen = new Set(hereName ? [fold(hereName)] : []);
+    const taken = new Set([here]);
+    const add = (key, name, legs) => {
+      if (!name || taken.has(key) || seen.has(fold(name))) return;
+      taken.add(key);
+      seen.add(fold(name));
+      out.push({ key, name, legs });
+    };
+
+    // The title's own names first, because a hand-written one can be better
+    // than the cartridge's: "Elm's lab" against "NEW BARK TOWN", which is the
+    // town the lab is in.
     const found = this.world.routesFrom(here, keys);
-    return keys
-      .filter((k) => found.has(k))
-      .map((k) => ({ key: k, name: names[k], legs: found.get(k).length }))
-      .sort((a, b) => a.legs - b.legs);
+    for (const k of keys) {
+      if (found.has(k)) add(k, named[k], found.get(k).length);
+    }
+
+    // Then everything else the cartridge names, **one entry per landmark**.
+    // Several maps share one -- a city, its Mart and its Center are all the
+    // city -- so this walks outward and takes the first map that reaches each
+    // new place, which is both the nearest and the one you would name.
+    //
+    // Bounded by legs rather than by maps, because the graph reaches hundreds:
+    // a list of two hundred rows is not an offer, it is a data dump. Six legs
+    // is about as far as any job walks in one press.
+    for (const { key, legs } of this._within(here, maxLegs)) {
+      const own = this.landmarkName(key);
+      if (own) add(key, own, legs);
+    }
+    // Nearest first, and then a bound on the length. The graph reaches
+    // hundreds of maps and forty rows is what six legs from Route 29 gives --
+    // which is a data dump by this file's own standard, and the file already
+    // says so about two hundred rows of `map 26.4`. The nearest two dozen is
+    // an offer; the rest is a map of Johto.
+    return out.sort((a, b) => a.legs - b.legs).slice(0, OFFER_MOST);
+  }
+
+  /** Every map within `maxLegs` of here, nearest first. */
+  _within(here, maxLegs) {
+    const out = [];
+    // A graph that cannot list exits is one this cannot walk outward from --
+    // which a title with names still uses, so an absence here is not a reason
+    // to offer nothing at all.
+    if (!this.world || typeof this.world.exits !== 'function') return out;
+    const seen = new Set([here]);
+    let edge = [here];
+    for (let legs = 1; legs <= maxLegs && edge.length; legs++) {
+      const next = [];
+      for (const key of edge) {
+        for (const exit of this.world.exits(key)) {
+          if (seen.has(exit.key)) continue;
+          seen.add(exit.key);
+          out.push({ key: exit.key, legs });
+          next.push(exit.key);
+        }
+      }
+      edge = next;
+    }
+    return out;
   }
 
   /** Stand on a tile that rolls for wild encounters. */

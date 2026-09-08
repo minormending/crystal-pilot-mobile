@@ -149,7 +149,7 @@ export class Symbols {
  */
 export const SHARED_SYMBOLS = [
   'CollisionPermissionTable', 'ItemNames', 'JohtoGrassWildMons',
-  'KantoGrassWildMons', 'MapGroupPointers',
+  'KantoGrassWildMons', 'Landmarks', 'MapGroupPointers',
   'Moves', 'PokemonNames', 'sCheckValue1', 'sCheckValue2', 'wBalls', 'wBattleMenuCursorPosition',
   'wBattleMode', 'wBattleMonHP', 'wBattleMonMaxHP', 'wCurItem', 'wCurPocket',
   'wEnemyMonHP', 'wEnemyMonLevel', 'wEnemyMonMaxHP', 'wEnemyMonSpecies',

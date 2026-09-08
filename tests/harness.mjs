@@ -442,7 +442,8 @@ export function markSaved(sram, sym, present = true) {
 }
 
 // --- a cartridge's tables, without a cartridge ------------------------------
-export function fakeRom({ moves = {}, species = {}, items = {} } = {}) {
+export function fakeRom({ moves = {}, species = {}, items = {},
+                          landmarks = {} } = {}) {
   const MOVES = {
     33: { id: 33, name: 'TACKLE', power: 35, effect: 0, pp: 35 },
     43: { id: 43, name: 'LEER', power: 0, effect: 19, pp: 30 },
@@ -459,6 +460,11 @@ export function fakeRom({ moves = {}, species = {}, items = {} } = {}) {
     },
     speciesName: (id) => species[id] || `SPECIES_${id}`,
     itemName: (id) => items[id] || `ITEM_${id}`,
+    // What the cartridge calls a place. A table rather than the real reader,
+    // because the reader needs a ROM and the callers only need the answer --
+    // `landmarks: null` stands for a cartridge whose symbol file has no table.
+    landmarks: landmarks,
+    landmarkName(id) { return this.landmarks ? (this.landmarks[id] || '') : ''; },
     // The real method, borrowed rather than restated: a stub of "which item is
     // cheapest" would test the stub, and the fold it does on the way is the
     // part that can be wrong.

@@ -36,11 +36,22 @@ const PUNCTUATION = {
 // table rather than a size in it, and a cartridge that used a different one
 // would need a different scan, not a different number.
 const TABLE_END = 0xff;
+// The bytes Gen 2 uses to break a line, which inside a *name* mean a space: a
+// landmark name is written to fit a two-line sign. $1f is the one landmark
+// names use -- read off "NEW BARK TOWN", whose bytes are
+// `8d 84 96 7f 81 80 91 8a 1f 93 8e 96 8d 50`, so the break sits exactly where
+// the sign wraps. $4e and $4f are the ones ordinary text uses; they are here
+// because a name is text and one of them will turn up in a hack.
+const LINE_BREAKS = new Set([0x1f, 0x4e, 0x4f]);
 // How far to scan the item table when asked for an id by name. Crystal has 250
 // items; the scan stops early at the first entry with no name, which is what
 // reading past the table gives. A bound rather than a count, so it is here
 // rather than in the engine profile.
 const ITEM_SCAN_LIMIT = 256;
+// A landmark entry: an x and a y for the town map, then a pointer to the name.
+// The name is terminated, so the length is a bound rather than a size --
+// "CIANWOOD CITY" is the longest in Johto at thirteen.
+const LANDMARK_BYTES = 4, LANDMARK_NAME = 2, LANDMARK_NAME_MAX = 24;
 
 /** The game's own character encoding, as far as names use it. */
 export function decodeText(bytes) {
@@ -49,6 +60,11 @@ export function decodeText(bytes) {
     if (b === NAME_TERMINATOR) break;            // "@" terminates
     if (b === POKE_LIGATURE) out += 'POKé';      // one byte, four letters
     else if (b === 0x7f) out += ' ';
+    // A line break inside a *name* is a space. Landmark names are written to
+    // fit a two-line sign -- "NEW BARK<line>TOWN" -- and reading the break as
+    // an unknown byte put a question mark in the middle of half the towns in
+    // Johto.
+    else if (LINE_BREAKS.has(b)) out += ' ';
     else if (PUNCTUATION[b] !== undefined) out += PUNCTUATION[b];
     else if (b >= 0x80 && b <= 0x99) out += String.fromCharCode(65 + b - 0x80);
     else if (b >= 0xa0 && b <= 0xb9) out += String.fromCharCode(97 + b - 0xa0);
@@ -87,6 +103,9 @@ export class RomData {
     this._species = new Map();
     this._moves = new Map();
     this.moves = symbols.has('Moves') ? this.at('Moves') : null;
+    // Optional, like the wild tables: a cartridge whose symbol file does not
+    // name it keeps every map it was told about and loses the rest.
+    this.landmarks = symbols.has('Landmarks') ? this.at('Landmarks') : null;
   }
 
   _read(bank, addr, length) {
@@ -133,6 +152,40 @@ export class RomData {
     const name = decodeText(bytes);
     if (!this._itemCache) this._itemCache = new Map();
     this._itemCache.set(id, name);
+    return name;
+  }
+
+  /**
+   * A landmark's name, straight out of the cartridge.
+   *
+   * The one table that retires hand-written data rather than adding to it.
+   * Until now a map was called whatever the title profile said, and everything
+   * else was "map 26.1" -- ten names out of two hundred and fifty. Gen 2 knows
+   * all of them: every map header carries a landmark id, and `Landmarks` is a
+   * table of four-byte entries -- an x and a y for the town map, then a pointer
+   * to the name.
+   *
+   * Measured against the maps this app already named: ids 1 to 6 read NEW BARK
+   * TOWN, ROUTE 29, CHERRYGROVE CITY, ROUTE 30, ROUTE 31, VIOLET CITY, and 7 to
+   * 12 carry on into SPROUT TOWER, ROUTE 32, RUINS OF ALPH, UNION CAVE, ROUTE
+   * 33, AZALEA TOWN. Id 0 is SPECIAL, which is what an indoor map with no
+   * landmark of its own gets.
+   *
+   * Empty for a cartridge whose symbol file does not name the table, which is
+   * "cannot read" and lets the caller fall back to what it had.
+   */
+  landmarkName(id) {
+    if (!this.landmarks || id === undefined || id === null) return '';
+    if (this._landmarkCache && this._landmarkCache.has(id)) {
+      return this._landmarkCache.get(id);
+    }
+    const { bank, addr } = this.landmarks;
+    const at = addr + id * LANDMARK_BYTES;
+    const ptr = this.gb.romByte(bank, at + LANDMARK_NAME)
+      | (this.gb.romByte(bank, at + LANDMARK_NAME + 1) << 8);
+    const name = decodeText(this._read(bank, ptr, LANDMARK_NAME_MAX));
+    if (!this._landmarkCache) this._landmarkCache = new Map();
+    this._landmarkCache.set(id, name);
     return name;
   }
 
