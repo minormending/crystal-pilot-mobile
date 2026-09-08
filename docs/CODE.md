@@ -425,7 +425,7 @@ watching.
 
 ### `symbols.js` — where things live
 
-<!-- covers: gen2/symbols.js @ b3d26488c0e3 -->
+<!-- covers: gen2/symbols.js @ 837a7d0005b4 -->
 
 Parses the `.sym` file into `name → { bank, addr }`. First definition wins;
 later duplicates are aliases and locals.
@@ -634,26 +634,79 @@ because the bag reader still uses it.
 
 ### `collision.js` — what you can walk on
 
-<!-- covers: gen2/collision.js @ 007920bcf242 -->
+<!-- covers: gen2/collision.js @ c72c09795b79 -->
 
 Decodes the loaded map into "can I stand on this tile", and does breadth-first
 pathfinding over the result. This is what turns walking from trial and error
 into a plan.
 
-It also reads `wMapObjects` twice, asking two different questions of the same
-byte. `occupied()` asks *who is standing where*, so a plan routes around them.
-`takeables()` asks *which of these is not a person* — an item ball or a fruit
-tree — so the pilot can go and press A at it. Which sprite ids those are is in
-the engine profile rather than here, because a sprite id is exactly the sort of
-thing a hack moves; both were measured on the cartridge, and the profile records
-where.
+It also reads the map's objects, and there are **two arrays**, not one. Getting
+that wrong was the twenty-seventh pass's biggest find, so it is worth stating
+plainly:
 
-**A ball that has already been taken is still in that list.** Measured, not
-assumed: after the ANTIDOTE at (8,35) on Route 30 was in the bag, its object was
-still exactly where it had been in work RAM. So `takeables` answers *what the map
-placed here* and nothing stronger, and the only honest way to find out what is
-left is to go and press A — which is why the job that uses it reports what
-arrived in the bag rather than what it expected to.
+| | `wMapObjects` — `placedObjects()` | `wObjectStructs` — `liveObjects()` |
+|---|---|---|
+| how many | 16 entries of 16 bytes | 13 structs of 40 bytes |
+| what it holds | what the map *placed* | what the game has *spawned* |
+| coordinates | never move | live |
+| absent when | never | not loaded yet, or hidden by its flag |
+
+Both were measured on one screen of Route 30. The placement array said the
+player was at `(7,53)`; they were standing at `(2,27)`. It said a wanderer was
+at `(7,30)`; the struct said `(8,30)`. It listed a trainer at `(2,28)` that a
+new save has never seen. And the struct array, twenty tiles from anything, was
+empty but for the player — whose `MapX/MapY` minus four *is* `wXCoord/wYCoord`,
+which is what pins the origin.
+
+So the three readers over them each pick the array that answers their question:
+
+- **`occupied()`** — who is standing where, so a plan routes around them — reads
+  the **live** structs. It used to read the placements, and was wrong in both
+  directions from the same byte: marking `(7,30)`, which nobody was on, and
+  leaving `(8,30)` open, where the wanderer was. It falls back to the placements
+  where a symbol file does not name the structs, because stale tiles beat no
+  tiles.
+- **`takeables()`** — item balls and fruit trees — reads the **placements**, and
+  that is the right array rather than the old one: a ball does not move, and the
+  game only spawns what is near enough to draw. Measured from the north end of
+  Route 30, the ball at `(8,35)` and both fruit trees had *no live struct at
+  all*, so reading the structs here would have made Take see only what you were
+  already standing next to.
+- **`trainers()`** — who wants a battle — needs **both**: the placement says
+  what an object *is*, and the struct says whether it is here and where. It
+  returns an empty list rather than falling back, because a fallback would offer
+  a walk to somebody a flag is still hiding.
+
+```mermaid
+flowchart LR
+    P["<b>wMapObjects</b><br/>16 &times; 16 bytes<br/><i>what the map placed</i>"]
+    S["<b>wObjectStructs</b><br/>13 &times; 40 bytes<br/><i>what the game spawned</i>"]
+    S -->|"MapObjectIndex"| P
+    P --> TK["takeables()<br/><i>a ball does not move,<br/>and is often not loaded</i>"]
+    S --> OC["occupied()<br/><i>people move</i>"]
+    P --> TR["trainers()"]
+    S --> TR
+    TR --> Q["<i>the placement says what;<br/>the struct says whether and where</i>"]
+```
+
+What an object *is* comes from a byte the cartridge's own symbol file gives two
+names — `wMap1ObjectPalette` and `wMap1ObjectType` are the same address, colour
+in the high nibble and the type in the low. Measured on Route 30, whose objects
+are one of each: the item ball reads 1, the three trainers read 2, and the fruit
+trees, the townsfolk and the two Rattata read 0. That is the game's own answer,
+and it is better than a sprite table for the thing it knows about — it is the
+byte the engine branches on when you press A. It only knows about balls, so a
+fruit tree is still found by its sprite, and which sprite that is lives in the
+engine profile because a sprite id is exactly the sort of thing a hack moves.
+
+**A ball that has already been taken is still in that list**, and so is a
+trainer who has already been beaten. Measured, not assumed: after the ANTIDOTE
+at (8,35) on Route 30 was in the bag, its object was still exactly where it had
+been in work RAM; and a beaten trainer reads with the same type byte and the
+same sight range as an unbeaten one, measured by beating one and comparing. So
+these answer *what the map placed here* and nothing stronger, and the only
+honest way to find out what is left is to go and press A — which is why the jobs
+that use them report what actually happened rather than what they expected.
 
 <details>
 <summary><b>Advanced detail:</b> the decode, and why one check is not enough</summary>
@@ -684,22 +737,28 @@ Two more things the map alone will not tell you:
 - **Ledges are one-way.** A ledge tile can be stood on; it is *leaving* one in
   the hop direction that moves two tiles irreversibly. `pathTo` never includes a
   hop, so a planned route can always be walked back.
-- **The map is terrain only.** NPCs read as open floor. `occupied()` reads
-  `wMapObjects` — sixteen 16-byte entries, coordinates stored four higher than
-  the map's own — and those tiles are *preferred against* rather than treated as
-  walls, because an object hidden by its event flag still has an entry.
-- **That +4 is the one cartridge assumption here that `calibrate` does not
-  cover**, and it used to claim it was "checked against the player" while
-  nothing checked it. Nor can it be, that way: index 0 holds where the map
-  *placed* the player, not where the player is — measured in Elm's lab, the
-  entry reads `(8,15)` while the player stands at `(7,4)`, having come in
-  through a door. So the check is the map's own bounds, and a tile outside them
-  is dropped instead of kept as a key that can never match. Which is also the
-  right way to fail: on a cartridge storing objects at a different origin, an
-  empty set means the planner walks into people and *recovers* — `walkTo` puts a
-  refused tile in `avoid` and routes around it — whereas a set of in-bounds but
-  wrong tiles can seal a one-tile corridor, and `unreachable` is the one answer
-  `walkTo` cannot recover from.
+- **The map is terrain only.** NPCs read as open floor, so `occupied()` supplies
+  them, and those tiles are *preferred against* rather than treated as walls —
+  `walkTo` drops the whole set on its second attempt when it seals a route.
+- **The +4 origin is the one cartridge assumption here that `calibrate` does not
+  cover.** It used to claim it was "checked against the player" while nothing
+  checked it, and on the placement array nothing can: index 0 holds where the
+  map *placed* the player, not where they are — measured in Elm's lab, the entry
+  reads `(8,15)` while the player stands at `(7,4)`, having come in through a
+  door. The **struct** array can, and does: struct 0's `MapX/MapY` minus four is
+  `wXCoord/wYCoord` exactly, measured on Route 30 at `(2,27)`. Beyond that the
+  check is the map's own bounds, and a tile outside them is dropped instead of
+  kept as a key that can never match. Which is also the right way to fail: on a
+  cartridge storing objects at a different origin, an empty set means the planner
+  walks into people and *recovers*, whereas a set of in-bounds but wrong tiles
+  can seal a one-tile corridor, and `unreachable` is the one answer `walkTo`
+  cannot recover from.
+- **An object is only loaded when you are near it.** Measured walking north up
+  Route 30: nothing at all was spawned from the south end, then the ball and a
+  tree, then a wanderer, then a trainer, one after another. So `occupied()` and
+  `trainers()` are *local* answers, and anything that wants to know what a whole
+  map holds has to ask `placedObjects()` — which is what the Duel row's hint
+  does, to say "3 more trainers further along this map".
 
 </details>
 
@@ -754,7 +813,7 @@ Route 30's door to it at `(17,5)`.
 
 ## 4. Taking one step, and planning a walk
 
-<!-- covers: gen2/nav.js gen2/collision.js @ 132389345097 -->
+<!-- covers: gen2/nav.js gen2/collision.js @ 2cffb1323b27 -->
 
 ### One step
 
@@ -837,9 +896,16 @@ step LEFT -> blocked @6,26
 path 6,26->6,0 avoid=1 = NULL          <- one refusal sealed the route
 ```
 
-Dropping the object list second is the right order because that list is what the
-map *placed*, not what is really there: an object hidden by its event flag still
-has an entry, so treating those as walls seals corridors that are open.
+Dropping the object list second is still the right order, and the reason has
+changed. It used to be that the list was what the map *placed* rather than what
+was really there — an object hidden by its event flag still had an entry, so
+treating those as walls sealed corridors that were open. `occupied()` reads the
+live object structs now, so that is no longer true and the list is much better
+than it was; what remains true is that it is a **hint**. Somebody standing in a
+one-tile corridor is a wall this second until they take a step, and no reading of
+memory can tell you which. So the second attempt drops the hint and the third
+drops the refusals, and the order says which of the two is more likely to be
+stale.
 
 `walkTo` returns `stopped` as one of `null | battle | unreachable | refused |
 decode | cancelled | stuck | warped`. `warped` matters: a goal is a tile on one
@@ -852,7 +918,7 @@ point those coordinates mean somewhere else entirely.
 
 ## 5. Crossing to the next map
 
-<!-- covers: gen2/journey.js gen2/world.js @ eb80c50364d5 -->
+<!-- covers: gen2/journey.js gen2/world.js @ 4586d58926a6 -->
 
 A connection spans only part of a shared edge, so "walk west until something
 happens" does not work. `crossEdge()` closes the distance in stages, then tries
@@ -1014,7 +1080,7 @@ eight kilobytes a full snapshot copies, which is worth keeping distinct.
 
 ## 6. Battles
 
-<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 410f4e8b846f -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 8827673af488 -->
 
 ### Which move, and which question
 
@@ -1413,6 +1479,16 @@ right:
   that is *not* fainted — reported our own knockout as a whiteout. It follows
   `_outcome`'s rule now: we lost only if every one of them is down.
 
+**And `lost` now means the battle is over.** It used to be returned the instant
+the party read as wiped, with the battle still on screen and not a button
+pressed — so a caller that asks *are we in a battle?* was told yes, fought it
+again, read the same wiped party and lost again. Measured on the egg errand,
+which passes exactly one trainer: the log said *trainer battle: lost* **seven
+times**. One loss, reported seven ways. `_whiteOut` presses through the sequence
+before returning the word, and still returns `lost` if it cannot — a whiteout
+this could not sit through is still a whiteout, and `stuck` would trade a true
+answer for a vaguer one.
+
 **A whiteout is named, in all three jobs that can meet one.** It is the most
 consequential thing that can happen while the pilot is driving — Gen 2 moves you
 to the last Pokémon Center and halves your money — and all three used to
@@ -1468,7 +1544,7 @@ fainted.
 
 ## 7. Catching something
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ afe80396c6d4 -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ 932307615857 -->
 
 Catching is the most involved loop, because a Poké Ball's odds turn on how much
 HP is left. Throwing at a full-health target is mostly throwing balls away.
@@ -1552,11 +1628,11 @@ precedes it defaults to yes, which is what we want; the nickname box does not.
 
 ---
 
-## 7a. Four that act on where you already are
+## 7a. Five that act on where you already are
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ fb48ff8a3aa3 -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ e816a5dac205 -->
 
-Grind, hunt and catch all go *looking* for something. These four do the obvious
+Grind, hunt and catch all go *looking* for something. These five do the obvious
 thing with the situation you are already in, and take no parameters:
 
 | Command | Does | Refuses when |
@@ -1565,6 +1641,7 @@ thing with the situation you are already in, and take no parameters:
 | **Catch this one** | weakens and throws at the wild Pokémon in front of you | not in a battle · it is a trainer's · party full · no balls |
 | **Heal** | goes to the nearer heal place and comes back | you are in a battle · nothing is hurt |
 | **Take** | walks to every item ball and fruit tree on this map and presses A | you are in a battle · the map is holding nothing |
+| **Duel** | walks up to a trainer near you and fights them | you are in a battle · nobody is near · nobody is fit to send out |
 
 ```mermaid
 flowchart TD
@@ -1725,9 +1802,10 @@ at 15/22 with two Potions unspent.
 </details>
 
 **Take is the one whose list comes out of the cartridge.** `collision.takeables`
-reads `wMapObjects` for the sprite ids the engine profile names as an item ball
-or a fruit tree, so on Route 29 the row reads *one item ball and one fruit tree*
-with nothing about Route 29 written down anywhere.
+reads the map's placement array for the sprite ids the engine profile names as an
+item ball or a fruit tree — and for the game's own type byte, which names balls
+directly — so on Route 29 the row reads *one item ball and one fruit tree* with
+nothing about Route 29 written down anywhere.
 
 ```mermaid
 flowchart TD
@@ -1767,6 +1845,57 @@ with which, because painting *nothing left to take here* red says something went
 wrong when nothing did. Measured on Route 29: the first press picked up a POTION
 and a BERRY thirty-five tiles apart and went green; the second said *nothing left
 to take here — tried 2* and stayed green.
+
+**Duel is Take's shape, for a target that moves.** Same walk, same approach from
+whichever side is open, same press of A — and three differences, every one of
+them measured rather than reasoned about.
+
+```mermaid
+flowchart TD
+    D["Duel"] --> B{"already in a<br/>trainer battle?"}
+    B -- yes --> F["fight it &mdash; that is the duel"]
+    B -- no --> W{"a wild one?"}
+    W -- yes --> R["flee: not the job"]
+    R --> L
+    W -- no --> L["trainers: live struct + placement type"]
+    L -- "nobody" --> N["nobody near enough to fight"]
+    L --> S["nearest not yet asked"]
+    S --> A["approach, face, press A<br/>up to forty taps"]
+    A -- "battle" --> F
+    A -- "nothing" --> M["mark them asked, try somebody else"]
+    M --> L
+    F --> P["money before vs after<br/>= the purse"]
+```
+
+- **A trainer is only *there* if the game has spawned it.** The map places
+  three on Route 30; from the south end, none had a struct. So the list is who
+  is near, the interface says how many are further on, and `duelHere` never
+  walks at a placement.
+- **A trainer moves, so the tile is re-read every attempt.** `takeables` can be
+  read once and walked to twice; a person cannot. Measured, a wanderer moved a
+  tile while nothing else happened.
+- **A trainer who refuses is not asked again.** Standing at (3,28) there were
+  two in range — the near one beaten, the far one not — and every attempt went
+  to the nearer, so all six were spent on somebody who would never answer. Tiles
+  that have been stood in front of are written down for the rest of the call.
+
+**The money is the evidence**, the same rule the shop follows. A trainer pays out
+when they lose and a wild Pokémon never does, so the purse is the one number
+that tells a won duel from every other way a battle can end — HP says who
+fought, and levels say what it was worth. Measured on Route 30 against the
+Youngster at (2,28): **won the battle, ¥64 — Lv5 to Lv6**, with money going
+3000 → 3064 and the lead's HP 19 → 15. ¥64 is the game's own arithmetic, a
+Youngster's base of 16 times a level-4 Rattata. Pressed a second time, the same
+trainer gave *stood in front of them and no battle started — already beaten?*
+and the money did not move.
+
+Which also fixed a battle defect that had nothing to do with duels. `lost` used
+to be returned the instant the party read as wiped, **with the battle still on
+screen and not a button pressed** — so every caller that asks "are we in a
+battle?" was told yes, fought it again, read the same wiped party and lost
+again. Measured on the egg errand, which passes exactly one trainer: the log
+said *trainer battle: lost* **seven times**. One loss, reported seven ways.
+`lost` now means the battle is over.
 
 </details>
 
@@ -1849,7 +1978,7 @@ counter and came away with **five potions and ¥1800**, in 49 seconds.
 
 ## 7b. Saving, and getting the save out
 
-<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 410f4e8b846f -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 8827673af488 -->
 
 ```mermaid
 flowchart TD
@@ -2091,7 +2220,7 @@ because that failure is only otherwise discovered by reaching for the undo.
 
 ## 8. The errands
 
-<!-- covers: titles/crystal.js gen2/journey.js @ 2131e01ef587 -->
+<!-- covers: titles/crystal.js gen2/journey.js @ cb8fad5f6e89 -->
 
 Everything in this section is `crystal.js` — the only file in the app that names
 a Crystal map, a Crystal door or a Crystal NPC. What it stands on is
@@ -2390,7 +2519,7 @@ This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ 7e42e2880e55 -->
+<!-- covers: app/main.js index.html @ b96f65bb12e8 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -2676,14 +2805,14 @@ Four consequences, each of which was a bug for one run:
 | assumed | broke | now |
 | --- | --- | --- |
 | `.job:first-of-type` wears no top rule | the row *written* first is not the row *shown* first, and may not be drawn at all | a `lead` class on rank 1 |
-| `#go` carries `primary` in the markup | true of six fixed rows, a lie once anything else can lead | `classList.toggle('primary', rank === 1)` |
+| `#go` carries `primary` in the markup | true of a fixed list, a lie once anything else can lead | `classList.toggle('primary', rank === 1)` |
 | a row's button is the row's button | Catch has two, and only one is on screen | the accent goes to whichever is not `.hide` |
 | `enabled` means "this row is live" | Catch with no balls cannot catch, but its errand is the thing to press | a `lit` flag, separate from `enabled` |
 
-The six rows also had to move into a `.jobs` flex column of their own. `order`
-sorts *every* flex child, and the species picker, the level presets and the
-`seen` line are not offers — left in the same container they sorted to the top,
-above the offers they belong to.
+The rows also had to move into a `.jobs` flex column of their own — eight of
+them now, Duel included. `order` sorts *every* flex child, and the species
+picker, the level presets and the `seen` line are not offers: left in the same
+container they sorted to the top, above the offers they belong to.
 
 </details> Three consequences fell out of that and
 each needed its own fix. `.job:first-of-type` was the row written first, not the
@@ -2694,7 +2823,7 @@ turned out to carry two meanings: Catch with no balls cannot catch, but the
 errand that fetches them lives in that row and is the thing to press — so a
 `lit` flag keeps the row's name from greying out under an accented button.
 
-The six rows moved into a `.jobs` flex column of their own, because `order`
+The rows moved into a `.jobs` flex column of their own, because `order`
 sorts *all* the flex children and the picker and the level presets are not
 offers. Those two are now shown only when a job that reads them is on the list;
 in a battle neither has anything to change. Making that work needed
@@ -2919,7 +3048,7 @@ seconds by a page whose loop was supposedly running.
 
 ### One thing at a time
 
-<!-- covers: app/main.js @ ba6130d6dea7 -->
+<!-- covers: app/main.js @ e20676eb0bc0 -->
 
 One Game Boy, one joypad, one canvas — so a great deal of this app is about
 making sure two things are never driving them at once. There are three claims,
@@ -3552,7 +3681,7 @@ they have been installed.
 
 ### Watching the other device's screen
 
-<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ 9adba523027b -->
+<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ 9af312f0b3ae -->
 
 One device shows its screen; the other watches it, and plays it if the first
 one says so. The picture goes straight between them over WebRTC and never

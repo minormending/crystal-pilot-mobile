@@ -80,7 +80,11 @@ Mart wants a Pokédex; the only free ball on the ground is on Route 31, and the
 road there is shut. Route 30's one-tile corridor north is filled by Youngster
 Joey and two Rattata sprites, all three conditional on `EVENT_ROUTE_30_BATTLE` —
 which is *clear* on a new game, so the objects are there until it gets set. It is
-a deliberate roadblock, and returning the Mystery Egg is what lifts it.
+a deliberate roadblock, and returning the Mystery Egg is what lifts it. Read out
+of the disassembly at the time, and **watched happening** twenty passes later,
+once the app could read the object structs: all three spawned before the errand,
+none after it — and the trainer at (2,28), absent before, spawned after. See
+[the twenty-seventh pass](#a-twenty-seventh-pass-two-arrays-where-the-app-believed-there-was-one).
 
 Which makes Route 31 the long way round, because the same errand ends with
 `giveitem POKE_BALL, 5` in Elm's lab, from a `coord_event` the player only has to
@@ -332,7 +336,7 @@ second, which is there so the core's own waits finish, not to run a game.
   candidates and returned true standing three tiles clear of any. It checks the
   tile underfoot now.
 
-## Twenty-six audits, and how each defect was actually found
+## Twenty-seven audits, and how each defect was actually found
 
 Everything above was watched happening. This section was the exception, and the
 exception was the point of it: after the ROM-hack work shipped, eleven passes
@@ -451,6 +455,11 @@ exactly why nothing failed.
 | 26 | a box being redrawn has the wrong shape, so one look reported "bought nothing" | driving a fifth menu | **driving a menu it had never opened** |
 | 26 | a purchase is two text boxes, so pressing once bought one of four | the same, once more | driving a menu it had never opened |
 | 26 | and pressing while waiting presses *into* the box being waited for | a fake that models the redraw | **the test, before the cartridge** |
+| 27 | `occupied` read the map's *placements*, so it marked an empty tile and left an occupied one open | a wanderer, on any route | **asking what the game itself reads** |
+| 27 | and blocked two tiles for objects the game had never spawned | a flag-hidden object | asking what the game itself reads |
+| 27 | `lost` was returned with the battle still on screen, so one loss was reported seven times | losing a trainer battle | **losing one** |
+| 27 | a beaten trainer took all six attempts, so the unbeaten one behind them was never approached | two trainers in range | **beating one, then asking again** |
+| 27 | and my own new hint lived in a row that is hidden whenever it applies | reading the wiring | reading the fix |
 
 Five things in that table are worth more than the individual rows.
 
@@ -461,13 +470,15 @@ device, a second cartridge, a second Pokémon. What it measures is how much of
 the world you have to *arrange*, not how much you have to own: the fifth pass
 needed no hardware at all, only a party with a corpse in slot one.
 
-**Two of the eighty-six were caught by a check**, and only after the fix
+**Three of the ninety-one were caught by a check**, and only after the fix
 had decided what to look for: the wiring group named the four modules still
-importing constants that had just been deleted. One more was caught by a *test*,
-and only because the test hung — the obvious `continue` for the party prompt
-advanced nothing in a loop bounded by balls thrown. That is the honest weight to
-give this repository's seventeen check groups and 344 tests: they hold a fix
-down, and they catch the fix that is itself wrong. They do not find the fault.
+importing constants that had just been deleted, and the symbol group refused a
+new address that had not been added to the list that travels between devices.
+One more was caught by a *test*, and only because the test hung — the obvious
+`continue` for the party prompt advanced nothing in a loop bounded by balls
+thrown. That is the honest weight to give this repository's seventeen check
+groups and 376 tests: they hold a fix down, and they catch the fix that is
+itself wrong. They do not find the fault.
 
 **Measuring also rules things out, which is half of what it is for.** The
 eighth pass put the world graph and the encounter tables through the same
@@ -1549,13 +1560,15 @@ same `useItemOn` measured on the cartridge two passes ago. **This is the third
 standing gap in this document**, beside the remote-play picture and the ROM hack,
 and it has the same character: it is waiting on a *situation* rather than on more
 reading. The list is worth keeping in one place, because it is the honest answer
-to "what would you do next if you could".
+to "what would you do next if you could" — and the twenty-seventh pass added a
+fourth in exactly the same shape.
 
 | Gap | What it needs |
 | --- | --- |
 | the remote-play picture | two real devices on one wifi |
 | a title profile that is not Crystal | a `.gbc` and a `.sym` from a real hack |
 | a non-zero status byte | a wild Pokémon that gets a turn |
+| the duel moving on to a second trainer | two spawned trainers in range, one already beaten |
 
 Sleep is worth one more line, because it is the one the decode could have got
 wrong quietly. **It is a counter, not a flag**: the low three bits hold the turns
@@ -1627,6 +1640,140 @@ And one detail that had to be declared rather than derived. A mart counter is a
 to it from is (3,3) facing LEFT — two away, across a corner. So the title says
 `stand` and `face` rather than the clerk's position, which is the opposite of how
 a healer is described, and the difference is measured rather than assumed.
+
+### A twenty-seventh pass: two arrays where the app believed there was one
+
+The feature was Duel — walk up to a trainer and fight them. It needed one thing
+the app had never asked for: *is that object a person or a trainer?* The answer
+turned out to be a byte the app was already reading past, and finding it turned
+up a defect in the reader every walk in this app depends on.
+
+**What an object is, the game says itself.** The cartridge's own symbol file
+gives one address two names — `wMap1ObjectPalette` and `wMap1ObjectType` are
+both `$d736` — colour in the high nibble, type in the low. Measured on Route 30,
+whose twelve objects are one of each kind:
+
+| type | what | on Route 30 |
+| --- | --- | --- |
+| 0 | a script — a person, a sign, a fruit tree | the townsfolk, both trees, the two Rattata |
+| 1 | an item ball | the one at (8,35) that gave the ANTIDOTE |
+| 2 | a trainer | three: two Youngsters and a Bug Catcher |
+
+That is better than the sprite table the app already had, for the thing it knows
+about: it is the byte the *engine* branches on when you press A, so a hack that
+draws its item balls with an unmeasured sprite still tags them as balls.
+
+**And then the array itself was wrong.** `occupied()` — the tiles a walk routes
+around, used by every plan this app makes — read `wMapObjects`, which is what
+the map **placed**. There is a second array, `wObjectStructs`, which is what the
+game has **spawned**. They disagree, and one screen of Route 30 showed all three
+ways:
+
+| | placement says | struct says |
+| --- | --- | --- |
+| the player | (7,53) | (2,27) — and the player was at (2,27) |
+| a wanderer | (7,30) | (8,30) |
+| a trainer | (2,28) | *no struct at all* |
+
+So the reader marked a tile nobody was on, left open the tile the wanderer was
+actually standing on, and blocked two tiles for objects the game had never
+loaded. Wrong in both directions, from the same byte, in the one function whose
+mistakes can seal a corridor — and `nav.walkTo`'s second attempt drops the whole
+set for exactly that reason, throwing away the entries that were right along
+with the ones that were not.
+
+The player's own struct is what pins it down: `MapX/MapY` minus four *is*
+`wXCoord/wYCoord`, which is the check the placement array can never provide,
+because index 0 there holds a placement too.
+
+**Which array is right depends on the question**, and that is the part worth
+keeping:
+
+- **`occupied`** wants the live structs. People move.
+- **`takeables`** wants the placements. A ball does not move, and the game only
+  spawns what is near: from the north end of Route 30 the ball at (8,35) and
+  both fruit trees had *no struct at all*, so reading the structs there would
+  have made Take see only what you were already standing next to.
+- **`trainers`** wants both. The placement says what it is; the struct says
+  whether it is here.
+
+### An object is only loaded when you are near it
+
+Measured walking north up Route 30, reading the structs at each stop:
+
+| standing at | spawned |
+| --- | --- |
+| (7,53) | nothing but the player |
+| (5,38) | the item ball, one fruit tree |
+| (4,33) | + a wanderer, + a trainer |
+| (3,28) | + a second trainer |
+
+That is a fact about the feature, not a detail: a trainer twenty tiles off does
+not exist as far as work RAM is concerned. So `trainers()` is a **local**
+answer, the row says *nearby* rather than *here*, and the map's own total —
+which only the placement array knows — goes in the hint: *3 more trainers
+further along this map*.
+
+**And that hint was a defect of mine first.** The total was in the row's text,
+where a row that cannot run is not drawn — so the sentence telling you to walk
+on could only appear in the state where walking on was unnecessary. Found by
+reading my own wiring rather than by running it.
+
+### Two defects in code that had nothing to do with duels
+
+**A lost battle was reported once per retry.** `fightBattle` returned `lost` the
+instant the party read as wiped — with the battle still on screen and not a
+button pressed. So every caller that asks *are we in a battle?* was told yes,
+fought it again, read the same wiped party and lost again. Measured on the egg
+errand, which passes exactly one trainer: the log said **`trainer battle: lost`
+seven times**. One loss, reported seven ways. `lost` now means the battle is
+over, because the word is pressed through before it is returned.
+
+**A beaten trainer blocked the one behind them.** Gen 2 leaves a beaten trainer
+standing on the map for ever — measured by beating one and comparing: same type
+byte, same sight range, same everything the app can read. So whether they will
+fight is only knowable by asking. Standing at (3,28) there were two trainers in
+range, the near one beaten and the far one not, and `duelHere` picked the
+nearest every time: all six attempts went to somebody who would never answer.
+Tiles that have been stood in front of are written down for the rest of the
+call now.
+
+### What it does now
+
+| | measured |
+| --- | --- |
+| the duel | **won the battle, ¥64 — Lv5 to Lv6** against the Youngster at (2,28) |
+| the money | ¥3,000 → ¥3,064, and ¥64 is the game's own sum: a Youngster's base of 16 × a level-4 Rattata |
+| the lead | 19/19 → 15/19 |
+| pressed again | *stood in front of them and no battle started — already beaten?*, money unmoved |
+| from the map's south end | row *nobody here wants a battle*, hint *3 more trainers further along this map* |
+| beside the trainer | row *one trainer nearby · ¥3,000 in hand*, and Duel on the offers list |
+
+Reproduced twice from a fresh save, intro and egg errand included, on the code
+as shipped.
+
+And the pass confirmed a claim this document already made, from the other side.
+[Section 8 of the code notes](CODE.md#8-the-errands) says Route 30's roadblock —
+a Youngster at (5,26) and two Rattata at (5,24) and (5,25) — stands until the
+Mystery Egg is returned, read out of the disassembly rather than watched. The
+structs say the same thing:
+
+| | before the errand | after |
+| --- | --- | --- |
+| the roadblock at (5,24)–(5,26) | all three spawned | **gone** |
+| the trainer at (2,28) | no struct, standing next to it | **spawned** |
+
+So the Youngster who blocks the corridor and the trainer who appears south of it
+are two halves of one event, and the polarity falls out with them: an object
+whose event flag is **set** is hidden. Which the app never has to know — it
+reads whether a struct exists, which is the question the game asks itself.
+
+**What was not measured**, said plainly: the fix for the beaten trainer taking
+every attempt was watched *failing* on the cartridge — all six attempts spent on
+the one at (2,28) — and the fix itself is held down by a test rather than by a
+run. Doing it properly needs two spawned trainers in range at once, one beaten,
+which the one screen that offers it did not survive a page reload. The
+[standing gaps](#what-was-measured-and-what-was-not) table has it.
 
 ## The part that had to be redesigned
 

@@ -486,6 +486,54 @@ on the way.
 
 Fruit trees regrow, so they are worth coming back to. Item balls are not.
 
+## Duel: fighting a trainer on purpose
+
+Wild Pokémon barely pay. A trainer does, and until now this app could earn no
+money at all — everything it could do collected or spent, and the shop had to
+live off your starting ¥3000. The **Duel** row walks up to a trainer standing
+near you and fights them, with the bag available the way a grind's battles are.
+
+| The row says | Meaning |
+| --- | --- |
+| **one trainer nearby · ¥3,064 in hand** | somebody is close enough to walk to, and what you have now |
+| **nobody here wants a battle** | nothing near you, and nothing further on either |
+| **nobody fit to send out** | the whole party is at 0 HP — Heal is on the list above this one |
+| **finish the battle first** | a battle is already on; Fight and Throw are by the pad |
+
+And under the offers, when there is nobody near but the map has somebody:
+*3 more trainers further along this map*. That sentence is the whole reason the
+row says "nearby" rather than "here": **the game only loads an object once you
+are close enough to draw it.** Standing at the south end of Route 30 the pilot
+can see nobody at all, and twenty tiles north a trainer, a wanderer and an item
+ball come into existence one after another. So the count is who you can actually
+reach, and the hint is what tells you to keep walking.
+
+Press it and the pilot picks the nearest, walks to whichever side of them is
+open, faces them and presses A. What comes back is the purse:
+
+> **won the battle, ¥64 — Lv5 to Lv6**
+
+The money is how it knows. A trainer pays out when they lose and a wild Pokémon
+never does, so the difference in your money is the one number that says the
+battle was both a trainer's and won — the same rule the shop follows about
+purchases. Measured on Route 30 against the Youngster at (2,28): ¥3000 → ¥3064,
+and the lead's HP 19 → 15.
+
+**Whether a trainer will fight is not knowable in advance.** Gen 2 leaves a
+beaten trainer standing on the map for ever, with the same object type and the
+same sight range as one who has never battled — so the pilot walks up, presses
+A, and tells you what happened: *stood in front of them and no battle started —
+already beaten?* That is an ordinary outcome, the same way an emptied item ball
+is, and the pilot will not ask that trainer again on the same press. It tries
+somebody else instead.
+
+Two things worth knowing before you press it:
+
+- **A trainer who sees you coming starts the battle themselves.** That is not
+  the row failing; it is the duel starting early, and the pilot fights it.
+- **Losing costs you.** A whiteout takes half your money and sends you to the
+  last Pokémon Center. Heal first if the row above this one is offering to.
+
 ## Travel: take me somewhere else
 
 Tap to walk moves you around the map you are standing on. **Travel** walks you
@@ -801,7 +849,7 @@ deployed, which is not the question you are asking when a bug you saw fixed is
 still in front of you. `tools/check-app` asserts that number matches the service
 worker's cache name, because a version display that lies is worse than none.
 
-<!-- covers: sw.js @ 203f99855729 -->
+<!-- covers: sw.js @ 7d94c4515440 -->
 
 The worker fetches **network first, falling back to the cache**. That is the
 opposite of the usual offline-first advice, on purpose.

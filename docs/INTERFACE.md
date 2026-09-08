@@ -92,7 +92,7 @@ It measured badly too. Content-sized flex rows gave four actions four different
 widths — 207, 110, 167 and 86 — inside a 351px card, which made Catch, the most
 consequential thing in it, the smallest target on screen.
 
-Then six rows in a list had the opposite problem: four of them were usually
+Then a list of rows had the opposite problem: four of them were usually
 greyed out with a line each explaining why — *not in a battle*, *not in a
 battle*, *no party yet*, *pick something below*. This app reads the game's own
 memory, which is the entire point of it. It knows there is no battle, that
@@ -108,7 +108,9 @@ rule in that order is a fact about the game rather than a preference:
 | someone has fainted | Heal | it is what stops every other job finishing |
 | a species is picked | Catch, Hunt | the specific intent beats the general one |
 | otherwise | Grind | the job that needs nothing but a party |
-| last of the five | Travel | a place is still there in a minute |
+| straight after Grind | Duel | it levels the same thing, and a trainer is beaten once |
+| below the jobs | Take, Travel | neither is urgent; a place is still there in a minute |
+| last | Shop | the only offer that is about what you will need next |
 
 Healing drops back below the jobs when the party is merely scratched, which is
 the same rule read the other way. The accent follows whatever ranks first: it
@@ -239,6 +241,25 @@ It sits above Travel and below the jobs, and for the mirror of Travel's reason.
 Travel is last because a place is still there in a minute. Take is above it
 because a thing on the ground is *here*, and the whole of its cost is that you
 walked past it.
+
+**Duel is the second row read off the map, and the first that had to admit how
+little the map will say.** It goes straight after Grind — both level the same
+Pokémon, and a trainer is beaten once where grass is always there, so a trainer
+is the more perishable offer; Grind still wins the tie because a duel can be
+lost and a grind cannot.
+
+The word in the row is **nearby**, not *here*, and that is measured. Gen 2 only
+loads an object once you are close enough to draw it: from the south end of
+Route 30 the pilot can see nobody at all, though the map places three trainers
+on it. So the count is who you can actually reach — *one trainer nearby ·
+¥3,064 in hand*, the money for the same reason Shop shows it — and the map's own
+total goes in **the hint**: *3 more trainers further along this map*.
+
+That split was a defect first. The total was in the row's text, where it could
+never be read: a row that cannot run is not drawn, so *none nearby — 3 further
+along* only existed in the one state where walking on was already unnecessary.
+The hint is where the things that would *add* to the list live, and this belongs
+there.
 
 Two other things went in the same pass, further back. *Pick one to look for* was
 a filled accent primary button that was disabled and did nothing, sitting below
@@ -576,4 +597,4 @@ So this page carries a marker naming the files it describes and the hash they
 had when it was last read against them. `tools/docs-check` reports it when they
 move, and the pre-commit hook blocks on that report.
 
-<!-- covers: index.html app/main.js app/rows.js @ efa3c86e4425 -->
+<!-- covers: index.html app/main.js app/rows.js @ 62ca1cf818d1 -->

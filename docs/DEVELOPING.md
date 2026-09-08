@@ -117,16 +117,16 @@ section gives. Everything by hand runs against a local build.
 
 ```mermaid
 flowchart BT
-    C["the app"] --> T["./run-tests<br/>344 behaviour tests"]
+    C["the app"] --> T["./run-tests<br/>376 behaviour tests"]
     C --> A["tools/check-app<br/>17 groups"]
-    C --> D["tools/docs-check<br/>25 tracked sections"]
+    C --> D["tools/docs-check<br/>26 tracked sections"]
     C --> V["tools/coverage<br/>what the suite never runs"]
     T --> M{{"mutation testing<br/>change a line, see who notices"}}
     A --> K["tools/check-checks<br/>break each group's own subject"]
     T -.-> V
     M -.->|"13 of 15 caught"| R(["the suite is load-bearing"])
     K -.->|"17 of 17 bite"| R2(["the groups are awake"])
-    V -.->|"42%, and where"| R3(["the gaps are known"])
+    V -.->|"60%, and where"| R3(["the gaps are known"])
 ```
 
 ### What the tests never run
@@ -287,14 +287,32 @@ told it is the wrong shape, and for a while it was the one path that skipped
 that.
 
 `window.PILOT` exposes the live objects — `gb`, `tasks`, `state`, `collision`,
-`world`, `nav`, `romdata`, `boot`, `walkToTap`, `showVersion`, and the two
-WebRTC ends as `host` and `watcher` — so anything can be driven and watched from
-a console rather than reasoned about.
+`world`, `nav`, `romdata`, `boot`, `saves`, `walkToTap`, `showVersion`, and the
+two WebRTC ends as `host` and `watcher` — so anything can be driven and watched
+from a console rather than reasoned about. `boot` is the title's driver, which is
+where the walks and the errands live.
 
 Sharing is tested by serving the same tree on **two ports** and treating them as
 two devices: separate origins mean separate IndexedDB and localStorage, which is
 exactly what two phones have. A fresh port also sidesteps an HTTP-cached module
 from the last run.
+
+**A verification run that spans a page reload has to take one of our slots.**
+`saves` is on that list because of a session this cost: the game was saved *in
+game*, the page reloaded to pick up edited modules, and the save was gone —
+WasmBoy flushes cartridge RAM to its own IndexedDB on its own schedule, and had
+not. `PILOT.saves.capture(0)` writes a slot immediately, and there was no way to
+ask for one without clicking. The cheaper trick for the reload itself is to
+re-fetch the shell with `cache: 'reload'` before navigating, which keeps the
+origin — and therefore the emulator's storage — intact:
+
+```js
+const sw = await (await fetch('./sw.js', { cache: 'reload' })).text();
+const files = [...sw.match(/const SHELL = \[([\s\S]*?)\]/)[1]
+  .matchAll(/'([^']+)'/g)].map((m) => m[1]);
+for (const f of files) await fetch(f, { cache: 'reload' });
+location.reload();
+```
 
 ## Running it
 
