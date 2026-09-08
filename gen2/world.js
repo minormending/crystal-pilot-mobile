@@ -156,10 +156,18 @@ export class World {
    * A route is a list of exits to take in order -- an edge to walk off, a warp
    * to stand on -- and the first one found by breadth is the shortest by legs.
    */
-  route(from, to, { maxMaps = 400 } = {}) {
+  route(from, to, { maxMaps = 400, avoid = null } = {}) {
     if (from === to) return [];
-    return this.routesFrom(from, [to], { maxMaps }).get(to) || null;
+    return this.routesFrom(from, [to], { maxMaps, avoid }).get(to) || null;
   }
+
+  /**
+   * The name a leg goes by when it has to be refused.
+   *
+   * Two maps rather than a map and a direction, because that is what a caller
+   * knows after a failure: it tried to get from here to there and could not.
+   */
+  static leg(from, to) { return `${from}>${to}`; }
 
   /**
    * Routes to several places at once, from one search.
@@ -176,7 +184,7 @@ export class World {
    * map you are standing on -- that is not a journey, and `travelTo` already
    * says "arrived" for it.
    */
-  routesFrom(from, targets, { maxMaps = 400 } = {}) {
+  routesFrom(from, targets, { maxMaps = 400, avoid = null } = {}) {
     const want = new Set([...targets].filter((k) => k !== from));
     const found = new Map();
     if (!want.size) return found;
@@ -186,6 +194,17 @@ export class World {
     while (head < queue.length && seen.size < maxMaps && found.size < want.size) {
       const [key, path] = queue[head++];
       for (const exit of this.exits(key)) {
+        // A leg the caller has already failed to walk. **This is not a
+        // theoretical case.** Route 29's connection struct says there is a map
+        // north of it, and there is -- Route 46 -- but the pilot cannot get up
+        // there, and naming Violet City made that the shortest route to it by
+        // legs. The walk refused UP three times and `travelTo` gave up, on a
+        // town that is perfectly reachable the ordinary way.
+        //
+        // So a search can be told to leave a leg out, and the caller that
+        // failed to walk one tells it. Shortest-by-legs has no notion of a leg
+        // being hard, and nothing in the connection data says so either.
+        if (avoid && avoid.has(World.leg(key, exit.key))) continue;
         if (seen.has(exit.key)) continue;
         const next = path.concat(exit);
         if (want.has(exit.key)) found.set(exit.key, next);

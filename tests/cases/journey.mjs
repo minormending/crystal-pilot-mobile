@@ -947,3 +947,88 @@ test('nothing on screen means nothing to close', async (t) => {
   t.true(await j.through([2, 7], 2), 'it got through');
   t.false(j.log.includes('closeConversation'), 'no pressing at all');
 });
+
+// --- a walk routes around a leg it cannot take ------------------------------
+
+/**
+ * A Journey over a ring of maps, with one leg the walk refuses.
+ *
+ * `refuse` is the edge that will not go, named the way a failure names it.
+ */
+function ringWalker({ refuse = null } = {}) {
+  const sym = symbols();
+  const [a, b, c, d, e] = [1, 2, 3, 4, 5];
+  const edges = { [a]: { RIGHT: b, LEFT: e }, [b]: { LEFT: a, RIGHT: c },
+                  [c]: { LEFT: b, RIGHT: d }, [d]: { LEFT: c, RIGHT: e },
+                  [e]: { LEFT: d, RIGHT: a } };
+  let here = a;
+  const log = [];
+  const world = {
+    route: (from, to, { avoid = null } = {}) => {
+      // Breadth-first over `edges`, honouring `avoid` -- the same contract
+      // World.route keeps, small enough to state here.
+      const seen = new Set([from]);
+      const queue = [[from, []]];
+      while (queue.length) {
+        const [k, path] = queue.shift();
+        for (const [dir, next] of Object.entries(edges[k] || {})) {
+          if (avoid && avoid.has(`${k}>${next}`)) continue;
+          if (seen.has(next)) continue;
+          const step = path.concat({ kind: 'edge', dir, key: next });
+          if (next === to) return step;
+          seen.add(next);
+          queue.push([next, step]);
+        }
+      }
+      return null;
+    },
+  };
+  const j = new Journey(new FakeGameBoy({ wram: worldRam(sym, {}) }),
+                        new GameState(sym), null, {},
+                        { mapKey: async () => here }, () => {}, world, {});
+  j.said = [];
+  j.say = (m) => j.said.push(m);
+  j.escapeBattle = async () => true;
+  j.runScripts = async () => true;
+  j.settled = async () => new Uint8Array(0x2000);
+  j.crossEdge = async (dir, expect) => {
+    log.push(`${here}>${expect}`);
+    if (refuse && `${here}>${expect}` === refuse) return false;
+    here = expect;
+    return true;
+  };
+  j.log = log;
+  return j;
+}
+
+test('a leg that will not go is routed around, not given up on', async (t) => {
+  // Not a theoretical case. Route 29's connection struct says there is a map to
+  // the north and there is -- Route 46 -- but the pilot cannot get up there,
+  // and naming Violet City made that the shortest route to it by legs. The walk
+  // refused UP three times and this gave up, on a town four ordinary legs away.
+  const j = ringWalker({ refuse: '1>2' });
+  const r = await j.travelTo(3);
+  t.true(r.ok, `it arrived: ${r.message}`);
+  t.contains(j.said.join(' '), 'trying another way', 'and said what it did');
+  t.true(j.log.length > 2, 'having gone the long way round');
+});
+
+test('the short way is still the way when it works', async (t) => {
+  const j = ringWalker();
+  const r = await j.travelTo(3);
+  t.true(r.ok, 'arrived');
+  t.eq(j.log, ['1>2', '2>3'], 'two legs, no detour');
+});
+
+test('a graph with no walkable route says so, and how many it tried',
+     async (t) => {
+  // Every leg refused, which is the honest end of the search rather than the
+  // loop running out: each failure removes an edge from a finite graph, so the
+  // route runs out before the leg budget does.
+  const j = ringWalker();
+  j.crossEdge = async () => false;
+  const r = await j.travelTo(3);
+  t.false(r.ok, 'no way through');
+  t.contains(r.message, 'refused', 'and it says how many legs it tried');
+  t.contains(r.message, 'this can walk', 'distinguished from no route at all');
+});

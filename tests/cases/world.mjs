@@ -179,3 +179,51 @@ test('a map the cartridge does not have reads as nothing, not as a crash',
   t.eq(world.warps(99, 99), [], 'and no warps');
   t.eq(world.route(mapKey(99, 99), BARK), null, 'and no route out of nowhere');
 });
+
+// --- a leg that will not go -------------------------------------------------
+
+/**
+ * Five maps in a ring, so there are two ways round and one is shorter.
+ *
+ *   A -> B -> C        two legs
+ *   A -> E -> D -> C   three
+ */
+const RING = [mapKey(9, 1), mapKey(9, 2), mapKey(9, 3), mapKey(9, 4), mapKey(9, 5)];
+function ringWorld() {
+  const [a, b, c, d, e] = RING;
+  return cartridge(new Map([
+    [a, { edges: { RIGHT: b, LEFT: e } }],
+    [b, { edges: { LEFT: a, RIGHT: c } }],
+    [c, { edges: { LEFT: b, RIGHT: d } }],
+    [d, { edges: { LEFT: c, RIGHT: e } }],
+    [e, { edges: { LEFT: d, RIGHT: a } }],
+  ])).world;
+}
+
+test('a search can be told to leave a leg out', async (t) => {
+  // Not a theoretical case. Route 29's connection struct says there is a map to
+  // the north and there is -- Route 46 -- but the pilot cannot get up there,
+  // and naming Violet City made that the shortest route to it by legs. The walk
+  // refused UP three times and travelTo gave up, on a town four ordinary legs
+  // away.
+  const [a, b, c] = RING;
+  const w = ringWorld();
+  t.eq(w.route(a, c).length, 2, 'two legs the short way');
+
+  const round = w.route(a, c, { avoid: new Set([World.leg(a, b)]) });
+  t.true(round.length > 2, `the long way round instead: ${round.length} legs`);
+  t.false(round.some((leg) => leg.key === b), 'and it does not go through B');
+});
+
+test('a graph with nothing left says so rather than looping', async (t) => {
+  const [a, b, c, , e] = RING;
+  const w = ringWorld();
+  const shut = new Set([World.leg(a, b), World.leg(a, e)]);
+  t.eq(w.route(a, c, { avoid: shut }), null, 'no way at all');
+});
+
+test('a leg is named by its two maps, which is what a failure knows', async (t) => {
+  // Rather than by a direction: after a refusal the caller knows it tried to
+  // get from here to there, and a warp has no direction at all.
+  t.eq(World.leg(6147, 1289), '6147>1289', 'from and to');
+});

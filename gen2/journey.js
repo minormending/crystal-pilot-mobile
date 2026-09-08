@@ -15,6 +15,7 @@
 // to land on and stops with a plain description if it lands somewhere else,
 // because a walk that quietly drifts off course ends up mashing A at a wall.
 import { CollisionMap } from './collision.js';
+import { World } from './world.js';
 
 // How many times a pickup starts over -- each one escapes whatever is on screen
 // and re-reads the map before choosing a side again -- and how many empty
@@ -463,15 +464,30 @@ export class Journey {
    */
   async travelTo(target, { maxLegs = 12 } = {}) {
     if (!this.world) return { ok: false, message: 'no world graph' };
+    // Legs this walk has tried and could not take. **A route is shortest by
+    // legs and knows nothing about a leg being hard**, and the two are not the
+    // same thing: Route 29's connection struct says there is a map to the north
+    // and there is -- Route 46 -- but the pilot cannot get up there, and naming
+    // Violet City made that the shortest way to it. The walk refused UP three
+    // times and this gave up, on a town that is four ordinary legs away.
+    //
+    // So a leg that will not go is written down and the route asked again
+    // without it. Only ever grows, so this terminates: every failure removes an
+    // edge from a finite graph, and when none is left the answer is honestly
+    // that there is no way.
+    const avoid = new Set();
     for (let leg = 0; leg < maxLegs; leg++) {
       if (this.stopped) return { ok: false, message: 'stopped' };
       const here = await this.mapKey();
       if (here === target) return { ok: true, message: 'arrived' };
-      const route = this.world.route(here, target);
+      const route = this.world.route(here, target, { avoid });
       if (route === null) {
         return {
           ok: false,
-          message: `no way from ${this.where(here)} to ${this.where(target)}`,
+          message: avoid.size
+            ? `no way from ${this.where(here)} to ${this.where(target)} that `
+              + `this can walk (${avoid.size} leg(s) refused)`
+            : `no way from ${this.where(here)} to ${this.where(target)}`,
         };
       }
       if (!route.length) return { ok: true, message: 'arrived' };
@@ -486,8 +502,15 @@ export class Journey {
           // second.
           const stuck = (await this.snap()).windowOpen
             ? ' — something is still on screen' : '';
-          return { ok: false,
-                   message: `could not get through to ${this.where(next.key)}${stuck}` };
+          if (stuck) {
+            return { ok: false,
+                     message: `could not get through to ${this.where(next.key)}${stuck}` };
+          }
+          // A door that will not open is a leg to route around, the same as an
+          // edge that will not cross.
+          this.say(`no way through to ${this.where(next.key)} — trying another way`);
+          avoid.add(World.leg(here, next.key));
+          continue;
         }
         continue;
       }
@@ -512,10 +535,9 @@ export class Journey {
         // second when the user pressed the first blames the map for a decision
         // they made.
         if (this.stopped) return { ok: false, message: 'stopped' };
-        return {
-          ok: false,
-          message: `could not leave ${this.where(here)} going ${next.dir}`,
-        };
+        this.say(`${next.dir.toLowerCase()} will not go — trying another way`);
+        avoid.add(World.leg(here, next.key));
+        continue;
       }
     }
     return { ok: false, message: 'too many legs' };
