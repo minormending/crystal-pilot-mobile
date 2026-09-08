@@ -693,6 +693,35 @@ export function withJobs(Base) {
         continue;
       }
       this.say(`battle ${stats.battles}: ${outcome}`);
+      // **Running out of PP is a Center's job, and the Center is already
+      // here.** A Pokemon Center restores PP as well as HP, which makes this a
+      // trip the job already knows how to make -- and the alternative is what
+      // was measured: fifty battles on a thirty-five-PP TACKLE, then a Lv2
+      // CATERPIE at 1 HP in a trainer battle the pilot could not finish, and
+      // every walk afterwards pointless.
+      //
+      // Counted against the same trip budget as a knockout, for the same
+      // reason: nothing here advances while walking to a Center.
+      if (outcome === 'nopp') {
+        stats.dry = (stats.dry || 0) + 1;
+        if (!heal || ++trips > MAX_HEALS) {
+          return {
+            ok: false,
+            message: `out of PP at Lv${mon.level} on anything that does damage`
+                     + (heal ? ` after ${MAX_HEALS} trips to heal` : ''),
+            stats: { ...stats, levels: mon.level - startLevel },
+          };
+        }
+        this.say(`out of PP at Lv${mon.level} — a Center restores it`);
+        if (!await heal('dry')) {
+          return {
+            ok: false,
+            message: `out of PP at Lv${mon.level}, and healing did not work`,
+            stats: { ...stats, levels: mon.level - startLevel },
+          };
+        }
+        continue;
+      }
       // Battles that end without resolving mean the pilot is not driving the
       // fight any more -- something is on screen it does not understand. A few
       // in a row is a stall, not bad luck, and grinding on just burns the

@@ -217,3 +217,51 @@ test('a well lead at full health is not healed for nothing', async (t) => {
   await tasks.grind(0, 6, { heal: async (why) => { reasons.push(why); return false; } });
   t.eq(reasons, [], 'nothing was asked for');
 });
+
+
+// --- running out of PP ------------------------------------------------------
+
+test('running out of PP sends the grind to a Center, which restores it',
+     async (t) => {
+  // **Measured on Route 31, and it wasted a session.** Fifty battles on a
+  // thirty-five-PP TACKLE, then a Lv2 CATERPIE at 1 HP in a *trainer* battle
+  // the pilot could not finish -- no damaging move with PP, and no fleeing a
+  // trainer. Every walk after that was pointless.
+  //
+  // A Pokémon Center restores PP as well as HP, so this is a trip the job
+  // already knows how to make. It just had no reason to make it.
+  const { tasks, said } = grinder(
+    [{ level: 5 }, { level: 5 }, { level: 6 }],
+    { outcomes: ['won', 'nopp', 'won', 'won'] });
+  const trips = [];
+  const r = await tasks.grind(0, 6, {
+    heal: async (why) => { trips.push(why); return true; },
+  });
+  t.true(r.ok, `it carried on and finished: ${r.message}`);
+  t.eq(trips, ['dry'], 'one trip, and for the reason a faint uses');
+  t.contains(said.join(' '), 'out of PP', 'and it said so');
+  t.contains(said.join(' '), 'a Center restores it', 'with why that helps');
+});
+
+test('with nowhere to heal, running out of PP is the end of the job',
+     async (t) => {
+  // The honest stop. Saying *out of PP on anything that does damage* is
+  // something a person can act on; 'stuck' was not.
+  const { tasks } = grinder([{ level: 5 }], { outcomes: ['nopp'] });
+  const r = await tasks.grind(0, 9, {});
+  t.false(r.ok, 'it stops');
+  t.contains(r.message, 'out of PP', 'naming what ran out');
+  t.contains(r.message, 'Lv5', 'and where it got to');
+});
+
+test('a trip to heal for PP is counted against the same budget as a faint',
+     async (t) => {
+  // Nothing advances while walking to a Center, so an unbounded version paces
+  // for ever -- which is the reason the knockout trips are bounded, and this is
+  // the same trip.
+  const { tasks } = grinder([{ level: 5 }],
+                            { outcomes: new Array(40).fill('nopp') });
+  const r = await tasks.grind(0, 9, { heal: async () => true });
+  t.false(r.ok, 'it gives up');
+  t.contains(r.message, 'trips to heal', 'having spent the budget');
+});
