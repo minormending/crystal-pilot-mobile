@@ -341,7 +341,15 @@ export function withJobs(Base) {
                     seconds: ((Date.now() - started) / 1000).toFixed(1) };
     const balls = (n) => `${n} ${r.ballName}${n === 1 ? '' : 's'}`;
     const how = captureOutcome(r.outcome);
-    return { ok: !!how.ok, stats, message: how.say(r, balls) };
+    const said = how.say(r, balls);
+    // The screen on the end of a failure, because these are the messages that
+    // needed it most. Measured while catching with a full party: two attempts
+    // reported *could not reach the ball in the pack* and *lost track of the
+    // battle*, and the screen said **"There's no will to battle!"** both times
+    // -- the game was refusing a fainted Pokemon, which is a different thing to
+    // go and fix than either message suggests.
+    return { ok: !!how.ok, stats,
+             message: how.ok ? said : await this.saying(said) };
   }
 
   /**
@@ -477,7 +485,8 @@ export function withJobs(Base) {
                  message: 'your lead fainted while weakening \u2014 heal and retry' };
       }
       if (r.outcome !== 'budget') {
-        return { ok: false, seen, stats, message: how.say({ ...r, name }, balls) };
+        return { ok: false, seen, stats,
+                 message: await this.saying(how.say({ ...r, name }, balls)) };
       }
       if (stats.thrown >= maxBalls) {
         return { ok: false, seen, stats,
