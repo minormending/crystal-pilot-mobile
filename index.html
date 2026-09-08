@@ -66,7 +66,26 @@
              connected cross with no borders, so the fill is the only thing
              telling it from the card and light needs a bigger step than the
              ordinary buttons do. */
-          --key:#343442; }
+          /* The pad is a device, so its keys carry their own ink and their own
+             drawn edge. The edge is the guarded pair rather than the fill: two
+             dark greys a card apart cannot reach 3:1, and a real handheld at
+             night does not either -- what has to be visible is where a key
+             ends. */
+          --key:#2e2e3a; --key-ink:#e8e8f0; --key-edge:#8a8aa2;
+
+          /* The light palette lives here, once, and the two places that switch
+             to it below only *map* these. It used to be written out twice --
+             once for `[data-theme="light"]` and once for the media query -- and
+             the two drifted the first time anything touched them: a new key
+             token went into one, the other kept the old value, and the theme
+             most people get is the one that was wrong. `check-app contrast`
+             now asserts the two mappings are identical, so the duplication
+             that is left is a checked invariant rather than a hazard. */
+          --l-bg:#eef0f4; --l-panel:#ffffff; --l-raise:#f1f4f9;
+          --l-line:#c2c9d5; --l-ink:#171a1f; --l-dim:#5c6470;
+          --l-raise-ink:#4e5663; --l-action:#3358cc; --l-accent:#3a61d6;
+          --l-ok:#1f7a47; --l-bad:#c0392f; --l-track:#d7dce4;
+          --l-key:#e3e9f2; --l-key-ink:#242a38; --l-key-edge:#7d8798; }
 
   /* Light.
      Dark is the base above, because that is what this app is: a Game Boy
@@ -79,10 +98,12 @@
      game's own picture, not on any surface of ours, so it is not the theme's
      business. */
   :root[data-theme="light"] {
-    --bg:#eef0f4; --panel:#ffffff; --raise:#f1f4f9; --line:#c2c9d5;
-    --ink:#171a1f; --dim:#5c6470; --raise-ink:#4e5663;
-    --action:#3358cc; --accent:#3a61d6;
-    --ok:#1f7a47; --bad:#c0392f; --track:#d7dce4; --key:#dee5f0;
+      --bg:var(--l-bg); --panel:var(--l-panel); --raise:var(--l-raise);
+      --line:var(--l-line); --ink:var(--l-ink); --dim:var(--l-dim);
+      --raise-ink:var(--l-raise-ink); --action:var(--l-action);
+      --accent:var(--l-accent); --ok:var(--l-ok); --bad:var(--l-bad);
+      --track:var(--l-track); --key:var(--l-key); --key-ink:var(--l-key-ink);
+      --key-edge:var(--l-key-edge);
   }
 
   /* --- Pico, pointed at this app's palette -------------------------------
@@ -149,15 +170,20 @@
   /* Follows the phone unless someone has said otherwise. */
   @media (prefers-color-scheme: light) {
     :root:not([data-theme="dark"]) {
-      --bg:#eef0f4; --panel:#ffffff; --raise:#f1f4f9; --line:#c2c9d5;
-      --ink:#171a1f; --dim:#5c6470; --raise-ink:#4e5663;
-      --action:#3358cc; --accent:#3a61d6;
-      --ok:#1f7a47; --bad:#c0392f; --track:#d7dce4; --key:#dee5f0;
+      --bg:var(--l-bg); --panel:var(--l-panel); --raise:var(--l-raise);
+      --line:var(--l-line); --ink:var(--l-ink); --dim:var(--l-dim);
+      --raise-ink:var(--l-raise-ink); --action:var(--l-action);
+      --accent:var(--l-accent); --ok:var(--l-ok); --bad:var(--l-bad);
+      --track:var(--l-track); --key:var(--l-key); --key-ink:var(--l-key-ink);
+      --key-edge:var(--l-key-edge);
     }
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
   body{margin:0;background:var(--bg);color:var(--ink);
-       font:15px/1.45 ui-sans-serif,-apple-system,system-ui,sans-serif;
+       /* Pico's stack rather than a hand-rolled one: it carries the emoji
+          fallbacks and the Windows faces this list did not. */
+       font-family:var(--pico-font-family-sans-serif);
+       font-size:15px;line-height:var(--pico-line-height);
        padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
   /* Wraps rather than clipping. Five things share this row once a game is
      loaded and a newer version exists -- name, version, Update, location,
@@ -440,19 +466,54 @@
   .chips button.on{background:var(--action);border-color:var(--action);
                    color:#fff;font-weight:600}
   .seen{color:var(--dim);font-size:12px;margin-top:10px;line-height:1.5}
-  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+  .card{background:var(--panel);border:1px solid var(--line);
+        border-radius:calc(var(--pico-border-radius) + 2px);
+        /* A shadow rather than only a border. Six cards with identical
+           one-pixel outlines on a near-white ground is why this page read as a
+           form: nothing was in front of anything. */
+        box-shadow:0 1px 2px rgba(16,18,24,.05),0 4px 12px rgba(16,18,24,.04);
         padding:12px;margin-top:12px}
-  .card h2{font-size:12px;margin:0 0 8px;color:var(--dim);letter-spacing:.06em;
-           text-transform:uppercase}
+  .card h2{font-size:11.5px;margin:0 0 10px;color:var(--dim);
+           letter-spacing:.08em;text-transform:uppercase;font-weight:600}
   .row{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
   /* Stop a held D-pad press turning into a scroll or a text selection. */
   [data-btn]{touch-action:none;user-select:none;-webkit-user-select:none}
-  button,label.file{font:inherit;color:var(--ink);background:var(--raise);
-    border:1px solid var(--line);border-radius:10px;padding:13px 14px;
-    min-height:46px;flex:1 1 auto;cursor:pointer;text-align:center}
+  /* Pico gives buttons a fill, a radius and focus rings; what it does not know
+     is that half the buttons here are *secondary* by role -- a row's Start is
+     the primary and the settings gear is not. So the base is the secondary
+     look and `.primary` opts up, which is the opposite of Pico's default and
+     right for a panel where most controls are equals. */
+  button,label.file{font-family:inherit;font-size:0.94rem;font-weight:500;
+    color:var(--ink);background:var(--raise);
+    border:1px solid var(--line);border-radius:var(--pico-border-radius);
+    padding:12px 14px;min-height:44px;flex:1 1 auto;cursor:pointer;
+    text-align:center;transition:background .12s ease,border-color .12s ease,
+    transform .06s ease;-webkit-tap-highlight-color:transparent}
+  button:hover:not([disabled]),label.file:hover{border-color:var(--accent)}
+  button:active:not([disabled]){transform:translateY(1px)}
+  button:focus-visible,label.file:focus-visible{outline:0;
+    box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 40%,transparent)}
   button.primary{background:var(--action);border-color:var(--action);
                  color:#fff;font-weight:600}
-  button[disabled]{opacity:.45}
+  button.primary:hover:not([disabled]){background:var(--accent);
+                 border-color:var(--accent)}
+  /* Greyed rather than faded. `opacity:.45` dims the *border* as well, so a
+     disabled control lost its edge and read as a hole in the card -- and on a
+     row that is disabled for a reason the person can fix, the edge is what
+     says there is something there.
+     
+     Not the pad, though, and that was a regression this rule caused the moment
+     it was written: with no game loaded every key is disabled, and clearing the
+     fill made A, B, SELECT and START read as *missing* rather than as waiting.
+     A row's button is an offer and can be withdrawn; a key is part of a
+     machine, and a machine with no buttons on it is broken. So the keys keep
+     their fill and dim only their ink. */
+  button[disabled]{color:var(--dim);background:transparent;
+    border-color:var(--line);cursor:not-allowed}
+  .dpad button[disabled],.face button[disabled],.menus button[disabled]{
+    background:var(--key);border-color:var(--key-edge);
+    color:color-mix(in srgb,var(--key-ink) 55%,transparent)}
+  .menus button[disabled] b{color:inherit}
   input[type=file]{display:none}
 
   /* The party, as a glance rather than a list. HP is the number that decides
@@ -507,9 +568,10 @@
      row at all once the ones that cannot run stop being drawn. */
   .job.lead{border-top:0;padding-top:2px}
   .job .what{min-width:0}
-  .job .jname{display:block;font-size:15px;font-weight:600}
-  .job .jstate{display:block;font-family:ui-monospace,Menlo,monospace;
-               font-size:11.5px;color:var(--dim);margin-top:2px;
+  .job .jname{display:block;font-size:15.5px;font-weight:600;
+              letter-spacing:-.005em}
+  .job .jstate{display:block;font-family:var(--pico-font-family-monospace);
+               font-size:11.5px;color:var(--dim);margin-top:3px;
                white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   button.jgo{flex:0 0 auto;min-height:42px;padding:10px 20px;font-size:13px}
   .job.blocked .jname{color:var(--dim)}
@@ -538,15 +600,30 @@
      and the face buttons to opposite edges, and a gamepad with 240px of gap
      down the middle stops reading as one thing. */
   .gamepad{display:flex;align-items:center;justify-content:space-between;
-           gap:10px;padding:2px 2px 0;max-width:330px;margin:0 auto}
+           gap:10px;padding:14px 12px 10px;max-width:330px;margin:0 auto;
+           /* A well, so the keys sit *in* something. Without it the pad floated
+              on the card and the whole PLAY section read as an unfinished form. */
+           background:var(--raise);border:1px solid var(--line);
+           border-radius:calc(var(--pico-border-radius) + 4px)}
 
   /* A connected cross, not four loose boxes. The cells touch and only the
      outer tips are rounded, which is what makes it read as a D-pad. */
   .dpad{--cell:48px;display:grid;grid-template-columns:repeat(3,var(--cell));
         grid-template-rows:repeat(3,var(--cell));flex:0 0 auto}
+  /* A key needs an edge. These were flat fills of `--key` on a card of
+     `--panel`, which in the light theme is #dee5f0 on #ffffff -- a 1.1:1 step,
+     so the pad read as a pale smudge rather than as something to press. The
+     shadow does the work a border cannot here: the cross is built from square
+     cells that share edges, and a border on each would draw a grid through it. */
   .dpad button,.dpad .hub{background:var(--key);border:0;margin:0;padding:0;
-        min-height:0;border-radius:0;color:#dcdce6;font-size:14px;line-height:1;
-        box-shadow:inset 0 1px 0 rgba(255,255,255,.05)}
+        min-height:0;border-radius:0;color:var(--key-ink);font-size:14px;
+        line-height:1;
+        /* An inset ring rather than a border. The cross is five cells that
+           share edges, so a border on each would draw a grid through it --
+           inset, the rings stay inside their own cell and read as moulding. */
+        box-shadow:inset 0 0 0 1px var(--key-edge),
+                   inset 0 2px 0 rgba(255,255,255,.07),
+                   inset 0 -3px 0 rgba(16,18,24,.16)}
   .dpad button{color:var(--ink)}
   .dpad .u{grid-area:1/2;border-radius:11px 11px 0 0}
   .dpad .l{grid-area:2/1;border-radius:11px 0 0 11px}
@@ -564,21 +641,30 @@
         grid-template-rows:repeat(2,calc(var(--btn) * 0.78));flex:0 0 auto}
   .face button{width:var(--btn);height:var(--btn);border-radius:50%;
         min-height:0;padding:0;flex:0 0 auto;background:var(--key);
-        border:0;font-weight:700;font-size:18px;color:var(--ink);
-        box-shadow:inset 0 1px 0 rgba(255,255,255,.06)}
+        border:1px solid var(--key-edge);font-weight:700;font-size:19px;
+        color:var(--key-ink);
+        box-shadow:inset 0 2px 0 rgba(255,255,255,.09),
+                   inset 0 -3px 0 rgba(16,18,24,.18),
+                   0 2px 5px rgba(16,18,24,.16)}
+  .face button:hover{filter:brightness(1.04)}
   .face .a{grid-area:1/2;align-self:start}
   .face .b{grid-area:2/1;align-self:end}
 
   /* Slim slanted keys, the way the hardware marks Select and Start. The label
      is un-skewed inside so only the key is angled. */
   .menus{display:flex;gap:16px;justify-content:center;margin-top:16px}
-  .menus button{display:flex;align-items:center;justify-content:center}
+  .menus button{display:flex;align-items:center;justify-content:center;
+        border:1px solid var(--key-edge);
+        box-shadow:inset 0 1px 0 rgba(255,255,255,.08),
+                   0 1px 3px rgba(16,18,24,.14)}
+  .menus button b{letter-spacing:.12em;font-weight:600;font-size:10.5px;
+        color:var(--key-ink)}
   .menus button{flex:0 0 auto;min-height:44px;padding:0 22px;border:0;
         border-radius:7px;background:var(--key);transform:skewX(-16deg);
         box-shadow:inset 0 1px 0 rgba(255,255,255,.05)}
   .menus button b{display:block;transform:skewX(16deg);font-weight:600;
         font-size:11px;letter-spacing:.11em;text-transform:uppercase;
-        color:var(--raise-ink)}
+        color:var(--key-ink)}
 
   /* Held, not just tapped. Without this a press gives no sign it landed --
      the default tap highlight is off, and the whole point of these controls
@@ -588,8 +674,10 @@
   .dpad button:active,.face button:active,.menus button:active{
         background:var(--action);color:#fff}
   .menus button.held b,.menus button:active b{color:#fff}
-  .face button.held,.face button:active{transform:scale(.95)}
-  .dpad button.held,.dpad button:active{box-shadow:inset 0 2px 5px rgba(0,0,0,.3)}
+  .face button.held,.face button:active{transform:scale(.95);
+        box-shadow:inset 0 3px 6px rgba(0,0,0,.35)}
+  .dpad button.held,.dpad button:active{
+        box-shadow:inset 0 3px 6px rgba(0,0,0,.35)}
   @media (prefers-reduced-motion:reduce){
     .face button.held,.face button:active{transform:none}
   }

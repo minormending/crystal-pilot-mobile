@@ -731,6 +731,45 @@ Which leaves the honest summary: **Pico does the typography and the controls,
 this file does the colour and the layout**, and the contrast check is what makes
 the division safe to maintain.
 
+### What actually changed, and what the check found while it did
+
+Four things looked wrong, and all four were the same thing: nothing was in front
+of anything.
+
+* **Cards had a one-pixel outline and no shadow.** Six of them, identical, on a
+  near-white ground — so the page read as a form rather than as a stack of
+  panels. They cast a shadow now.
+* **Disabled buttons were `opacity:.45`**, which dims the *border* too, so a
+  control you could re-enable read as a hole in the card. They grey their text
+  and keep their edge.
+* **The pad was pale patches.** `--key` on `--panel` was a **1.1:1** step in the
+  light theme: it read as a smudge rather than as something to press. The keys
+  have their own ink and a drawn edge now, and sit in a well so they are *in*
+  something.
+* **And buttons had no states at all** — no hover, no focus ring, no travel on
+  press. Pico supplies all three; they were simply never adopted.
+
+**The contrast check was watching the wrong background for the pad**, and had
+been for thirty-seven passes: it compared the key's ink against `--raise`, the
+surface the key sits *on*, rather than against the key. In the dark theme
+`--key` and `--raise` were the same colour, so it was comparing a token with
+itself and passing.
+
+Extending it turned up the bar that could not be met: **two dark greys a card
+apart do not reach 3:1**, and a real handheld at night does not either. What has
+to be visible is where a key *ends*, so the guarded pair is the key's edge
+against its well — cheap in both themes, and the thing the design actually
+leans on. Twenty-four pairs now, from twenty-two.
+
+**And the light palette was written out twice.** Once for `[data-theme="light"]`
+and once for the `prefers-color-scheme` media query, because CSS cannot put a
+media query in a selector list. They drifted the moment anything touched them: a
+new token went into one, the other kept the old value, and *the theme most
+people get is the one that was wrong* — which is exactly what happened here, and
+took twenty minutes of reading a screenshot that would not change. The values
+live once now and both switches map them, and the check asserts the two mappings
+are identical, so what duplication is left is a checked invariant.
+
 ## Keeping this page honest
 
 This is the page that went stale. It described a column-flex layout that
@@ -742,4 +781,4 @@ So this page carries a marker naming the files it describes and the hash they
 had when it was last read against them. `tools/docs-check` reports it when they
 move, and the pre-commit hook blocks on that report.
 
-<!-- covers: index.html app/main.js app/rows.js @ 1dfe3a72db27 -->
+<!-- covers: index.html app/main.js app/rows.js @ 0ec28d3a7333 -->

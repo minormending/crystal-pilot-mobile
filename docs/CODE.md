@@ -3474,7 +3474,7 @@ This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ 98cd3c1a7106 -->
+<!-- covers: app/main.js index.html @ cf6467cac8d0 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -5269,7 +5269,7 @@ about that code did not.
 
 ### The other checks
 
-<!-- covers: tools/check-app @ 840b483b0db5 -->
+<!-- covers: tools/check-app @ 9375bb41a177 -->
 
 `tools/check-app` runs everything that can be verified without a ROM:
 

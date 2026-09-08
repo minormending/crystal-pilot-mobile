@@ -162,7 +162,19 @@ PAIRS = [
     ("ink on a raised button", "ink",   "raise",  4.5),
     ("dim text on a card",     "dim",   "panel",  4.5),
     ("dim text on the page",   "dim",   "bg",     4.5),
-    ("key ink on a key",       "raise-ink", "raise", 4.5),
+    # The pad's labels sit on a *key*, not on the card behind it -- and this
+    # watched `raise` for thirty-seven passes, which is the surface the key is
+    # *on*. Measured when the pad was restyled: in the dark theme `--key` and
+    # `--raise` were the same colour, so the check was passing on a comparison
+    # of a token with itself while the pad had no edge at all.
+    ("key ink on a key",       "key-ink",   "key",   4.5),
+    # **The key's *edge*, not its fill.** The first draft of these watched
+    # `key` against `raise` at 3:1, and that bar cannot be met in the dark
+    # theme without a pad that glows: two dark greys a card apart do not reach
+    # 3:1, and a real handheld at night does not either. What has to be seen is
+    # where a key ends, and that is carried by a drawn edge -- so the edge is
+    # what is guarded, and it is cheap to satisfy in both themes.
+    ("a key's edge on its well", "key-edge", "raise", 3.0),
     ("Stop label on a card",   "bad",   "panel",  4.5),
     ("link on a card",         "accent", "panel", 4.5),
     ("running dot on a card",  "accent", "panel", 3.0),
@@ -189,16 +201,68 @@ def _ratio(a, b):
 
 
 def _tokens(block):
-    return dict(re.findall(r"--([\w-]+)\s*:\s*(#[0-9a-fA-F]{3,6})", block))
+    """`--name: #hex` pairs in a block, and `--name: var(--other)` too.
+
+    The second half is not a nicety. The light palette used to be written out
+    twice -- once for `[data-theme="light"]`, once for the `prefers-color-scheme`
+    media query -- and the two drifted the moment anything touched them. It is
+    written once now and both switches *map* it, which means the light block
+    holds no hex at all: this function found nothing there, the caller fell back
+    to the dark values, and the check went on reporting "both themes" while
+    reading one of them twice. A check that quietly stops checking is worse than
+    no check.
+    """
+    out = dict(re.findall(r"--([\w-]+)\s*:\s*(#[0-9a-fA-F]{3,6})", block))
+    out.update(dict(re.findall(r"--([\w-]+)\s*:\s*var\(--([\w-]+)\)", block)))
+    return out
+
+
+def _resolve(tokens, base):
+    """Follow `--a: var(--b)` until it lands on a colour, or give up saying so."""
+    out = {}
+    for name in tokens:
+        seen, value = set(), name
+        while value in tokens and not str(tokens[value]).startswith("#"):
+            if value in seen:
+                break
+            seen.add(value)
+            value = tokens[value]
+        if str(tokens.get(value, "")).startswith("#"):
+            out[name] = tokens[value]
+        elif str(base.get(value, "")).startswith("#"):
+            out[name] = base[value]
+    return out
 
 
 def check_contrast():
     s = INDEX.read_text()
     css = s.split("<style>")[1].split("</style>")[0]
-    dark = _tokens(css.split(":root {")[1].split("}")[0])
-    light_block = css.split('[data-theme="light"]')[1].split("}")[0]
-    light = dict(dark)
-    light.update(_tokens(light_block))
+    root = _tokens(css.split(":root {")[1].split("}")[0])
+    dark = _resolve(root, root)
+    # The *selector*, brace and all. Splitting on `[data-theme="light"]` alone
+    # matched a comment in the stylesheet that mentions it -- so `light_block`
+    # became the tail of `:root` and the comparison below reported fifteen
+    # phantom mismatches. Prose about code reads like code, which is the third
+    # time that has cost this repository something.
+    light_block = css.split(':root[data-theme="light"] {')[1].split("}")[0]
+    merged = dict(root)
+    merged.update(_tokens(light_block))
+    light = _resolve(merged, root)
+
+    # **The two light switches have to say the same thing.** There are two --
+    # the explicit `[data-theme="light"]` and the `prefers-color-scheme` media
+    # query -- because CSS cannot put a media query in a selector list. Only
+    # one of them can be read above, so the other is held to it by comparison:
+    # the theme most people get is the media query, and it is the one that was
+    # silently wrong when these were written out separately.
+    media = css.split(':root:not([data-theme="dark"]) {')[1].split("}")[0]
+    if _tokens(media) != _tokens(light_block):
+        only_a = sorted(set(_tokens(light_block)) - set(_tokens(media)))
+        only_b = sorted(set(_tokens(media)) - set(_tokens(light_block)))
+        print("        the two light theme blocks do not match"
+              + (f"; only in [data-theme]: {', '.join(only_a)}" if only_a else "")
+              + (f"; only in the media query: {', '.join(only_b)}" if only_b else ""))
+        return fail("the light palette is written two different ways")
 
     problems = []
     for label, themes in (("dark", dark), ("light", light)):
