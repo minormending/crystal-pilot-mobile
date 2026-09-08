@@ -28,7 +28,7 @@ flowchart LR
 
 Every step of that is the first time it has been watched on a cartridge since
 the battle and job code was rewritten, and one of them failed the first time
-round — see [the eleventh pass](#thirty-four-audits-and-how-each-defect-was-actually-found).
+round — see [the eleventh pass](#the-audits-and-how-each-defect-was-actually-found).
 
 Proven, and visible in [the screenshot on the front page](../README.md):
 
@@ -336,18 +336,18 @@ second, which is there so the core's own waits finish, not to run a game.
   candidates and returned true standing three tiles clear of any. It checks the
   tile underfoot now.
 
-## Thirty-four audits, and how each defect was actually found
+## The audits, and how each defect was actually found
 
 Everything above was watched happening. This section was the exception, and the
-exception was the point of it: after the ROM-hack work shipped, thirty-three
-passes went looking for defects in code that already worked, and found **119** —
+exception was the point of it: after the ROM-hack work shipped, **thirty-five**
+passes went looking for defects in code that already worked, and found **128** —
 a handful of them created by a fix on the way, which are in the table in italics
 because they are a different kind of thing. None of them announced itself.
 
 **Reading found twenty-two**, more than any other single method, which is why it
 comes first in the table and why it is worth doing before touching the game. But
-the interesting number is the tail: the remaining ninety-seven were found almost
-as many different ways, and almost every entry in that column is a sentence rather than
+the interesting number is the tail: the remaining hundred and six were found
+almost as many different ways, and almost every entry in that column is a sentence rather than
 a category — *measuring the fix*, *asking a second tile*, *feeding it the wrong
 thing*, *writing a cartridge Crystal is not*, *a test, before the cartridge*,
 *playing the game*. Each change of method found what the one before it was
@@ -497,6 +497,15 @@ exactly why nothing failed.
 | 34 | the edge half read the screen after `runScripts` had pressed the words away | Travel, at a gated route edge | asking what order the reads happen in |
 | 34 | a gate at an edge was ground at for over two and a half minutes and looked hung | Travel to ROUTE 33 from Route 32, no badge | playing the game, and waiting |
 | 34 | a predicate that deleted the entry it was asked about, while a caller iterated it | nothing yet — read, not seen | reading |
+| 35 | `collision.js` ran on nearly every test in its file and was checked by almost none | any wall, water tile, ledge or warp — the fake said LAND to all of them | **a tool that breaks lines on purpose** |
+| 35 | all four of `furthestToward`'s direction comparators could be inverted | a route too long to cross in one plan | the same tool |
+| 35 | a heal that was really a knockout reported *healed one Pokémon at Violet City* | Heal, with a lead too hurt to make the walk | a wallet that had halved |
+| 35 | arriving after a whiteout reported plain *arrived* | Travel, on a route with a trainer on it | the same wallet |
+| 35 | a beaten trainer was walked back to, because only refusals were written down | Clear, on a map with more than one trainer | the feature's own first test |
+| 35 | a sweep gave up at a trainer it had already beaten, with two more further along | Clear, from Route 30's north end | playing the game |
+| 35 | the sweep did nothing at all on a route, because nobody was drawn yet | Clear, arriving at Route 31's western edge | playing the game |
+| 35 | the sweep's bound was measured off who was *drawn* while its comment claimed the map | the same edge, where that number is nought | reading the comment against the code |
+| 35 | four documentation anchors pointed at headings that no longer existed | any of the six links | **a check written for it** |
 
 Five things in that table are worth more than the individual rows.
 
@@ -2362,6 +2371,102 @@ no one method is the method. This is the sharper version of the same claim:
 **a test written in the same hour as the code it tests inherits the code's
 assumptions**, and only something outside the author's head — the cartridge,
 here — can refuse them.
+
+### A thirty-fifth pass: a tool for the step that kept getting skipped
+
+Every fix in this repository since the tests existed has been hand-mutated -- a
+python heredoc that breaks one line, a run, a restore -- to answer the only
+question that matters about a new test: *would it have failed?* That worked, and
+it was also the step most likely to go when the budget got tight, which is
+exactly backwards. So it is a tool now, and it immediately said something worse
+than expected.
+
+**`collision.js` was checked at eighteen per cent.**
+
+| | says | reads as |
+| --- | --- | --- |
+| line coverage | 51% | a gap; a plateau; fine for a module with a ROM half |
+| mutation | **18%** | those lines ran and almost nothing asserted on what they did |
+
+In the module that decides where the pilot may walk. The wall and water rules,
+the ledge and warp ranges, the pathfinder, and **all four of
+`furthestToward`'s direction comparators** could be inverted and the suite
+passed -- and that last one is the function that makes a fifty-four-tile route
+crossable at all, so an inverted comparator walks the pilot away from the edge
+it is trying to leave by, and every symptom of it looks like the map being in
+the way.
+
+The cause was one line in a fake. Every collision test handed the decode
+`{ romByte: () => 0 }`, so `permission()` answered LAND for every byte on every
+map. **A stub that answers one thing consistently is indistinguishable from a
+module that works**, and line coverage cannot tell you which you have. It is
+66% now, over painted maps.
+
+Two survivors got *deleted* rather than tested, which is the better outcome and
+the answer this tool gives that no other check can: a line nothing can
+distinguish is a second way to say one thing.
+
+### The pass's own defect: a failure dressed as a success
+
+`healNow` was asked to mend a lead at 9 of 24. The walk to Violet met something
+it could not run from, the party fainted, and the job reported **healed one
+Pokémon at Violet City**.
+
+Every reading agreed with it. A whiteout in Gen 2 heals the party, moves the
+player to the last Pokémon Center and takes half the wallet -- so afterwards the
+HP is full and the map is the town the walk was heading for, which is precisely
+what success looks like. The only trace was a wallet that had gone from 3136 to
+1568.
+
+This is the third pass in a row to land on the same lesson from a different
+side, and it is worth stating in its strongest form. The thirty-third pass:
+[a failure message is a diagnosis the app
+publishes](#a-thirty-third-pass-the-diagnosis-that-was-wrong-twice). The
+thirty-fourth: [a test written in the same hour as its code inherits that code's
+assumptions](#a-thirty-fourth-pass-the-test-that-agreed-with-the-bug). This one:
+**a failure dressed as a failure costs a minute, and a failure dressed as a
+success costs however long it takes somebody to notice.**
+
+### And the feature, which found four of its own
+
+`clearHere` fights everybody on a map -- the primitive a Gym needs, and the
+reason the pilot is stuck on Route 32 at all. Four defects, three of them from
+driving it:
+
+- **A beaten trainer was walked back to.** `duelHere` wrote a tile down only
+  when the trainer *refused*; Gen 2 leaves a beaten one standing there with the
+  same sprite and sight range. The loop's first test wrote three trainers,
+  watched six wins, and logged every approach to the same tile.
+- **It did nothing at all on a route.** Gen 2 draws a character only when you
+  are close enough to see one, so on arriving at Route 31's western edge
+  `duelHere` said *nobody near enough to fight* with one placed seventeen tiles
+  east. It walks over now.
+- **And its bound was measured off that same empty number** while its comment
+  claimed the map's own list -- a budget of the slack alone and a job that stops
+  before it starts.
+- **It gave up at somebody it had already beaten.** Route 30's trainer at (1,7)
+  answers nothing; two more sat at (2,28) and (5,23), never drawn. An empty view
+  and an exhausted view are the same question to this loop.
+
+Measured after: from Route 30's north end it walks to (5,23), then twenty tiles
+to (2,28), and reports that everyone there has already been beaten. On Route 31,
+seventeen tiles east and a win: Lv7 to Lv8, ¥24.
+
+### An eighteenth check group, for a rot nothing could see
+
+`docs-check` notices when described code changes. It cannot notice a *heading*
+being renamed underneath the links that point at it -- four dead anchors on the
+first run, three of them from renames in earlier passes and one written an hour
+earlier. A link that lands silently at the top of the page is worse than no
+link, because it reads as having been checked.
+
+Both halves of it were wrong first, in opposite directions, and the pair is the
+finding: **prose about code reads like code.** GitHub does not collapse the
+spaces around an em-dash when it makes a slug, and collapsing them reported six
+good links dead. Code spans are not links -- it failed on the line that
+documents it -- but masking them has to apply to the *link scan only*, because
+masking a heading strips its backticked half and reports four more good links
+dead.
 
 ## The part that had to be redesigned
 
