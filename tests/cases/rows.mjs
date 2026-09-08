@@ -756,3 +756,39 @@ test('a long list of other hours is counted rather than recited', async (t) => {
   t.contains(said, 'and 2 more', 'two named, the rest counted');
   t.false(said.includes('DROWZEE'), 'because a line is a line');
 });
+
+// --- what the map is holding -------------------------------------------------
+
+test('the Take row counts what is placed here, and never promises what is left',
+     async (t) => {
+  // Counted rather than named on purpose: an item ball stays in work RAM after
+  // it has been taken -- measured, the object at (8,35) on Route 30 was still
+  // there with the ANTIDOTE in the bag -- so the row cannot know what is left.
+  const ball = { x: 4, y: 4, what: 'ball' }, tree = { x: 9, y: 2, what: 'tree' };
+  t.eq(look({}, { takeables: [ball] }).take.text, 'one item ball', 'one of one kind');
+  t.eq(look({}, { takeables: [ball, tree] }).take.text,
+       'one item ball and one fruit tree', 'both kinds, both counted');
+  t.eq(look({}, { takeables: [tree, tree, tree] }).take.text, 'three fruit trees',
+       'and it pluralises');
+  t.eq(look({}, { takeables: [] }).take.text, 'nothing lying about here',
+       'an empty map says so rather than nothing');
+});
+
+test('a sprite the profile names that is neither still counts', async (t) => {
+  // A hack's own. The row must not go silent about a thing the pilot will
+  // happily walk to and press A at.
+  const r = look({}, { takeables: [{ x: 1, y: 1, what: 'shrine' }] });
+  t.contains(r.take.text, 'one other thing', 'counted without being named');
+});
+
+test('Take is offered only where there is something to take', async (t) => {
+  const ball = { x: 4, y: 4, what: 'ball' };
+  const world = { party: [{ hp: 20, maxHp: 20, species: CYNDAQUIL, level: 5 }] };
+  t.true(offers(world, { takeables: [ball] }).offered.includes('take'),
+         'on a map holding something');
+  t.false(offers(world, { takeables: [] }).offered.includes('take'),
+          'and not on one that is not');
+  t.false(offers({ ...world, battleMode: 1 }, { takeables: [ball] })
+            .offered.includes('take'),
+          'nor in a battle, where nothing on the map can be walked to');
+});

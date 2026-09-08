@@ -56,6 +56,12 @@ let wilds = null;
 // that costs no walking.
 let hours = null;
 let hourNow = null;
+// What this map is holding: item balls and fruit trees, by the sprite ids the
+// engine profile carries. Read from the same work-RAM snapshot as everything
+// else in a refresh, and re-read on every one -- unlike the species list and the
+// destinations, this changes without the map changing, because taking a ball is
+// what changes it.
+let takeables = [];
 let ballId = null;
 // Frames advanced per animation frame while nobody is driving. The steps are
 // powers of two because that is how it reads: 1x, 2x, 4x... and the last one is
@@ -418,7 +424,7 @@ async function reallyStart() {
   }
   tasks = new Tasks(gb, state, progress, romdata);
   saves = new Saves(gb, state, romdata, progress);
-  collision = new CollisionMap(symbols, gb);
+  collision = new CollisionMap(symbols, gb, title.engine);
   nav = new Nav(gb, symbols);
   world = new World(symbols, gb);
   boot = new title.drive(gb, state, tasks, collision, nav, progress, world);
@@ -1454,6 +1460,7 @@ const JOB_ROWS = {
   hunt: ['#huntstate', '#hunt', '#job-hunt'],
   catch: ['#catchstate', '#catch', '#job-catch'],
   heal: ['#healstate', '#heal', '#job-heal'],
+  take: ['#takestate', '#take', '#job-take'],
   travel: ['#travelstate', '#travel', '#job-travel'],
 };
 
@@ -1464,7 +1471,7 @@ function paintJobs(s) {
   const ctx = { rom: romdata, target, huntWanted, ballId, savedThisSession,
                 healPlace, canFetch: typeof boot.eggErrand === 'function',
                 places: travelPlaces, travelTo, huntable, wilds,
-                hours, hourNow,
+                hours, hourNow, takeables,
                 engine: state.e };
   const rows = describeRows(s, ctx);
   const offers = describeOffers(s, ctx);
@@ -1554,6 +1561,12 @@ async function refresh() {
   await refreshSpecies(s);
   await refreshPlaces(s);
   if (romdata) refreshBag(s);
+  // Straight off the snapshot this refresh already has, with no key to cache
+  // it against on purpose. The species list and the destinations are keyed by
+  // map because walking is what changes them; this changes when a ball is
+  // *taken*, which happens on the map you are standing on.
+  takeables = collision && s.worldLoaded && s.wram
+    ? collision.takeables(s.wram) : [];
   // Remembered so the relative presets have something to be relative to.
   lastLead = s.party.length ? s.party[0].level : null;
   // Options that arrived from another device while a job was running.
@@ -2343,6 +2356,22 @@ $('#catchhere').onclick = async () => {
 $('#heal').onclick = async () => {
   if (!boot) return;
   await runTask('#heal', 'off to heal', () => boot.healNow());
+};
+
+/**
+ * Take what the map is holding.
+ *
+ * The row counts what is *placed* here, not what is left: an item ball stays in
+ * work RAM after it has been taken -- measured, the object at (8,35) on Route 30
+ * was still there with the ANTIDOTE in the bag. So the job reports what actually
+ * arrived, and "nothing left to take here" is an ordinary outcome rather than a
+ * failure of the walk.
+ */
+$('#take').onclick = async () => {
+  if (!boot) return;
+  const res = await runTask('#take', 'picking things up', () => boot.takeHere());
+  progress(res && res.got && res.got.length
+    ? `${res.got.length} in the bag` : '');
 };
 
 /**

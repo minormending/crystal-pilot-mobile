@@ -26,7 +26,7 @@
 export function describeRows(s, ctx = {}) {
   const { rom = null, target = 5, huntWanted = null, ballId = null,
           savedThisSession = false, healPlace = null,
-          places = [], travelTo = null, wilds = null,
+          places = [], travelTo = null, wilds = null, takeables = [],
           // The cartridge's own numbers. A party of six and a trainer battle of
           // 2 are Gen 2's, not this module's, and reading them from an import
           // meant the stock values reached here even when a title had changed
@@ -143,7 +143,35 @@ export function describeRows(s, ctx = {}) {
       enabled: afoot && !!travelTo && byKey.has(travelTo),
       places,
     },
+    // What the map is holding. Counted rather than named, because the app
+    // cannot tell a ball somebody has already taken from one still lying there
+    // -- measured: the object stays in work RAM after the ANTIDOTE is in the
+    // bag -- so a promise of what you will get would be a promise it cannot
+    // keep. The job says what actually arrived.
+    take: {
+      text: s.inBattle ? 'finish the battle first'
+        : !takeables.length ? 'nothing lying about here'
+        : takeWord(takeables),
+      enabled: afoot && takeables.length > 0,
+      count: takeables.length,
+    },
   };
+}
+
+/** "a ball and two trees", for what the map is holding. */
+function takeWord(takeables) {
+  const n = (what) => takeables.filter((t) => t.what === what).length;
+  const words = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven',
+                 'eight', 'nine', 'ten'];
+  const say = (count, one, many) =>
+    `${words[count] || count} ${count === 1 ? one : many}`;
+  const parts = [];
+  if (n('ball')) parts.push(say(n('ball'), 'item ball', 'item balls'));
+  if (n('tree')) parts.push(say(n('tree'), 'fruit tree', 'fruit trees'));
+  // A sprite the profile names that is neither -- a hack's own -- still counts.
+  const rest = takeables.length - n('ball') - n('tree');
+  if (rest) parts.push(say(rest, 'other thing', 'other things'));
+  return parts.join(' and ');
 }
 
 /**
@@ -324,7 +352,10 @@ export function describeOffers(s, ctx = {}) {
   // never urgent -- a place is still there in a minute -- and it is also the
   // only one somebody reaches for while *not* mid-task, so burying it would be
   // wrong too. Last of the five, drawn whenever there is somewhere to go.
-  order.push('catch', 'hunt', 'grind', 'heal', 'travel');
+  // Take sits above Travel and below the jobs, for the reason Travel is last:
+  // it is never urgent, but unlike a place, a thing lying on the ground is
+  // *here* -- and the whole of its cost is that you walked past it.
+  order.push('catch', 'hunt', 'grind', 'heal', 'take', 'travel');
 
   const offered = [];
   for (const key of order) {
