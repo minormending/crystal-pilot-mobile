@@ -1356,6 +1356,48 @@ def check_markers():
                 f"{len(drawn)} vendor-drawn element(s)")
 
 
+JOB_TABLE = re.compile(r"const JOB_ROWS = \{(.*?)\n\};", re.S)
+JOB_KEY = re.compile(r"^\s*(\w+):\s*\['#[\w-]+',\s*'#([\w-]+)',\s*'#([\w-]+)'\]", re.M)
+JNAME = re.compile(r'id="job-([\w-]+)"(.*?)<span class="jname">([^<]*)</span>', re.S)
+
+
+def check_labels():
+    """Every job row is named after its own key, capitalised.
+
+    Which is an invariant the app *reads* rather than a tidiness: the runner
+    that presses these rows in sequence prints which one it starts with, and it
+    builds that word from the key -- `heal` becomes "starts with Heal". There is
+    no table mapping one to the other, deliberately, because a table is a second
+    copy of nine words that can drift from the markup silently.
+
+    So the check is the other half of that decision. Rename a row's `.jname` and
+    the runner goes on announcing the old word, which is a sentence about a row
+    that is not on the screen -- and nothing else in this repository can see it:
+    the id is unchanged, the handler is unchanged, and every test passes.
+    """
+    text = INDEX.read_text()
+    table = JOB_TABLE.search(module("main.js").read_text())
+    if not table:
+        return fail("app/main.js has no JOB_ROWS table")
+    keys = [m.group(1) for m in JOB_KEY.finditer(table.group(1))]
+    if not keys:
+        return fail("read no job keys out of JOB_ROWS")
+    names = {m.group(1): m.group(3).strip() for m in JNAME.finditer(text)}
+    problems = []
+    for key in keys:
+        want = key[0].upper() + key[1:]
+        got = names.get(key)
+        if got is None:
+            problems.append(f"index.html  no #job-{key} row with a name in it")
+        elif got != want:
+            problems.append(f"index.html  #job-{key} is called {got!r}, "
+                            f"and the runner will say {want!r}")
+    for p in problems:
+        print(f"        {p}")
+    return fail(f"{len(problems)} row name(s) the runner would get wrong") \
+        if problems else ok(f"all {len(keys)} job rows are named after their key")
+
+
 CHECKS = {
     "syntax": check_syntax,
     "layers": check_layers,
@@ -1377,6 +1419,7 @@ CHECKS = {
     "moves": check_moves,
     "deadcss": check_dead_css,
     "markers": check_markers,
+    "labels": check_labels,
 }
 
 
