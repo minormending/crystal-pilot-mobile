@@ -648,7 +648,12 @@ function dueller({ trainers = () => [], at = [5, 5], starts = true,
                    // map can be watched mending it and stopping when it
                    // cannot. `bag` is what mending costs: a function, because
                    // whether it works is the thing under test.
-                   hp = 20, bag = null, hurtPerFight = 0 } = {}) {
+                   hp = 20, bag = null, hurtPerFight = 0,
+                   // Who the map *placed*, separately from who is spawned.
+                   // On a route they differ, and that difference is what
+                   // `_closeOnTrainer` exists for: Gen 2 draws an object only
+                   // when you are near it.
+                   placed = null } = {}) {
   const sym = symbols();
   const log = [];
   let money = 1000, inBattle = !!battle, mode = battle || 0, level = 5;
@@ -661,6 +666,13 @@ function dueller({ trainers = () => [], at = [5, 5], starts = true,
     mapSize: () => [60, 60],
     walkable: (x, y) => open(x, y),
     trainers: () => trainers(),
+    // What the map *placed*, which is what bounds a sweep: Gen 2 only spawns an
+    // object you are close enough to draw, so `trainers()` answered nought
+    // arriving on Route 31 with four of them further along. Placements never
+    // move and are all there whether drawn or not, so the fake gives the same
+    // people an index and the trainer type.
+    placedObjects: () => (placed || trainers())
+      .map((o, i) => ({ ...o, index: i + 1, type: 2 })),
   };
   const nav = {
     mapKey: async () => 1,
@@ -773,6 +785,45 @@ test('a beaten trainer is not walked back to', async (t) => {
   const places = new Set(walks);
   t.eq(places.size, walks.length,
        `no tile approached twice: ${JSON.stringify(walks)}`);
+});
+
+test('a trainer the map placed but has not drawn is walked up to', async (t) => {
+  // **The difference between clearing a route and only working next to
+  // somebody.** Measured arriving on Route 31 at its western edge: `duelHere`
+  // said "nobody near enough to fight" with a trainer placed seventeen tiles
+  // east and not yet spawned. The placements say where they are whether drawn
+  // or not, so the sweep closes the distance and asks again.
+  let near = false;
+  const far = { x: 21, y: 13, sprite: 37 };
+  const j = dueller({
+    at: [4, 6],
+    placed: [far],                        // the map's list: always there
+    trainers: () => (near ? [far] : []),  // spawned: only once we are close
+  });
+  // Walking is what brings them into being, which is what the game does -- the
+  // object loads when the player gets near enough to draw it.
+  const walkTo = j.nav.walkTo;
+  j.nav.walkTo = async (...a) => { near = true; return walkTo(...a); };
+
+  const r = await j.clearHere();
+  t.true(j.log.some((l) => l.startsWith('walk')), 'it walked');
+  t.contains(j.said.join(' '), 'walking up to whoever is at 21,13',
+             'and said who it was walking at');
+  t.eq(r.stats.won, 1, 'then fought them');
+});
+
+test('a placement nothing can walk to is not asked about twice', async (t) => {
+  // Otherwise the sweep spends every round walking at somebody behind a fence.
+  const j = dueller({
+    at: [4, 6],
+    placed: [{ x: 21, y: 13, sprite: 37 }],
+    trainers: () => [],
+    open: () => false,
+  });
+  const r = await j.clearHere();
+  t.false(r.message.includes('everyone'), 'no claim to have cleared it');
+  const tries = j.said.filter((l) => l.includes('walking up to')).length;
+  t.true(tries <= 1, `asked once, not once per round: ${tries}`);
 });
 
 test('the bag mends between rounds, and the walk to a Center does not',

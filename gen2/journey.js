@@ -1741,16 +1741,28 @@ export class Journey {
    * from the wrong place by nobody fit. Reported as what it is rather than
    * retried.
    *
-   * **Bounded by who is actually placed here.** The map's own object list says
-   * how many trainers it holds, so the budget is that plus slack rather than a
-   * number somebody picked. A map whose list cannot be read gets the slack
-   * alone, which is the safe way for the bound to be wrong.
+   * **Bounded by who the map *placed*, not by who is spawned.** Gen 2 only
+   * loads an object when you are close enough to draw it, so the count of live
+   * trainers is a fact about where you are standing: measured arriving on Route
+   * 31 at its western edge, `trainers()` answered **nought** with four of them
+   * further along the route. Bounding on that gives a budget of the slack alone
+   * and a job that stops before it starts, so the bound comes off the
+   * placements -- which never move and are all there whether drawn or not.
+   *
+   * A map whose list cannot be read gets the slack alone, which is the safe way
+   * for the bound to be wrong, and the sweep is not *claimed* as a sweep in
+   * that case: a count nobody could take is not a clear map.
    */
   async clearHere({ slack = CLEAR_SLACK } = {}) {
     const spent = new Set();
     const stats = { fought: 0, won: 0, prize: 0 };
     const wram = await this.settled();
-    const placed = wram ? this.collision.trainers(wram).length : 0;
+    const trainerType = (this.state.e.objectTypes || {}).trainer;
+    const list = wram && trainerType !== undefined
+      ? this.collision.placedObjects(wram)
+          .filter((o) => o.index !== 0 && o.type === trainerType)
+      : [];
+    const placed = list.length;
     const rounds = placed + slack;
     let stoppedBy = null;
     for (let round = 0; round < rounds; round++) {
@@ -1777,8 +1789,19 @@ export class Journey {
         break;
       }
       if (r.outcome === 'stopped') { stoppedBy = 'stopped'; break; }
-      // 'none', 'beaten' and 'unreachable' all mean the same thing to this
-      // loop: there is nobody left it can get to. Kept apart in the message
+      // **Nobody spawned is not nobody here.** Gen 2 loads an object only when
+      // you are close enough to draw it, so on a route the honest answer to
+      // *fight everyone* starts with a walk: arriving on Route 31 at its
+      // western edge, `duelHere` said "nobody near enough to fight" with a
+      // trainer placed seventeen tiles east. The placements say where they are
+      // whether drawn or not, so this closes the distance and asks again --
+      // which is the whole difference between a job that clears a route and one
+      // that only works if you were already standing next to somebody.
+      if (r.outcome === 'none' && await this._closeOnTrainer(list, spent)) {
+        continue;
+      }
+      // 'none', 'beaten' and 'unreachable' otherwise all mean the same thing to
+      // this loop: nobody left it can get to. Kept apart in the message
       // because they are different things to go and look at.
       //
       // No `|| 'none'` fallback: every path out of `duelHere` names an outcome,
@@ -1792,6 +1815,43 @@ export class Journey {
       stats: { ...stats, at: this.where(await this.mapKey()) },
       message: this._clearedMessage(stats, stoppedBy, placed),
     };
+  }
+
+  /**
+   * Walk at the nearest trainer the map placed but the game has not drawn.
+   *
+   * True when it got somewhere new, so the caller can ask again. A placement is
+   * a tile that is very often occupied -- by the trainer standing on it -- so
+   * this aims at the tiles *around* it and settles for whichever is reachable,
+   * which is the same thing `_approach` does for a spawned one.
+   */
+  async _closeOnTrainer(list, spent) {
+    const wram = await this.settled();
+    if (!wram || !list.length) return false;
+    const at = this.collision.playerPos(wram);
+    const far = list
+      .filter((o) => !spent.has(o.x + ',' + o.y))
+      .filter((o) => Math.abs(o.x - at[0]) + Math.abs(o.y - at[1]) > 1)
+      .sort((a, b) => Math.abs(a.x - at[0]) + Math.abs(a.y - at[1])
+                      - Math.abs(b.x - at[0]) - Math.abs(b.y - at[1]));
+    for (const who of far) {
+      for (const [dx, dy] of [[0, 1], [0, -1], [-1, 0], [1, 0], [0, 0]]) {
+        const goal = [who.x + dx, who.y + dy];
+        if (!this.collision.walkable(goal[0], goal[1])) continue;
+        if (goal[0] === at[0] && goal[1] === at[1]) continue;
+        this.say(`walking up to whoever is at ${who.x},${who.y}`);
+        const res = await this.nav.walkTo(this.collision, goal, this.longWalk);
+        // A battle on the way is the errand arriving early: a trainer with a
+        // sight range opens one the moment the walk crosses their line, which
+        // is how most of these actually begin.
+        if (res.stopped === 'battle') return true;
+        const now = this.collision.playerPos(await this.settled() || wram);
+        if (now[0] !== at[0] || now[1] !== at[1]) return true;
+      }
+      // Could not get anywhere near this one; do not ask about them again.
+      spent.add(who.x + ',' + who.y);
+    }
+    return false;
   }
 
   /** What `clearHere` has to say for itself. */
