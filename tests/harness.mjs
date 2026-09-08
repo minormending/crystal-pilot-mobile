@@ -492,6 +492,32 @@ export function fakeRom({ moves = {}, species = {}, items = {},
  * tests the stub. This drives the actual selection logic, byte layout and all,
  * so reverting the fix in romdata.js fails a test rather than passing one.
  */
+/**
+ * A `gb` that answers `romByte` from a real collision permission table.
+ *
+ * Every collision test until now passed `{ romByte: () => 0 }`, which means
+ * `permission()` answered LAND for every byte on the map -- so `isWall`,
+ * `isWater`, and every rule built on them ran on each of those tests and was
+ * checked by none of them. `tools/mutate` put the number on it: eighteen per
+ * cent of `collision.js` mutations caught, in the module that decides where the
+ * pilot may walk.
+ *
+ * `perms` maps a collision byte to its permission nybble; anything not named
+ * reads LAND, which is what the old stub did for everything.
+ */
+export function collisionRom(perms = {}) {
+  const sym = symbols();
+  const bank = sym.bank('CollisionPermissionTable');
+  const addr = sym.addr('CollisionPermissionTable');
+  return {
+    romByte(b, at) {
+      if (b !== bank) return 0;
+      const coll = at - addr;
+      return perms[coll] ?? 0;
+    },
+  };
+}
+
 export function romReading(moveTable) {
   const sym = symbols();
   const { bank, addr } = { bank: sym.bank('Moves'), addr: sym.addr('Moves') };

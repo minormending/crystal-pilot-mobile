@@ -195,6 +195,22 @@ def _num(src, mask):
         yield m.start(), m.end(), str(value + 1), f"{text} to {value + 1}"
 
 
+def _null_not_default(src, mask):
+    """`null` to `undefined`, except where it is an initialiser.
+
+    `let x = null` and `{ opt = null }` behave identically with `undefined`, so
+    those mutations always survive and say nothing -- fifteen of them in one
+    module, which is enough noise to stop a report being read. A `null` that is
+    *returned* or *compared* is a different matter: callers here check `=== null`
+    to tell "cannot say" from "says none", and that distinction has been a bug.
+    """
+    for m in masked_finditer(r"\bnull\b", src, mask):
+        before = src[:m.start()].rstrip()
+        if before.endswith("=") and not before.endswith(("==", "!=", ">=", "<=")):
+            continue
+        yield m.start(), m.end(), "undefined", "null to undefined"
+
+
 def _drop_negation(src, mask):
     for m in masked_finditer(r"(?<![!=<>])!(?=[A-Za-z_$(])", src, mask):
         yield m.start(), m.end(), "", "drop the !"
@@ -211,7 +227,7 @@ OPERATORS = [
     _tok(r"(?<![<>=!-])<(?![<=])", "<=", "< to <="),
     _tok(r"\btrue\b", "false", "true to false"),
     _tok(r"\bfalse\b", "true", "false to true"),
-    _tok(r"\bnull\b", "undefined", "null to undefined"),
+    _null_not_default,
     _drop_negation,
     _num,
 ]
