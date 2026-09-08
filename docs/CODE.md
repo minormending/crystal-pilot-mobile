@@ -1098,7 +1098,7 @@ point those coordinates mean somewhere else entirely.
 
 ## 5. Crossing to the next map
 
-<!-- covers: gen2/journey.js gen2/world.js @ 9a84bb328dc7 -->
+<!-- covers: gen2/journey.js gen2/world.js @ 9162522abf79 -->
 
 A connection spans only part of a shared edge, so "walk west until something
 happens" does not work. `crossEdge()` closes the distance in stages, then tries
@@ -1916,7 +1916,7 @@ flowchart TD
 
 ## 7a. Five that act on where you already are
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ 2b88f7529d83 -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ 4e3111716cf9 -->
 
 Grind, hunt and catch all go *looking* for something. These five do the obvious
 thing with the situation you are already in, and take no parameters:
@@ -2538,7 +2538,7 @@ because that failure is only otherwise discovered by reaching for the undo.
 
 ## 8. The errands
 
-<!-- covers: titles/crystal.js gen2/journey.js @ 435c16580fa5 -->
+<!-- covers: titles/crystal.js gen2/journey.js @ db95069beed6 -->
 
 Everything in this section is `crystal.js` — the only file in the app that names
 a Crystal map, a Crystal door or a Crystal NPC. What it stands on is
@@ -2870,7 +2870,7 @@ the bag" rather than "did we gain any".
 
 ## 8a. Finding the Centers and the Marts in the cartridge
 
-<!-- covers: gen2/world.js gen2/journey.js @ 9a84bb328dc7 -->
+<!-- covers: gen2/world.js gen2/journey.js @ 9162522abf79 -->
 
 The last thing in this app that had to be written out by hand. A title said
 where the Centers and the Marts were, so the pilot healed in the two towns
@@ -3106,7 +3106,7 @@ by, which is the only leg it can measure.
 
 ## 8d. A route the game itself refuses
 
-<!-- covers: gen2/journey.js gen2/state.js @ f0a7ac8b5ada -->
+<!-- covers: gen2/journey.js gen2/state.js @ fa8c153f594d -->
 
 The pass before this one taught the walk to *quote* the man who turns it back.
 This is the pilot doing something about it.
@@ -3213,7 +3213,7 @@ counting bytes reads a full case as one.
 
 ## 8e. Fighting everybody here
 
-<!-- covers: gen2/journey.js @ b83741ad8c4a -->
+<!-- covers: gen2/journey.js @ 04911f3d6ac9 -->
 
 The primitive a Gym needs. The pilot has been stopped on Route 32 for three
 passes by a man who wants Falkner beaten first, and beating Falkner means
@@ -3314,7 +3314,7 @@ costs however long it takes somebody to notice their money is gone.
 
 ## 8f. Going and winning a badge
 
-<!-- covers: gen2/journey.js gen2/state.js titles/crystal.js @ 151a7118e062 -->
+<!-- covers: gen2/journey.js gen2/state.js titles/crystal.js @ 617c9ea7e74c -->
 
 The pilot has been turned back from Route 32 since the pass it learned to find
 Pokémon Centers. `reopen` throws away every written-off road the moment a badge
@@ -3372,6 +3372,19 @@ enough to walk into. So the title declares one Gym, the machinery is written
 against a declared shape exactly as the healers were, and the day a better
 signature turns up nothing above `gyms:` has to change.
 
+**And the leader is who gets named when the leader is the problem.** A Gym whose
+trainers had already been beaten, and whose leader then won, reported *no badge
+yet — everyone here has already been beaten*: `beatGym` was throwing away what
+`leaderFight` said and reporting the sweep's line. He is the reason there is no
+badge and they are not. The sweep still speaks when the leader was never
+reached, because a party that ran out on the way to him is the sweep's story to
+tell.
+
+That is the fourth of this shape in four passes, all in this one file — *could
+not heal*, *healed one Pokémon*, *something is still on screen*, and this. The
+rule the messages follow: **say the thing that changes what somebody would do
+next.**
+
 **And the heal's answer is read rather than discarded.** The first cartridge run
 of this had a lead at 1 of 22, a heal that was turned back at Route 32's gate,
 and it walked into the Gym anyway and lost the first battle — which is worse
@@ -3384,7 +3397,7 @@ everybody is a heal whatever it says about itself.
 
 ## 8g. The tiles that run a script, and saying hello
 
-<!-- covers: gen2/world.js gen2/journey.js @ 9a84bb328dc7 -->
+<!-- covers: gen2/world.js gen2/journey.js @ 9162522abf79 -->
 
 Four passes of machinery pointed at one sentence a man says, and the reader that
 made it diagnosable is twelve lines.
