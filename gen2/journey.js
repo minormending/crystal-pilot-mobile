@@ -36,6 +36,12 @@ const LONG_WALK_STEPS = 260;
 // far as any job walks in one press.
 const OFFER_LEGS = 6, OFFER_MOST = 24;
 
+// How many refused legs one walk will write off before giving up. The `avoid`
+// set already terminates over a finite graph; this is the bound for a graph
+// nobody has seen, and it is generous because a refusal costs one crossing
+// attempt rather than a walk.
+const MAX_REFUSALS = 20;
+
 // What `pickUp` answers with when it did not come away with anything. Named,
 // because `takeHere` has to tell them apart: the first is what an item ball
 // somebody already took looks like -- the object stays in work RAM once the
@@ -511,7 +517,15 @@ export class Journey {
     // edge from a finite graph, and when none is left the answer is honestly
     // that there is no way.
     const avoid = new Set();
-    for (let leg = 0; leg < maxLegs; leg++) {
+    // **A refused leg is not a leg walked**, and counting it as one is how the
+    // first walk to a landmark-only place failed: DARK CAVE is two legs from
+    // Route 29 through Route 46, the pilot cannot get up there, and every
+    // refusal spent one of the twelve until the budget ran out in Cherrygrove
+    // with *too many legs*. So the budget counts arrivals and the refusals get
+    // their own -- bounded because `avoid` only grows over a finite graph, and
+    // capped as well so a graph nobody has seen cannot spin.
+    let walked = 0, refused = 0;
+    for (let step = 0; walked < maxLegs && refused < MAX_REFUSALS; step++) {
       if (this.stopped) return { ok: false, message: 'stopped' };
       const here = await this.mapKey();
       if (here === target) return { ok: true, message: 'arrived' };
@@ -529,6 +543,7 @@ export class Journey {
       const next = route[0];
       if (next.kind === 'warp') {
         this.say(`through to ${this.where(next.key)}`);
+        const before = here;
         if (!await this.through(next.tile, next.key)) {
           if (this.stopped) return { ok: false, message: 'stopped' };
           // Say what is actually in the way. A door that will not open and a
@@ -544,9 +559,11 @@ export class Journey {
           // A door that will not open is a leg to route around, the same as an
           // edge that will not cross.
           this.say(`no way through to ${this.where(next.key)} — trying another way`);
-          avoid.add(World.leg(here, next.key));
+          avoid.add(World.leg(before, next.key));
+          refused++;
           continue;
         }
+        walked++;
         continue;
       }
       this.say(`heading ${next.dir.toLowerCase()}`);
@@ -572,10 +589,19 @@ export class Journey {
         if (this.stopped) return { ok: false, message: 'stopped' };
         this.say(`${next.dir.toLowerCase()} will not go — trying another way`);
         avoid.add(World.leg(here, next.key));
+        refused++;
         continue;
       }
+      walked++;
     }
-    return { ok: false, message: 'too many legs' };
+    // Arriving on the last leg of the budget is arriving. The check at the top
+    // of the loop is the only one there was, so a walk that spent its whole
+    // budget getting there reported *too many legs* from the doorstep -- found
+    // by giving one exactly the legs it needed.
+    if (await this.mapKey() === target) return { ok: true, message: 'arrived' };
+    return { ok: false, message: refused >= MAX_REFUSALS
+      ? `gave up after ${refused} legs that would not go`
+      : 'too many legs' };
   }
 
   /**

@@ -1162,3 +1162,26 @@ test('the list is bounded, because the graph is not', async (t) => {
   const j = traveller({ reachable, landmarks });
   t.eq(j.placesFrom(HOME).length, 24, 'two dozen');
 });
+
+test('a refused leg does not spend the walk budget', async (t) => {
+  // How the first walk to a landmark-only place failed: DARK CAVE is two legs
+  // from Route 29 through Route 46, the pilot cannot get up there, and every
+  // refusal spent one of the twelve legs until the budget ran out in
+  // Cherrygrove with *too many legs*.
+  const j = ringWalker({ refuse: '1>2' });
+  const r = await j.travelTo(3, { maxLegs: 3 });
+  t.true(r.ok, `it arrived on a budget of three: ${r.message}`);
+  t.eq(j.log.filter((l) => l !== '1>2').length, 3, 'three legs actually walked');
+});
+
+test('a graph of nothing but refusals is given up on, and says so', async (t) => {
+  // The routes run out before the refusal cap does on a graph this small, which
+  // is the better of the two answers: it says there is no way *this can walk*,
+  // as against no way at all.
+  const j = ringWalker();
+  j.crossEdge = async () => false;
+  const r = await j.travelTo(3, { maxLegs: 12 });
+  t.false(r.ok, 'no way through');
+  t.contains(r.message, 'this can walk', 'and which kind of no it is');
+  t.contains(r.message, 'refused', 'with a count of what it tried');
+});
