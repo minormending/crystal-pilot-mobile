@@ -110,6 +110,17 @@ def mutations(root):
             "## 9. The interface", "## 9. The interface, renamed")),
         "moves": lambda: edit("gen2/engine.js", sub(
             "lethalEffects: [38, 40, 87, 88, 89, 144]", "lethalEffects: [40]")),
+        # The rule put back the way it was written, one class instead of two --
+        # which is the whole defect: `.param` sets display later in the sheet,
+        # so the save card's slot label went back beside the middle row.
+        "deadcss": lambda: edit("index.html", sub(
+            "  .param.slots{display:block}", "  .slots{display:block}")),
+        # And our own marker put back beside Pico's, which is what shipped for
+        # four passes.
+        "markers": lambda: edit("index.html", sub(
+            "  details.how summary::after{float:none;",
+            '  details.how summary::before{content:"\u203a"}\n'
+            "  details.how summary::after{float:none;")),
     }
 
 

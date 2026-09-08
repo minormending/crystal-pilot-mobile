@@ -29,6 +29,10 @@ APP = sorted((f for d in LAYERS for f in (ROOT / d).glob("*.js")),
 # repo has to enforce is narrower and its own business: that the copies are in
 # the offline shell.
 VENDORED = sorted(f for d in ("sync", "baton") for f in (ROOT / d).glob("*.js"))
+# The vendored stylesheet, which is somebody else's and is read rather than
+# edited: what this repo has to know about it is what it already draws, so that
+# nothing here draws the same thing twice.
+VENDORED_CSS = sorted((ROOT / "vendor").glob("*.css"))
 INDEX = ROOT / "index.html"
 SW = ROOT / "sw.js"
 
@@ -1123,6 +1127,235 @@ def check_exports():
         else ok("every export is read by something outside its module")
 
 
+# --- the stylesheet against itself, and against the vendor's ----------------
+#
+# Two failures that have the same shape: a declaration that is written, is
+# correct, and never applies. Neither shows up as an error anywhere -- the CSS
+# parses, the page renders, and what you get is simply not what the rule says.
+# `node --check` cannot see it, no test opens a browser, and a screenshot only
+# catches it if somebody happens to look at that row and know what it should
+# have looked like. Both of these were found by looking; both are now looked
+# for.
+
+STYLE = re.compile(r"<style>(.*?)</style>", re.S)
+IMPORTANT = re.compile(r"!\s*important")
+DECL = re.compile(r"(?:^|;)\s*([a-z-]+)\s*:([^;]*)")
+
+
+def _css_rules(css):
+    """(selector, body, order) for every rule at the top level of a sheet.
+
+    At-rule bodies are skipped rather than descended into: a declaration inside
+    `@media` that repeats one outside it is the whole point of a media query,
+    and reporting that as shadowing would be reporting the feature.
+    """
+    css = re.sub(r"/\*.*?\*/", "", css, flags=re.S)
+    rules, i, n, order = [], 0, len(css), 0
+    while i < n:
+        brace = css.find("{", i)
+        if brace < 0:
+            break
+        selector = css[i:brace].strip()
+        depth, j = 1, brace + 1
+        while j < n and depth:
+            if css[j] == "{":
+                depth += 1
+            elif css[j] == "}":
+                depth -= 1
+            j += 1
+        if not selector.startswith("@"):
+            rules.append((selector, css[brace + 1:j - 1], order))
+            order += 1
+        i = j
+    return rules
+
+
+def _decls(body):
+    """{property: important} for one rule body."""
+    return {m.group(1): bool(IMPORTANT.search(m.group(2)))
+            for m in DECL.finditer(body)}
+
+
+def _values(body):
+    """{property: value} for one rule body, `!important` and spaces removed."""
+    return {m.group(1): IMPORTANT.sub("", m.group(2)).strip()
+            for m in DECL.finditer(body)}
+
+
+ONE_CLASS = re.compile(r"^\.([\w-]+)$")
+
+
+def check_dead_css():
+    """No single-class rule is overridden everywhere it could apply.
+
+    Two classes, one element, same property: CSS breaks the tie on source order,
+    so the rule written *first* loses -- and a modifier written near the thing it
+    modifies, above the layout rule it means to override, is dead on every
+    element that carries it.
+
+    `.slots{display:block}` was exactly that. It sat with the other save-card
+    rules; `.param{display:flex}` sat two hundred lines further down with the
+    other parameter rows; the only element in the app carrying `slots` carries
+    `param` too. So the save card's three slots laid out as a flex row with the
+    label centred beside them, and "SLOTS" spent its whole life next to the
+    *middle* row of three, reading as that row's name.
+
+    Only reported where it is certainly dead: the class is in the markup, every
+    element carrying it also carries the overriding one, the loser is not
+    `!important` where the winner is not, and neither rule is inside an at-rule.
+    Classes the app names in JavaScript are left out on both sides, and the
+    second half of that is the one that matters -- a winner the app takes off
+    again is not a winner. `.runlog{display}` is beaten by `.hide` on the one
+    element that carries both, and is exactly what that element is for the rest
+    of the time.
+    """
+    css = STYLE.search(INDEX.read_text()).group(1)
+    rules = _css_rules(css)
+    # Every class set the markup actually builds.
+    sets = [set(m.split()) for m in re.findall(r'class="([^"]*)"', INDEX.read_text())]
+    # Classes the app *uses as classes* at run time: either side of a
+    # comparison, these are outside what this file can reason about. Read from
+    # the class operations rather than from every quoted word in the app, which
+    # was the first draft and quietly excluded `slots` -- an IndexedDB store
+    # three layers down happens to be called that, so the one defect this group
+    # was written for was the one thing it skipped.
+    js = " ".join(p.read_text() for p in APP)
+    live = set()
+    for m in re.finditer(r"classList\.(?:add|remove|toggle|contains|replace)"
+                         r"\(([^)]*)\)", js):
+        live.update(re.findall(r"['\"]([\w-]+)['\"]", m.group(1)))
+    for m in re.finditer(r"className\s*=\s*['\"]([^'\"]*)['\"]", js):
+        live.update(m.group(1).split())
+    # And the ones built into markup strings, which the row builders do.
+    for m in re.finditer(r"class=\\?[\"']([\w -]*)", js):
+        live.update(m.group(1).split())
+    props = {}          # class -> {property: (order, important)}
+    for selector, body, order in rules:
+        m = ONE_CLASS.match(selector)
+        if not m:
+            continue
+        for prop, bang in _decls(body).items():
+            props.setdefault(m.group(1), {})[prop] = (order, bang)
+    problems = []
+    for cls, mine in sorted(props.items()):
+        carriers = [s for s in sets if cls in s]
+        if not carriers or cls in live:
+            continue
+        for prop, (order, bang) in sorted(mine.items()):
+            winners = set()
+            for carried in carriers:
+                beat = [o for o in carried - {cls}
+                        if prop in props.get(o, {})
+                        and props[o][prop][0] > order
+                        and (props[o][prop][1] or not bang)
+                        and o not in live]
+                if not beat:
+                    break
+                winners.update(beat)
+            else:
+                problems.append(
+                    f"index.html  .{cls}{{{prop}}} never applies — "
+                    f".{sorted(winners)[0]} sets it later")
+    for p in problems:
+        print(f"        {p}")
+    return fail(f"{len(problems)} dead declaration(s)") if problems \
+        else ok(f"{len(props)} class rules, none written where it cannot apply")
+
+
+PSEUDO = re.compile(r"^(.*?)(::?(?:before|after))$")
+
+
+def _drawing_pseudos(css):
+    """{subject: pseudo} for vendor rules that draw a mark with a pseudo-element.
+
+    "Draws" means a `content` that is not `none`, plus something to see: a
+    background image, a border or a size. The chevron Pico puts on every
+    `summary` is the one that matters here, but the set is read from the sheet
+    rather than listed, so a vendor upgrade that adds another is covered.
+    """
+    out = {}
+    for selector, body, _ in _css_rules(css):
+        for part in selector.split(","):
+            m = PSEUDO.match(part.strip())
+            if not m:
+                continue
+            d = _decls(body)
+            if "content" not in d:
+                continue
+            if not ({"background-image", "border", "border-width", "width"} & set(d)):
+                continue
+            subject = m.group(1).strip().split()[-1] if m.group(1).strip() else ""
+            # Bare elements and attribute selectors only. A vendor class is the
+            # vendor's own business; a `summary` is ours the moment we write one.
+            if re.fullmatch(r"[a-z]+|\[[^\]]+\]", subject):
+                out[subject] = m.group(2)
+    return out
+
+
+def check_markers():
+    """We do not hand-draw an affordance the vendor sheet already draws.
+
+    Pico puts a chevron on every `summary` as a floated `::after`. This sheet
+    drew a `›` on the same summaries as a `::before`, so both `details.how`
+    blocks in the app carried *two* disclosure markers: one beside the words and
+    one at the far right of the row, and only the far one moved when the block
+    opened. It shipped in v161 and survived four passes of looking at those
+    cards, because two markers is not obviously wrong -- it reads as a design
+    somebody chose.
+
+    Replacing the vendor's is still allowed; duplicating it is not. So a rule
+    that draws on either pseudo of an element the vendor already draws on has to
+    be accompanied by one that switches the vendor's off.
+    """
+    vendor_css = "\n".join(p.read_text() for p in VENDORED_CSS)
+    ours = STYLE.search(INDEX.read_text()).group(1)
+    drawn = _drawing_pseudos(vendor_css)
+    if not drawn:
+        return fail("read no drawing pseudo-elements out of the vendor sheet")
+    # Which vendor pseudos this sheet turns off, per subject. Read off the
+    # *values*, because the first draft asked whether the body mentioned
+    # `none` at all -- and the rule that stops Pico's chevron floating says
+    # `float:none`, so the check read our fix as our having removed the marker
+    # and then had nothing left to complain about. A group that is switched
+    # off by the very edit it is meant to police is worse than no group.
+    silenced = set()
+    for selector, body, _ in _css_rules(ours):
+        v = _values(body)
+        if v.get("display") != "none" and v.get("content") != "none":
+            continue
+        for part in selector.split(","):
+            m = PSEUDO.match(part.strip())
+            if not m:
+                continue
+            subject = m.group(1).strip().split()[-1] if m.group(1).strip() else ""
+            subject = re.sub(r"[.#\[].*$", "", subject) or subject
+            silenced.add((subject, m.group(2)))
+    problems = []
+    for selector, body, _ in _css_rules(ours):
+        d = _decls(body)
+        if "content" not in d:
+            continue
+        for part in selector.split(","):
+            m = PSEUDO.match(part.strip())
+            if not m:
+                continue
+            subject = m.group(1).strip().split()[-1] if m.group(1).strip() else ""
+            subject = re.sub(r"[.#\[].*$", "", subject) or subject
+            if subject not in drawn:
+                continue
+            theirs = drawn[subject]
+            if (subject, theirs) in silenced:
+                continue
+            problems.append(
+                f"index.html  {part.strip()} draws a mark, and the vendor sheet "
+                f"already draws {subject}{theirs} — two markers on one element")
+    for p in problems:
+        print(f"        {p}")
+    return fail(f"{len(problems)} duplicated marker(s)") if problems \
+        else ok(f"no mark is drawn twice on any of "
+                f"{len(drawn)} vendor-drawn element(s)")
+
+
 CHECKS = {
     "syntax": check_syntax,
     "layers": check_layers,
@@ -1142,6 +1375,8 @@ CHECKS = {
     "doclinks": check_doc_links,
     "names": check_names,
     "moves": check_moves,
+    "deadcss": check_dead_css,
+    "markers": check_markers,
 }
 
 
