@@ -470,6 +470,14 @@ export class Crystal extends Journey {
       await this.runScripts();
       // "Do you want this one?" defaults to yes, which is what we want here --
       // unlike the nickname box that follows it.
+      //
+      // **And the nickname box is not in fact declined**, which the
+      // twenty-eighth pass measured and could not fix. Every starter this app
+      // takes is named AAAAAAAAAA: the A presses above answer the question and
+      // then type the letter under the cursor, and `declineNickname` returns
+      // false because the box is not drawn when it looks. Twelve runs, five
+      // approaches, and the account of each is in
+      // [what is proven](../docs/PROVEN.md). It is cosmetic and it is real.
       await this.tasks.declineNickname();
       await this.runScripts();
       const s = await this.snap();
