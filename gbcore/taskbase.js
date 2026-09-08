@@ -73,8 +73,32 @@ export class TaskBase {
 
   say(msg) { this.onProgress(msg); }
 
-  async closeMenus(times = 4) {
-    for (let i = 0; i < times; i++) await this.push('B', 5, 10);
+  /**
+   * Back out of whatever is on screen, and *check* that it closed.
+   *
+   * It pressed B four times and asked nothing. Which is the one habit this
+   * repository has spent twenty passes removing everywhere else -- read the live
+   * state and step toward the target -- surviving in the primitive every other
+   * primitive falls back to.
+   *
+   * What it costs is not a menu left open. It is that **every directional press
+   * after it drives a menu cursor instead of the player**, silently. Measured,
+   * while three menus deep in the pack: `closeMenus()` returned, then 400 paces
+   * of `paceUntilBattle` moved the START menu's cursor up and down, and the
+   * grind reported *no wild Pokemon appeared -- are you standing in grass?* from
+   * a tile whose collision byte is `$18`, tall grass, with `onGrass` true.
+   * A wrong answer to the right question, arrived at confidently.
+   *
+   * Four was not even the wrong number: a box swallows a press while it
+   * animates, so the count that closes three levels is not three, or four, or
+   * any number. Press, look, stop when it is shut.
+   */
+  async closeMenus(times = 8) {
+    for (let i = 0; i < times; i++) {
+      if (!(await this.snap()).windowOpen) return true;
+      await this.push('B', 5, 10);
+    }
+    return !(await this.snap()).windowOpen;
   }
 
   /** Tap through whatever text is left until the game stops asking. */

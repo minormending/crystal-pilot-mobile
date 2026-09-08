@@ -484,8 +484,14 @@ and in `bootstrap.js`, with nothing able to notice if they drifted.
   where confusing the pack for the battle menu cost five Poké Balls.
 - **`wBalls` does not settle until a battle ends.** A Pokémon can already be
   caught while the bag still reads five. Never difference the bag mid-battle.
-  Out on the map it settles immediately, which is what lets a pickup be
-  confirmed by differencing both pockets.
+  **And the ITEM pocket does not settle immediately out on the map either**,
+  which the line here claimed for one version and is wrong. Measured: a BERRY
+  used on a Cyndaquil at 5/22 took it to 15/22 — ten HP, exactly a BERRY — and
+  `wItems` still listed that berry on the next read. The removal landed later,
+  and when it did, the berry and the potion used after it disappeared together.
+  A pickup is still confirmed by differencing, because the *arrival* of an item
+  does settle; it is the *spending* of one that lags. So HP is the evidence a
+  heal worked and the pocket is corroboration — see section 7a.
 - **`POCKET_KINDS = 20` is a bound, not a capacity.** A garbage count byte must
   not send a reader walking through work RAM. It is deliberately not in the
   engine profile: that file says in its own header that this app's caution is
@@ -958,7 +964,7 @@ eight kilobytes a full snapshot copies, which is worth keeping distinct.
 
 ## 6. Battles
 
-<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ f9d6c3137b78 -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ d36794f9ab40 -->
 
 ### Which move, and which question
 
@@ -1471,6 +1477,82 @@ which is worth knowing: the syntax check in `tools/check-app` parses every
 module but cannot see an undefined reference. That class of bug only shows up by
 running the thing.
 
+**Heal spends the bag before it spends the walk.** `nearestHeal` prices two
+Centers in tiles and picks the nearer — 31 against 53 from the east end of Route
+29 — and a POTION already in the pocket costs none of them. A grind is handed a
+budget of twelve trips for exactly this reason, and until now it spent them
+while carrying the answer.
+
+```mermaid
+flowchart TD
+    H["Heal"] --> F{"anyone fainted?"}
+    F -- yes --> W["walk to the nearer Center<br/><i>a potion does nothing at 0 HP</i>"]
+    F -- no --> B{"anything in the bag<br/>that mends?"}
+    B -- no --> W
+    B -- yes --> C["cheapest first, worst-hurt first"]
+    C --> U["useItemOn: START → PACK →<br/>ITEMS → the item → USE → who"]
+    U --> V{"did the HP move?"}
+    V -- yes --> OK["mended, without moving a tile"]
+    V -- no --> W
+```
+
+Which item is `cheapestHeal`, and which items count is the **title's** list, not
+the engine's: an id is layout and a name is content, and content is what a hack
+changes. Weakest first, matched through the same `normalise` fold the ball
+preference uses — so BERRY comes before POTION, being free and growing back on
+the trees the Take row finds.
+
+<details>
+<summary><b>Advanced detail:</b> four boxes, and the three things measurement
+changed about them</summary>
+
+Every box between the START menu and a healed Pokémon is matched on its
+**shape** rather than reached by a press count, which is the lesson `learnMove`
+and the battle pack already carried. All four measured on the cartridge:
+
+| Box | `menuItems` / `menuTop` | Note |
+| --- | --- | --- |
+| the START menu | 7 / 0 | grows as the game goes on; counted by stepping |
+| the pack | 5 / 1 | the same box the battle pack draws |
+| USE / GIVE / TOSS / QUIT | 4 / 3 | USE is row 1, and TOSS is two rows under it |
+| which Pokémon | 4 / 0 | four items again, told apart by the row |
+
+**The PACK row is found by trying and looking.** It is row 2 of 7 on a fresh
+Route 29 save, and nothing in the code believes that: the menu grows — no
+POKéDEX or POKéGEAR early on — so it drives to a row, presses A, and asks
+whether the pack's own box is what appeared. `saveGame` learned the same thing
+about SAVE.
+
+Three defects came out of driving it, and all three were about *evidence*:
+
+- **`settleText` taps A while any window is open, and after a heal the pack is
+  one of those.** With two Potions in the bag that press lands on the next item
+  and uses it — the stray-press failure `watchThrow` has warned about in the
+  neighbouring file since it was written. `_pastTheMessage` stops as soon as the
+  box on screen is the pack or the party list again, because those are boxes to
+  back out of and not text to advance.
+- **The ITEM pocket lags a use, so the pocket is not the evidence.** A BERRY
+  took a Cyndaquil from 5/22 to 15/22 and `wItems` still listed it. Judging on
+  the pocket reported a working heal as a failure — and that failure then stopped
+  the loop from reaching for a second item. HP is the evidence; the pocket is
+  polled for, briefly, and its silence is reported rather than believed.
+- **And the loop re-read that lagging pocket.** So it picked the same berry
+  again, walked past it in a pack that no longer had it, and gave up: the
+  Pokémon was left at 15 of 22 **with two potions in the bag**. The pocket is
+  read once per press of Heal and kept, decremented as things are spent — which
+  is the opposite of what this repository says about the ball count, and
+  deliberately. *Count them out of the bag rather than trusting a tally* is the
+  right rule when the bag is current, and this pocket has been measured not to
+  be. A local tally can only be wrong in one direction here: it forgets an item
+  sooner than the game does, and the next press reads fresh.
+
+End to end on Route 29, standing at (19,4) with a Cyndaquil at **6/24** and a bag
+of two Potions and a Berry: **24/24, the Berry and one Potion spent, and the
+player never left the tile.** Before the pocket fix, the same situation stopped
+at 15/22 with two Potions unspent.
+
+</details>
+
 **Take is the one whose list comes out of the cartridge.** `collision.takeables`
 reads `wMapObjects` for the sprite ids the engine profile names as an item ball
 or a fruit tree, so on Route 29 the row reads *one item ball and one fruit tree*
@@ -1519,7 +1601,7 @@ to take here — tried 2* and stayed green.
 
 ## 7b. Saving, and getting the save out
 
-<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ f9d6c3137b78 -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ d36794f9ab40 -->
 
 ```mermaid
 flowchart TD
@@ -2663,6 +2745,22 @@ and the dot goes red. Which is the shape found in `Join` three audits earlier,
 in the other half of the app: a `finally` without a `catch`, on a path nobody
 presses twice.
 
+**And a press that is not looked at is not a press.** `closeMenus` pressed B
+four times and asked nothing — in the primitive every other primitive falls back
+to, in a repository that has spent twenty passes replacing exactly that habit
+everywhere else. What it costs is not a menu left open. It is that **every
+directional press afterwards drives a menu cursor instead of the player**,
+silently: measured three boxes deep in the pack, `closeMenus()` returned, then
+400 paces of `paceUntilBattle` moved the START menu's cursor up and down, and
+the grind reported *no wild Pokémon appeared — are you standing in grass?* from a
+tile whose collision byte is `$18`, tall grass, with `onGrass` true. A wrong
+answer to the right question, arrived at confidently.
+
+Four was not even the wrong number. A box swallows a press while it animates, so
+the count that closes three levels is not three, or four, or any number. Press,
+look, stop when it is shut — and say so, because a caller that cannot close the
+menus has no business pressing anything else.
+
 <details>
 <summary><b>Advanced detail:</b> Stop, and the button that could not be
 pressed</summary>
@@ -2926,7 +3024,7 @@ recorded at all, so the kept battery was restored into whatever ROM was picked
 next; and `pickKey` was *the only record, if there is exactly one*, which wrote
 this cartridge's save into the previous cartridge's record. Both failed
 silently, and both were on the paths nobody presses — see
-[Twenty-two audits](PROVEN.md#twenty-two-audits-and-how-each-defect-was-actually-found)
+[Twenty-three audits](PROVEN.md#twenty-three-audits-and-how-each-defect-was-actually-found)
 for why that is not a coincidence.
 
 `patchMeta` merges fields into the `meta` record, and it used to do that as a

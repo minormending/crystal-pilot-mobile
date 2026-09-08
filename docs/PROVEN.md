@@ -28,7 +28,7 @@ flowchart LR
 
 Every step of that is the first time it has been watched on a cartridge since
 the battle and job code was rewritten, and one of them failed the first time
-round — see [the eleventh pass](#twenty-two-audits-and-how-each-defect-was-actually-found).
+round — see [the eleventh pass](#twenty-three-audits-and-how-each-defect-was-actually-found).
 
 Proven, and visible in [the screenshot on the front page](../README.md):
 
@@ -332,7 +332,7 @@ second, which is there so the core's own waits finish, not to run a game.
   candidates and returned true standing three tiles clear of any. It checks the
   tile underfoot now.
 
-## Twenty-two audits, and how each defect was actually found
+## Twenty-three audits, and how each defect was actually found
 
 Everything above was watched happening. This section was the exception, and the
 exception was the point of it: after the ROM-hack work shipped, eleven passes
@@ -432,6 +432,11 @@ exactly why nothing failed.
 | 22 | the approach used `walkTo`'s eighty steps while every other leg passes 260 | a thing across a route | asking a second tile |
 | 22 | listing the slots dropped five rejections nobody could catch | a read that fails | **a fake IndexedDB** |
 | 22 | and my own new advice painted an ordinary outcome red | pressing Take twice | measuring the fix |
+| 23 | `closeMenus` pressed B four times blind, so a grind paced a menu cursor | driving the pack three boxes deep | **driving a menu at all** |
+| 23 | `settleText` after a heal taps A into the still-open pack | two potions in the bag | driving a menu at all |
+| 23 | the ITEM pocket lags a use, so the bag is not the evidence | a berry that healed and stayed listed | **watching both halves** |
+| 23 | and the loop re-read that pocket, so it never reached the second item | one berry and two potions | watching both halves |
+| 23 | my own patch landed in the wrong method, and 284 tests passed | pressing the button once | measuring the fix |
 
 Five things in that table are worth more than the individual rows.
 
@@ -442,12 +447,12 @@ device, a second cartridge, a second Pokémon. What it measures is how much of
 the world you have to *arrange*, not how much you have to own: the fifth pass
 needed no hardware at all, only a party with a corpse in slot one.
 
-**Two of the sixty-seven were caught by a check**, and only after the fix
+**Two of the seventy-two were caught by a check**, and only after the fix
 had decided what to look for: the wiring group named the four modules still
 importing constants that had just been deleted. One more was caught by a *test*,
 and only because the test hung — the obvious `continue` for the party prompt
 advanced nothing in a loop bounded by balls thrown. That is the honest weight to
-give this repository's seventeen check groups and 258 tests: they hold a fix
+give this repository's seventeen check groups and 292 tests: they hold a fix
 down, and they catch the fix that is itself wrong. They do not find the fault.
 
 **Measuring also rules things out, which is half of what it is for.** The
@@ -1266,6 +1271,95 @@ and the microtask queue drains in between. It is there to make the ordering a
 rule of the function rather than a property of the platform — and saying which
 of two changes was the fix is the thing three earlier passes got wrong by not
 saying.
+
+### A twenty-third pass: the first time the pilot used an item
+
+Twenty-two passes of reading the game, and the pilot had only ever *pressed* at
+menus it already knew: the battle menu, the pack in a battle, the save box, two
+yes/no prompts. This pass took it four boxes deep into the field pack for the
+first time, and the audit is what happened on the way.
+
+Every box is matched on its **shape** rather than reached by a press count,
+which is the lesson `learnMove` and the battle pack already carried. All four
+measured on the cartridge:
+
+| Box | `menuItems` / `menuTop` |
+| --- | --- |
+| the START menu | 7 / 0 — and it grows, so it is counted by stepping |
+| the pack | 5 / 1 — the same box the battle pack draws |
+| USE / GIVE / TOSS / QUIT | 4 / 3 — USE on row 1, TOSS two rows under it |
+| which Pokémon | 4 / 0 — four items again, told apart by the row |
+
+**PACK is row 2 of 7 on a fresh Route 29 save, and nothing believes that.** The
+menu grows, so the row is found by driving to one, pressing A, and asking
+whether the pack's own box appeared — the same thing `saveGame` learned about
+SAVE.
+
+### The one in the primitive everything falls back to
+
+```mermaid
+flowchart LR
+    A["closeMenus()<br/><b>press B four times, ask nothing</b>"] --> B["one press swallowed<br/>while a box animates"]
+    B --> C["a menu is still open"]
+    C --> D["paceUntilBattle presses LEFT/RIGHT<br/><b>400 times, into the menu cursor</b>"]
+    D --> E["<i>no wild Pokémon appeared —<br/>are you standing in grass?</i>"]
+    E --> F["<b>collision byte $18. Tall grass.<br/>onGrass true.</b>"]
+```
+
+`closeMenus` is what every other primitive falls back to, and it was the one
+place that never looked. What that costs is not a menu left open: it is that
+**every directional press afterwards drives a menu cursor instead of the
+player**, silently. Measured exactly as drawn — three boxes deep in the pack, the
+call returned, and a grind then reported a confident wrong answer to the right
+question from the middle of a route covered in grass.
+
+Four was not even the wrong number. A box swallows a press while it animates, so
+the count that closes three levels is not three, or four, or any number.
+
+### Two about evidence, and they are the same finding twice
+
+**The ITEM pocket lags a use.** Measured: a BERRY used on a Cyndaquil at 5/22
+took it to 15/22 — ten HP, exactly a BERRY — and `wItems` still listed that berry
+on the next read. The removal landed later, and when it did, that berry and the
+potion used after it disappeared together. Which contradicts a line added to the
+walkthrough one pass earlier saying the pocket settles immediately out on the
+map; that line is corrected, and the pattern is now familiar enough to name — a
+claim about *when* a byte is true, made from one reading.
+
+It cost twice over:
+
+1. `useItemOn` judged success on the pocket, so **a heal that worked reported a
+   failure.**
+2. `healFromBag` re-read the pocket between items, so it **picked the same spent
+   berry again**, walked past it in a pack that no longer had it, gave up, and
+   never reached the POTION. The Pokémon was left at 15 of 22 *with two potions
+   in the bag.*
+
+HP is the evidence now, the pocket is polled for and its silence reported, and
+the loop keeps its own view of the pocket — decremented as things are spent.
+Which is the opposite of what this repository says about the ball count, and
+deliberately: *count them out of the bag rather than trusting a tally* is the
+right rule when the bag is current, and this pocket has been measured not to be.
+A local tally can only be wrong in one direction here — it forgets an item sooner
+than the game does — and the next press of Heal reads fresh.
+
+### And one of mine, caught by the cartridge in under a minute
+
+The block that tries the bag before the walk went into **`healUp` instead of
+`healNow`**, because the anchor it was inserted against appears in both and the
+edit took the first. `before` is not in scope there. Every one of the 284 tests
+passed. The cartridge said *off to heal: before is not defined* on the first
+press.
+
+There is a caller-level test for it now, and it fails when the block is removed
+— which is the third pass in a row to end with the same sentence, and worth
+counting: the tests exercised `healFromBag` and `cheapestHeal` thoroughly and
+never once asked what `healNow` did with them.
+
+End to end on Route 29, standing at (19,4) with a Lv7 Cyndaquil at **6 of 24**
+and a bag of two Potions and a Berry: **24 of 24, the Berry and one Potion
+spent, and the pilot never left the tile.** Before the pocket fix, the same
+situation stopped at 15 of 22.
 
 ## The part that had to be redesigned
 

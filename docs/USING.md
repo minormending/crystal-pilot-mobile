@@ -494,7 +494,41 @@ back where you started. If a leg fails it says which and where it stopped —
 *could not leave Route 29 going LEFT — stopped at Route 29* — because a route
 that gives up halfway leaves you somewhere you did not choose.
 
-## Two places to heal
+## Healing: the bag first, then the walk
+
+Press **Heal** and the pilot mends whoever is hurt. What it does about it now
+depends on what you are carrying, and the row says which before you press it:
+
+* *1 hurt · POTION in the bag* — it opens the pack and uses it, without moving.
+* *1 hurt · nearest is Elm's lab* — nothing in the bag will do, so it walks.
+
+The bag comes first because it is free. The walk is real work: from the east end
+of Route 29 the nearer of the two healing places is 31 tiles away and the other
+is 53, and a grind is allowed twelve round trips before it gives up. A POTION
+already in your pocket costs none of that.
+
+**Cheapest first.** A BERRY before a POTION, a POTION before a SUPER POTION, and
+a FULL RESTORE last — the same rule the pilot already follows with Poké Balls,
+which is never to spend the good one on something the cheap one would have done.
+Berries are first because they are free and grow back on the trees the Take row
+finds.
+
+**Worst hurt first.** A party of two at 3/40 and 38/40 has one member the next
+battle will lose and one it will not.
+
+**A fainted Pokémon needs a Center, and the row says so.** A Potion does nothing
+for a Pokémon at 0 HP in Gen 2, so a party with one in it gets the walk whatever
+the bag holds — offering the bag would be a promise it cannot keep.
+
+Measured on Route 29 with a Lv7 Cyndaquil at **6 of 24** and a bag of two
+Potions and a Berry: **24 of 24, the Berry and one Potion spent, and the pilot
+never left the tile it was standing on.**
+
+Which items count is read from a list for your cartridge, so a hack that renamed
+POTION loses this and keeps everything else — and gets it back the moment
+somebody writes the name down.
+
+## Two places to heal, when the bag will not do
 
 Elm has a healing machine in his lab, and it works from the moment you take a
 starter — `bg_event 2, 1` in `ElmsLab.asm`, gated on

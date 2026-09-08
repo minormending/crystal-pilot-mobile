@@ -186,6 +186,19 @@ Elm's lab it offers *downstairs · one map away*, and from downstairs that entry
 is gone and *Elm's lab* has appeared. A cartridge nobody has described has no
 list and no row, the same way it has no scripted intro.
 
+**The Heal row names what it will spend.** It has always named the nearer of the
+two healing places; it now names a POTION instead when there is one in the bag,
+because that is what it will actually do and the bag is free. *1 hurt · POTION
+in the bag* against *1 hurt · nearest is Elm's lab* — same row, two different
+jobs, and which one it is visible before the press rather than discovered in the
+log afterwards.
+
+The exception is stated in the row rather than hidden in the job: a **fainted**
+party gets the walk whatever the bag holds, because a Potion does nothing for a
+Pokémon at 0 HP in Gen 2. Offering the bag there would be a promise the row
+cannot keep — which is the same standard the Take row holds itself to when it
+counts what is placed rather than naming what you will get.
+
 **Take is the sixth offer, and the only one whose whole reason to exist is
 read off the map you are standing on.** Every other row is about your party, your
 bag or the graph; this one is about `wMapObjects`. It says what is *placed* here
