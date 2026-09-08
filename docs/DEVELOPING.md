@@ -359,6 +359,7 @@ await DEV.keep('3')       // save in-game, then copy the battery to a slot
 await DEV.load('3')       // put it back, boot it, and unstick it
 await DEV.at()            // where, who, how hurt — always a fresh read
 await DEV.watch(b => b.clearHere(), 60)   // run a job, collect what it said
+await DEV.patch()         // re-import the modules onto the live objects
 await DEV.grid(9)         // the collision map around the player, as a picture
 ```
 
@@ -381,6 +382,15 @@ read as the app being broken:
 `saves.install` refuses on a hidden page at all: the ROM does reload, and the
 game that comes up will not take a single button press — START included — until
 something runs the scripts.
+
+`patch` is the one this session typed most. Verifying an edit against the
+cartridge means either reloading — which loses the running game — or hand-listing
+every method that changed and copying it off a fresh prototype. **The hand-list
+is what gets it wrong**: a method left off runs its old body, the run behaves
+oddly, and half an hour goes on a defect that was already fixed. `patch` takes
+the whole prototype, leaves the title's own overrides alone (so a `Crystal`
+stays a `Crystal`), and re-imports with a `?v=` because a module already
+imported is cached for the life of the page.
 
 `grid` earned itself in one call. Asked why a sweep had stopped, it drew:
 

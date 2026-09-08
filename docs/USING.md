@@ -782,6 +782,27 @@ Which items count is read from a list for your cartridge, so a hack that renamed
 POTION loses this and keeps everything else — and gets it back the moment
 somebody writes the name down.
 
+### Out of PP, which is not the same as out of health
+
+**A move with no PP left is a Pokémon that cannot win a fight**, and for a long
+time the pilot could not tell the difference. Measured on Route 31: fifty
+battles on a thirty-five-PP TACKLE, then a Lv2 Caterpie at 1 HP in a *trainer*
+battle — which cannot be run from — and no move left that does any damage. The
+pilot lowered the Caterpie's defence forty times and reported *stuck*.
+
+It says the useful thing now:
+
+> out of PP on anything that does damage — nothing else will work until that is
+> dealt with
+
+And **a grind fixes it by itself**, because a Pokémon Center restores PP as well
+as HP: it walks there, comes back, and carries on. That trip counts against the
+same budget as a knockout, so a grind that keeps running dry stops and tells
+you rather than pacing for ever.
+
+If you see the message outside a grind, the answer is a Center, or an Ether, or
+a different Pokémon in front.
+
 ### When the game says no, the pilot tells you what it said
 
 A place the pilot **found** in the cartridge can be somewhere the game will not
@@ -802,6 +823,18 @@ with words — a guard, a closed gate, an NPC who wants a conversation first.
 
 If you see it, the answer is usually a badge: go and win the one for the town
 you came from, and the route opens.
+
+**And it tries saying hello first.** A tile that stops you usually belongs to
+somebody standing beside it, and the rest of what they have to say — the half
+that checks a badge and hands something over — only happens when they are
+spoken to. So before writing a road off, the pilot walks up to whoever is there
+and lets them finish:
+
+> having a word with whoever is at 19,8
+
+Which is what the man at the top of Route 32 wanted all along. He asks whether
+you have been to the Gym, and the script that asks it is not the script that
+lets you past.
 
 **And the pilot only needs telling once.** Having been turned back, it writes
 that leg off and stops offering it — so the next press of Heal picks somewhere it

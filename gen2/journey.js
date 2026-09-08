@@ -2451,10 +2451,26 @@ export class Journey {
     if (await this.onGrass()) return true;
     if (await this.findGrass()) return true;
     const here = await this.mapKey();
-    for (const map of this.title.grassyMaps || []) {
-      if (map === here) continue;
+    // **Nearest first, and this is the third caller to need telling.**
+    // `restock` walked from Violet back to Cherrygrove because it used
+    // `marts[0]`; `heal` picked the first healer written down; both were fixed
+    // by one shared cost model. This one still walked the list in the order the
+    // title happened to write it -- so from Route 32 it set off for Route 29 at
+    // five legs while Route 31 sat two away, and a measured grind spent
+    // ninety-nine seconds and eighteen walking steps without fighting anything.
+    //
+    // Picked one at a time rather than sorted once, because arriving somewhere
+    // changes what is nearest: a leg that refuses on the way to the near one
+    // can leave the far one closer.
+    const left = (this.title.grassyMaps || []).filter((m) => m !== here);
+    while (left.length) {
+      const pick = await this.nearestPlace(left.map((m) => ({ map: m })), here);
+      const map = pick && pick.place ? pick.place.map : left[0];
+      left.splice(left.indexOf(map), 1);
+      this.say(`looking for grass at ${this.where(map)}`);
       const there = await this.travelTo(map);
       if (there.ok && await this.findGrass()) return true;
+      if (this.stopped || this.stuckInBattle) return false;
     }
     return false;
   }

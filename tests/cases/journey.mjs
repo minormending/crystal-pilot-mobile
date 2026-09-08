@@ -1933,6 +1933,67 @@ test('a place under our feet costs nothing and wins outright', async (t) => {
   t.eq(picked.cost, 0, 'and it costs nothing');
 });
 
+test('the grass it walks to is the nearest, not the first written down',
+     async (t) => {
+  // **The third caller to need this.** `restock` walked from Violet back to
+  // Cherrygrove because it used `marts[0]`; `heal` picked the first healer
+  // written down; both were fixed by one shared cost model, and this one still
+  // walked the list in the order the title happened to write it.
+  //
+  // Measured: from Route 32 it set off for Route 29 at five legs while Route 31
+  // sat two away, and a grind spent ninety-nine seconds and eighteen walking
+  // steps without fighting anything.
+  const FAR = 2, MID = 3, NEAR = 4;
+  const title = { legCost: 25, grassyMaps: [FAR, MID, NEAR] };
+  const went = [];
+  const j = walker({
+    title,
+    routes: {
+      [FAR]: [{ kind: 'warp' }, { kind: 'warp' }, { kind: 'warp' }],
+      [MID]: [{ kind: 'warp' }, { kind: 'warp' }],
+      [NEAR]: [{ kind: 'warp' }],
+    },
+  });
+  j.onGrass = async () => false;
+  j.findGrass = async () => went.length >= 1;   // arriving anywhere works
+  j.travelTo = async (map) => { went.push(map); return { ok: true }; };
+  t.true(await j.backToGrass(), 'it found grass');
+  t.eq(went, [NEAR], 'and went to the near one, not the first listed');
+});
+
+test('grass further off is tried when the near one does not work out',
+     async (t) => {
+  // Picked one at a time rather than sorted once, because arriving somewhere
+  // changes what is nearest -- and because a route that refuses has to leave
+  // the others reachable.
+  const FAR = 2, NEAR = 4;
+  const title = { legCost: 25, grassyMaps: [FAR, NEAR] };
+  const went = [];
+  const j = walker({
+    title,
+    routes: { [FAR]: [{ kind: 'warp' }, { kind: 'warp' }], [NEAR]: [{ kind: 'warp' }] },
+  });
+  j.onGrass = async () => false;
+  j.findGrass = async () => went.length >= 2;   // only the second try works
+  j.travelTo = async (map) => { went.push(map); return { ok: true }; };
+  t.true(await j.backToGrass(), 'it kept looking');
+  t.eq(went, [NEAR, FAR], 'near first, then the other one');
+});
+
+test('a battle nothing can play ends the search for grass', async (t) => {
+  // Otherwise the grind walks the whole list while a battle it cannot finish
+  // makes every step of it pointless.
+  const title = { legCost: 25, grassyMaps: [2, 3, 4] };
+  const went = [];
+  const j = walker({ title, routes: { 2: [{ kind: 'warp' }], 3: [{ kind: 'warp' }],
+                                      4: [{ kind: 'warp' }] } });
+  j.onGrass = async () => false;
+  j.findGrass = async () => false;
+  j.travelTo = async (map) => { went.push(map); j.battleStuck = true; return { ok: true }; };
+  t.false(await j.backToGrass(), 'it gives up');
+  t.eq(went.length, 1, 'after one, not three');
+});
+
 test('an empty list has no nearest anything', async (t) => {
   const j = walker({ title: {} });
   t.eq(await j.nearestPlace([], 1), null, 'nothing to choose between');

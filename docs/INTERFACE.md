@@ -256,6 +256,18 @@ walk, and the row may only make it about a walk the pilot would actually
 complete. That is why a shut road changes the sentence rather than only the
 outcome.
 
+**A failure that names the wrong thing is worse than a vague one**, and this
+page has now collected three of the same shape. *Could not heal* sent two
+passes at the pathfinder. *Healed one Pokémon* was a knockout. *Could not get
+through to DARK CAVE — something is still on screen* was a Pokémon with no PP,
+and the door it blamed was fine. Each was true of something and false of what
+had happened, and each cost more than silence would have.
+
+The rule the messages follow now: **say the thing that changes what somebody
+would do next.** Out of PP means go to a Center. Turned back means win a badge
+or talk to somebody. A knockout means the money is gone. A shut road means pick
+somewhere else. None of those is a walk that failed.
+
 **Gym is the only row that reads its own past.** Every other offer is computed
 from the situation in front of it — who is hurt, what is placed here, where the
 graph reaches. This one asks the game whether a thing has already been done, and

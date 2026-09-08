@@ -912,7 +912,7 @@ Two more things the map alone will not tell you:
 
 ### `world.js` — which map adjoins which
 
-<!-- covers: gen2/world.js @ f3453cd6b5be -->
+<!-- covers: gen2/world.js @ edfaa66ed480 -->
 
 The map graph, read out of the cartridge: edge connections *and* warps, so it can
 route out of a building rather than only across a route.
@@ -967,6 +967,11 @@ from being worse than the bug — none of which can refuse a map that exists:
 - **A step of exactly nought is a derivation, not a failure to derive** — that
   group is empty and every number in it is refused. `tools/mutate` found that
   by surviving `> 0`.
+- **And `coordEventsOn` reads the trigger tiles**, which is the same event block
+  one step further along: scene, y, x, a pad byte, a script pointer. Its
+  coordinates are *raw* where the objects' are stored four higher — measured,
+  and the sort of asymmetry that reads as obviously consistent. See [the tiles
+  that run a script](#8g-the-tiles-that-run-a-script-and-saying-hello).
 - **A tile off the map is not a tile**, which needed `sizeOf(group, number)` —
   the ROM's own copy of what `collision.mapSize()` reads from work RAM, so it
   can be asked about a room nobody has walked into. Measured against two maps
@@ -1093,7 +1098,7 @@ point those coordinates mean somewhere else entirely.
 
 ## 5. Crossing to the next map
 
-<!-- covers: gen2/journey.js gen2/world.js @ d5d73dcba7ee -->
+<!-- covers: gen2/journey.js gen2/world.js @ 19e899afc041 -->
 
 A connection spans only part of a shared edge, so "walk west until something
 happens" does not work. `crossEdge()` closes the distance in stages, then tries
@@ -1301,7 +1306,16 @@ eight kilobytes a full snapshot copies, which is worth keeping distinct.
 
 ## 6. Battles
 
-<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 42da330bb92d -->
+**`fightBattle` has a fifth answer now: `nopp`.** Having PP is not the same as
+having a move that could end a battle, and the difference is a battle that
+cannot be won — measured with TACKLE on 0 of 35, LEER and SMOKESCREEN full, and
+a Lv2 Caterpie at 1 HP in a trainer battle that cannot be fled. `canStillWin`
+asks the second question before the first swing rather than after forty turns,
+and a Pokémon Center restores PP, so the grind treats it as a trip it already
+knew how to make. See [the tiles that run a
+script](#8g-the-tiles-that-run-a-script-and-saying-hello) for the walk half.
+
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ a4697043092b -->
 
 ### Which move, and which question
 
@@ -1765,7 +1779,7 @@ fainted.
 
 ## 7. Catching something
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ 75f59da52054 -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ a8e63c8ad2bf -->
 
 Catching is the most involved loop, because a Poké Ball's odds turn on how much
 HP is left. Throwing at a full-health target is mostly throwing balls away.
@@ -1902,7 +1916,7 @@ flowchart TD
 
 ## 7a. Five that act on where you already are
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ fea19b98a313 -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ a5c689bd8352 -->
 
 Grind, hunt and catch all go *looking* for something. These five do the obvious
 thing with the situation you are already in, and take no parameters:
@@ -2282,7 +2296,7 @@ counter and came away with **five potions and ¥1800**, in 49 seconds.
 
 ## 7b. Saving, and getting the save out
 
-<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 42da330bb92d -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ a4697043092b -->
 
 ```mermaid
 flowchart TD
@@ -2524,7 +2538,7 @@ because that failure is only otherwise discovered by reaching for the undo.
 
 ## 8. The errands
 
-<!-- covers: titles/crystal.js gen2/journey.js @ 724acb3908cb -->
+<!-- covers: titles/crystal.js gen2/journey.js @ 7092b4639aca -->
 
 Everything in this section is `crystal.js` — the only file in the app that names
 a Crystal map, a Crystal door or a Crystal NPC. What it stands on is
@@ -2856,7 +2870,7 @@ the bag" rather than "did we gain any".
 
 ## 8a. Finding the Centers and the Marts in the cartridge
 
-<!-- covers: gen2/world.js gen2/journey.js @ d5d73dcba7ee -->
+<!-- covers: gen2/world.js gen2/journey.js @ 19e899afc041 -->
 
 The last thing in this app that had to be written out by hand. A title said
 where the Centers and the Marts were, so the pilot healed in the two towns
@@ -2933,7 +2947,7 @@ after](#8d-a-route-the-game-itself-refuses).
 
 ## 8b. Asking the cartridge what its places are called
 
-<!-- covers: gen2/romdata.js gen2/world.js @ 20ac78285f13 -->
+<!-- covers: gen2/romdata.js gen2/world.js @ 261e74642978 -->
 
 The one table that **retires** hand-written data rather than adding to it. A map
 used to be called whatever the title profile said, and everything else was
@@ -3008,7 +3022,7 @@ go](#8c-naming-a-city-is-a-feature).
 
 ## 8c. Naming a city is a feature
 
-<!-- covers: titles/crystal.js gen2/world.js @ 9cb0d8a2778b -->
+<!-- covers: titles/crystal.js gen2/world.js @ d16cc7d51aa8 -->
 
 The map graph has always reached most of Johto. A flood over its exits from
 Route 31 finds sixty-odd maps in five legs — and every feature in this app was
@@ -3092,7 +3106,7 @@ by, which is the only leg it can measure.
 
 ## 8d. A route the game itself refuses
 
-<!-- covers: gen2/journey.js gen2/state.js @ 242f46dafcd0 -->
+<!-- covers: gen2/journey.js gen2/state.js @ 14f6cdd08b5e -->
 
 The pass before this one taught the walk to *quote* the man who turns it back.
 This is the pilot doing something about it.
@@ -3199,7 +3213,7 @@ counting bytes reads a full case as one.
 
 ## 8e. Fighting everybody here
 
-<!-- covers: gen2/journey.js @ 4fd0d71a7042 -->
+<!-- covers: gen2/journey.js @ b380ef7140ac -->
 
 The primitive a Gym needs. The pilot has been stopped on Route 32 for three
 passes by a man who wants Falkner beaten first, and beating Falkner means
@@ -3300,7 +3314,7 @@ costs however long it takes somebody to notice their money is gone.
 
 ## 8f. Going and winning a badge
 
-<!-- covers: gen2/journey.js gen2/state.js titles/crystal.js @ b60354cd93ab -->
+<!-- covers: gen2/journey.js gen2/state.js titles/crystal.js @ 53ab7240521a -->
 
 The pilot has been turned back from Route 32 since the pass it learned to find
 Pokémon Centers. `reopen` throws away every written-off road the moment a badge
@@ -3365,6 +3379,79 @@ than not going, because losing costs half the money, and the pilot *knew* it
 could not heal before it set off. The check is on whether the party is fit
 afterwards rather than on what the heal reported, because a bag heal that mends
 everybody is a heal whatever it says about itself.
+
+</details>
+
+## 8g. The tiles that run a script, and saying hello
+
+<!-- covers: gen2/world.js gen2/journey.js @ 19e899afc041 -->
+
+Four passes of machinery pointed at one sentence a man says, and the reader that
+made it diagnosable is twelve lines.
+
+**`world.coordEventsOn` reads a map's trigger tiles.** Route 32 has two: scene 0
+at (18,8) and scene 1 at (7,71). The first dumps as
+`00 08 12 00 ab 44 00 00` — scene, y, x, a pad byte, then a script pointer — and
+0x44ab is `Route32CooltrainerMStopsYouScene`, whose siblings in the symbol table
+are `.DontHaveZephyrBadge`, `.GiveMiracleSeed` and `.BagFull`. So he **does**
+check the badge. The stopping script only pushes you back north; the rest of it
+runs when he is *spoken to*, and he stands one tile east at (19,8).
+
+**A coord event's coordinates are raw. An object's are stored four higher.**
+Measured, and it is the opposite of the reader three lines away in the same
+file — the kind of asymmetry that reads as obviously consistent and puts a
+trigger four tiles from where it is.
+
+```mermaid
+flowchart TD
+    W["a walk is refused,<br/>with words on the screen"] --> C{"a coord event<br/>within three tiles?"}
+    C -- no --> OFF["write the road off"]
+    C -- yes --> P{"a script object<br/>within two of it?"}
+    P -- no --> OFF
+    P -- yes --> T["<b>talk to them</b><br/><i>approach, face, press A</i>"]
+    T --> AGAIN["give the walk one more go"]
+    AGAIN --> OFF
+```
+
+**So `talkPast` is the general rule**: a tile that runs a script when stepped on
+usually belongs to somebody standing beside it, and pressing on through them is
+not how you get past. Both walks try it once — once, because a second go at the
+same conversation is the loop this exists to break — before writing a road off.
+
+<details>
+<summary><b>Advanced detail:</b> a battle nothing can play, and two wrong
+guesses at it</summary>
+
+**Every walk was asking about the same unplayable battle.** `escapeBattle` runs
+at the top of each crossing stage, each edge attempt and each doorway try — so
+`trainer battle: stuck` five times and counting, while the walk carried on
+calling it. `grind` bounds its own stuck run at five; the walks had no bound
+because they could not tell a battle that was *lost* from one that could not be
+*played*. Both came back false. `stuckInBattle` is the difference, cleared at
+the start of each walk so it means *during this one*.
+
+**Two guesses at the cause, and the first was wrong.** `awaitBattleMenu` pressed
+A only, described as pushing through text — which is right for text and wrong
+for a submenu, where A is a *selection*. That is a real hazard and the fix
+stands (B every fourth press; B advances Gen 2 text as well as A does) and it
+did not fix this battle.
+
+**What it was.** Cyndaquil at Lv11 with TACKLE on 0 of 35, LEER and SMOKESCREEN
+full, and a Lv2 CATERPIE at 1 HP in a *trainer* battle — so no fleeing either.
+Forty turns of lowering a Caterpie's defence, then 'stuck': true, and nothing
+anybody can act on.
+
+**Having PP is not having a move that can win**, and the difference is a battle
+that cannot be won. `canStillWin` asks the second question, before the first
+swing rather than after forty, and the outcome has its own word: `nopp`. A
+Pokémon Center restores PP as well as HP, so the grind treats it as a reason to
+make a trip it already knew how to make — bounded against the same budget as a
+knockout, because nothing advances while walking to a Center.
+
+**And a walk was reporting it as a door problem.** The box a stuck battle leaves
+on screen made the warp branch say *could not get through to DARK CAVE —
+something is still on screen*. The door was never the problem, and the sentence
+sent the reader at it.
 
 </details>
 
