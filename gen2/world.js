@@ -36,6 +36,19 @@ const ATTR_CONNECTIONS = 11, ATTR_STRUCTS = 12;
 // leads to. The block shares a bank with the map scripts.
 const EVENTS_WARP_COUNT = 2, EVENTS_WARPS = 3, WARP_BYTES = 5;
 const WARP_Y = 0, WARP_X = 1, WARP_GROUP = 3, WARP_NUMBER = 4;
+// The rest of the event block, past the warps: a count and then that many
+// fixed-size records, three times over. Every size measured against work RAM --
+// the object list this parses out of the ROM matches `wMapObjects` entry for
+// entry on Elm's lab, Cherrygrove's Center and Route 30, sprites and tiles and
+// types alike, which is a stronger check than reading the macro would be.
+const COORD_BYTES = 8, BG_BYTES = 5, OBJECT_BYTES = 13;
+const OBJECT_SPRITE = 0, OBJECT_Y = 1, OBJECT_X = 2;
+// Objects are stored with the same +4 origin work RAM uses.
+const OBJECT_ORIGIN = 4;
+// A sanity bound, like MAX_WARPS: a bad read should give up rather than walk
+// off into the ROM.
+const MAX_OBJECTS = 32;
+
 const CONNECTION_BYTES = 12;
 const CONNECTED_GROUP = 0, CONNECTED_NUMBER = 1;
 
@@ -63,6 +76,7 @@ export class World {
     };
     this.cache = new Map();
     this.warpCache = new Map();
+    this.objectCache = new Map();
   }
 
   _word(bank, addr) {
@@ -165,6 +179,50 @@ export class World {
     } catch (e) {
       return null;
     }
+  }
+
+  /**
+   * What the ROM places on a map: `[{ sprite, x, y }]`.
+   *
+   * The same block `warps` walks, read further along. Which makes it the one
+   * reader in this app that can look at a map **it is not standing on** --
+   * `collision.placedObjects` reads work RAM, so it only ever knows about the
+   * map that is loaded, and that is exactly the limitation this exists to lift:
+   * a Pokemon Center is recognisable by the nurse behind her counter, and the
+   * pilot needs to know which door has one behind it *before* it walks through.
+   *
+   * Cached per map, because the classification above it asks about every map
+   * within a few legs and the answer cannot change: this is the cartridge, not
+   * the game.
+   */
+  objectsOn(group, number) {
+    const id = mapKey(group, number);
+    if (this.objectCache.has(id)) return this.objectCache.get(id);
+    const out = [];
+    try {
+      const attr = this._attributes(group, number);
+      const bank = this.gb.romByte(attr.bank, attr.addr + ATTR_SCRIPTS_BANK);
+      const events = this._word(attr.bank, attr.addr + ATTR_EVENTS);
+      const rd = (i) => this.gb.romByte(bank, (events + i) & 0xffff);
+      let at = EVENTS_WARP_COUNT;
+      at += 1 + rd(at) * WARP_BYTES;              // warps
+      at += 1 + rd(at) * COORD_BYTES;             // coord events
+      at += 1 + rd(at) * BG_BYTES;                // bg events
+      const count = rd(at++);
+      for (let i = 0; i < Math.min(count, MAX_OBJECTS); i++) {
+        const o = at + i * OBJECT_BYTES;
+        out.push({
+          sprite: rd(o + OBJECT_SPRITE),
+          x: rd(o + OBJECT_X) - OBJECT_ORIGIN,
+          y: rd(o + OBJECT_Y) - OBJECT_ORIGIN,
+        });
+      }
+    } catch (e) {
+      // Same as the other readers here: nonsense reads mean nothing placed,
+      // not a crash.
+    }
+    this.objectCache.set(id, out);
+    return out;
   }
 
   /** Every way off this map, edges and doors alike. */

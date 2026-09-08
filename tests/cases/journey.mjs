@@ -1185,3 +1185,101 @@ test('a graph of nothing but refusals is given up on, and says so', async (t) =>
   t.contains(r.message, 'this can walk', 'and which kind of no it is');
   t.contains(r.message, 'refused', 'with a count of what it tried');
 });
+
+// --- the cartridge shows its own Centers and Marts --------------------------
+
+/**
+ * A Journey whose graph can be asked what is behind a door.
+ *
+ * `rooms` maps a map key to the objects the ROM places on it, which is the one
+ * thing `collision` can never answer: it reads work RAM, so it only knows the
+ * map that is loaded, and the pilot needs to know what is behind a door before
+ * it walks through.
+ */
+function explorer({ warps = {}, rooms = {}, title = {} } = {}) {
+  const sym = symbols();
+  const world = {
+    warps: (g, n) => warps[g * 256 + n] || [],
+    objectsOn: (g, n) => rooms[g * 256 + n] || [],
+    exits: (key) => (warps[key] || []).map((w) => ({ kind: 'warp', key: w.key })),
+    route: () => [],
+  };
+  const j = new Journey(new FakeGameBoy({ wram: worldRam(sym, {}) }),
+                        new GameState(sym), null, {},
+                        { mapKey: async () => 1 }, () => {}, world, title);
+  return j;
+}
+
+const NURSE = { sprite: 55, x: 3, y: 1 };
+const CLERK = { sprite: 57, x: 1, y: 3 };
+
+test('a Center is recognised through the door, before walking in', async (t) => {
+  // The last thing in this app that had to be written out by hand. A title said
+  // where the Centers were, so the pilot healed in the two towns somebody had
+  // described and nowhere else -- and the cartridge has always known: a Center
+  // is the room with the nurse behind her counter.
+  const j = explorer({
+    warps: { 1: [{ x: 29, y: 3, key: 5 }, { x: 23, y: 3, key: 6 }] },
+    rooms: { 5: [NURSE, { sprite: 41, x: 1, y: 6 }], 6: [CLERK] },
+  });
+  const found = j.discover('center', 1);
+  t.eq(found.length, 1, 'one Center behind one of the two doors');
+  t.eq(found[0].inside, 5, 'the room with the nurse');
+  t.eq(found[0].door, [29, 3], 'reached by its own door tile');
+  t.eq(found[0].reach, 'healAtCenter', 'and driven by the shared procedure');
+  t.eq(found[0].nurse, [3, 1], 'which is told where she stands');
+});
+
+test('a Mart is recognised, and the counter is a wall', async (t) => {
+  // Measured in Cherrygrove: the clerk sits at (1,3) and the only tile you can
+  // talk to him from is (3,3) facing LEFT, two away across a corner.
+  const j = explorer({
+    warps: { 1: [{ x: 23, y: 3, key: 6 }] },
+    rooms: { 6: [CLERK] },
+  });
+  const found = j.discover('mart', 1);
+  t.eq(found.length, 1, 'one Mart');
+  t.eq(found[0].stand, [3, 3], 'stand two along the row');
+  t.eq(found[0].face, 'LEFT', 'and face back at him');
+  t.eq(found[0].from, 1, 'entered from the map we are standing on');
+});
+
+test('a room with the right sprite in the wrong place is not claimed',
+     async (t) => {
+  // Narrow on purpose: of twenty-six maps carrying a clerk, thirteen have him
+  // at (1,3) and the rest are department-store floors and kiosks. A wrong match
+  // walks the pilot into a stranger's front room.
+  const j = explorer({
+    warps: { 1: [{ x: 1, y: 1, key: 7 }] },
+    rooms: { 7: [{ sprite: 57, x: 13, y: 5 }] },
+  });
+  t.eq(j.discover('mart', 1), [], 'not a standard Mart');
+});
+
+test('a cartridge with no signatures discovers nothing', async (t) => {
+  // The generic profile's position, and the same rule the takeable sprites
+  // follow: a sprite id is exactly the kind of thing a hack moves.
+  const j = explorer({ warps: { 1: [{ x: 1, y: 1, key: 5 }] },
+                       rooms: { 5: [NURSE] } });
+  j.state.e = { ...j.state.e, places: undefined };
+  t.eq(j.discover('center', 1), [], 'nothing is claimed');
+});
+
+test('what the title declared comes first, and is not found twice', async (t) => {
+  // Elm's computer is a healer no signature will ever recognise, and it is the
+  // only one available before the Pokedex -- so a declared entry is not just
+  // preferred, it is sometimes the only one there is.
+  const title = { healers: [{ map: 9, reach: 'healAtElm' },
+                            { map: 1, reach: 'healAtCenter', inside: 5,
+                              door: [29, 3], nurse: [3, 1] }] };
+  const j = explorer({
+    warps: { 1: [{ x: 29, y: 3, key: 5 }, { x: 1, y: 1, key: 8 }] },
+    rooms: { 5: [NURSE], 8: [NURSE] },
+    title,
+  });
+  const list = await j.healerList(1);
+  t.eq(list.length, 3, 'two declared, one found');
+  t.eq(list[0].reach, 'healAtElm', 'the declared ones first');
+  t.true(list[1].inside === 5 && !list[1].found, 'the declared Center, not the found one');
+  t.true(list[2].inside === 8 && list[2].found, 'and the one nobody described');
+});

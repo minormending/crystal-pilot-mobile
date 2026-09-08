@@ -36,6 +36,11 @@ const LONG_WALK_STEPS = 260;
 // far as any job walks in one press.
 const OFFER_LEGS = 6, OFFER_MOST = 24;
 
+// How far to look through doors for a Center or a Mart. Shorter than the offer
+// list's reach: a walk to heal is a detour from whatever the pilot was doing,
+// and three legs is about as far as that is worth going.
+const DISCOVER_LEGS = 3;
+
 // How many refused legs one walk will write off before giving up. The `avoid`
 // set already terminates over a finite graph; this is the bound for a graph
 // nobody has seen, and it is generous because a refusal costs one crossing
@@ -685,6 +690,81 @@ export class Journey {
     return out.sort((a, b) => a.legs - b.legs).slice(0, OFFER_MOST);
   }
 
+  /**
+   * Places the *cartridge* shows near here, in the shape a title declares.
+   *
+   * The last thing in this app that had to be written out by hand. A title said
+   * where the Centers and the Marts were, so the pilot could heal in the two
+   * towns somebody had described and nowhere else -- and the cartridge has
+   * always known: a Pokemon Center is the room with the nurse behind her
+   * counter, and every town's warp list says which door leads to one.
+   *
+   * So this walks outward, looks through every door within reach, and reports
+   * what it finds in exactly the shape `healers` and `marts` use -- which is
+   * what lets `healAtCenter` and `restock` drive a discovered place without
+   * knowing it was discovered.
+   *
+   * The signature is the engine profile's, measured across the whole ROM: of
+   * twenty-three maps carrying the nurse sprite, twenty-one have her at (3,1);
+   * of twenty-six carrying a clerk, thirteen have him at (1,3). Narrow on
+   * purpose -- a wrong match walks the pilot into a stranger's front room.
+   *
+   * Nothing is claimed about a cartridge whose profile has no signatures, which
+   * is the generic one: it keeps whatever the title declared and discovers
+   * nothing, the same rule the takeable sprites follow.
+   */
+  discover(kind, here, { maxLegs = DISCOVER_LEGS } = {}) {
+    const sign = ((this.state.e.places || {})[kind]) || null;
+    if (!sign || !this.world || typeof this.world.objectsOn !== 'function') {
+      return [];
+    }
+    const isOne = (key) => this.world
+      .objectsOn(key >> 8, key & 0xff)
+      .some((o) => o.sprite === sign.sprite
+                   && o.x === sign.at[0] && o.y === sign.at[1]);
+    const out = [];
+    const seen = new Set();
+    // Here first, then outward: the door in the town you are standing in is
+    // the one worth finding.
+    const from = [{ key: here, legs: 0 }, ...this._within(here, maxLegs)];
+    for (const { key } of from) {
+      for (const w of this.world.warps(key >> 8, key & 0xff)) {
+        if (seen.has(w.key) || !isOne(w.key)) continue;
+        seen.add(w.key);
+        out.push(kind === 'center'
+          ? { map: key, reach: 'healAtCenter', inside: w.key,
+              door: [w.x, w.y], nurse: sign.nurse, found: true }
+          : { map: w.key, from: key, door: [w.x, w.y],
+              stand: [sign.at[0] + sign.reach.dx, sign.at[1] + sign.reach.dy],
+              face: sign.reach.face, found: true });
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Everywhere that can heal: what the title declared, then what was found.
+   *
+   * The title's first, because a hand-written entry can be better -- Elm's
+   * computer is a healer no signature will ever recognise, and it is the only
+   * one available before the Pokedex.
+   */
+  async healerList(here) {
+    const declared = (this.title.healers || []);
+    const known = new Set(declared.map((h) => h.inside || h.map));
+    const found = this.discover('center', here)
+      .filter((h) => !known.has(h.inside));
+    return declared.concat(found);
+  }
+
+  /** Everywhere that sells: the same rule. */
+  martList(here) {
+    const declared = (this.title.marts || []);
+    const known = new Set(declared.map((m) => m.map));
+    return declared.concat(this.discover('mart', here)
+      .filter((m) => !known.has(m.map)));
+  }
+
   /** Every map within `maxLegs` of here, nearest first. */
   _within(here, maxLegs) {
     const out = [];
@@ -1017,10 +1097,14 @@ export class Journey {
    * and could not read until now.
    */
   async restock(names, want = 5) {
-    const marts = (this.title && this.title.marts) || null;
+    const marts = this.martList(await this.mapKey());
     const rom = this.tasks && this.tasks.rom;
-    if (!marts || !marts.length) {
-      return { ok: false, stats: {}, message: 'nowhere to shop that this build knows about' };
+    if (!marts.length) {
+      // "Nowhere it can find", not "nowhere it was told about": the pilot looks
+      // through every door within three legs now, so an empty list means there
+      // is no counter near rather than no counter described.
+      return { ok: false, stats: {},
+               message: 'no mart within reach of here' };
     }
     if (!rom || !Array.isArray(names) || !names.length) {
       return { ok: false, stats: {}, message: 'nothing named to buy' };
@@ -1455,7 +1539,7 @@ export class Journey {
   }
 
   async nearestHeal(from) {
-    const healers = this.title.healers || [];
+    const healers = await this.healerList(from);
     if (!healers.length) return null;
     const picked = await this.nearestPlace(healers, from);
     if (!picked || !picked.place) return null;

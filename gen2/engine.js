@@ -136,6 +136,28 @@ export const gen2 = {
   // it, and leaving it out would make 0 look like an absence.
   objectTypes: { script: 0, itemball: 1, trainer: 2 },
 
+  // --- how to recognise a place through a door -----------------------------
+  // The two rooms the pilot has business in, and the one object each that says
+  // which is which. Measured across the whole ROM rather than on the two the
+  // app already knew: of twenty-three maps carrying the nurse sprite,
+  // **twenty-one have her at (3,1)**; of twenty-six carrying a clerk,
+  // **thirteen have him at (1,3)**, and the other thirteen are department-store
+  // floors and kiosks, which this rule does not claim.
+  //
+  // So the signature is a sprite *and* a tile, and it is deliberately narrow: a
+  // wrong match walks the pilot into a stranger's front room, and a missed one
+  // costs nothing but the town the title already named.
+  //
+  // `nurse` and `clerk` are the same tiles, said twice, because they are two
+  // facts: where the object stands, and where the pilot must stand to speak to
+  // it. A counter is a *wall* -- measured in Cherrygrove, the clerk sits at
+  // (1,3) and the only tile you can talk to him from is (3,3) facing LEFT, two
+  // away across a corner -- so `reach` says how to turn the one into the other.
+  places: {
+    center: { sprite: 55, at: [3, 1], nurse: [3, 1] },
+    mart: { sprite: 57, at: [1, 3], reach: { dx: 2, dy: 0, face: 'LEFT' } },
+  },
+
   // --- the letters on the screen -------------------------------------------
   // Gen 2 draws text as tiles, so `wTilemap` holds the words a person is
   // reading. Every entry below was measured off the cartridge rather than

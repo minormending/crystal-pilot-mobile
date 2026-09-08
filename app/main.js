@@ -73,6 +73,9 @@ const boxedPhrase = () =>
   (title && title.phrases && title.phrases.boxed) || null;
 let trainers = [];
 let trainersOnMap = 0;
+// Whether the pilot can find a counter from where it stands. A boolean because
+// that is all the row needs; which counter is `restock`'s business.
+let martsNear = false;
 // The cheapest thing in the bag that would mend somebody, by name, or null. Read
 // from the same snapshot as everything else in a refresh, because the bag
 // changes as the pilot spends it.
@@ -1577,7 +1580,11 @@ function paintJobs(s) {
                 hours, hourNow, takeables, trainers, trainersOnMap,
                 canBox: !!boxedPhrase(),
                 bagHeal, bagCure,
-                marts: !!(title && title.marts && title.marts.length),
+                // Whether there is a counter *within reach*, not whether the
+                // title mentioned one: the pilot looks through every door
+                // within three legs now, so the row can offer to shop in a town
+                // nobody described.
+                marts: martsNear,
                 shopFor: shopFor(),
                 engine: state.e };
   const rows = describeRows(s, ctx);
@@ -1680,6 +1687,11 @@ async function refresh() {
   // twenty tiles further on.
   trainers = collision && s.worldLoaded && s.wram
     ? collision.trainers(s.wram) : [];
+  // Asked once per refresh, off the same snapshot the rest of the row context
+  // comes from. Cheap: the graph and the ROM object lists are both cached, and
+  // neither can change while a cartridge is loaded.
+  martsNear = boot && s.worldLoaded && typeof boot.martList === 'function'
+    ? boot.martList(s.map[0] * 256 + s.map[1]).length > 0 : false;
   const trainerType = (state.e.objectTypes || {}).trainer;
   trainersOnMap = collision && s.worldLoaded && s.wram && trainerType !== undefined
     ? collision.placedObjects(s.wram)

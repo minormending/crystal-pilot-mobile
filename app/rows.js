@@ -199,7 +199,7 @@ export function describeRows(s, ctx = {}) {
     // thing in this app that cannot be read before arriving.
     shop: {
       text: s.inBattle ? 'finish the battle first'
-        : !marts ? 'nowhere to shop that this build knows about'
+        : !marts ? 'no mart within reach of here'
         : `${money} in hand · ${shopFor || 'nothing named to buy'}`,
       enabled: afoot && !!marts && !!shopFor,
     },
