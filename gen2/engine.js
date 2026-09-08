@@ -117,6 +117,23 @@ export const gen2 = {
     { sprite: 93, what: 'tree' },
   ],
 
+  // --- what the game itself says an object *is* ----------------------------
+  // One byte in a wMapObjects entry carries two things, and the cartridge's own
+  // symbol file is what settles it: `wMap1ObjectPalette` and `wMap1ObjectType`
+  // are *the same address*, colour in the high nibble and the type in the low.
+  // So this is the game's own answer to a question the sprite table above can
+  // only guess at -- a hack that moves the item-ball sprite still tags its
+  // balls as balls, because the engine branches on this byte to decide what
+  // pressing A does.
+  //
+  // Measured on Route 30, whose objects are one of each: the item ball at
+  // (8,35) reads 1, the three trainers read 2, and the fruit trees, townsfolk
+  // and the two Rattata read 0.
+  //
+  // `script` is here to be named rather than to be used: nothing branches on
+  // it, and leaving it out would make 0 look like an absence.
+  objectTypes: { script: 0, itemball: 1, trainer: 2 },
+
   // --- what the overworld rolls an encounter on ----------------------------
   // COLL_LONG_GRASS $14, COLL_TALL_GRASS $18, and the two unused mirrors the
   // engine still treats as grass.

@@ -52,10 +52,29 @@ export const DELTA = {
 
 // The offsets the desktop version tries when the derived one does not
 // reproduce the game's own answer. (4, 4) is the one the map layout implies.
-// wMapObjects: sixteen 16-byte entries, coordinates offset by four.
+//
+// wMapObjects: sixteen 16-byte entries, coordinates offset by four. Every
+// offset here is cross-checked against the cartridge's own symbol file, which
+// names each field of the struct -- wMap1ObjectSprite is one past wMap1Object,
+// wMap1ObjectType is eight past it, and wMap2Object is sixteen past. They are
+// written out rather than looked up because a .sym need only carry the labels
+// the app asks for by name, and this is layout: the same numbers for every
+// cartridge built from the same engine.
 const MAP_OBJECT_COUNT = 16, MAP_OBJECT_BYTES = 0x10;
 const MAP_OBJECT_SPRITE = 1, MAP_OBJECT_Y = 2, MAP_OBJECT_X = 3;
+const MAP_OBJECT_TYPE = 8;
 const MAP_OBJECT_ORIGIN = 4;
+
+// wObjectStructs: thirteen 40-byte structs, the player's first, one per object
+// the game has actually *spawned*. Same +4 origin, and the proof is the player:
+// struct 0's MapX/MapY minus four is exactly wXCoord/wYCoord, measured on
+// Route 30 with the player at (2,27) and the struct reading (6,31).
+//
+// `PLACED` is the link back to wMapObjects -- wObject1MapObjectIndex -- and it
+// is what makes the two arrays answerable together: the struct says where
+// something *is*, and the entry it points at says what it *is*.
+const STRUCT_COUNT = 13, STRUCT_BYTES = 0x28;
+const STRUCT_SPRITE = 0, STRUCT_PLACED = 1, STRUCT_X = 0x10, STRUCT_Y = 0x11;
 
 const CANDIDATE_OFFSETS = [[4, 4], [0, 0], [4, 0], [0, 4], [2, 2], [6, 6], [5, 5], [3, 3]];
 
@@ -73,6 +92,10 @@ export class CollisionMap {
       x: symbols.addr('wXCoord'),
       y: symbols.addr('wYCoord'),
       objects: symbols.has('wMapObjects') ? symbols.addr('wMapObjects') : null,
+      // Optional for the same reason `objects` is: a cartridge whose symbol
+      // file does not name it still walks, on the placement array alone.
+      structs: symbols.has('wObjectStructs')
+        ? symbols.addr('wObjectStructs') : null,
     };
     this.permTable = symbols.addr('CollisionPermissionTable');
     this.permBank = symbols.bank('CollisionPermissionTable');
@@ -117,83 +140,193 @@ export class CollisionMap {
   }
 
   /**
+   * What the map *placed* here: `[{ index, sprite, type, x, y }]`.
+   *
+   * wMapObjects is the map's own object list, read once for the three readers
+   * below. It is the map's plan rather than the game's present tense, and both
+   * halves of that matter:
+   *
+   *   - The coordinates never move. Measured on Route 30: the player's own
+   *     entry reads (7,53), the tile the map put them on, while they stand at
+   *     (2,27); and the wanderer placed at (7,30) was live at (8,30). So these
+   *     are *placements*, for everyone, not just for index 0.
+   *   - An object hidden by its event flag is still an entry. Route 30 carries
+   *     a trainer at (2,28) that a new game has never seen, because the flag
+   *     that reveals it is unset.
+   *
+   * Which makes it the right answer for a thing that cannot move and the wrong
+   * one for a person -- see `takeables` and `occupied`, which is the whole
+   * reason this is one walk with three callers rather than three walks.
+   *
+   * Index 0 is the player. It is kept here, because the index is what a struct
+   * points back at, and dropped by each caller that would be confused by it.
+   *
+   * Tiles outside the map are dropped. Index 0 cannot be used to check the
+   * origin -- it holds a placement, not a position -- so the bounds of the map
+   * are the only check available, and that is also the right way to fail: on a
+   * cartridge that stored objects at a different origin an empty list means
+   * the planner walks into people and recovers, where a list of in-bounds but
+   * *wrong* tiles can seal a one-tile corridor.
+   */
+  placedObjects(wram = this.wram) {
+    const out = [];
+    if (this.a.objects === null) return out;
+    const w = b(wram, this.a.mapWidth) * 2, h = b(wram, this.a.mapHeight) * 2;
+    for (let i = 0; i < MAP_OBJECT_COUNT; i++) {
+      const at = this.a.objects + i * MAP_OBJECT_BYTES;
+      const sprite = b(wram, at + MAP_OBJECT_SPRITE);
+      if (!sprite) continue;
+      const x = b(wram, at + MAP_OBJECT_X) - MAP_OBJECT_ORIGIN;
+      const y = b(wram, at + MAP_OBJECT_Y) - MAP_OBJECT_ORIGIN;
+      if (x < 0 || y < 0 || x >= w || y >= h) continue;
+      out.push({ index: i, sprite, type: b(wram, at + MAP_OBJECT_TYPE) & 0x0f,
+                 x, y });
+    }
+    return out;
+  }
+
+  /**
+   * What is actually on the map right now: `[{ index, sprite, type, x, y }]`.
+   *
+   * wObjectStructs, one entry per object the game has spawned, joined back to
+   * its placement for the `type` byte. Two things are true of it that are not
+   * true of the placement array, and they are the two things that were wrong
+   * with reading only the placements:
+   *
+   *   - The coordinates are live. A wanderer reads where it is standing.
+   *   - An object the game has not spawned is simply absent -- whether because
+   *     its event flag hides it or because it is too far away to matter.
+   *
+   * Thirteen structs against sixteen placements, so being off the list is
+   * ordinary rather than exceptional: Route 30 places twelve objects and spawns
+   * five of them.
+   *
+   * Index 0 is the player's struct and is skipped: the tile the player is
+   * standing on is not an obstacle to the player.
+   *
+   * Returns null, not an empty list, when the symbol file does not name the
+   * array -- the callers need "cannot tell" apart from "nothing there", because
+   * one of them falls back to the placements and the other must not claim a map
+   * has no trainers when it has not looked.
+   */
+  liveObjects(wram = this.wram) {
+    if (this.a.structs === null || this.a.objects === null) return null;
+    const out = [];
+    const w = b(wram, this.a.mapWidth) * 2, h = b(wram, this.a.mapHeight) * 2;
+    for (let i = 1; i < STRUCT_COUNT; i++) {
+      const at = this.a.structs + i * STRUCT_BYTES;
+      const sprite = b(wram, at + STRUCT_SPRITE);
+      if (!sprite) continue;
+      const index = b(wram, at + STRUCT_PLACED);
+      const x = b(wram, at + STRUCT_X) - MAP_OBJECT_ORIGIN;
+      const y = b(wram, at + STRUCT_Y) - MAP_OBJECT_ORIGIN;
+      if (x < 0 || y < 0 || x >= w || y >= h) continue;
+      // The type comes from the placement it points at, because a struct does
+      // not carry one. A struct pointing outside the array is not trusted for
+      // its type and is still trusted for its tile: something is standing
+      // there whatever it turns out to be.
+      const type = index < MAP_OBJECT_COUNT
+        ? b(wram, this.a.objects + index * MAP_OBJECT_BYTES + MAP_OBJECT_TYPE)
+          & 0x0f
+        : null;
+      out.push({ index, sprite, type, x, y });
+    }
+    return out;
+  }
+
+  /**
    * Tiles that people and props are standing on.
    *
    * The collision map is terrain only, so an NPC reads as open floor and the
    * planner walks into them. That is not a theoretical problem: Route 30 opens
-   * with Youngster Joey and two Rattata sprites filling the one-tile corridor
+   * with a Youngster and two Rattata sprites filling the one-tile corridor
    * north, and every plan routed straight through them.
    *
-   * The list is what the map placed, not what is on screen -- an object whose
-   * event flag has hidden it is still an entry -- so these are treated as tiles
-   * to prefer avoiding rather than walls, and the caller drops them if that is
-   * the only way through. Index 0 is the player and is skipped. Coordinates are
-   * stored four higher than the map's own.
+   * Read from the *live* structs, and that is a correction rather than a
+   * refinement. On the placements this was wrong in both directions at once,
+   * measured on one screen of Route 30: it marked (7,30), which nobody was
+   * standing on, and left (8,30) open, where the wanderer actually was; and it
+   * marked (2,28) and (1,7) for two objects a new game has never spawned. Both
+   * mistakes cost the same thing, because `avoid` can seal a corridor -- see
+   * `nav.walkTo`, whose second attempt drops this whole set for exactly that
+   * reason, and in dropping it gives up the entries that were right along with
+   * the ones that were not.
    *
-   * That offset used to claim it was "checked against the player", and it was
-   * not -- nor can it be that way. Index 0 holds where the map *placed* the
-   * player, not where the player is: measured in Elm's lab, the entry reads
-   * (8,15) while the player stands at (7,4), because they came in through a
-   * door. So the only check available is the bounds of the map, and tiles
-   * outside them are dropped rather than kept as keys that can never match.
-   *
-   * Which is also the right way to fail. On a cartridge that stored objects at
-   * a different origin, an empty set means the planner walks into people and
-   * recovers -- walkTo puts a refused tile in `avoid` and routes around it. A
-   * set of in-bounds but *wrong* tiles is the bad outcome: it can seal a
-   * one-tile corridor, and "unreachable" is the one answer walkTo cannot
-   * recover from.
+   * Falls back to the placements where the structs cannot be read at all. That
+   * is the old behaviour, kept deliberately: stale tiles beat no tiles, because
+   * walking into somebody costs a refused step and the fallback in `walkTo`
+   * recovers from a sealed corridor.
    */
   occupied(wram = this.wram) {
     const taken = new Set();
-    if (this.a.objects === null) return taken;
-    const w = b(wram, this.a.mapWidth) * 2, h = b(wram, this.a.mapHeight) * 2;
-    for (let i = 1; i < MAP_OBJECT_COUNT; i++) {
-      const at = this.a.objects + i * MAP_OBJECT_BYTES;
-      if (!b(wram, at + MAP_OBJECT_SPRITE)) continue;
-      const x = b(wram, at + MAP_OBJECT_X) - MAP_OBJECT_ORIGIN;
-      const y = b(wram, at + MAP_OBJECT_Y) - MAP_OBJECT_ORIGIN;
-      if (x < 0 || y < 0 || x >= w || y >= h) continue;
-      taken.add(x + ',' + y);
-    }
+    const live = this.liveObjects(wram);
+    const from = live || this.placedObjects(wram).filter((o) => o.index !== 0);
+    for (const o of from) taken.add(o.x + ',' + o.y);
     return taken;
   }
 
   /**
    * Things on this map you can take something from: `[{ x, y, what }]`.
    *
-   * The same walk of `wMapObjects` as `occupied`, asking a different question of
-   * the same byte: a sprite the engine profile names as an item ball or a fruit
-   * tree rather than a person. Which sprites those are is measured on the
-   * cartridge and lives in the profile, because a hack may have moved them --
-   * see the note there for what was picked up where.
+   * Read from the *placements*, and unlike `occupied` that is the right array
+   * rather than the old one: a ball and a tree do not move, and the game only
+   * spawns what is near enough to draw. Measured on Route 30 with the player at
+   * the north end, the ball at (8,35) and both fruit trees had no live struct
+   * at all -- so reading the structs here would have made Take see only what
+   * you were already standing next to.
+   *
+   * Two ways of recognising one, and they agreed on every object of Route 30:
+   * the sprite ids the engine profile carries, and the game's own type byte.
+   * The type is the better test where a cartridge has one -- it is what the
+   * engine itself branches on when you press A -- and it only knows about
+   * balls, so the sprite table is what finds a fruit tree. A ball is therefore
+   * found either way and a tree only by its sprite.
    *
    * **A ball that has already been taken is still in this list**, and that is
-   * measured rather than assumed: taking the ANTIDOTE at (8,35) on Route 30 left
-   * its object exactly where it was in work RAM. So this answers *what the map
-   * placed here*, and the only honest way to find out whether anything is left
-   * is to go and press A -- which is why the job that uses it reports what
+   * measured rather than assumed: taking the ANTIDOTE at (8,35) on Route 30
+   * left its object exactly where it was in work RAM. So this answers *what the
+   * map placed here*, and the only honest way to find out whether anything is
+   * left is to go and press A -- which is why the job that uses it reports what
    * arrived in the bag rather than what it expected to.
    */
   takeables(wram = this.wram) {
-    const out = [];
-    if (this.a.objects === null) return out;
     const kinds = new Map((this.e.takeable || []).map((t) => [t.sprite, t.what]));
-    if (!kinds.size) return out;
-    const w = b(wram, this.a.mapWidth) * 2, h = b(wram, this.a.mapHeight) * 2;
-    for (let i = 1; i < MAP_OBJECT_COUNT; i++) {
-      const at = this.a.objects + i * MAP_OBJECT_BYTES;
-      const what = kinds.get(b(wram, at + MAP_OBJECT_SPRITE));
+    const ball = (this.e.objectTypes || {}).itemball;
+    if (!kinds.size && ball === undefined) return [];
+    const out = [];
+    for (const o of this.placedObjects(wram)) {
+      if (o.index === 0) continue;
+      const what = kinds.get(o.sprite)
+        || (ball !== undefined && o.type === ball ? 'ball' : null);
       if (!what) continue;
-      const x = b(wram, at + MAP_OBJECT_X) - MAP_OBJECT_ORIGIN;
-      const y = b(wram, at + MAP_OBJECT_Y) - MAP_OBJECT_ORIGIN;
-      // The same bounds as `occupied`, for the same reason: an object read at a
-      // different origin is out of the map, and a wrong in-bounds tile is worse
-      // than none.
-      if (x < 0 || y < 0 || x >= w || y >= h) continue;
-      out.push({ x, y, what });
+      out.push({ x: o.x, y: o.y, what });
     }
     return out;
+  }
+
+  /**
+   * The trainers standing on this map: `[{ x, y, sprite }]`.
+   *
+   * Both arrays at once, because either alone gives a wrong answer. The
+   * placement says what an object *is* -- the type byte the game branches on,
+   * 2 for a trainer -- and the struct says whether it is here and where. A
+   * trainer whose event flag has not fired yet is a placement with no struct,
+   * and offering to walk to it is offering to walk to nobody: measured on a new
+   * save, Route 30 places three trainers and has spawned exactly none of them,
+   * one hidden by its flag and two too far north to be loaded.
+   *
+   * Which is why this returns an empty list rather than falling back to the
+   * placements the way `occupied` does. The fallback there is a hint that can
+   * be wrong at the cost of a re-plan; here it would be an offer to fight
+   * somebody who is not there.
+   */
+  trainers(wram = this.wram) {
+    const want = (this.e.objectTypes || {}).trainer;
+    if (want === undefined) return [];
+    const live = this.liveObjects(wram);
+    if (!live) return [];
+    return live.filter((o) => o.type === want)
+      .map((o) => ({ x: o.x, y: o.y, sprite: o.sprite }));
   }
 
   // --- calibration -----------------------------------------------------------

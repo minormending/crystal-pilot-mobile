@@ -158,6 +158,7 @@ export const SHARED_SYMBOLS = [
   'wItems', 'wMenuCursorX', 'wMenuCursorY', 'wMenuDataItems', 'wMoney',
   'wNumBalls',
   'wNumItems',
+  'wObjectStructs',
   'wOverworldMapBlocks', 'wPartyCount', 'wPartyMon1', 'wPlayerBGMapOffsetX',
   'wPlayerBGMapOffsetY', 'wPlayerTileCollision', 'wScriptMode',
   'wTilesetCollisionAddress', 'wTilesetCollisionBank', 'wTimeOfDay',

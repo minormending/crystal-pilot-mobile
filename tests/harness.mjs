@@ -196,6 +196,8 @@ const WRAM_NAMES = [
   ['wOverworldMapBlocks', 0x510], ['wMapWidth', 1], ['wMapHeight', 1],
   ['wTilesetCollisionBank', 1], ['wTilesetCollisionAddress', 2],
   ['wMapObjects', 16 * 0x10],
+  // The live side of the same story: thirteen structs, the player's first.
+  ['wObjectStructs', 13 * 0x28],
   // These four sit next to each other on purpose: state.js reads them as one
   // small window, and a layout that scattered them would not exercise that.
   ['wMenuDataItems', 1], ['wMenuBorderTopCoord', 1], ['wMenuBorderRightCoord', 1],
@@ -299,7 +301,14 @@ export function worldRam(sym, {
   // MAPOBJECT entries, whose coordinates the cartridge stores four higher than
   // the map's own -- given here the way the game gives them, so a test that
   // says (8,15) is saying what the ROM says.
-  mapBlocks = null, objects = [],
+  // `objects` are MAPOBJECT entries -- what the map *placed*, index 0 being the
+  // player -- and `spawned` are the object structs, what the game has actually
+  // loaded. They are separate arguments because on a cartridge they disagree:
+  // a placement can have no struct (hidden by a flag, or too far away) and a
+  // struct's coordinates move while its placement's never do. `placed` on a
+  // spawned entry is the index into `objects` it points back at, which is how
+  // the reader learns what a live object *is*.
+  mapBlocks = null, objects = [], spawned = null,
 } = {}) {
   const wram = new Uint8Array(WRAM_BYTES);
   w8(wram, sym.addr('wPartyCount'), party.length);
@@ -349,6 +358,19 @@ export function worldRam(sym, {
     w8(wram, at + 1, o.sprite ?? 1);
     w8(wram, at + 2, o.y ?? 0);
     w8(wram, at + 3, o.x ?? 0);
+    // Colour in the high nibble, type in the low -- one byte the cartridge's
+    // symbol file gives two names. The colour is arbitrary here and non-zero on
+    // purpose, so a reader that forgets to mask reads a type nobody declared.
+    w8(wram, at + 8, 0x90 | ((o.type ?? 0) & 0x0f));
+  });
+  // Struct 0 is the player's and is left empty: a sprite of zero is how the
+  // game says a struct is unused, and every reader skips index 0 anyway.
+  (spawned || []).forEach((o, i) => {
+    const at = sym.addr('wObjectStructs') + (i + 1) * 0x28;
+    w8(wram, at + 0, o.sprite ?? 1);
+    w8(wram, at + 1, o.placed ?? 0);
+    w8(wram, at + 0x10, o.x ?? 0);
+    w8(wram, at + 0x11, o.y ?? 0);
   });
   w8(wram, sym.addr('wNumBalls'), balls.length);
   balls.forEach(([id, qty], i) => {
