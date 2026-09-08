@@ -1,0 +1,109 @@
+// Reading the words the game is showing.
+//
+// Every box in this app was identified by its *shape* until this pass, and
+// three of them share one. The screen says which. These tests run over a
+// tilemap painted by the harness through the same charmap the reader uses, so
+// what is under test is the decoding and the matching rather than the table.
+import { paintScreen, symbols, test, worldRam } from '../harness.mjs';
+import { GameState } from '../../gen2/state.js';
+import { gen2 } from '../../gen2/engine.js';
+import { arrowAt, charOf, fold, screenLines, screenSays, screenText,
+         selectedLine } from '../../gen2/screen.js';
+
+const sym = symbols();
+const AT = sym.addr('wTilemap');
+
+/** A work-RAM snapshot with these lines on screen. */
+const showing = (lines) => worldRam(sym, { screen: lines });
+
+test('the letters on screen are the letters in memory', async (t) => {
+  // Measured off the cartridge, by dumping the raw tilemap beside the picture:
+  // $80-$99 are A-Z, $a0-$b9 are a-z, $f6-$ff are 0-9, and $7f is the blank
+  // inside every box.
+  t.eq(charOf(0x80), 'A', 'the first letter');
+  t.eq(charOf(0x99), 'Z', 'and the last');
+  t.eq(charOf(0xa0), 'a', 'lower case starts its own run');
+  t.eq(charOf(0xb9), 'z', 'and ends it');
+  t.eq(charOf(0xf6), '0', 'digits are a third run');
+  t.eq(charOf(0xff), '9', 'ten of them');
+  t.eq(charOf(0x7f), ' ', 'and the blank is a space');
+});
+
+test('a tile that is not a letter reads as a space, not as nothing',
+     async (t) => {
+  // A space rather than a marker, and rather than dropping it: the columns stay
+  // lined up, so a dumped screen says where things are. Dropping unmapped tiles
+  // shifts every character after a graphic.
+  t.eq(charOf(0x7a), ' ', 'the box border is a graphic');
+  t.eq(charOf(0x60), ' ', 'so is a health bar');
+  const lines = screenLines(showing(['AB']), AT);
+  t.eq(lines[0].length, 20, 'every line is twenty characters wide');
+  t.eq(lines.length, 18, 'and there are eighteen of them');
+});
+
+test('the readable lines are what the screen is saying, in order', async (t) => {
+  const wram = showing(['', ' >PACK', '  SAVE', '', 'What do you want']);
+  t.eq(screenText(wram, AT), [' >PACK', '  SAVE', 'What do you want'],
+       'blank rows dropped, the rest in order');
+});
+
+test('the arrow is found where it is drawn', async (t) => {
+  // Which is the whole reason this module exists. Measured on the bedroom PC:
+  // the arrow sat at tilemap rows 2, 4, 6, 8, 10 as wMenuCursorY read 1 to 5 --
+  // and on the submenu behind it, eight presses over six hundred frames moved
+  // that variable not at all while the arrow moved every time.
+  const wram = showing(['', ' WITHDRAW ITEM', '', ' >DEPOSIT ITEM']);
+  t.eq(arrowAt(wram, AT), { row: 3, col: 1 }, 'row and column');
+  t.eq(selectedLine(wram, AT), '>DEPOSIT ITEM', 'and the line it is on');
+});
+
+test('a screen with no arrow has nothing selected', async (t) => {
+  // "No menu to drive", which is what stops `_driveToSaying` pressing DOWN into
+  // an overworld -- where DOWN is a step into the grass.
+  const wram = showing(['CHRIS turned on', 'the PC.']);
+  t.eq(arrowAt(wram, AT), null, 'no arrow');
+  t.eq(selectedLine(wram, AT), '', 'and so no selection');
+});
+
+test('matching folds away everything that is not a letter or a digit',
+     async (t) => {
+  // Because the screen is not a string. POKeDEX draws its accented letter as a
+  // tile the charmap does not name; POKeGEAR's logo is drawn as graphics
+  // entirely, so the row reads "  GEAR"; and an HP reading is "21/ 21".
+  t.eq(fold(' >POK DEX '), 'POKDEX', 'spaces and the arrow go');
+  t.eq(fold('21/ 21'), '2121', 'and punctuation');
+  const wram = showing(['', ' >POK DEX', '  PACK']);
+  t.true(screenSays(wram, AT, 'pack'), 'case does not matter');
+  t.true(screenSays(wram, AT, 'POK DEX'), 'nor do the gaps a glyph leaves');
+  t.false(screenSays(wram, AT, 'SAVE'), 'and a word that is not there is not there');
+});
+
+test('a phrase is not matched across two lines', async (t) => {
+  // Two unrelated lines that happen to abut are not a sentence.
+  const wram = showing(['SAVE', 'THE GAME']);
+  t.true(screenSays(wram, AT, 'SAVE'), 'each line on its own');
+  t.false(screenSays(wram, AT, 'SAVETHE'), 'but not the two run together');
+});
+
+test('a cartridge whose symbol file has no tilemap reads no screen',
+     async (t) => {
+  // "Cannot read" rather than "says nothing", which is the distinction every
+  // caller of this leans on: it keeps the row counting it had.
+  const bare = { has: (n) => n !== 'wTilemap' && sym.has(n),
+                 addr: (n) => sym.addr(n), bank: (n) => sym.bank(n) };
+  const state = new GameState(bare);
+  t.eq(state.screen(showing([' >PACK'])), null, 'no reader at all');
+
+  const real = new GameState(sym);
+  const sc = real.screen(showing([' >PACK']));
+  t.true(!!sc, 'and one where the name is there');
+  t.true(sc.selectedSays('PACK'), 'which can answer about the selected row');
+});
+
+test('the harness paints what the reader reads', async (t) => {
+  // One charmap, used in both directions, so a table that is wrong is wrong in
+  // both -- rather than a test passing against a second copy of the mistake.
+  const wram = new Uint8Array(0x2000);
+  paintScreen(wram, sym, ['ABZ abz 09'], gen2);
+  t.eq(screenLines(wram, AT)[0].trim(), 'ABZ abz 09', 'there and back');
+});

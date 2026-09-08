@@ -14,6 +14,7 @@
 import { writeFileSync } from 'node:fs';
 import { RomData } from '../gen2/romdata.js';
 import { Symbols } from '../gen2/symbols.js';
+import { gen2 } from '../gen2/engine.js';
 
 const GB_WRAM_START = 0xc000;
 const WRAM_BYTES = 0x2000;
@@ -196,6 +197,9 @@ const WRAM_NAMES = [
   ['wOverworldMapBlocks', 0x510], ['wMapWidth', 1], ['wMapHeight', 1],
   ['wTilesetCollisionBank', 1], ['wTilesetCollisionAddress', 2],
   ['wMapObjects', 16 * 0x10],
+  // The tilemap: twenty by eighteen bytes of tile ids, which is where the words
+  // on screen live.
+  ['wTilemap', 20 * 18],
   // The live side of the same story: thirteen structs, the player's first.
   ['wObjectStructs', 13 * 0x28],
   // These four sit next to each other on purpose: state.js reads them as one
@@ -291,6 +295,38 @@ const w16 = (wram, addr, v) => {
  * "in a wild battle against a 20 HP Pidgey with the battle menu up" and not
  * which byte that is.
  */
+/**
+ * Write text into the tilemap, the way the cartridge does.
+ *
+ * The inverse of `screen.js`, built from the same engine profile rather than
+ * from a second table -- so a test that paints "PACK" and a reader that reads
+ * "PACK" cannot drift apart, and a charmap that is wrong here is wrong there
+ * too. Anything the charmap does not name is left as the blank tile, which is
+ * what a graphic decodes to.
+ */
+export function paintScreen(wram, sym, lines, engine = gen2) {
+  const cm = engine.charmap || {};
+  const back = new Map();
+  for (const [from, to, first] of cm.ranges || []) {
+    for (let t = from; t <= to; t++) {
+      back.set(String.fromCharCode(first.charCodeAt(0) + (t - from)), t);
+    }
+  }
+  for (const [t, ch] of Object.entries(cm.singles || {})) back.set(ch, Number(t));
+  const blank = back.get(' ') === undefined ? 0 : back.get(' ');
+  const base = sym.addr('wTilemap') - GB_WRAM_START;
+  for (let y = 0; y < 18; y++) {
+    const line = (lines[y] || '').padEnd(20, ' ');
+    for (let x = 0; x < 20; x++) {
+      const ch = line[x];
+      const tile = ch === '>' ? cm.cursor
+        : back.has(ch) ? back.get(ch) : blank;
+      wram[base + y * 20 + x] = tile === undefined ? blank : tile;
+    }
+  }
+  return wram;
+}
+
 export function worldRam(sym, {
   party = [], battleMode = 0, map = [24, 3], pos = [5, 5], mapStatus = 2,
   scriptMode = 0, tile = 0, menu = [0, 0], battleCursor = 0, windowStack = 0,
@@ -309,6 +345,10 @@ export function worldRam(sym, {
   // spawned entry is the index into `objects` it points back at, which is how
   // the reader learns what a live object *is*.
   mapBlocks = null, objects = [], spawned = null,
+  // `screen` is the words on screen, one string per row, painted into the
+  // tilemap through the engine's own charmap -- so a test writes what a person
+  // would read. A '>' becomes the cursor tile, which is how the arrow is drawn.
+  screen = null,
 } = {}) {
   const wram = new Uint8Array(WRAM_BYTES);
   w8(wram, sym.addr('wPartyCount'), party.length);
@@ -389,6 +429,7 @@ export function worldRam(sym, {
   });
   w8(wram, sym.addr('wCurPocket'), curPocket);
   w8(wram, sym.addr('wCurItem'), curItem);
+  if (screen) paintScreen(wram, sym, screen);
   return wram;
 }
 

@@ -166,6 +166,52 @@ export class TaskBase {
    * handful of bytes rather than the eight kilobytes a full snapshot copies.
    * This exists because the two-line incantation for it appeared five times.
    */
+  /**
+   * What the screen is saying right now, or null on a cartridge that cannot be
+   * read for it.
+   *
+   * A fresh work-RAM read rather than a field on `snap()`, and that is the
+   * point: this is asked when something has gone wrong and the question is
+   * *what is on the screen at this moment*, which a snapshot taken before the
+   * press cannot answer.
+   */
+  async screen() {
+    return this.state.screen(await this.gb.readWram());
+  }
+
+  /**
+   * What the screen is saying, as one short line for a message.
+   *
+   * Trimmed hard, because this goes on the end of a failure a person reads: the
+   * last two readable lines are the box and the text under it, which is what
+   * they would have seen. Empty string where the screen cannot be read, so a
+   * caller can append it unconditionally.
+   */
+  async screenSaid(lines = 2) {
+    const sc = await this.screen();
+    if (!sc) return '';
+    const said = sc.lines().map((l) => l.trim()).filter(Boolean);
+    if (!said.length) return '';
+    return said.slice(-lines).join(' / ');
+  }
+
+  /**
+   * A failure message with what the screen was showing on the end of it.
+   *
+   * "The USE box never appeared" says what the pilot expected. It does not say
+   * what turned up instead, and that is the whole of the difference between a
+   * report somebody can act on and one they can only re-run. Measured while
+   * driving the bedroom PC: three probes failed to identify a box by its shape,
+   * and one look at its words -- *CHRIS turned on the PC* -- settled it.
+   *
+   * Returns the message unchanged where the screen cannot be read, so a caller
+   * can wrap every failure without asking first.
+   */
+  async saying(message) {
+    const said = await this.screenSaid();
+    return said ? `${message} — the screen says: ${said}` : message;
+  }
+
   async menuWindow() {
     return this.gb.readBytes(this.state.menuWindow.addr, this.state.menuWindow.len);
   }

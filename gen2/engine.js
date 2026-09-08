@@ -134,6 +134,46 @@ export const gen2 = {
   // it, and leaving it out would make 0 look like an absence.
   objectTypes: { script: 0, itemball: 1, trainer: 2 },
 
+  // --- the letters on the screen -------------------------------------------
+  // Gen 2 draws text as tiles, so `wTilemap` holds the words a person is
+  // reading. Every entry below was measured off the cartridge rather than
+  // copied out of `charmap.asm`, by dumping the raw tilemap beside the picture
+  // and reading them against each other:
+  //
+  //   $80-$99  A-Z     "WITHDRAW ITEM" on the bedroom PC
+  //   $a0-$b9  a-z     "What do you want to do?" under it
+  //   $f6-$ff  0-9     "21/ 21" and "Lv6" on the party screen
+  //   $7f      space   the blank inside every box
+  //   $f3      /       between the two halves of an HP reading
+  //   $e6      ?       the end of that same question
+  //   $ed      the cursor arrow, at rows 2,4,6,8,10 as the cursor read 1..5
+  //   $6d      :       between the two halves of the save panel's "0:03"
+  //
+  // **The arrow is a tile in a list menu and a sprite in a YES/NO box.** The
+  // save confirmation was dumped with its panel up, "Would you like to save?"
+  // plainly readable, and not one $ed anywhere in the tilemap -- the same thing
+  // `sendOut` found about the party screen years of passes ago. So a list can
+  // be driven by following the arrow and a question cannot; a question is
+  // recognised by its words and answered through `wMenuCursorY`, which it does
+  // keep.
+  //
+  // The box border is $79-$7e and is left unnamed on purpose: it maps to
+  // spaces like every other graphic, and naming it would put punctuation in the
+  // middle of a line that has none.
+  //
+  // Here rather than in a title profile because it is an *encoding*, the same
+  // kind of thing as `moneyBytes`: a pokecrystal hack keeps this charmap, and a
+  // translation is exactly the case where a title would want to replace it.
+  charmap: {
+    ranges: [[0x80, 0x99, 'A'], [0xa0, 0xb9, 'a'], [0xf6, 0xff, '0']],
+    singles: { 0x7f: ' ', 0xf3: '/', 0xe6: '?', 0xe8: '.', 0xf4: ',',
+               0xe7: '!', 0xf0: '¥', 0xf1: 'x', 0xed: '>', 0x6d: ':' },
+    // The arrow is named twice on purpose: once above so a dumped screen shows
+    // which row is selected, and once here so `arrowAt` can find the tile
+    // without knowing what character it was rendered as.
+    cursor: 0xed,
+  },
+
   // --- what the overworld rolls an encounter on ----------------------------
   // COLL_LONG_GRASS $14, COLL_TALL_GRASS $18, and the two unused mirrors the
   // engine still treats as grass.

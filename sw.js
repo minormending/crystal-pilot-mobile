@@ -5,7 +5,7 @@
 // in IndexedDB on the device by app/remember.js, so a reload does not send you
 // looking for them -- which is a different thing from being cached, and is
 // thrown away by Forget in the settings card.
-const CACHE = 'crystal-pilot-v153';
+const CACHE = 'crystal-pilot-v154';
 const SHELL = [
   './', './index.html', './manifest.webmanifest', './icon.svg',
   './vendor/wasmboy.umd.js',
@@ -13,7 +13,8 @@ const SHELL = [
   './gen2/symbols.js', './gen2/tasks.js', './gbcore/saves.js',
   './gbcore/taskbase.js', './gen2/menus.js', './gen2/battle.js', './gen2/jobs.js',
   './app/rows.js', './gbcore/version.js', './gbcore/remember.js',
-  './gen2/collision.js', './gen2/nav.js', './gen2/romdata.js', './gen2/world.js',
+  './gen2/collision.js', './gen2/nav.js', './gen2/romdata.js', './gen2/screen.js',
+  './gen2/world.js',
   './gen2/journey.js', './titles/contract.js', './titles/crystal.js', './titles/crystal-early.js', './titles/generic.js', './titles/pick.js', './gbcore/room.js', './gbcore/stream.js',
   // Vendored from the kidsync repo, and cached for the same reason as the rest:
   // unlisted means served from the network, which is invisible until someone is

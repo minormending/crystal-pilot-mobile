@@ -1,6 +1,7 @@
 // Typed reads of the game, from one work-RAM snapshot per poll.
 import { GameBoy } from '../gbcore/gb.js';
 import { gen2 } from './engine.js';
+import { arrowAt, fold, screenSays, screenText, selectedLine } from './screen.js';
 
 const b = GameBoy.byteAt, w = GameBoy.wordAt;
 
@@ -107,6 +108,10 @@ export class GameState {
       numItems: symbols.addr('wNumItems'),
       items: symbols.addr('wItems'),
       money: symbols.addr('wMoney'),
+      // Optional, like `wMapObjects` is in the collision decode: a cartridge
+      // whose symbol file does not name the tilemap keeps every feature that
+      // drives a box by its shape, and loses only the ones that read its words.
+      tilemap: symbols.has('wTilemap') ? symbols.addr('wTilemap') : null,
       curPocket: symbols.addr('wCurPocket'),
       curItem: symbols.addr('wCurItem'),
       windowStack: symbols.addr('wWindowStackSize'),
@@ -215,6 +220,33 @@ export class GameState {
    * and the grind has counted knockouts since the seventeenth pass without ever
    * saying what one was worth.
    */
+  /**
+   * What the screen is saying, as words.
+   *
+   * A thin door onto `screen.js`, which holds the decoding: this class already
+   * carries the address and the engine profile, so putting the door here means
+   * nothing else has to be handed either. Callers get `null` where the symbol
+   * file does not name the tilemap, which is "cannot read" rather than "says
+   * nothing" -- the same distinction `liveObjects` makes.
+   */
+  screen(wram) {
+    if (this.a.tilemap === null) return null;
+    const at = this.a.tilemap, e = this.e;
+    return {
+      lines: () => screenText(wram, at, e),
+      selected: () => selectedLine(wram, at, e),
+      arrow: () => arrowAt(wram, at, e),
+      says: (phrase) => screenSays(wram, at, phrase, e),
+      // The line the arrow is on, asked about by name. Which is the question a
+      // menu actually raises -- "is the thing I want the thing selected?" --
+      // and the one the row *number* could only ever approximate.
+      selectedSays: (phrase) => {
+        const want = fold(phrase);
+        return !!want && fold(selectedLine(wram, at, e)).includes(want);
+      },
+    };
+  }
+
   money(wram) {
     let out = 0;
     for (let i = 0; i < (this.e.moneyBytes || 3); i++) {

@@ -161,6 +161,7 @@ export const SHARED_SYMBOLS = [
   'wObjectStructs',
   'wOverworldMapBlocks', 'wPartyCount', 'wPartyMon1', 'wPlayerBGMapOffsetX',
   'wPlayerBGMapOffsetY', 'wPlayerTileCollision', 'wScriptMode',
+  'wTilemap',
   'wTilesetCollisionAddress', 'wTilesetCollisionBank', 'wTimeOfDay',
   'wWindowStackSize', 'wXCoord', 'wYCoord',
 ];
