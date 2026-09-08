@@ -247,12 +247,30 @@ export function describeRows(s, ctx = {}) {
     shop: {
       text: s.inBattle ? 'finish the battle first'
         : !marts ? 'no mart within reach of here'
+        // The one state in which the whole job is impossible rather than
+        // merely pointless, and the row was offering it: **an empty party.**
+        // Every mart is in a town, and the town the game starts you in is the
+        // one it will not let you leave without a Pokémon -- Elm's aide stands
+        // in the way and puts you back. So "Shop · 5 more potion" in the
+        // bedroom of a new game is a two-minute walk into a roadblock, which
+        // is the interface's first rule broken: nothing is drawn that cannot
+        // be done.
+        //
+        // Nobody had pressed Shop from a bedroom, which is why nothing caught
+        // it. Found by the runner, which presses whatever is at the front of
+        // the list and does not know any better -- with no party and nothing
+        // else on offer, Shop was the front.
+        //
+        // An empty party is also *only* ever this state: Gen 2 refuses to
+        // deposit your last Pokémon, so the party is empty before the starter
+        // and never again.
+        : !s.party.length ? 'nothing to shop for without a Pokémon'
         // No money here: it is in the header, where it belongs. It is global
         // state -- a battle changes it -- and it was being printed in this row
         // and the Duel row both, which is the same number twice and clutter in
         // each. What this row is *for* is the thing it will buy.
         : shopFor || 'nothing named to buy',
-      enabled: afoot && !!marts && !!shopFor,
+      enabled: afoot && !!marts && !!shopFor && s.party.length > 0,
     },
     // Winning a badge, which is the one job whose result the game writes down
     // permanently -- so this row can say whether it has been done rather than
@@ -678,6 +696,58 @@ export function describeOffers(s, ctx = {}) {
     // Two clauses at most. A third is a paragraph, and this is a line.
     hint: hint.slice(0, 2).join(' · '),
   };
+}
+
+/**
+ * Which job the pilot would start next if nobody chose one, and when to stop.
+ *
+ * The list above this row is already ranked, every refresh, from what the game
+ * says -- which is the whole thesis of the app. Running the top of it and then
+ * reading the list again is therefore not a new decision: it is the decision
+ * the app has been making and showing all along, taken repeatedly. So there is
+ * very little here, and that is the point.
+ *
+ * Two jobs are never taken on their own, and for two different reasons:
+ *
+ *   * **Travel** is a destination, and a destination is somebody's choice. The
+ *     row carries a slot for picking one precisely because the app cannot.
+ *   * **Hunt** ends *inside* a battle by design -- that is what it is for, to
+ *     hand you one. A step that finishes somewhere the next step cannot start
+ *     is not a step in a sequence.
+ *
+ * Catch is on the list, because it finishes the battle it starts, and its
+ * species is a choice already made and remembered. A row still waiting on one
+ * (`needs`) is skipped for the same reason Travel is.
+ *
+ * `changed` is the caller's evidence, not a claim: a signature of the things a
+ * job could move -- where you are, the money, the badges, the party, the bag.
+ * The loop that must end is the one where a job reports success and leaves the
+ * world exactly as it was, which is a real state rather than a hypothetical:
+ * "off to heal" with a full party heals nothing, says so cheerfully, and is
+ * offered again a tenth of a second later.
+ */
+const AUTO_NEVER = ['travel', 'hunt'];
+
+export function describeAuto(offers, rows, { last = null, changed = true } = {}) {
+  const ready = (offers.offered || []).filter(
+    (key) => !AUTO_NEVER.includes(key)
+             && rows[key] && rows[key].enabled && !rows[key].needs);
+  if (!ready.length) {
+    return { key: null, enabled: false,
+             text: 'nothing it can start on its own' };
+  }
+  // `offered` is in rank order, so the front of it is the row wearing the
+  // accent -- the one a person would have pressed.
+  const key = ready[0];
+  const name = key[0].toUpperCase() + key.slice(1);
+  if (key === last && !changed) {
+    return { key: null, enabled: false,
+             text: `${name} ran and changed nothing` };
+  }
+  // Only the first step is promised. What follows is decided after this one
+  // has moved something, and saying otherwise would be a plan the app cannot
+  // keep -- one heal changes which row leads.
+  return { key, enabled: true, text: `starts with ${name}` };
 }
 
 /**

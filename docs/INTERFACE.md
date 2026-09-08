@@ -856,6 +856,43 @@ the collapsed paragraph was counted as visible and the improvement looked like
 then re-measured against the pre-pass build on the same origin rather than
 trusted from memory.
 
+## One more row, and it runs the other nine
+
+The ranking has been the app's central claim since v89: *what can the pilot do
+here, and which of those is worth most?* It has been drawn as an order and one
+accent rail ever since, and until v167 it was a suggestion a person acted on one
+row at a time.
+
+**Run the list** is that suggestion, taken repeatedly. It sits at the bottom of
+the nine rather than the top — deliberately, because it is an action *over* the
+list rather than an offer competing with the offers, so it reads as the list's
+own footer and the row wearing the rail stays the first thing the eye lands on.
+It is not ranked either: a rank would have it wearing the rail some refreshes
+and not others.
+
+It is drawn only when it can run, which is the list's own first rule. What it
+would do first is on the row before you press it, because a control that does
+several things has to say where it starts — and only the first step, because
+what follows is decided after this one has moved something.
+
+**The design question it forced was where the stopping rule lives.** A
+sequence of jobs has to end, and "eight jobs" alone is not enough: the honest
+guard is evidence, not a count. So after each job the app compares a signature
+of everything a job could move — the map, the money, the badges, every member's
+level and HP, and both pockets — and hands back when the same job runs twice
+with all of it standing still. *Off to heal* with a full party walks to the
+Center, heals nobody, says so cheerfully, and is offered again a tenth of a
+second later; that is a real state, and it is the loop this guards.
+
+**And it found a defect on its first run against a live cartridge**, which is
+the argument for building it. With no party at all, in the bedroom of a new
+game, the front of the list was *Shop · 5 more potion* — and the runner pressed
+it, because that is all it does. Every mart is in another town, and the town the
+game starts you in is the one it will not let you leave without a Pokémon. So
+the list was offering a two-minute walk into a roadblock: rule one broken, in
+the oldest card in the app, invisible for seventy versions because nobody
+presses Shop from a bedroom.
+
 ## The other two screens, where the problem was not the words
 
 The pilot's list had 279 words and the fix was to remove 100 of them. The
@@ -958,4 +995,4 @@ So this page carries a marker naming the files it describes and the hash they
 had when it was last read against them. `tools/docs-check` reports it when they
 move, and the pre-commit hook blocks on that report.
 
-<!-- covers: index.html app/main.js app/rows.js @ d7f87f521447 -->
+<!-- covers: index.html app/main.js app/rows.js @ 2ba430f4c73e -->

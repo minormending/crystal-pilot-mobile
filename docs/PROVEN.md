@@ -339,14 +339,14 @@ second, which is there so the core's own waits finish, not to run a game.
 ## The audits, and how each defect was actually found
 
 Everything above was watched happening. This section was the exception, and the
-exception was the point of it: after the ROM-hack work shipped, **forty** passes
-went looking for defects in code that already worked, and found **164** — a
-handful of them created by a fix on the way, which are in the table in italics
+exception was the point of it: after the ROM-hack work shipped, **forty-one**
+passes went looking for defects in code that already worked, and found **171** —
+a handful of them created by a fix on the way, which are in the table in italics
 because they are a different kind of thing. None of them announced itself.
 
 **Reading found twenty-three**, more than any other single method, which is why
 it comes first in the table and why it is worth doing before touching the game.
-But the interesting number is the tail: the remaining hundred and forty-one were
+But the interesting number is the tail: the remaining hundred and forty-eight were
 found almost as many different ways, and almost every entry in that column is a sentence rather than
 a category — *measuring the fix*, *asking a second tile*, *feeding it the wrong
 thing*, *writing a cartridge Crystal is not*, *a test, before the cartridge*,
@@ -542,6 +542,13 @@ exactly why nothing failed.
 | 40 | *`markers`' first draft asked whether a rule mentioned `none` at all, and the rule that stops Pico's chevron floating says `float:none`* | *—* | *the same* |
 | 40 | *every button in this sheet is `flex:1 1 auto`, so three segments measured 325px and the group wrapped onto a line of its own* | *the colour row at 375px* | *a screenshot* |
 | 40 | *Pico gives inputs `width:100%`, which is the flex basis — so on a row that can wrap, the code box took its label and its button a line each* | *Settings, after pressing Join* | *a screenshot* |
+| 41 | Shop was offered with an empty party — a two-minute walk into the roadblock the game puts in front of a player with no Pokémon | the bedroom of a new game, seventy versions running | **the runner**, which presses whatever is at the front of the list |
+| 41 | a run of stuck battles was countable rather than consecutive, so four stalls and a good battle and four more stalls would have stopped a grind that was going fine | forty battles, five stalls apart | `tools/mutate` on the module it rated 35% |
+| 41 | nothing asserted the twelve-trip heal budget, the stuck-battle limit, or any of `catch_`'s six refusals | — | the same |
+| 41 | `DEVELOPING.md` claimed 143 tests in seventeen files while 576 ran in twenty-three, and two diagrams in it disagreed with the prose and with each other | — | counting them |
+| 41 | a device mid-connect was not tested for being offered a code box, which now gates two controls rather than one | Settings, while connecting | mutation, and the pass before it |
+| 41 | *the first signature omitted the ball pocket, so "threw four balls and caught nothing" would have read as nothing happened* | *a catch that fails* | *reading it back* |
+| 41 | *a handler that declines before reaching `runTask` answers `undefined`, and the runner would have stopped dead with a blank bar* | *—* | *reading the three outcomes* |
 
 Five things in that table are worth more than the individual rows.
 
@@ -2788,6 +2795,62 @@ meeting Pico's. Every button here is `flex:1 1 auto`, which is right for a pad
 key and wrong for a segment; every input is `width:100%`, which is the flex
 *basis*, so the moment a row was allowed to wrap the code box took its label and
 its button a line each.
+
+### A forty-first pass: the feature that audited the app
+
+The next feature was a runner: press the front of the ranked list, read the
+list again, keep going. It is a small amount of code, because the ranking has
+been on screen every refresh for twenty passes and running it adds no decision
+— a planner would be a second, worse copy of `describeOffers`.
+
+**Its first run against a live game found a defect seventy versions old.** In
+the bedroom of a new game, with no party at all, the front of the list was
+*Shop · 5 more potion*, and the runner pressed it, because that is all it does.
+Every mart is in another town, and the town the game starts you in is the one it
+will not let you leave without a Pokémon — Elm's aide stands in the way and puts
+you back. So the oldest card in the app had been offering a two-minute walk into
+a roadblock, and rule one — *nothing is drawn that cannot be done* — had been
+broken there the whole time.
+
+Nobody presses Shop from a bedroom. That is the entire reason it survived: not
+subtlety, but that the state and the control had never met. A runner that takes
+the front of the list has no such taste, which turns out to be the useful
+property. **A mechanism with no judgement is an auditor.**
+
+**And the mutation tool found where the tests were not.** `gen2/jobs.js` — the
+module that drives every job, and the one people leave running for ninety
+seconds at a time — scored **35%**, the worst in the repository. Its survivors
+were not scattered: they were concentrated in *refusals* and *termination
+bounds*, which are exactly the two things that cannot be found by watching the
+job work. An unbounded loop looks like a slow one; a refusal that reports
+success looks like a job that had nothing to do.
+
+Eleven tests later it is 46%, and one of them was a real defect rather than a
+gap: **a run of stuck battles was being counted, not run.** `stuckRun` resets to
+zero on any battle that resolves, and nothing asserted the reset — so four
+stalls, a battle that works, and four more stalls would have stopped a grind
+that was going perfectly well. That is the classic form of this bug and it was
+one operator away.
+
+**A count in prose is a claim like any other.** `docs/DEVELOPING.md` said *143
+tests in seventeen files*; 576 ran in twenty-three, `journey.mjs` was listed
+with six and had a hundred and thirty, and two diagrams in the same document
+disagreed with the prose and with each other. `docs-check` could not see any of
+it, because it watches sections whose marker names the *source* files they
+describe and no section claims to cover `tests/`. A table about the tests went
+out of date in silence one directory away from the machinery built to prevent
+exactly that. There is a check for it now, and for one more thing the runner
+introduced: the word it prints is built from a row's key rather than from a
+second copy of nine words, so `labels` holds the markup to it.
+
+**The method note.** One defect from the feature itself, three from mutation,
+one from counting, and two from reading the new code before running it — the
+signature that omitted the ball pocket, and the handler that declines before
+reaching `runTask` and would have stopped the runner dead with a blank bar.
+Nothing came from the cartridge this pass, and that is worth saying plainly: the
+Browser pane was hidden, and a fresh ROM load on a hidden pane boots nothing at
+all. The half of the feature that a live game would have exercised — eight real
+jobs in a row — is tested against fakes and has not yet been watched.
 
 ## The part that had to be redesigned
 

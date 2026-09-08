@@ -15,8 +15,8 @@ what CI checks and what the pre-commit hook blocks on.
 ```mermaid
 flowchart LR
     E[an edit] --> H{{".githooks/pre-commit"}}
-    H --> T["./run-tests<br/>143 behaviour tests"]
-    H --> C["tools/check-app<br/>20 groups"]
+    H --> T["./run-tests<br/>576 behaviour tests"]
+    H --> C["tools/check-app<br/>22 groups"]
     H --> D["tools/docs-check<br/>25 tracked sections"]
     T --> OK[commit]
     C --> OK
@@ -39,27 +39,33 @@ git config core.hooksPath .githooks
 ./run-tests -v         # notes and stack lines
 ```
 
-143 tests in seventeen files, and what each file is about says more than the count:
+576 tests in 23 files, and what each file is about says more than the count:
 
 | file | tests | what it pins down |
 | --- | --- | --- |
-| `rows.mjs` | 31 | what every row and offer says, and when its button works |
-| `battle.mjs` | 13 | whose turn it is, which Pokémon is out, and a win from a whiteout |
-| `capture.mjs` | 12 | weakening, ball choice, the party prompt, and counting throws out of the bag |
-| `titles.mjs` | 11 | choosing a profile for a cartridge, and falling back to generic |
-| `control.mjs` | 10 | the task lifecycle: stopping, failing, undo points, and loops that must end |
-| `remember.mjs` | 10 | which remembered choices are believed, and which dropped |
-| `engine.mjs` | 8 | that a changed engine number is actually followed |
+| `journey.mjs` | 130 | the walking: routes, doors, shut legs, healers, gyms, and the map graph |
+| `rows.mjs` | 94 | what every row and offer says, when its button works, and what the runner picks |
+| `menus.mjs` | 53 | the order the START menu is driven in, and what is closed between tries |
+| `battle.mjs` | 44 | whose turn it is, which Pokémon is out, and a win from a whiteout |
+| `collision.mjs` | 34 | which tiles can be walked, and which have somebody standing on them |
+| `capture.mjs` | 25 | weakening, ball choice, the party prompt, and the refusals before a throw |
+| `grind.mjs` | 22 | what a grind says while it works, and the bounds that make it stop |
+| `world.mjs` | 22 | reading a cartridge's own maps: sizes, warps, objects and triggers |
+| `control.mjs` | 18 | the task lifecycle: stopping, failing, undo points, and loops that must end |
+| `state.mjs` | 16 | reading the party, the map, the badges and the battery out of work RAM |
+| `romdata.mjs` | 15 | the cartridge's own character encoding and tables, byte by byte |
+| `titles.mjs` | 15 | choosing a profile for a cartridge, and falling back to generic |
+| `remember.mjs` | 14 | which remembered choices are believed, and which dropped |
+| `worker.mjs` | 14 | the idle loop: one step outstanding, and a lost step recovered |
+| `screen.mjs` | 13 | the frames that go between two devices, and who may press what |
 | `room.mjs` | 9 | the merge rules and the handshake, so two devices settle rather than fight |
-| `journey.mjs` | 6 | choosing where to heal: the cost model, and a map with no name |
-| `state.mjs` | 6 | reading the party, the map and the battery out of work RAM |
-| `symbols.mjs` | 5 | the 45-address digest a second device boots from |
+| `engine.mjs` | 8 | that a changed engine number is actually followed |
+| `symbols.mjs` | 7 | the shared address digest a second device boots from |
+| `wilds.mjs` | 7 | what the grass here gives, at this hour |
+| `saves.mjs` | 6 | which battery record belongs to the cartridge in the machine |
 | `cartridge.mjs` | 4 | reading a ROM's own header: the logo, the title, Color-only |
+| `codec.mjs` | 3 | packing a save small enough for a room to carry |
 | `input.mjs` | 3 | held buttons, and releasing them |
-| `saves.mjs` | 3 | which battery record belongs to the cartridge in the machine |
-| `collision.mjs` | 3 | which tiles have somebody standing on them |
-| `menus.mjs` | 4 | the order the START menu is driven in, and what is closed between tries |
-| `romdata.mjs` | 5 | the cartridge's own character encoding, byte by byte |
 
 No ROM, no browser, no emulator — which is the point rather than a compromise.
 The ROM is not in this repository and never will be, so a test that needs one
@@ -117,8 +123,8 @@ section gives. Everything by hand runs against a local build.
 
 ```mermaid
 flowchart BT
-    C["the app"] --> T["./run-tests<br/>511 behaviour tests"]
-    C --> A["tools/check-app<br/>20 groups"]
+    C["the app"] --> T["./run-tests<br/>576 behaviour tests"]
+    C --> A["tools/check-app<br/>22 groups"]
     C --> D["tools/docs-check<br/>31 tracked sections"]
     C --> V["tools/coverage<br/>what the suite never runs"]
     T --> M["tools/mutate<br/>break a line, see who notices"]
@@ -287,7 +293,7 @@ is wrong, not the check. It is not in the pre-commit hook: it runs `check-app`
 about fifty times, which is the wrong price for every commit and the right
 one for the commit that changes a check.
 
-`tools/check-app` is twenty groups, each one a class of mistake that parses
+`tools/check-app` is twenty-two groups, each one a class of mistake that parses
 fine and is wrong at run time:
 
 | group | asserts |
@@ -310,6 +316,8 @@ fine and is wrong at run time:
 | `doclinks` | every `](#anchor)` in `docs/` lands on a heading that exists |
 | `markers` | nothing here draws an affordance the vendor stylesheet already draws — replacing Pico's chevron is fine, having two is not |
 | `deadcss` | no single-class rule is overridden on every element that could carry it, which is how `.slots{display:block}` lost to `.param{display:flex}` |
+| `labels` | every job row is named after its own key, capitalised — which is the word the runner prints, built from the key rather than from a second table |
+| `testtable` | the table above says what is actually in `tests/cases` — it claimed 143 tests in seventeen files while 576 ran in twenty-three |
 
 `tools/docs-check` is the other half, and it checks the prose rather than the
 code: a documentation section opts in with a marker naming the files it covers

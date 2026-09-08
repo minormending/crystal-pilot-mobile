@@ -1008,6 +1008,9 @@
   <g id="i-cart" fill="none" stroke="currentColor" stroke-width="1.8"
      stroke-linecap="round" stroke-linejoin="round">
     <path d="M4.6 4.7 6.4 2.9h7v12.2h-8.8Z"/><path d="M6.8 12.3h4.4"/></g>
+  <g id="i-auto" fill="none" stroke="currentColor" stroke-width="1.8"
+     stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4.2 4.4 8.8 9l-4.6 4.6"/><path d="M9.8 4.4 14.4 9l-4.6 4.6"/></g>
 </defs></svg>
 <header>
   <h1>crystal-pilot</h1>
@@ -1310,6 +1313,25 @@
       </div>
       <button class="jgo" id="travel" disabled>Walk</button>
     </div>
+    </div>
+
+    <!-- The list, run for you. Deliberately *below* the nine rows rather than
+         above them: it is an action over the list, so it reads as the list's
+         own footer, and the row wearing the accent stays the first thing the
+         eye lands on. Not ranked either -- it is not an offer competing with
+         the offers, and giving it a rank would have it wearing the rail some
+         refreshes and not others.
+
+         Drawn only when it can run, which is the list's own first rule. What
+         it would do is on the row before you press it, because a control that
+         does several things has to say where it starts. -->
+    <div class="job hide" id="job-auto">
+      <svg class="jicon" viewBox="0 0 18 18" aria-hidden="true"><use href="#i-auto"/></svg>
+      <div class="what">
+        <span class="jname">Run the list</span>
+        <span class="jstate" id="autostate">&mdash;</span>
+      </div>
+      <button class="jgo" id="keepgoing">Start</button>
     </div>
 
     <p class="offerhint" id="offerhint"></p>

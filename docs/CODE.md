@@ -46,6 +46,7 @@ and the code disagree, the code is right and the section is a bug — see
 8. [The errands](#8-the-errands)
 9. [The interface](#9-the-interface)
    · [One thing at a time](#one-thing-at-a-time)
+   · [Running the list](#running-the-list)
    · [The settings and the save card](#the-settings-and-the-save-card)
    · [Colour](#colour) · [What it remembers](#what-it-remembers)
    · [Sharing between your own devices](#sharing-between-your-own-devices)
@@ -3475,7 +3476,7 @@ This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ c611f51a7bd2 -->
+<!-- covers: app/main.js index.html @ d251cdb6be25 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -4024,7 +4025,7 @@ seconds by a page whose loop was supposedly running.
 
 ### One thing at a time
 
-<!-- covers: app/main.js @ 4948f6912a55 -->
+<!-- covers: app/main.js @ eb13b6bf86f9 -->
 
 One Game Boy, one joypad, one canvas — so a great deal of this app is about
 making sure two things are never driving them at once. There are three claims,
@@ -4043,9 +4044,13 @@ flowchart TD
     subgraph M["one marker tracking the map"]
       K["<b>markGen</b> — a counter<br/>same shape as the loop's"]
     end
+    subgraph A["one sequence of jobs"]
+      N["<b>autoOn</b> — a flag<br/>held <i>across</i> jobs, not around one"]
+    end
     R --> W["walkToTap · runTask · the idle refresh<br/>all read it, none may set it late"]
     G --> V["visibilitychange · a lost step"]
     S --> P["re-picking a ROM or a .sym"]
+    N --> Q["setMode · the pad and Stop, between two steps"]
 ```
 
 **A flag is claimed before the first `await`, or it is not a claim.** This is
@@ -4067,6 +4072,23 @@ whole of that await the handle said null while the chain was very much alive, so
 emulator every frame. The way in is ordinary: arrive somewhere, then tap again
 inside the 1.8 seconds the marker outlives the walk. It uses a generation now,
 like the loop.
+
+**A flag that spans jobs rather than wrapping one, which is a different claim
+from `running`.** The runner behind *Run the list* is a sequence of ordinary
+jobs, and every one of them is a `runTask` that claims `running` on its first
+line and releases it in its `finally`. So the runner cannot itself be a
+`runTask` — nesting would have its first step refused by the very guard that
+keeps two jobs off one joypad — and it holds `autoOn` instead: *there is another
+job coming after this one*.
+
+`setMode` reads both, and that is the whole reason the second flag exists.
+Every step ends by calling `setMode(false)`, so without it the pad came back to
+life and Stop vanished in the gap between two jobs. A tenth of a second, which
+is long enough to press either, and exactly the window Stop exists for.
+
+`autoStop` is the third, and it is Stop reaching the *sequence* rather than the
+job under way. `tasks.cancel()` has always stopped the job; starting the next
+one a moment later is the worst possible answer to a press on Stop.
 
 **A latch, where the thing being guarded is construction rather than a chain.**
 `generation` lives inside `startLoop`'s closure, so it can retire chains that
@@ -4143,9 +4165,106 @@ before a step is taken, so a stopped walk does not move at all.
 
 </details>
 
+### Running the list
+
+<!-- covers: app/rows.js app/main.js @ f7599d3ace01 -->
+
+The app has spent forty passes learning to answer one question — *what can the
+pilot do here, and which of those is worth most?* — and twenty showing the
+answer on screen, ranked, every refresh. **Run the list** takes the front of
+that answer, presses it, and reads the answer again.
+
+There is deliberately no new decision in it. A planner would be a second, worse
+copy of `describeOffers`, and it would disagree with the screen the moment one
+of them was edited.
+
+```mermaid
+flowchart TD
+    P["press Run the list"] --> S["snap · the game's own memory"]
+    S --> R["describeOffers · the same ctx the screen uses"]
+    R --> A["describeAuto · front of the list,<br/>minus Travel, Hunt, and anything with a slot"]
+    A -->|"nothing"| X["stop · nothing it can start on its own"]
+    A -->|"a key"| B["press that row's own button"]
+    B --> O{"what came back?"}
+    O -->|"undefined"| D["stop · the handler declined, and said nothing"]
+    O -->|"null, or not ok"| F["stop · the job already said why"]
+    O -->|"ok"| C{"did the signature move?"}
+    C -->|"no, and same job"| N["stop · X ran and changed nothing"]
+    C -->|"yes"| S
+    C -->|"eight jobs"| E["stop · one press's worth"]
+```
+
+**Two jobs are never taken on their own, for two different reasons.** Travel is
+a destination, and a destination is somebody's choice — the row carries a slot
+for picking one precisely because the app cannot. Hunt ends *inside* a battle
+by design, which is what it is for; a step that finishes somewhere the next step
+cannot start is not a step in a sequence. Catch is on the list, because it
+finishes the battle it starts and its species is a choice already made and
+remembered.
+
+**It presses the row's own button rather than calling the job behind it.** The
+handler is where the target, the busy line, the undo point and the reporting
+live, and a second path into a job is a second path to keep in step. Which
+meant the handlers had to start handing their results back: seven of the nine
+awaited their job and dropped the answer, and a runner cannot tell a job that
+failed from one that worked without it.
+
+The one place it prefers a different button is Duel, where the row has offered
+**Clear** beside it since Clear was written: the same fights in one job with its
+own budget, instead of one per step out of eight.
+
+<details>
+<summary><b>Advanced detail:</b> the loop that must end, and the two flags</summary>
+
+**`stateSignature` is the guard, and it is evidence rather than a claim.** A job
+that reports success and leaves the map, the money, the badges, every member's
+level and HP, and both pockets identical did nothing, whatever it said. That is
+a real state and not a hypothetical: *off to heal* with a full party walks to
+the Center, heals nobody, says so cheerfully, and is offered again a tenth of a
+second later. The balls are a pocket of their own in Gen 2 and were missed on
+the first draft, which would have read "Catch threw four balls and caught
+nothing" as *nothing happened*. Four balls happened.
+
+The bound on top of that is eight jobs — one press's worth — because a signature
+that keeps moving is not by itself a reason to keep going for ever.
+
+**Two flags, because they say different things.** `running` is *a job has the
+joypad*, claimed and released by `runTask` around every single job — the runner
+is not itself a `runTask`, and nesting would have its first step refused by the
+guard that exists to stop two jobs driving one emulator. `autoOn` is *there is
+another job coming after this one*, held across the whole sequence, and
+`setMode` reads it: without that the pad came back to life and Stop disappeared
+between every step, for a tenth of a second, which is long enough to press
+either and exactly the window Stop exists for.
+
+`autoStop` is the third, and it is Stop reaching the *sequence* rather than the
+job. `tasks.cancel()` stops the job under way; starting the next one a moment
+later is the worst possible answer to a press on Stop.
+
+**Three outcomes, and telling two of them apart matters.** `runTask` answers
+`null` for a refusal, a throw and a Stop, and every one of those has already put
+its own sentence on the bar — so a sentence of ours would overwrite the useful
+half. A handler that declines *before* reaching `runTask` answers `undefined`
+and says nothing at all, which is the one stop that would be silent. Nothing on
+the list should be able to reach it, since a row is not enabled unless its
+handler's preconditions hold — so if it happens it is a defect, and the runner
+names it rather than stopping dead with a blank bar.
+
+**What it found on its first run against a live game.** With no party at all, in
+the bedroom of a new game, the front of the list was *Shop · 5 more potion* and
+the runner pressed it. Every mart is in another town, and the town the game
+starts you in is the one it will not let you leave without a Pokémon — Elm's
+aide stands in the way and puts you back. So that row was a two-minute walk into
+a roadblock, which is the interface's first rule broken: nothing is drawn that
+cannot be done. Nobody had pressed Shop from a bedroom, which is why nothing
+caught it. An empty party is also *only* ever that state, because Gen 2 refuses
+to deposit your last Pokémon.
+
+</details>
+
 ### The settings and the save card
 
-<!-- covers: index.html app/main.js @ c611f51a7bd2 -->
+<!-- covers: index.html app/main.js @ d251cdb6be25 -->
 
 The pilot's own list got a glyph column, shorter names and a slot to fill in
 v165. These two cards did not, and reading them found that they had a different
@@ -4773,7 +4892,7 @@ they have been installed.
 
 ### Watching the other device's screen
 
-<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ 8e652551ce4c -->
+<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ b063c34f8760 -->
 
 One device shows its screen; the other watches it, and plays it if the first
 one says so. The picture goes straight between them over WebRTC and never
@@ -5386,7 +5505,7 @@ about that code did not.
 
 ### The other checks
 
-<!-- covers: tools/check-app @ e86331e1136a -->
+<!-- covers: tools/check-app @ 83ed7b6a7400 -->
 
 `tools/check-app` runs everything that can be verified without a ROM:
 
@@ -5417,6 +5536,8 @@ tools/check-app contrast     # or one group
 | `doclinks` | every `](#anchor)` in `docs/` lands on a heading that exists |
 | `markers` | nothing here draws an affordance the vendor stylesheet already draws |
 | `deadcss` | no single-class rule is overridden on every element that could carry it |
+| `labels` | every job row is named after its own key, which is the word the runner prints |
+| `testtable` | `DEVELOPING.md`'s table of test files says what is actually in `tests/cases` |
 
 Half of that table was missing until the marker above was added: six groups had
 been written and never listed, so the document described five checks while
@@ -5432,6 +5553,16 @@ on every `summary` and this stylesheet drew another — and `deadcss` from
 `.param{display:flex}` sits later in the same sheet at the same specificity.
 Both are argued out in [the settings and the save
 card](#the-settings-and-the-save-card).
+
+The two after them are about *claims* rather than about code that runs. `labels`
+keeps a word the runner builds from a key in step with the word on the row;
+`testtable` keeps a count in prose honest, and it exists because
+`DEVELOPING.md` said **143 tests in seventeen files** while 576 ran in
+twenty-three, with two diagrams in the same document disagreeing with the prose
+and with each other. `docs-check` could not see it: that tool watches sections
+whose marker names the *source* files they describe, and no section claims to
+cover `tests/`. A table about the tests went out of date in silence one
+directory away from the machinery built to prevent exactly that.
 
 CI (`.github/workflows/checks.yml`) runs `check-app`, the behaviour tests and
 `docs-check` on every push. There is deliberately no emulator in CI: driving

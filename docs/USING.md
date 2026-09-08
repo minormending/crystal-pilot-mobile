@@ -743,6 +743,50 @@ they are the row telling you what would change its mind.
 Where you are and how much money you have live in the **header**, because they
 are true of the whole app rather than of any one offer.
 
+## Run the list: the whole list, in order
+
+At the bottom of the offers is one more row: **Run the list**. It does what the
+rail already suggests, and then keeps doing it — press the row the pilot would
+have done first, read the situation again, press the next one. Up to eight jobs
+on one press, which is where it stops by itself.
+
+The row says where it starts before you press it — *starts with Heal* — and only
+that, because what comes second is decided after the first one has moved
+something. One heal changes which row leads.
+
+**Two jobs are never taken this way, for two different reasons.** Travel needs a
+destination, and that is your choice, not the app's. Hunt deliberately ends
+*inside* a battle, which is the whole point of it — so it is not a step that
+another step can follow. Catch is fair game, because it finishes the battle it
+starts and the species is one you have already picked.
+
+**Stop works throughout.** It stops the job under way *and* the sequence, which
+are two different things: cancelling the job and then starting the next one a
+moment later would be the worst possible answer to a press on Stop. The pad
+stays dim between jobs for the same reason — there is another one coming.
+
+It stops for one of five reasons, and says which:
+
+| It says | Meaning |
+| --- | --- |
+| `nothing it can start on its own` | the list is empty, or everything left needs a choice from you |
+| `Heal ran and changed nothing` | the job reported success and nothing moved — see below |
+| `8 jobs is one press's worth` | the budget, not a problem |
+| *the job's own message* | something failed, and it already said why |
+| `stopped` | you pressed Stop |
+
+**"Changed nothing" is the one worth understanding**, because it is what keeps
+this from running for ever. After each job the app compares where you are, the
+money, the badges, every party member's level and HP, and both pockets of the
+bag. A job that reports success while all of that stands still did nothing,
+whatever it said — *off to heal* with a full party walks to the Center, heals
+nobody, and comes back pleased with itself. So the same job twice in a row with
+nothing moved is where it hands back.
+
+**It will spend money**, because Shop is on the list. Every job takes an undo
+point first, the same as when you press it yourself, so *Undo the last job* on
+the save card reaches the last one it ran.
+
 ## Clear: fighting everybody on this map
 
 The Duel row has two buttons. **Fight** takes on whoever is in front of you.
@@ -1185,7 +1229,7 @@ deployed, which is not the question you are asking when a bug you saw fixed is
 still in front of you. `tools/check-app` asserts that number matches the service
 worker's cache name, because a version display that lies is worse than none.
 
-<!-- covers: sw.js @ ef12ca6cad56 -->
+<!-- covers: sw.js @ 475f0f158166 -->
 
 The worker fetches **network first, falling back to the cache**. That is the
 opposite of the usual offline-first advice, on purpose.

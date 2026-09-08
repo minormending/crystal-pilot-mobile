@@ -3,7 +3,7 @@ import { readHeader } from '../gbcore/cartridge.js';
 import { GameBoy } from '../gbcore/gb.js';
 import { Symbols, sharedNames } from '../gen2/symbols.js';
 import {
-  describeHandoff, describeOffers, describeParty, describeReplaced,
+  describeAuto, describeHandoff, describeOffers, describeParty, describeReplaced,
   describeRoom, describeRows, describeSaying, describeScreen, describeSlot,
   describeTitle, describeUndo, hoursLine, joinFailure, otherHour,
 } from './rows.js';
@@ -193,6 +193,15 @@ let restoredSession = false;
 const LOST_STEP_MS = 1000;
 let speed = 1;
 let running = false, target = 5;
+// Two flags rather than one, because they say different things. `running` is
+// "a job has the joypad", claimed and released by `runTask` around every
+// single job. `autoOn` is "there is another job coming after this one", held
+// across a whole sequence by `keepGoing` -- which is why the pad stays dim and
+// Stop stays on screen in the gap between two steps. `autoStop` is a press on
+// Stop reaching the sequence, which `tasks.cancel()` cannot: cancelling the
+// job under way and then starting the next one is the worst possible answer to
+// a press on Stop.
+let autoOn = false, autoStop = false;
 // Which half of the bootstrap the button is offering. Two presses, because the
 // middle of it is not the pilot's decision: the first plays the intro and stops
 // at the table in Elm's lab, the second walks out to the grass once you have
@@ -1396,8 +1405,13 @@ function startLoop() {
  * running. This is the whole switch -- the ordering and dimming live in CSS.
  */
 function setMode(piloting) {
-  document.body.classList.toggle('piloting', piloting);
-  $('#stopRun').classList.toggle('hide', !piloting);
+  // `|| autoOn`, because the runner is a sequence of ordinary jobs and each one
+  // ends by calling this with false. Without it the pad came back to life and
+  // Stop disappeared between every step -- for a tenth of a second, which is
+  // long enough to press either and exactly the window Stop exists for.
+  const on = piloting || autoOn;
+  document.body.classList.toggle('piloting', on);
+  $('#stopRun').classList.toggle('hide', !on);
   // Asking for a job is asking to watch it. Only one way: a job that ends does
   // not re-open the menu, because the person may well be reading the screen.
   if (piloting) showPanel(null);
@@ -1634,7 +1648,16 @@ const JOB_ROWS = {
   travel: ['#travelstate', '#travel', '#job-travel'],
 };
 
-function paintJobs(s) {
+/**
+ * The ranked list, from where the game is now.
+ *
+ * Split out of `paintJobs` because the runner below needs *the same answer the
+ * screen is showing* -- and the only way to be sure of that is one function.
+ * A second copy of this ctx would drift the moment a field was added to one of
+ * them, and the failure would be a pilot that ran something the list was not
+ * offering.
+ */
+function offersNow(s) {
   // `canFetch` is a title question, not a game one: the errand that gets the
   // first Poké Balls is a scripted walk to particular places, and a cartridge
   // nobody has described has no such walk.
@@ -1652,8 +1675,11 @@ function paintJobs(s) {
                 marts: martsNear,
                 shopFor: shopFor(),
                 engine: state.e };
-  const rows = describeRows(s, ctx);
-  const offers = describeOffers(s, ctx);
+  return { ctx, rows: describeRows(s, ctx), offers: describeOffers(s, ctx) };
+}
+
+function paintJobs(s) {
+  const { ctx, rows, offers } = offersNow(s);
 
   // The pilot's rows are reordered and hidden rather than rebuilt. Every one of
   // them keeps its id, its handler and its place in check-app's wiring check;
@@ -1675,6 +1701,13 @@ function paintJobs(s) {
     }
   }
   $('#offerhint').textContent = offers.hint;
+
+  // Drawn only when it can run. The reason it cannot is worth saying *after*
+  // somebody asked -- which is the status bar, where the runner puts it -- and
+  // not as a permanently greyed row explaining an absence nobody asked about.
+  const auto = describeAuto(offers, rows);
+  $('#job-auto').classList.toggle('hide', !auto.enabled || autoOn);
+  $('#autostate').textContent = auto.text;
 
   // The picker and the presets belong to the jobs that read them. In a battle
   // neither job is on the list, so neither control has anything to change.
@@ -2344,6 +2377,7 @@ $('#catch').onclick = async () => {
   paintSeen(res);
   progress(res
     ? Object.entries(res.stats).map(([k, v]) => `${k}=${v}`).join('  ') : '');
+  return res;
 };
 
 
@@ -2678,6 +2712,7 @@ $('#go').onclick = async () => {
     }));
   progress(res
     ? Object.entries(res.stats).map(([k, v]) => `${k}=${v}`).join('  ') : '');
+  return res;
 };
 
 // --- the three that act on where you already are ----------------------------
@@ -2702,7 +2737,10 @@ $('#catchhere').onclick = async () => {
 
 $('#heal').onclick = async () => {
   if (!boot) return;
-  await runTask('#heal', 'off to heal', () => boot.healNow());
+  // Returned, not dropped. Every handler on the list hands its result back now
+  // -- the runner reads it to decide whether there is any point in a next step,
+  // and a job that failed silently would have it pressing on regardless.
+  return runTask('#heal', 'off to heal', () => boot.healNow());
 };
 
 /**
@@ -2719,6 +2757,7 @@ $('#take').onclick = async () => {
   const res = await runTask('#take', 'picking things up', () => boot.takeHere());
   progress(res && res.got && res.got.length
     ? `${res.got.length} in the bag` : '');
+  return res;
 };
 
 /**
@@ -2742,6 +2781,7 @@ $('#duel').onclick = async () => {
   const res = await runTask('#duel', 'looking for a battle',
                             () => boot.duelHere());
   progress(res && res.won && res.prize ? `¥${res.prize} richer` : '');
+  return res;
 };
 
 /**
@@ -2764,6 +2804,7 @@ $('#gym').onclick = async () => {
   const res = await runTask('#gym', 'off to the Gym', () => boot.beatGym(gymNext));
   progress(res && res.stats
     ? Object.entries(res.stats).map(([k, v]) => `${k}=${v}`).join('  ') : '');
+  return res;
 };
 
 $('#clear').onclick = async () => {
@@ -2772,6 +2813,7 @@ $('#clear').onclick = async () => {
                             () => boot.clearHere());
   progress(res && res.stats
     ? Object.entries(res.stats).map(([k, v]) => `${k}=${v}`).join('  ') : '');
+  return res;
 };
 
 /**
@@ -2799,6 +2841,7 @@ $('#shop').onclick = async () => {
                             () => boot.restock(buyable, RESTOCK_TO));
   progress(res && res.stats
     ? Object.entries(res.stats).map(([k, v]) => `${k}=${v}`).join('  ') : '');
+  return res;
 };
 
 $('#travel').onclick = async () => {
@@ -2823,12 +2866,133 @@ $('#gear').onclick = () => showPanel(panel === 'settings' ? null : 'settings');
 paintStatusCard();
 
 $('#stopRun').onclick = () => {
-  // Reaches both kinds of work: the task flag, which a walk never reads, and
-  // the walk flag, which a task never reads.
+  // Reaches all three kinds of work: the task flag, which a walk never reads,
+  // the walk flag, which a task never reads, and the runner, which would
+  // otherwise start the *next* job a moment after this one was stopped -- the
+  // worst possible answer to a press on Stop.
   if (tasks) tasks.cancel();
   walkCancelled = true;
+  autoStop = true;
   progress('stopping…');
 };
+
+// --- running the list --------------------------------------------------------
+//
+// The app has spent forty passes learning to answer one question -- *what can
+// the pilot do here, and which of those is worth most?* -- and has answered it
+// on screen, every refresh, for the last twenty. This runs the answer.
+//
+// There is deliberately no new decision in here. The list is ranked by
+// `describeOffers` from what the game says; `describeAuto` takes the front of
+// it; this presses that row's own button and reads the list again. A pilot that
+// planned would be a second, worse copy of the ranking.
+
+/** How many jobs one press will run. */
+const AUTO_STEPS = 8;
+
+/**
+ * The things a job could move, as one string.
+ *
+ * This is the runner's only guard against the loop that never ends, and it is
+ * evidence rather than a claim: a job that reports success and leaves all of
+ * this identical did nothing, whatever it said. That is a real state and not a
+ * hypothetical -- "off to heal" with a full party walks to the Center, heals
+ * nobody, says so cheerfully, and is offered again a tenth of a second later.
+ *
+ * Where you are, the money, the badges, every member's level and HP, and both
+ * pockets. Between them they cover what every job on the list is *for*: money
+ * is a purchase, HP is a heal, a level is a battle, a badge is a Gym, an item
+ * is a pick-up, a ball is a throw, and the map is a walk.
+ *
+ * The balls are a pocket of their own in Gen 2 and were missed on the first
+ * draft, which would have read "Catch threw four balls and caught nothing" as
+ * *nothing happened*. Four balls happened.
+ */
+function stateSignature(s) {
+  return [
+    (s.map || []).join('.'),
+    s.money,
+    s.badges,
+    (s.party || []).map((m) => `${m.species}/${m.level}/${m.hp}`).join(','),
+    (s.items || []).map(([id, n]) => `${id}x${n}`).join(','),
+    (s.balls || []).map(([id, n]) => `${id}x${n}`).join(','),
+  ].join('|');
+}
+
+/**
+ * Run the top of the list, then read the list again, until it stops.
+ *
+ * Not itself a `runTask`: every step *is* one, and `running` is the flag that
+ * keeps a single job on the joypad. Nesting would have the first step refused
+ * by the guard that exists to stop two jobs driving one emulator. So this holds
+ * a flag of its own, and the two say different things -- `running` is "a job
+ * has the joypad", `autoOn` is "there is another one coming".
+ *
+ * It presses the row's own button rather than calling the job behind it. That
+ * is not laziness: the handler is where the target, the busy line, the undo
+ * point and the reporting live, and a second path into a job is a second path
+ * to keep in step. Which means the handlers have to hand their result back --
+ * they used to await it and drop it, and the runner cannot tell a job that
+ * failed from one that worked without it.
+ */
+async function keepGoing() {
+  if (running || autoOn || !tasks) return;
+  autoOn = true;
+  autoStop = false;
+  setMode(true);
+  let last = null, lastSig = null, ran = 0, why = '';
+  try {
+    for (let step = 0; step < AUTO_STEPS; step++) {
+      if (autoStop) { why = 'stopped'; break; }
+      const s = await tasks.snap();
+      if (!s.worldLoaded) { why = 'no game running'; break; }
+      const { rows, offers } = offersNow(s);
+      const sig = stateSignature(s);
+      const auto = describeAuto(offers, rows,
+                                { last, changed: sig !== lastSig });
+      if (!auto.key) { why = auto.text; break; }
+      // Clear beats Duel wherever the row offers it: the same fights, in one
+      // job with its own budget, instead of one per step out of eight. The
+      // Duel row has carried two buttons since the day Clear was written, and
+      // this is the one place that has to know which of them is the better
+      // press.
+      const button = auto.key === 'duel' && rows.duel.clearable
+        ? '#clear' : JOB_ROWS[auto.key][1];
+      last = auto.key;
+      lastSig = sig;
+      // `autoOn` stays true across this: `setMode` reads it, so the pad stays
+      // dim and Stop stays on screen while one step hands over to the next.
+      const res = await $(button).onclick();
+      // Three outcomes, and telling two of them apart matters. `runTask`
+      // answers `null` for a refusal, a throw and a Stop, and every one of
+      // those has already put its own sentence on the bar -- so adding one of
+      // ours would overwrite the useful half. A handler that declines before
+      // reaching `runTask` answers `undefined` and says *nothing*, which is
+      // the one stop that would be silent. Nothing on the list should be able
+      // to reach that -- a row is not enabled unless its handler's
+      // preconditions hold -- so if it happens it is a defect, and a defect
+      // that stops the runner dead with a blank bar is the worst shape for
+      // one.
+      if (res === undefined) { why = `${last} would not start`; break; }
+      if (res === null || !res.ok) { why = ''; break; }
+      ran += 1;
+    }
+    if (ran >= AUTO_STEPS) why = `${AUTO_STEPS} jobs is one press's worth`;
+  } finally {
+    autoOn = false;
+    setMode(false);
+    refresh();
+  }
+  // Said only where there is something to say that the last job did not
+  // already say. Two jobs and a reason is the useful shape: what it got done,
+  // and why it is handing back.
+  if (why) {
+    setStatus(ran ? `${ran} job${ran === 1 ? '' : 's'} done — ${why}`
+                  : why, ran ? 'ok' : 'bad');
+  }
+}
+
+$('#keepgoing').onclick = keepGoing;
 
 // --- which build this is -----------------------------------------------------
 
