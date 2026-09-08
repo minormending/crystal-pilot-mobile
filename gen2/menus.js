@@ -35,6 +35,13 @@ const CANCEL = 0xff;
 // pocket lags -- see `useItemOn` for the measurement -- and this is a bound on
 // waiting for it, not a promise that it will arrive.
 const BAG_SETTLE_TRIES = 10;
+// How many settles to wait for an expected box. Generous: a box that is going
+// to appear appears within a few, and one that is not costs a few frames.
+const BOX_TRIES = 8;
+// How patiently to wait after each A when pressing toward a box. Small, because
+// this is inside a loop that will press again -- the waiting is only to avoid
+// pressing into a box that is arriving.
+const PRESS_SETTLES = 3;
 
 export function withMenus(Base) {
   // Named, so a stack trace says which of these a frame came from.
@@ -179,6 +186,28 @@ export function withMenus(Base) {
   }
 
   /**
+   * Wait for a particular box to be the one on screen.
+   *
+   * One sample is not enough, and that is measured rather than cautious: the
+   * mart's quantity box reads `4/15` when it has settled and **`4/0` while it
+   * is being redrawn**, so a check that looked once landed on the transient
+   * shape, decided the box was wrong, and reported *bought nothing* from inside
+   * a working shop. The first probe of the sequence caught that frame and the
+   * second did not, which is exactly what a race looks like in a log.
+   *
+   * Which makes this the third place in this app to need the same rule --
+   * `_packMoved` and `_openBattlePack` are the others. Press, then *wait for
+   * what you expected*, rather than pressing and looking.
+   */
+  async _awaitBox(shape, tries = BOX_TRIES) {
+    for (let i = 0; i < tries; i++) {
+      if (this._isBox(await this.snap(), shape)) return true;
+      await this.step(SETTLE_FRAMES);
+    }
+    return this._isBox(await this.snap(), shape);
+  }
+
+  /**
    * Open the pack from the START menu, by trying rows and checking.
    *
    * The row is not fixed and cannot be counted to. The START menu grows -- no
@@ -260,8 +289,7 @@ export function withMenus(Base) {
     }
 
     await this.push('A', 6, 10);
-    await this.step(SETTLE_PACK);
-    if (!this._isBox(await this.snap(), e.itemUse)) {
+    if (!await this._awaitBox(e.itemUse)) {
       await this.closeMenus();
       return { ok: false, message: 'the USE box never appeared' };
     }
@@ -273,8 +301,7 @@ export function withMenus(Base) {
       return { ok: false, message: 'could not reach USE' };
     }
     await this.push('A', 6, 10);
-    await this.step(SETTLE_PACK);
-    if (!this._isBox(await this.snap(), e.partyPick)) {
+    if (!await this._awaitBox(e.partyPick)) {
       await this.closeMenus();
       return { ok: false, message: 'the party never came up' };
     }
@@ -374,6 +401,136 @@ export function withMenus(Base) {
       await this.pump();
     }
     return false;
+  }
+
+  /**
+   * Buy `count` of an item from the clerk you are standing in front of.
+   *
+   * Five boxes, every one confirmed by its shape before anything is pressed
+   * into it, and the whole sequence measured in Cherrygrove's Mart -- buying two
+   * POTIONs at 300 each and watching the money fall 3000 to 2700 to 2400 while
+   * the pocket went one to two to three.
+   *
+   * **The money is the evidence.** Not the presses landing, and not the pocket:
+   * the pocket lags a *use* (see `useItemOn`) and there is no reason to think a
+   * purchase is different, while the money moved on the same read as the item
+   * arriving in every measurement taken. So the answer is what it spent.
+   *
+   * One press at a time rather than a quantity, deliberately. The `howMany` box
+   * takes UP to raise the count, and getting that wrong buys ninety-nine of
+   * something -- whereas repeating a confirmed one-item purchase costs a few
+   * frames and cannot overshoot.
+   */
+  async buyFromClerk(itemId, count = 1) {
+    const e = this.state.e.shop || {};
+    const before = await this.snap();
+    const startMoney = before.money;
+    let bought = 0, spent = 0;
+
+    // The clerk's greeting is text; the menu is behind it.
+    if (!await this._pressUntilBox(e.menu)) {
+      await this.closeMenus();
+      return { ok: false, bought: 0, spent: 0, message: 'the clerk never offered a menu' };
+    }
+    // BUY is row 1 of three, and the cursor opens on it -- asked for rather
+    // than assumed, because SELL is the row under it.
+    if (!await this._driveMenuCursor(1, 3)) {
+      await this.closeMenus();
+      return { ok: false, bought: 0, spent: 0, message: 'could not reach BUY' };
+    }
+    await this.push('A', 6, 10);
+    if (!await this._awaitBox(e.list)) {
+      await this.closeMenus();
+      return { ok: false, bought: 0, spent: 0, message: 'the mart never showed its stock' };
+    }
+
+    for (let n = 0; n < count; n++) {
+      // Pressed toward, not waited for. The way *back* to the stock list is
+      // two text boxes rather than one -- the price line and the thanks -- so
+      // waiting for the list without pressing through them times out, and
+      // pressing once and then waiting stops one box short. Either way the job
+      // buys one of four and says so honestly, which is the worst kind of
+      // wrong: nothing looks broken.
+      if (!await this._pressUntilBox(e.list)) break;
+      let s = await this.snap();
+      // The stock list is walked by `wCurItem`, the same way the pack is, and
+      // it does not wrap either -- so an overshoot is walked back.
+      for (let i = 0; i < 24 && s.curItem !== itemId; i++) {
+        if (s.curItem === CANCEL) {
+          await this.push('UP', 4, 8);
+          await this.step(SETTLE_FRAMES);
+          s = await this.snap();
+          if (s.curItem === itemId) break;
+          await this.closeMenus();
+          return { ok: bought > 0, bought, spent,
+                   message: `the mart does not stock that (bought ${bought})` };
+        }
+        s = await this._packMoved('DOWN', (x) => x.curItem);
+      }
+      if (s.curItem !== itemId) break;
+      const had = s.money;
+      await this.push('A', 6, 10);          // pick it
+      if (!await this._awaitBox(e.howMany)) break;
+      await this.push('A', 6, 10);          // one of them
+      if (!await this._awaitBox(e.confirm)) break;
+      // YES is row 1 and the cursor opens on it; NO is the row under.
+      if (!await this._driveMenuCursor(1, 2)) break;
+      await this.push('A', 6, 10);
+      await this.step(SETTLE_PACK);
+      const now = await this.snap();
+      if (now.money >= had) {
+        // Nothing was spent. Either it could not be afforded or the press went
+        // somewhere else, and both are reasons to stop rather than press on.
+        await this.closeMenus();
+        return { ok: bought > 0, bought, spent,
+                 message: bought ? `bought ${bought}, then could not afford another`
+                                 : 'could not afford it' };
+      }
+      bought++;
+      spent += had - now.money;
+      // The text after a purchase is the top of this loop's business, because
+      // it does not know how many boxes it is.
+    }
+
+    await this.closeMenus();
+    const end = await this.snap();
+    return {
+      ok: bought > 0,
+      bought,
+      spent: startMoney - end.money,
+      message: bought
+        ? `bought ${bought} for ${startMoney - end.money}`
+        : 'bought nothing',
+    };
+  }
+
+  /**
+   * Press A until a particular box is the one on screen.
+   *
+   * Not `settleText`: that stops when no window is open, and a menu *is* a
+   * window -- so it would stop before the text had finished and leave the
+   * caller pressing into whatever came next. It stops on the shape it is
+   * waiting for, the same rule `_pastTheMessage` follows one feature over.
+   *
+   * Written for the clerk's greeting and needed twice, which is the useful
+   * part: **a purchase is followed by two text boxes, not one.** Measured --
+   * confirm, A, the price line, A, the thanks, A, and only then the stock list
+   * again. Pressing once and waiting for the list bought exactly one of four
+   * items and reported it honestly, which is a job doing a quarter of its work
+   * without anything looking wrong.
+   */
+  async _pressUntilBox(shape, taps = 12) {
+    for (let i = 0; i < taps; i++) {
+      // Waited for after every press, not merely looked at. Otherwise a press
+      // lands *into* the box being waited for while it is still redrawing --
+      // which in a stock list picks an item, and is how a patient loop turns
+      // into a shopping spree. The fake that models the redraw caught this
+      // before the cartridge did, which is the first time round here that the
+      // test found the hazard rather than recording it.
+      if (await this._awaitBox(shape, PRESS_SETTLES)) return true;
+      await this.push('A', 6, 12);
+    }
+    return this._isBox(await this.snap(), shape);
   }
 
   /**

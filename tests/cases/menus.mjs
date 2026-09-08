@@ -512,3 +512,193 @@ test('an item that cures nothing on a well Pokémon is still no effect',
   t.false(r.ok, 'nothing happened');
   t.contains(r.message, 'no effect', 'and it says so');
 });
+
+// --- the counter -------------------------------------------------------------
+
+/**
+ * A pilot in front of a clerk whose shop is a scripted state machine.
+ *
+ * The five boxes are the ones measured in Cherrygrove's Mart, in the order they
+ * appear — so what is under test is whether each is confirmed before anything
+ * is pressed into it, and whether the *money* is what decides a purchase
+ * happened.
+ */
+function shopping({ stock = [POTION], price = 300, purse = 3000,
+                    pocket = [], greetings = 1, boxes = null,
+                    // How many reads a box spends being redrawn before it
+                    // settles. The mart's quantity box reads 4/0 mid-redraw and
+                    // 4/15 settled, measured -- so a checker that looks once
+                    // lands on the wrong shape.
+                    redraw = 0 } = {}) {
+  const sym = symbols();
+  const state = new GameState(sym);
+  const gb = new FakeGameBoy({ wram: worldRam(sym, {}) });
+  const tasks = new Tasks(gb, state, () => {},
+                          fakeRom({ items: { 18: 'POTION', 12: 'ANTIDOTE' } }));
+  const E = tasks.state.e.shop;
+  const bag = pocket.map(([id, n]) => [id, n]);
+  const at = { box: 'greeting', row: 1, item: stock[0], left: greetings,
+               money: purse, settling: 0 };
+  const log = [];
+  const SHAPES = { greeting: null, menu: E.menu, list: E.list, howMany: E.howMany,
+                   confirm: E.confirm, done: E.done, closed: null };
+  tasks.step = async () => {};
+  tasks.pump = async () => {};
+  tasks.closeMenus = async () => { at.box = 'closed'; log.push('close'); return true; };
+  tasks.menuCursor = async () => at.row;
+  tasks.snap = async () => {
+    let shape = (boxes ? boxes(at) : SHAPES[at.box]) || { items: 0, top: 0 };
+    // Mid-redraw: the right item count at the wrong row, which is exactly what
+    // the cartridge showed.
+    if (at.settling > 0) { at.settling--; shape = { items: shape.items, top: 0 }; }
+    return {
+      ...state.read(worldRam(sym, { items: bag, money: at.money })),
+      windowOpen: at.box !== 'closed',
+      menuItems: shape.items, menuTop: shape.top, menu: [1, at.row],
+      curItem: at.item, curPocket: 0,
+      // The fake's own view, because it mutates objects rather than bytes.
+      items: bag.map((b) => [...b]), money: at.money,
+    };
+  };
+  tasks._packMoved = async (button) => {
+    log.push(button);
+    if (button === 'DOWN') {
+      const i = stock.indexOf(at.item);
+      at.item = i + 1 < stock.length ? stock[i + 1] : 0xff;
+    }
+    if (button === 'UP') {
+      const i = stock.indexOf(at.item);
+      at.item = i > 0 ? stock[i - 1] : stock[stock.length - 1];
+    }
+    return tasks.snap();
+  };
+  tasks.push = async (b) => {
+    log.push(`${b}@${at.box}`);
+    if (b === 'DOWN') { at.row++; return; }
+    if (b === 'UP') { at.row = Math.max(1, at.row - 1); return; }
+    if (b !== 'A') return;
+    if (at.box === 'greeting') { if (--at.left <= 0) at.box = 'menu'; at.row = 1; return; }
+    if (at.box === 'menu') { at.box = at.row === 1 ? 'list' : 'closed'; at.row = 1; return; }
+    if (at.box === 'list') { at.box = 'howMany'; return; }
+    if (at.box === 'howMany') { at.box = 'confirm'; at.row = 1; return; }
+    if (at.box === 'confirm') {
+      if (at.row === 1 && at.money >= price) {
+        at.money -= price;
+        const e = bag.find(([id]) => id === at.item);
+        if (e) e[1]++; else bag.push([at.item, 1]);
+      }
+      at.box = 'done';
+      at.settling = redraw;
+      return;
+    }
+    if (at.box === 'done') { at.box = 'list'; at.row = 1; at.settling = redraw; return; }
+  };
+  return { tasks, log, bag, at };
+}
+
+test('buying is confirmed by the money, not by the presses', async (t) => {
+  // Measured in Cherrygrove: two POTIONs at 300 each took the money 3000 to
+  // 2700 to 2400 while the pocket went one to two to three. The money moved on
+  // the same read as the item arriving; the pocket lags a *use*, and there is
+  // no reason to trust it more here.
+  const { tasks, bag, at } = shopping({ purse: 3000 });
+  const r = await tasks.buyFromClerk(POTION, 2);
+  t.true(r.ok, 'it bought');
+  t.eq(r.bought, 2, 'both');
+  t.eq(r.spent, 600, 'and says what it cost');
+  t.eq(at.money, 2400, 'which the wallet agrees with');
+  t.eq(bag[0][1], 2, 'and the pocket has them');
+});
+
+test('it stops when the money runs out rather than pressing on', async (t) => {
+  const { tasks } = shopping({ purse: 700, price: 300 });
+  const r = await tasks.buyFromClerk(POTION, 5);
+  t.true(r.ok, 'it bought what it could');
+  t.eq(r.bought, 2, 'two of five');
+  t.contains(r.message, 'could not afford another', 'and says why it stopped');
+});
+
+test('nothing affordable at all is said rather than reported as success',
+     async (t) => {
+  const { tasks } = shopping({ purse: 100, price: 300 });
+  const r = await tasks.buyFromClerk(POTION, 1);
+  t.false(r.ok, 'nothing bought');
+  t.contains(r.message, 'could not afford', 'and it says so');
+});
+
+test('a mart that does not stock it is reported, not pressed at', async (t) => {
+  const { tasks } = shopping({ stock: [12] });
+  const r = await tasks.buyFromClerk(POTION, 1);
+  t.false(r.ok, 'nothing bought');
+  t.contains(r.message, 'does not stock that', 'naming the reason');
+});
+
+test('the greeting is tapped through however long it is', async (t) => {
+  // Not `settleText`, which stops when no window is open -- and the menu *is* a
+  // window, so it would stop before the greeting had finished and leave the
+  // caller pressing into text.
+  const { tasks } = shopping({ greetings: 4 });
+  const r = await tasks.buyFromClerk(POTION, 1);
+  t.true(r.ok, 'it still got there');
+});
+
+test('a clerk that never offers a menu is backed away from', async (t) => {
+  const { tasks, log } = shopping({ greetings: 99 });
+  const r = await tasks.buyFromClerk(POTION, 1);
+  t.false(r.ok, 'nothing bought');
+  t.contains(r.message, 'never offered a menu', 'and it says which');
+  t.contains(log.join(' '), 'close', 'having closed what it opened');
+});
+
+test('a box that is not the one expected stops the purchase', async (t) => {
+  // Pressing on from an unknown box in a shop is how a pilot sells something.
+  const sym0 = symbols();
+  const E = new Tasks(new FakeGameBoy({ wram: worldRam(sym0, {}) }),
+                      new GameState(sym0), () => {}, fakeRom()).state.e.shop;
+  const { tasks } = shopping({
+    boxes: (at) => (at.box === 'confirm' ? { items: 9, top: 9 }
+      : ({ greeting: null, menu: E.menu, list: E.list, howMany: E.howMany,
+           done: E.done, closed: null })[at.box]),
+  });
+  const r = await tasks.buyFromClerk(POTION, 1);
+  t.false(r.ok, 'it stopped');
+  t.eq(r.bought, 0, 'with nothing bought');
+});
+
+test('a box being redrawn is waited for, not judged on one look', async (t) => {
+  // Measured, and it reported "bought nothing" from inside a working shop: the
+  // mart's quantity box reads 4/15 settled and **4/0 while being redrawn**, so
+  // a check that looked once landed on the transient shape and gave up. The
+  // first probe of the sequence caught that frame and the second did not, which
+  // is what a race looks like in a log.
+  const { tasks } = pilot();
+  const want = { items: 4, top: 15 };
+  let looks = 0;
+  tasks.step = async () => {};
+  tasks.snap = async () => (++looks < 3
+    // Two frames of the redraw, then the box it settles to.
+    ? { windowOpen: true, menuItems: 4, menuTop: 0 }
+    : { windowOpen: true, menuItems: 4, menuTop: 15 });
+  t.true(await tasks._awaitBox(want), 'it waited and found it');
+  t.true(looks >= 3, 'having looked more than once');
+});
+
+test('a box that never appears is given up on, bounded', async (t) => {
+  const { tasks } = pilot();
+  let looks = 0;
+  tasks.step = async () => {};
+  tasks.snap = async () => { looks++; return { windowOpen: true, menuItems: 9, menuTop: 9 }; };
+  t.false(await tasks._awaitBox({ items: 4, top: 15 }, 4), 'the answer is no');
+  t.true(looks <= 6, 'and it stopped rather than waiting for ever');
+});
+
+test('a second purchase survives the box still closing behind the first',
+     async (t) => {
+  // Measured: with the wait only on the way *in*, one press of Shop bought one
+  // potion of four and reported it honestly -- because the thanks box was still
+  // closing when the loop looked for the stock list again.
+  const { tasks, at } = shopping({ purse: 3000, redraw: 2 });
+  const r = await tasks.buyFromClerk(POTION, 3);
+  t.eq(r.bought, 3, 'all three');
+  t.eq(at.money, 2100, 'and nine hundred spent');
+});

@@ -1554,7 +1554,7 @@ precedes it defaults to yes, which is what we want; the nickname box does not.
 
 ## 7a. Four that act on where you already are
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ 6db3a9725776 -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ 3f6b59c49a09 -->
 
 Grind, hunt and catch all go *looking* for something. These four do the obvious
 thing with the situation you are already in, and take no parameters:
@@ -1772,7 +1772,7 @@ to take here — tried 2* and stayed green.
 
 ## 7d. The counter, and the money it takes
 
-<!-- covers: gen2/menus.js gen2/state.js titles/crystal.js @ 0dbe57bea731 -->
+<!-- covers: gen2/menus.js gen2/state.js titles/crystal.js @ ed7aa1af5fbc -->
 
 Everything the pilot could do until now used what it found. **Shop** walks to a
 mart and buys, which is the first thing it does that spends rather than
