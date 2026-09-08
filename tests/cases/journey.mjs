@@ -825,6 +825,33 @@ test('a heal that worked lets the Gym go ahead', async (t) => {
   t.true(r.ok, `it went and won: ${r.message}`);
 });
 
+test('the pilot goes shopping before a Gym, and goes anyway if it cannot',
+     async (t) => {
+  // **Measured on the cartridge.** A Lv13 lead with an empty pocket beat
+  // Falkner's first Bird Keeper for 162 and lost to the second: `clearHere`
+  // mends between rounds and there was nothing to mend with. A Gym is several
+  // battles with no Center between them, so the bag is the only mid-way help
+  // there is.
+  const bought = [];
+  const j = gymGoer();
+  j.restock = async (names, want) => {
+    bought.push(`${names.join()} x${want}`);
+    return { ok: true, message: 'bought some' };
+  };
+  await j.beatGym((await j.gymList(2565))[0]);
+  t.eq(bought.length, 1, 'it went shopping');
+  t.contains(bought[0], 'potion', 'for what the title says heals');
+  t.contains(bought[0], 'x4', 'and carried a spare');
+
+  // No mart in reach, no money, nothing named to buy: all reasons to walk in
+  // with what you have rather than reasons not to go.
+  const broke = gymGoer();
+  broke.restock = async () => ({ ok: false, message: 'no mart within reach of here' });
+  const r = await broke.beatGym((await broke.gymList(2565))[0]);
+  t.true(r.ok, `it still went and won: ${r.message}`);
+  t.contains(broke.said.join(' '), 'going in as we are', 'saying so on the way');
+});
+
 test('a Gym already beaten is not offered, and not walked to', async (t) => {
   const j = gymGoer({ has: true });
   t.eq(await j.gymList(2565), [], 'off the list');

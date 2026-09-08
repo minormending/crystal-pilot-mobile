@@ -78,6 +78,12 @@ const DUEL_TRIES = 6, DUEL_START_TAPS = 40, DUEL_TURNS = 60;
 // not large, because every wasted round is a walk across a map.
 const CLEAR_SLACK = 3;
 
+// How many of the cheapest heal to carry into a Gym. Four, because Falkner's
+// two Bird Keepers and the leader are three battles and one spare is the
+// difference between a bad turn and a walk home -- and because at 300 a Potion
+// that is a thousand of the three the pilot tends to have.
+const GYM_POTIONS = 4;
+
 // Reaching the nickname question: how many presses to spend getting there, and
 // how long to let the screen settle between them. The text ahead of it is two
 // pages, so a handful is plenty -- and each poll is cheap because it is a read
@@ -1966,6 +1972,22 @@ export class Journey {
         return { ok: false, stats: { at: where, badge: false },
                  message: `not fit for a Gym and could not heal — ${mended.message}` };
       }
+    }
+    // **A Gym is several battles with no Center between them, and the bag is the
+    // only thing that can help mid-way through.** Measured: a Lv13 lead with an
+    // empty pocket beat Falkner's first Bird Keeper for 162 and lost to the
+    // second -- `clearHere` mends between rounds and there was nothing to mend
+    // with. So the pilot goes shopping first, which is what a person does.
+    //
+    // Best effort, and deliberately quiet about failing: no mart in reach, no
+    // money, or a cartridge with nothing named to buy are all reasons to walk
+    // in with what you have rather than reasons not to go.
+    const buy = ((this.title && this.title.heals) || [])
+      .filter((n) => !n.includes('berry'));
+    if (buy.length && typeof this.restock === 'function') {
+      this.say('stocking up before the Gym');
+      const shopped = await this.restock(buy, GYM_POTIONS);
+      if (!shopped.ok) this.say(`going in as we are — ${shopped.message}`);
     }
     if (await this.mapKey() !== gym.inside) {
       if (await this.mapKey() !== gym.map) {

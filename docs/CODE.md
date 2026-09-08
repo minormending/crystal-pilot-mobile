@@ -938,11 +938,44 @@ Warps live in the map's event block: two filler bytes, a count, then five bytes
 per warp — `y`, `x`, the destination warp index, and the group and number of the
 map it leads to.
 
-Nothing is loaded up front. The ROM carries no table of how many maps a group
-holds — the disassembly knows that from constants the cartridge does not have —
-so walking every map is impossible. It is also unnecessary: connections name
-their neighbours, so expanding outward from wherever the player is reaches
-everything walkable and nothing else.
+Nothing is loaded up front, and expanding outward from wherever the player is
+reaches everything walkable and nothing else, which is all a journey needs.
+
+**A claim that used to sit here was wrong, and it cost a pass.** It said the ROM
+carries no table of how many maps a group holds, so walking every map is
+impossible. The first half is true — there is no count — and the conclusion is
+not: `MapGroupPointers` is one pointer per group and the lists sit one after
+another, so the *next* group's pointer bounds this one. Measured, the twenty-six
+pointers ascend by 126, 63, 819, 81 … 135 bytes, every one an exact multiple of
+the nine-byte header, and the twenty-seventh reads 0x0725 against the
+twenty-sixth's 0x4d75.
+
+What that claim cost was a reader with no bound on a map number, which this file
+also documented and shrugged at — *a map number the ROM does not have reads as
+nonsense rather than failing* — and which was harmless right up until
+`objectsOn` started being asked about whatever a warp pointed at. A sweep
+looking for the Gyms then got Violet's Gym back under six group numbers and an
+object at (141,72) on a map twenty tiles wide.
+
+So `mapCount(group)` derives it, `hasMap` uses it, and three things keep the fix
+from being worse than the bug — none of which can refuse a map that exists:
+
+- **Null wherever the reasoning does not hold**, and permissive on null. The
+  last group has nothing after it; a hack that padded between its lists gives a
+  step that is not a multiple of nine. Refusing a real map breaks a cartridge
+  this app should support; reading a fake one is caught below.
+- **A step of exactly nought is a derivation, not a failure to derive** — that
+  group is empty and every number in it is refused. `tools/mutate` found that
+  by surviving `> 0`.
+- **A tile off the map is not a tile**, which needed `sizeOf(group, number)` —
+  the ROM's own copy of what `collision.mapSize()` reads from work RAM, so it
+  can be asked about a room nobody has walked into. Measured against two maps
+  whose tile dimensions were already known: Route 32's attributes read 45 and 10
+  for a map 20 by 90, Route 31's read 9 and 20 for one 40 by 18. Height first,
+  and a block is two tiles each way.
+- **And a count that reaches the sanity bound is a bad read**, not a crowded
+  map. `MAX_OBJECTS` was truncating and returning, so a map past the end of the
+  last group answered with exactly thirty-two objects at plausible tiles.
 
 Checked against `data/maps/attributes.asm`: Cherrygrove gives
 `UP → Route 30, RIGHT → Route 29`; Route 31 gives `DOWN → Route 30, LEFT →
