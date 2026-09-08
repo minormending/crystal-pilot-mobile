@@ -721,6 +721,27 @@ Which items count is read from a list for your cartridge, so a hack that renamed
 POTION loses this and keeps everything else — and gets it back the moment
 somebody writes the name down.
 
+### When the game says no, the pilot tells you what it said
+
+A place the pilot **found** in the cartridge can be somewhere the game will not
+let you go yet, and no amount of map data says so. Standing on Route 32 with a
+Center forty-eight tiles down the same route, Heal used to try eight times and
+report *could not heal (stopped in ROUTE 32)* — which reads like the pilot's
+walking is broken. It is not: two tiles into the walk a man says **"Wait up!
+What's the hurry? Have you gone to the POKéMON GYM?"** and puts you back where
+you started. Route 32 is shut until you beat Falkner in Violet City.
+
+So a walk that is turned back twice now stops and quotes him:
+
+> turned back on the way to ROUTE 32 — Wait up! / What's the hurry?
+
+Which is a message you can act on. Two attempts instead of eight, and under a
+second instead of thirty. The same thing covers anything else that stops you
+with words — a guard, a closed gate, an NPC who wants a conversation first.
+
+If you see it, the answer is usually a badge: go and win the one for the town
+you came from, and the route opens.
+
 ### Poisoned is not "hurt", and the row says which
 
 The pilot read your party's HP and nothing else for twenty-four versions, which
@@ -963,6 +984,16 @@ its own store held zero records after a save this app had verified byte for
 byte. Saving then reloading lost the game. The save survives now because the
 app keeps a copy itself — see below.
 
+Measured again the pass after, from the other direction, because a verification
+run needed to reload on purpose: the library's own store had **no record at all**
+for the cartridge — not a stale one, not an empty one — after a game the app had
+saved in-game and read back. A slot of ours was the only copy of it. Which also
+says why loading a save asks you to bring the page to the front first: driven
+from a hidden page the ROM does reload, and the game that comes up will not take
+a single button press until something presses through the script it wakes in.
+The refusal is doing its job even though what it says about animation frames is
+only half the reason.
+
 It is in the header because that is the one part of the app that is always
 there. For three versions it lived in the settings card, which at the time did
 not exist until a ROM and a symbol file were loaded — so answering "am I running
@@ -984,7 +1015,7 @@ deployed, which is not the question you are asking when a bug you saw fixed is
 still in front of you. `tools/check-app` asserts that number matches the service
 worker's cache name, because a version display that lies is worse than none.
 
-<!-- covers: sw.js @ af87607847e3 -->
+<!-- covers: sw.js @ 5825deb1972f -->
 
 The worker fetches **network first, falling back to the cache**. That is the
 opposite of the usual offline-first advice, on purpose.

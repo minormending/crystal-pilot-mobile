@@ -336,22 +336,31 @@ second, which is there so the core's own waits finish, not to run a game.
   candidates and returned true standing three tiles clear of any. It checks the
   tile underfoot now.
 
-## Thirty-two audits, and how each defect was actually found
+## Thirty-three audits, and how each defect was actually found
 
 Everything above was watched happening. This section was the exception, and the
-exception was the point of it: after the ROM-hack work shipped, eleven passes
-went looking for defects in code that already worked, and found twenty-nine —
-plus one a fix created on the way, which is in the table in italics because it
-is a different kind of thing. None of them announced itself.
+exception was the point of it: after the ROM-hack work shipped, thirty-three
+passes went looking for defects in code that already worked, and found **113** —
+a handful of them created by a fix on the way, which are in the table in italics
+because they are a different kind of thing. None of them announced itself.
 
-Six of those passes worked by **reading**, two by **measuring**, the ninth by
-**checking the claims the comments make**, the tenth by **checking the things
-that do the checking**, and the eleventh by **playing the game** — which is the
-method this whole document is built on and the last one an audit here got round
-to. Each change of method found what the one before it was structurally bad at,
-which is the thread worth pulling below.
+**Reading found twenty-one**, more than any other single method, which is why it
+comes first in the table and why it is worth doing before touching the game. But
+the interesting number is the tail: the remaining ninety were found ninety
+different ways, and almost every entry in that column is a sentence rather than
+a category — *measuring the fix*, *asking a second tile*, *feeding it the wrong
+thing*, *writing a cartridge Crystal is not*, *a test, before the cartridge*,
+*playing the game*. Each change of method found what the one before it was
+structurally bad at, which is the thread worth pulling below.
 
-The recurring shape is the same in all five:
+Which is also the honest summary of this document: **no one method is the
+method.** Reading catches what a comment claims and the code does not. Tests
+catch the case nobody would play. Only playing catches a rule of the game — the
+[thirty-third pass](#a-thirty-third-pass-the-diagnosis-that-was-wrong-twice) is
+that lesson at its bluntest, where two plausible causes were fixed before the
+screen was read and the screen had the answer on it in words the whole time.
+
+The recurring shape is the same in all of them:
 
 ```mermaid
 flowchart LR
@@ -479,6 +488,9 @@ exactly why nothing failed.
 | 32 | a map the title had named was offered again under its landmark | Elm's lab, in New Bark Town | a test, before the cartridge |
 | 32 | a refused leg spent the walk budget, so a two-leg walk ran out of twelve | walking to a place only the cartridge names | walking there |
 | 32 | *and arriving on the last leg of the budget reported too many legs* | *a walk given exactly the legs it needed* | *a test, before the cartridge* |
+| 33 | a wild encounter spent one of the eight tries a doorway gets | a door at the far end of a route full of grass | reading, on the way past |
+| 33 | a walk turned back by a person blamed the door, eight times over | Heal, standing on Route 32 with no badge | playing the game |
+| 33 | the screen read "What  the hurry?" — a contraction is one tile, two characters | any quoted screen text with an apostrophe in it | the message it had just printed |
 
 Five things in that table are worth more than the individual rows.
 
@@ -2191,6 +2203,79 @@ the pilot tried six different legs, wrote each of them off, and said:
 
 which is a different sentence from *there is no route*, and the difference is
 the whole point of the pass before's `avoid` set.
+
+### A thirty-third pass: the diagnosis that was wrong twice
+
+Worth writing down as a *method* failure rather than a code one, because the
+defect was found in one attempt and the cause took three.
+
+The pass before taught the pilot to **find** Pokémon Centers in the cartridge
+instead of being told about them, and the first one it found on its own was on
+Route 32. Everything about the discovery was right — the door at (11,73), a
+ninety-six-step path to it, `nearestHeal` pricing it at zero legs — and the heal
+failed every time, reporting *could not heal (stopped in ROUTE 32)*.
+
+**First diagnosis: the grass.** Ninety tiles of route, eight trainers, and
+`through`'s eight tries. That reads well and it was wrong. It was also worth
+fixing on its own terms — a wild encounter is progress-neutral, so counting it
+as a failed attempt made the budget a function of the grass rather than of the
+distance, exactly the mistake `travelTo` made with a refused leg one pass
+earlier. Fixed, tested, mutation-tested. It did not fix the heal.
+
+**Second diagnosis: the collision map.** Every walk came back `refused` with the
+player two tiles from where it started, and the tile south of it read walkable.
+That looked like a decode that was wrong about a column — until banning both
+candidate columns left no path at all, which is not what a bad decode looks
+like.
+
+**What it actually was.** Sampling the tilemap every eight frames while stepping
+onto the tile that refused:
+
+> Wait up! | What's the hurry?
+>
+> Have you gone to | the POKéMON GYM?
+>
+> You can test your | POKéMON and yourself there.
+>
+> It's a rite of | passage for all trainers...
+
+Route 32 is shut until Falkner is beaten. A man says so, moves the player back
+north, and no map data anywhere says he exists — the collision map, the warps
+and the object list all describe a walkable route, because the rule lives in a
+script. `walkTo` reports `refused` when three steps in a row are blocked, which
+is exactly what a running script looks like from outside, and `through` answered
+that by pressing A and walking at the same tile eight times.
+
+So the fix is not to predict the gate but to **read the room**: a refusal with
+words on the screen is somebody talking, the words are kept, and the second time
+it happens the walk stops and quotes them.
+
+> turned back on the way to ROUTE 32 — Wait up! / What's the hurry?
+
+Two attempts and 0.6 seconds against eight and thirty. A silent refusal still
+spends its tries, because that one really is a tile somebody is standing on.
+
+**Three things this pass is a lesson about.**
+
+1. **A plausible cause measured against the right evidence is still a guess.**
+   The grass story explained the symptom and survived a code review; what it
+   never did was get checked against the screen, which had the answer on it in
+   words the entire time. The screen reader has existed for five passes.
+2. **The tool that finds a defect and the tool that names it are different
+   tools.** Playing the game found it. Reading found the budget bug next to it.
+   Only sampling the tilemap mid-script named it.
+3. **A failure message is a diagnosis the app publishes.** *Could not heal* sent
+   two passes of work looking at pathfinding. The pilot's own walking is the
+   first thing a person blames, and here it was the one thing working.
+
+And a fourth, smaller: the message printed *What  the hurry?* with a hole in it.
+Dumped raw, the line is `96 a7 a0 b3 d4 7f b3 a7 a4` — `W h a t 's _ t h e` — so
+`$d4` is one tile carrying two characters. Gen 2 has no apostrophe in running
+text; it has a ligature per contraction. That one is measured and in the
+charmap. Its neighbours in `$d0-$d6` are the other contractions and are
+deliberately left out, because they would be copied off a table with no screen
+to check them against, and an unnamed tile reads as a space: *don t* is clumsy
+and readable, which is the right way round for a guess nobody has checked.
 
 ## The part that had to be redesigned
 

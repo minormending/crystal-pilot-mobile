@@ -642,7 +642,7 @@ the symbol file does not name the tilemap, which is *cannot read* rather than
 
 ### `screen.js` — the words on screen
 
-<!-- covers: gen2/screen.js @ 2948af74bfc9 -->
+<!-- covers: gen2/screen.js @ c46efac9d9f8 -->
 
 Gen 2 renders text into `wTilemap` — twenty by eighteen bytes of tile ids — and
 the letters *are* tiles. So the words a person is reading have been sitting in
@@ -1034,7 +1034,7 @@ point those coordinates mean somewhere else entirely.
 
 ## 5. Crossing to the next map
 
-<!-- covers: gen2/journey.js gen2/world.js @ d9a0ec779bf1 -->
+<!-- covers: gen2/journey.js gen2/world.js @ 29b02f3570a7 -->
 
 A connection spans only part of a shared edge, so "walk west until something
 happens" does not work. `crossEdge()` closes the distance in stages, then tries
@@ -1100,16 +1100,36 @@ the wrong budget reads as the map being in the way.
 eight times. Every wild encounter used to spend one of those eight — and a
 battle is progress-neutral rather than a failure: the walk got partway, something
 jumped out, and asking again from where it stopped converges. Counting it made
-the budget a function of the *grass* rather than of the distance, which nothing
-noticed while every door the pilot knew about was in a town somebody had
-described. The first door it ever **found** for itself was Route 32's Pokémon
-Center, ninety-six steps down ninety tiles of grass, and the eight tries were
-gone long before the door. Battles have their own allowance now — forty — and
-only a walk that came back for some other reason spends a try. The allowance is
-what keeps *not counted* from meaning *forever*, and it is the same shape as the
-[refused leg](#travelling-further-than-one-map) that stopped spending the walk
-budget one pass earlier: two counters, because two different things were being
-counted as one.
+the budget a function of the *grass* rather than of the distance, which is the
+same mistake as the [refused leg](#travelling-further-than-one-map) one pass
+earlier: two things counted as one. Battles have their own allowance now —
+forty — and only a walk that came back for some other reason spends a try. The
+allowance is what keeps *not counted* from meaning *forever*. It has not been
+seen to rescue a walk on the cartridge yet; it is a budget that was measured
+against the wrong thing, fixed on the way past.
+
+**A refusal with words on the screen is somebody talking.** `walkTo` reports
+`refused` when three steps in a row are blocked, and that is exactly what a
+running script looks like from outside — so the pilot answered it by pressing A
+and walking at the same tile eight times over, then said the door could not be
+reached.
+
+Measured on Route 32, and it is worth saying what it was, because the diagnosis
+was wrong twice before it was right. The first Pokémon Center the pilot ever
+**found** rather than was told about is on that route: the door at (11,73), a
+real ninety-six-step path to it, and the heal failed every time. Ninety tiles of
+grass looked like the answer, and it was not. Two tiles south of Violet a man
+says *"Wait up! What's the hurry? Have you gone to the POKéMON GYM? It's a rite
+of passage for all trainers"* and puts the player back where they started.
+**Falkner's badge opens that route and nothing else does.** The discovery, the
+door and the path were all correct; the failure message was the defect.
+
+So the words are kept, and the second time the same thing happens the walk stops
+and says them — `turned back on the way to ROUTE 32 — Wait up! / What's the
+hurry?` instead of `could not heal (stopped in ROUTE 32)`. Two attempts and
+0.6 seconds on the cartridge, against eight and thirty. A *silent* refusal still
+spends its tries, because that one really is a tile somebody is standing on, and
+re-asking is how it gets walked around.
 
 </details>
 
@@ -1812,7 +1832,7 @@ flowchart TD
 
 ## 7a. Five that act on where you already are
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ 20eec6e665cc -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ e581a4dfb88e -->
 
 Grind, hunt and catch all go *looking* for something. These five do the obvious
 thing with the situation you are already in, and take no parameters:
@@ -2434,7 +2454,7 @@ because that failure is only otherwise discovered by reaching for the undo.
 
 ## 8. The errands
 
-<!-- covers: titles/crystal.js gen2/journey.js @ c1afb552b921 -->
+<!-- covers: titles/crystal.js gen2/journey.js @ 385c37ca35b5 -->
 
 Everything in this section is `crystal.js` — the only file in the app that names
 a Crystal map, a Crystal door or a Crystal NPC. What it stands on is
@@ -2766,7 +2786,7 @@ the bag" rather than "did we gain any".
 
 ## 8a. Finding the Centers and the Marts in the cartridge
 
-<!-- covers: gen2/world.js gen2/journey.js @ d9a0ec779bf1 -->
+<!-- covers: gen2/world.js gen2/journey.js @ 29b02f3570a7 -->
 
 The last thing in this app that had to be written out by hand. A title said
 where the Centers and the Marts were, so the pilot healed in the two towns
@@ -2823,16 +2843,21 @@ Measured on the cartridge. From Violet City the pilot finds Centers in ROUTE 32,
 AZALEA TOWN, ECRUTEAK CITY and GOLDENROD CITY, and Marts in Azalea and Ecruteak
 — none of which any title has ever heard of.
 
-**And the first door it found broke the walk that goes through doors.** Standing
-on Route 32, `healerList` offered `ROUTE 32 [found]` and `nearestHeal` put it at
-zero legs — both right — and the heal failed twice over. The door is at (11,73)
-on a map ninety tiles tall and the pilot arrives at its north end: ninety-six
-steps of grass, which spent every one of `through`'s eight tries on wild
-encounters. A declared place is somewhere a person thought to write down, and
-people write down towns; a *found* place is wherever the cartridge put it. So
-this feature is what turned [a budget measured on
-rooms](#5-crossing-to-the-next-map) into a bug — the discovery was never wrong,
-and neither were the coordinates.
+**And the first door it found was behind a story gate.** Standing on Route 32,
+`healerList` offered `ROUTE 32 [found]` and `nearestHeal` put it at zero legs —
+both right — and the heal failed. The door is at (11,73) on a map ninety tiles
+tall, the pilot arrives at its north end, and the ninety-six-step path to it is
+real; but two tiles into the walk a man turns the player back until Violet's Gym
+is beaten.
+
+A declared place is somewhere a person thought to write down, and people write
+down towns they could get to. A *found* place is wherever the cartridge put it —
+including behind a badge. Nothing in the map data says so, and nothing in it
+can: the collision map, the warps and the object list all describe a route that
+is walkable, and the rule lives in a script. So discovery does not try to
+predict this, and the pilot finds out the way a person does — by being told, at
+the tile, in words. What [the walk does with those
+words](#5-crossing-to-the-next-map) is the other half of this feature.
 
 ## 8b. Asking the cartridge what its places are called
 
