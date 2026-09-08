@@ -49,6 +49,13 @@ const WARP_Y = 0, WARP_X = 1, WARP_GROUP = 3, WARP_NUMBER = 4;
 // entry on Elm's lab, Cherrygrove's Center and Route 30, sprites and tiles and
 // types alike, which is a stronger check than reading the macro would be.
 const COORD_BYTES = 8, BG_BYTES = 5, OBJECT_BYTES = 13;
+// A coord event: the scene it belongs to, then y and x, then a pad byte, then
+// the script it runs. **Measured, and the coordinates are *not* offset** --
+// which is the opposite of the objects three lines down and exactly the sort of
+// asymmetry that reads as obviously consistent and is not. Route 32's first
+// coord event dumps as `00 08 12 00 ab 44 00 00`: scene 0 at y 8, x 0x12, and
+// (18,8) is the tile the pilot was measurably turned back on.
+const COORD_SCENE = 0, COORD_Y = 1, COORD_X = 2;
 const OBJECT_SPRITE = 0, OBJECT_Y = 1, OBJECT_X = 2;
 // Objects are stored with the same +4 origin work RAM uses.
 const OBJECT_ORIGIN = 4;
@@ -59,6 +66,9 @@ const OBJECT_ORIGIN = 4;
 // group answered with thirty-two objects at plausible tiles. No real map in
 // Crystal carries anything like this many.
 const MAX_OBJECTS = 32;
+// The same kind of bound, for the same reason: a count that reaches it says the
+// read is wrong rather than that the map is busy. No map in Crystal has many.
+const MAX_COORD_EVENTS = 16;
 
 const CONNECTION_BYTES = 12;
 const CONNECTED_GROUP = 0, CONNECTED_NUMBER = 1;
@@ -295,6 +305,52 @@ export class World {
       // not a crash.
     }
     this.objectCache.set(id, out);
+    return out;
+  }
+
+  /**
+   * The tiles on a map that run a script when stepped on.
+   *
+   * **The thing that had been turning the pilot back for four passes, readable
+   * at last.** Route 32 has two: scene 0 at (18,8) and scene 1 at (7,71). The
+   * first is `Route32CooltrainerMStopsYouScene` -- a man who pushes the player
+   * back north -- and until this reader existed the pilot could only find it by
+   * walking into it, twice, and writing the road off.
+   *
+   * `scene` is which of the map's scenes the trigger belongs to. A map's scene
+   * advances as its story does, so a trigger is live only while its scene is
+   * current: Route 32's two are 0 and 1, and the one at the top stops firing
+   * once the map has moved on. This reader reports them all and does not guess
+   * which is live, because the scene lives in work RAM and this is the ROM.
+   */
+  coordEventsOn(group, number) {
+    const id = mapKey(group, number);
+    if (this.coordCache === undefined) this.coordCache = new Map();
+    if (this.coordCache.has(id)) return this.coordCache.get(id);
+    const out = [];
+    try {
+      const attr = this._attributes(group, number);
+      const size = this.sizeOf(group, number);
+      const bank = this.gb.romByte(attr.bank, attr.addr + ATTR_SCRIPTS_BANK);
+      const events = this._word(attr.bank, attr.addr + ATTR_EVENTS);
+      const rd = (i) => this.gb.romByte(bank, (events + i) & 0xffff);
+      let at = EVENTS_WARP_COUNT;
+      at += 1 + rd(at) * WARP_BYTES;              // past the warps
+      const count = rd(at++);
+      if (count > MAX_COORD_EVENTS) {
+        throw new Error(`${count} coord events is not a map`);
+      }
+      for (let i = 0; i < count; i++) {
+        const c = at + i * COORD_BYTES;
+        const x = rd(c + COORD_X), y = rd(c + COORD_Y);
+        // The same rule the objects follow: a tile off the map is not a tile.
+        if (size && (x >= size[0] || y >= size[1])) continue;
+        out.push({ scene: rd(c + COORD_SCENE), x, y });
+      }
+    } catch (e) {
+      // Nonsense reads mean no triggers, not a crash -- as everywhere here.
+    }
+    this.coordCache.set(id, out);
     return out;
   }
 

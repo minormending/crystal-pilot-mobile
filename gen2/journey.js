@@ -52,6 +52,12 @@ const THROUGH_BATTLES = 40;
 // ordinary greeting and the second is a pattern.
 const THROUGH_TURNS = 2;
 
+// How far from a scripted tile the pilot counts as having been stopped by it,
+// and how far from that tile its owner may be standing. Both small: a script
+// that pushes you back leaves you a step or two away, and the person it belongs
+// to is beside it -- Route 32's man is one tile east of his own trigger.
+const TRIGGER_REACH = 3, TALK_REACH = 2;
+
 // How many refused legs one walk will write off before giving up. The `avoid`
 // set already terminates over a finite graph; this is the bound for a graph
 // nobody has seen, and it is generous because a refusal costs one crossing
@@ -317,6 +323,58 @@ export class Journey {
   }
 
   /**
+   * Try talking to whoever owns the scripted tile that just turned us back.
+   *
+   * **The general rule, and it took four passes to see.** A tile that runs a
+   * script when stepped on usually belongs to somebody standing beside it, and
+   * pressing on through them is not how you get past -- talking to them is.
+   *
+   * Route 32 is the case that taught it. The coord event at (18,8) is
+   * `Route32CooltrainerMStopsYouScene`, a man who pushes the player back north,
+   * and its siblings in the symbol table are `.DontHaveZephyrBadge`,
+   * `.GiveMiracleSeed` and `.BagFull` -- so he *does* check the badge. But the
+   * stopping script only pushes; the rest of it runs when he is *spoken to*,
+   * and he is standing one tile east at (19,8). The pilot walked into him
+   * twice, wrote the road off, and never said hello.
+   *
+   * Answers whether anybody was found and talked to, so the caller can give the
+   * walk one more go before writing the road off.
+   */
+  async talkPast() {
+    const wram = await this.settled();
+    if (!wram || !this.world) return false;
+    const key = await this.mapKey();
+    const triggers = this.world.coordEventsOn(key >> 8, key & 0xff);
+    if (!triggers.length) return false;
+    const at = this.collision.playerPos(wram);
+    const dist = (a, b) => Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]);
+    // The nearest trigger, because the one that fired is the one we are next
+      // to -- a script that pushes you back leaves you within a step or two of
+      // its own tile, which is how it stopped you in the first place.
+    const near = triggers
+      .map((t) => ({ t, d: dist([t.x, t.y], at) }))
+      .filter((x) => x.d <= TRIGGER_REACH)
+      .sort((a, b) => a.d - b.d)[0];
+    if (!near) return false;
+    const script = (this.state.e.objectTypes || {}).script;
+    if (script === undefined) return false;
+    const live = this.collision.liveObjects(wram) || [];
+    const who = live
+      .filter((o) => o.index !== 0 && o.type === script)
+      .map((o) => ({ o, d: dist([o.x, o.y], [near.t.x, near.t.y]) }))
+      .filter((x) => x.d <= TALK_REACH)
+      .sort((a, b) => a.d - b.d)[0];
+    if (!who) return false;
+    const from = await this._approach([who.o.x, who.o.y]);
+    if (!from) return false;
+    this.say(`having a word with whoever is at ${who.o.x},${who.o.y}`);
+    await this.nav.step(from.face);
+    await this.gb.press('A', 6, 12);
+    await this.runScripts();
+    return true;
+  }
+
+  /**
    * What the screen is saying, or '' when this cartridge cannot say.
    *
    * A cartridge whose symbol file does not name the tilemap has no words to
@@ -550,6 +608,16 @@ export class Journey {
    * you on the way -- Mom does, on the way out of the house -- and the walk
    * ends early with the text still up.
    */
+  /**
+   * A battle nothing can do anything with, met on the way somewhere.
+   *
+   * Set by `escapeBattle` and cleared by whoever starts a walk, so it means
+   * *during this walk* rather than ever. The walks read it and give up, because
+   * a battle that cannot be played makes every step after it pointless -- and
+   * the pilot standing in one is a thing a person can act on.
+   */
+  get stuckInBattle() { return !!this.battleStuck; }
+
   async through(goal, expect, tries = 8) {
     // **A battle is not a try.** It is progress-neutral and not a failure: the
     // walk got partway and something jumped out, and asking again from where it
@@ -558,8 +626,9 @@ export class Journey {
     // away, the Pokemon Center on Route 32 is ninety-six steps down a
     // ninety-tile route, and eight tries never got near it. `travelTo` learned
     // the same thing about a refused leg one pass earlier.
-    let fought = 0, turned = 0;
+    let fought = 0, turned = 0, greeted = false;
     this.turnedBack = null;
+    this.battleStuck = false;
     for (let i = 0; i < tries && fought < THROUGH_BATTLES;) {
       if (this.stopped) return false;
       const from = await this.mapKey();
@@ -583,6 +652,10 @@ export class Journey {
       // so the budget is a route's, not a room's, and whatever jumps out on the
       // way is dealt with rather than counted as the door being unreachable.
       await this.escapeBattle();
+      if (this.stuckInBattle) {
+        this.say('stuck in a battle nothing can finish');
+        return false;
+      }
       const res = await this.nav.walkTo(this.collision, goal, this.longWalk);
       if (res.stopped === 'battle') { fought++; continue; }
       i++;
@@ -607,6 +680,15 @@ export class Journey {
         await this.runScripts();
         if (said) {
           this.turnedBack = said;
+          // **Say hello before giving up.** Whoever pushed us back is standing
+          // beside the tile that did it, and the rest of their script -- the
+          // half that checks a badge and hands something over -- runs when they
+          // are spoken to. Once per walk, because a second go at the same
+          // conversation is the loop this is here to break.
+          if (turned + 1 >= THROUGH_TURNS && !greeted && await this.talkPast()) {
+            greeted = true;
+            continue;
+          }
           if (++turned >= THROUGH_TURNS) {
             // Written off, so the *next* question gets a usable answer rather
             // than this same wall. See `shut`.
@@ -643,6 +725,7 @@ export class Journey {
     if (!wram) return false;
     const from = await this.mapKey();
     this.turnedBack = null;
+    this.battleStuck = false;
     // **Somebody saying no, counted rather than repeated.** A refusal out here
     // is usually a phone call or a passer-by, which is why the loops below
     // answer one by running the scripts and asking again. A *gate* answers the
@@ -655,12 +738,19 @@ export class Journey {
     // second time the same thing happens this gives up and says who did it.
     // `through` learned this one pass earlier at the doorways; this is the same
     // rule at the edges, and `travelTo` reads `turnedBack` from either.
-    let turned = 0;
+    let turned = 0, greeted = false;
     const refused = async () => {
       const said = await this.wordsOnScreen();
       await this.runScripts();
       if (!said) return false;
       this.turnedBack = said;
+      // The same rule the doorways follow: the person who stopped us is beside
+      // the tile that did it, and their script's other half runs when they are
+      // spoken to. Once per crossing.
+      if (turned + 1 >= THROUGH_TURNS && !greeted && await this.talkPast()) {
+        greeted = true;
+        return false;
+      }
       return ++turned >= THROUGH_TURNS;
     };
 
@@ -670,6 +760,7 @@ export class Journey {
     for (let push = 0; push < 12; push++) {
       if (this.stopped) return false;
       await this.escapeBattle();
+      if (this.stuckInBattle) return false;
       const w2 = await this.settled();
       if (!w2) break;
       const at = this.collision.playerPos(w2);
@@ -782,6 +873,7 @@ export class Journey {
     // Held for the whole walk, because a knockout on the way is invisible from
     // the far end: full HP at a Center is what arriving looks like.
     const started = await this.snap();
+    this.battleStuck = false;
     const avoid = new Set();
     // **Seeded with what earlier walks already learned.** A leg the game itself
     // refused -- a guard, a gate, a man who wants a badge first -- is refused
@@ -817,6 +909,11 @@ export class Journey {
         };
       }
       if (!route.length) return this._arrived(started);
+        if (this.stuckInBattle) {
+        return { ok: false,
+                 message: 'stuck in a battle nothing can finish — nothing else '
+                          + 'will work until it is dealt with' };
+      }
       const next = route[0];
       if (next.kind === 'warp') {
         this.say(`through to ${this.where(next.key)}`);
@@ -870,6 +967,10 @@ export class Journey {
           this.say(`trying ${next.dir.toLowerCase()} again`);
         }
         crossed = await this.crossEdge(next.dir, next.key);
+        // Asking again is for a leg that failed for a reason that passes. A
+        // battle nothing can play is not one of those, and the retries are
+        // where most of the re-asking came from.
+        if (this.stuckInBattle) break;
         if (!crossed && !said) said = this.turnedBack || '';
         if (said) break;                      // somebody said no; asking again
         if (!crossed && await this.mapKey() !== here) break;   // somewhere new
@@ -1538,6 +1639,16 @@ export class Journey {
       const how = await this.tasks.fightBattle(
         undefined, { heals: (this.title && this.title.heals) || null });
       this.say(how === 'won' ? 'won a trainer battle' : `trainer battle: ${how}`);
+      // **A battle the pilot cannot drive does not get better by being asked
+      // again**, and every walk asks: `escapeBattle` runs at the top of each
+      // crossing stage, each edge attempt and each doorway try. Measured while
+      // grinding on Route 31 -- Cyndaquil out of PP on its only damaging move,
+      // a Lv2 Caterpie at 1 HP in a trainer battle that cannot be fled, and
+      // `trainer battle: stuck` five times and counting while the walk carried
+      // on calling it. `grind` bounds its own stuck run at five; the walks had
+      // no such bound because they never knew the difference between a battle
+      // that was lost and one that could not be played.
+      if (how === 'stuck') this.battleStuck = true;
       return how === 'won';
     }
     return this.tasks.flee();

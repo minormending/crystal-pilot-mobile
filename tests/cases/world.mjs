@@ -83,6 +83,10 @@ function cartridge(maps, { pad = 0 } = {}) {
     const events = nextEvents; nextEvents += 0x100;
     put(ATTR_BANK, attr + 6, EVENT_BANK);                 // scripts/events bank
     put16le(ATTR_BANK, attr + 9, events);                 // events address
+    // A map's size, which is what bounds the object and trigger coordinates.
+    const [bw, bh] = spec.blocks || [10, 10];
+    put(ATTR_BANK, attr + 1, bh);
+    put(ATTR_BANK, attr + 2, bw);
     const warps = spec.warps || [];
     put(EVENT_BANK, events + 2, warps.length);
     warps.forEach(([x, y, to], i) => {
@@ -91,6 +95,18 @@ function cartridge(maps, { pad = 0 } = {}) {
       put(EVENT_BANK, w + 1, x);
       put(EVENT_BANK, w + 3, to >> 8);
       put(EVENT_BANK, w + 4, to & 0xff);
+    });
+    // Then the coord events, right after the warps: scene, y, x, a pad byte and
+    // a script pointer. **Raw coordinates, unlike the objects** -- which is the
+    // asymmetry this fake exists to hold the reader to.
+    let cursor = events + 3 + warps.length * 5;
+    const triggers = spec.triggers || [];
+    put(EVENT_BANK, cursor++, triggers.length);
+    triggers.forEach(([x, y, scene], i) => {
+      const c = cursor + i * 8;
+      put(EVENT_BANK, c + 0, scene || 0);
+      put(EVENT_BANK, c + 1, y);
+      put(EVENT_BANK, c + 2, x);
     });
   }
 
@@ -379,4 +395,65 @@ test('a map knows its own size without being stood on', async (t) => {
                             has: () => true }, gb);
   t.eq(world.sizeOf(1, 1), [20, 90], 'twenty by ninety tiles');
   t.eq(world.sizeOf(1, 2), null, 'and a map with no size will not guess');
+});
+
+
+// --- the tiles that run a script when you step on them ----------------------
+
+test('the trigger tiles on a map are read, with their scenes', async (t) => {
+  // **The thing that turned the pilot back for four passes, readable at last.**
+  // Route 32's first coord event dumps as `00 08 12 00 ab 44 00 00` -- scene 0
+  // at y 8, x 0x12 -- and (18,8) is the tile the pilot was measurably stopped
+  // on. The symbol at 0x44ab is `Route32CooltrainerMStopsYouScene`.
+  const c = cartridge(new Map([
+    [mapKey(1, 1), { blocks: [10, 45],
+                     warps: [[4, 3, mapKey(1, 2)]],
+                     triggers: [[18, 8, 0], [7, 71, 1]] }],
+    [mapKey(1, 2), {}],
+  ]));
+  t.eq(c.world.coordEventsOn(1, 1),
+       [{ scene: 0, x: 18, y: 8 }, { scene: 1, x: 7, y: 71 }],
+       'both of them, in order, with their scenes');
+  t.eq(c.world.coordEventsOn(1, 2), [], 'and a map with none has none');
+});
+
+test('a trigger is read past the warps, however many there are', async (t) => {
+  // The block is warps *then* triggers, so a wrong warp stride reads the
+  // trigger count out of the middle of a warp -- which is the shape of a bug
+  // that works on every map with one door and fails on the first with three.
+  const c = cartridge(new Map([
+    [mapKey(1, 1), { blocks: [10, 10],
+                     warps: [[1, 1, mapKey(1, 2)], [2, 2, mapKey(1, 2)],
+                             [3, 3, mapKey(1, 2)]],
+                     triggers: [[5, 6, 2]] }],
+    [mapKey(1, 2), {}],
+  ]));
+  t.eq(c.world.coordEventsOn(1, 1), [{ scene: 2, x: 5, y: 6 }],
+       'found behind three doors');
+});
+
+test('a trigger coordinate is raw, where an object coordinate is not',
+     async (t) => {
+  // **The asymmetry, pinned.** An object is stored four higher than the map's
+  // own coordinates and a coord event is not -- which reads as obviously
+  // consistent and is not, and is exactly the sort of thing that puts a trigger
+  // four tiles from where it is.
+  const c = cartridge(new Map([
+    [mapKey(1, 1), { blocks: [10, 10], triggers: [[5, 6, 0]],
+                     objects: [[5, 6, 39]] }],
+    [mapKey(1, 2), {}],
+  ]));
+  t.eq(c.world.coordEventsOn(1, 1)[0].x, 5, 'the trigger is where it says');
+  t.eq(c.world.coordEventsOn(1, 1)[0].y, 6, 'on both axes');
+});
+
+test('a trigger off the map, or too many of them, is a bad read', async (t) => {
+  // The same two rules the object reader follows, and for the same reason: a
+  // read that has walked off the end of something gives plausible numbers.
+  const off = cartridge(new Map([
+    [mapKey(1, 1), { blocks: [2, 2], triggers: [[3, 3, 0], [40, 40, 0]] }],
+    [mapKey(1, 2), {}],
+  ]));
+  t.eq(off.world.coordEventsOn(1, 1), [{ scene: 0, x: 3, y: 3 }],
+       'the one inside a four-by-four map, and not the other');
 });

@@ -43,6 +43,30 @@ test('the battle menu is not live on the turn it has not been drawn yet', async 
           'a cursor at 0 means the menu is drawn but not interactive');
 });
 
+test('the battle menu is live at every cursor it has, and nowhere else',
+     async (t) => {
+  // **The bounds, which nothing tested.** `tools/mutate` could widen or narrow
+  // every one of `x >= 1 && x <= 2 && y >= 1 && y <= 2` and the suite passed --
+  // in the guard that tells the battle menu from the pack drawn over it, which
+  // is the confusion that once made a thrown ball look like a Pokémon breaking
+  // free.
+  //
+  // Four positions, because the battle menu is a two-by-two: FIGHT, PKMN, PACK,
+  // RUN. A bound that is one out either way reads one of those four as "not the
+  // menu" and the turn is driven blind.
+  const { sym, state } = pilot();
+  const at = (x, y) => Tasks.menuIsLive(state.read(worldRam(sym, {
+    battleMode: 1, menu: [x, y], menuItems: 34, menuTop: 12,
+  })));
+  for (const [x, y] of [[1, 1], [2, 1], [1, 2], [2, 2]]) {
+    t.true(at(x, y), `(${x},${y}) is one of the four corners`);
+  }
+  t.false(at(0, 1), 'x of nought is the menu not yet interactive');
+  t.false(at(1, 0), 'and so is y of nought');
+  t.false(at(3, 1), 'x past the right-hand column is not the menu');
+  t.false(at(1, 3), 'nor y past the bottom row');
+});
+
 test('weakening never reaches for a move whose power byte lies about it', async (t) => {
   // Driven through the real RomData against a real byte layout, because a stub
   // of isChipMove would only be testing the stub.

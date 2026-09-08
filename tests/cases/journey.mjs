@@ -938,6 +938,83 @@ test('a cartridge that cannot read badges still offers the Gym', async (t) => {
   t.eq((await j.gymList(2565)).length, 1, 'still on the list');
 });
 
+// --- a battle nothing can finish ---------------------------------------------
+
+test('a walk gives up on a battle it cannot play, rather than re-asking',
+     async (t) => {
+  // **Measured while grinding on Route 31.** Cyndaquil out of PP on its only
+  // damaging move, a Lv2 Caterpie at 1 HP, and a *trainer* battle -- which
+  // cannot be fled. `fightBattle` answered 'stuck' and `escapeBattle` said
+  // `trainer battle: stuck`, five times and counting, because every walk calls
+  // it: at the top of each crossing stage, each edge attempt, each doorway try.
+  //
+  // `grind` bounds its own stuck run at five. The walks had no such bound,
+  // because they could not tell a battle that was *lost* from one that could
+  // not be *played* -- both came back false.
+  const j = ringWalker();
+  let asked = 0;
+  j.escapeBattle = async () => { asked++; j.battleStuck = true; return false; };
+  const r = await j.travelTo(3);
+  t.false(r.ok, 'the walk stops');
+  t.contains(r.message, 'nothing can finish', 'and says what is in the way');
+  t.true(asked <= 2, `asked once or twice, not per step: ${asked}`);
+});
+
+test('escapeBattle is what notices, driven rather than stubbed', async (t) => {
+  // **The line that sets the flag, through the real method.** Every test around
+  // it replaces `escapeBattle` wholesale -- which is how `if (how === 'stuck')`
+  // survived every mutation of it. A stub agrees with whoever wrote it.
+  const sym = symbols();
+  const gb = new FakeGameBoy({ wram: worldRam(sym, {}) });
+  const j = new Journey(gb, new GameState(sym), null, {}, {}, () => {}, null,
+                        { heals: ['potion'] });
+  j.said = [];
+  j.say = (m) => j.said.push(m);
+  let how = 'stuck';
+  j.snap = async () => ({ inBattle: true, battleMode: j.state.e.trainerBattle,
+                          party: [{ hp: 5, maxHp: 30 }], money: 0 });
+  j.tasks = { fightBattle: async () => how };
+
+  t.false(await j.escapeBattle(), 'a stuck battle is not escaped');
+  t.true(j.stuckInBattle, 'and the walks are told');
+  t.contains(j.said.join(' '), 'trainer battle: stuck', 'said out loud too');
+
+  // A battle that is merely *lost* is a different thing: the walk carries on
+  // from wherever the whiteout put it, which it has always done.
+  const lost = new Journey(gb, new GameState(sym), null, {}, {}, () => {}, null,
+                           { heals: ['potion'] });
+  lost.say = () => {};
+  lost.snap = j.snap;
+  lost.tasks = { fightBattle: async () => 'lost' };
+  t.false(await lost.escapeBattle(), 'still not a win');
+  t.false(lost.stuckInBattle, 'but not unplayable either');
+
+  // And a win clears nothing and blocks nothing.
+  const won = new Journey(gb, new GameState(sym), null, {}, {}, () => {}, null,
+                          { heals: ['potion'] });
+  won.say = () => {};
+  won.snap = j.snap;
+  won.tasks = { fightBattle: async () => 'won' };
+  t.true(await won.escapeBattle(), 'a won battle is a won battle');
+  t.false(won.stuckInBattle, 'and the walk goes on');
+});
+
+test('a doorway gives up on one too, and says so', async (t) => {
+  const j = atADoor({ windowOpen: false });
+  j.escapeBattle = async () => { j.battleStuck = true; return false; };
+  t.false(await j.through([2, 7], 2), 'it does not keep trying the door');
+  t.contains(j.said.join(' '), 'stuck in a battle', 'saying which');
+});
+
+test('the flag is about this walk, not about ever', async (t) => {
+  // Cleared at the start of each walk, because a battle dealt with between two
+  // presses must not make the second press refuse.
+  const j = ringWalker();
+  j.battleStuck = true;
+  const r = await j.travelTo(3);
+  t.true(r.ok, `a fresh walk starts clean: ${r.message}`);
+});
+
 // --- a whiteout looks exactly like success -----------------------------------
 
 test('a heal that was really a knockout says so', async (t) => {
@@ -1701,6 +1778,11 @@ function ringWalker({ refuse = null, saying = '', badges = 0 } = {}) {
   j.runScripts = async () => true;
   j.settled = async () => new Uint8Array(0x2000);
   j.crossEdge = async (dir, expect) => {
+    // The real one runs `escapeBattle` at the top of every staged advance and
+    // every edge attempt, which is the whole reason a battle it cannot play
+    // gets asked about once per step. A fake that skips it cannot show that.
+    await j.escapeBattle();
+    if (j.stuckInBattle) return false;
     log.push(`${here}>${expect}`);
     if (refuse && `${here}>${expect}` === refuse) {
       // What the real one does on a gate: read the words on the refusal and
