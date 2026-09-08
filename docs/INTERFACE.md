@@ -139,6 +139,11 @@ for the *no* balls case, which is why the empty bag worked and the full one did
 not. Travel walked into the same trap the day it was added, which is how it was
 found.
 
+**The `seen` line belongs to both jobs that walk the grass.** It was painted by
+the Hunt handler alone, from a tally `catch_` never collected — so a catch that
+spent two hundred encounters showed a row of counters and no species names. One
+function, two callers, and the same sentence on the end of both messages.
+
 **The quiet line can now answer the question it raises.** *Grinding here will be
 slow* is a complaint; *slow here — Route 31 gives Lv4–5, three maps away* is
 something to do about it. Both halves of that sentence come from the cartridge —
@@ -597,4 +602,4 @@ So this page carries a marker naming the files it describes and the hash they
 had when it was last read against them. `tools/docs-check` reports it when they
 move, and the pre-commit hook blocks on that report.
 
-<!-- covers: index.html app/main.js app/rows.js @ 62ca1cf818d1 -->
+<!-- covers: index.html app/main.js app/rows.js @ 8ee9bc1763ed -->

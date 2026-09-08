@@ -336,7 +336,7 @@ second, which is there so the core's own waits finish, not to run a game.
   candidates and returned true standing three tiles clear of any. It checks the
   tile underfoot now.
 
-## Twenty-seven audits, and how each defect was actually found
+## Twenty-eight audits, and how each defect was actually found
 
 Everything above was watched happening. This section was the exception, and the
 exception was the point of it: after the ROM-hack work shipped, eleven passes
@@ -460,6 +460,10 @@ exactly why nothing failed.
 | 27 | `lost` was returned with the battle still on screen, so one loss was reported seven times | losing a trainer battle | **losing one** |
 | 27 | a beaten trainer took all six attempts, so the unbeaten one behind them was never approached | two trainers in range | **beating one, then asking again** |
 | 27 | and my own new hint lived in a row that is hidden whenever it applies | reading the wiring | reading the fix |
+| 28 | every starter this app ever took was named AAAAAAAAAA, for twenty-eight passes | reading the party screen | **reading the screen** |
+| 28 | `catch_` counted nothing, while `hunt` beside it counted everything | asking for a species by mistake | asking for the wrong thing |
+| 28 | `_menuRowCount` read a swallowed press as a one-row menu, in the primitive two features stand on | one dropped press | reading the primitive |
+| 28 | *and five fixes for the starter's name, none of which shipped* | *twelve runs* | *measuring each fix* |
 
 Five things in that table are worth more than the individual rows.
 
@@ -470,14 +474,14 @@ device, a second cartridge, a second Pokémon. What it measures is how much of
 the world you have to *arrange*, not how much you have to own: the fifth pass
 needed no hardware at all, only a party with a corpse in slot one.
 
-**Three of the ninety-one were caught by a check**, and only after the fix
+**Three of the ninety-five were caught by a check**, and only after the fix
 had decided what to look for: the wiring group named the four modules still
 importing constants that had just been deleted, and the symbol group refused a
 new address that had not been added to the list that travels between devices.
 One more was caught by a *test*, and only because the test hung — the obvious
 `continue` for the party prompt advanced nothing in a loop bounded by balls
 thrown. That is the honest weight to give this repository's seventeen check
-groups and 376 tests: they hold a fix down, and they catch the fix that is
+groups and 395 tests: they hold a fix down, and they catch the fix that is
 itself wrong. They do not find the fault.
 
 **Measuring also rules things out, which is half of what it is for.** The
@@ -1560,8 +1564,9 @@ same `useItemOn` measured on the cartridge two passes ago. **This is the third
 standing gap in this document**, beside the remote-play picture and the ROM hack,
 and it has the same character: it is waiting on a *situation* rather than on more
 reading. The list is worth keeping in one place, because it is the honest answer
-to "what would you do next if you could" — and the twenty-seventh pass added a
-fourth in exactly the same shape.
+to "what would you do next if you could" — and two later passes each added one
+in the same shape. The fifth is the odd one out: it is not waiting on a
+situation but on an idea, and five have been tried.
 
 | Gap | What it needs |
 | --- | --- |
@@ -1569,6 +1574,7 @@ fourth in exactly the same shape.
 | a title profile that is not Crystal | a `.gbc` and a `.sym` from a real hack |
 | a non-zero status byte | a wild Pokémon that gets a turn |
 | the duel moving on to a second trainer | two spawned trainers in range, one already beaten |
+| declining the starter's nickname | a way to answer a box that a press has to create |
 
 Sleep is worth one more line, because it is the one the decode could have got
 wrong quietly. **It is a counter, not a flag**: the low three bits hold the turns
@@ -1774,6 +1780,110 @@ the one at (2,28) — and the fix itself is held down by a test rather than by a
 run. Doing it properly needs two spawned trainers in range at once, one beaten,
 which the one screen that offers it did not survive a page reload. The
 [standing gaps](#what-was-measured-and-what-was-not) table has it.
+
+### A twenty-eighth pass: reading the screen, and what it found first
+
+The feature was the screen. Gen 2 renders text into `wTilemap` — twenty by
+eighteen bytes of tile ids — and the letters *are* tiles, so the words a person
+is reading have been in work RAM the whole time. Twenty-seven passes drove boxes
+by their *shape* without ever looking at them.
+
+The charmap was measured, not copied: dump the raw tilemap beside the picture
+and read them against each other.
+
+| tiles | what | read off |
+| --- | --- | --- |
+| `$80`–`$99` | A–Z | *WITHDRAW ITEM* |
+| `$a0`–`$b9` | a–z | *What do you want to do?* |
+| `$f6`–`$ff` | 0–9 | *21/ 21*, *Lv6* |
+| `$7f` `$f3` `$e6` `$6d` | space `/` `?` `:` | box interiors, an HP reading, that question, *0:03* |
+| `$ed` | the cursor arrow | rows 2, 4, 6, 8, 10 as `wMenuCursorY` read 1–5 |
+
+**What it settled immediately.** Three probes had failed to identify a box on the
+bedroom PC by its shape; one look at its words — *CHRIS turned on the PC* — was
+enough. And the menu behind it read `WITHDRAW ITEM / DEPOSIT ITEM / TOSS ITEM /
+MAIL BOX / DECORATION / TURN OFF`, which answered a question this pass had opened
+with: **a Gen 2 Pokémon Center has no PC at all.** Cherrygrove's Center parses to
+three warps, no coord events, **no bg events** and four objects, all people; and
+pressing A at every wall in its top half opened nothing. The home PC is items
+only. So "deposit a Pokémon to free a party slot" — the dead end the app names
+in three places — has nowhere to happen from that this pass could find.
+
+**A box that keeps its selection nowhere readable.** Measured on the same PC's
+submenu: eight DOWN presses over six hundred frames moved `wMenuCursorY` not
+once. A work-RAM diff across a press turned up thirty-seven changed bytes, every
+one in the sprite buffer, and the only *named* change was the game clock. The
+arrow moved every time, because the arrow is drawn — which is what
+`_arrowMoved` follows.
+
+**And two row-hunting hacks became one question.** `_openPack` opened rows one at
+a time asking each time whether the pack had appeared; `saveGame` counts SAVE
+from the bottom. Both now ask the screen and keep their search as the fallback.
+Measured on Route 29 after the intro, the menu reads POKéMON, PACK, GEAR, CHRIS,
+SAVE, OPTION, EXIT — seven rows, `_menuRowCount` agreeing, PACK at row 2 and at
+row 3 once the Pokédex arrives.
+
+### The defect the screen found in its first hour
+
+**Every starter this app has ever taken is named AAAAAAAAAA.**
+
+The party screen said so the first time anything here could read one, and the
+bytes agree: `80 80 80 80 80 80 80 80 80 80 50` at `wPartyMon1Nickname` — ten
+'A's and a terminator. A PIDGEY caught later in the same save reads `PIDGEY`,
+which localises it to the starter flow.
+
+The mechanism is a comment that was right about the plan and wrong about the
+order. `takeStarter` presses A on the ball and then mashes A through the script.
+Gen 2 asks two questions on the way — *Do you want CYNDAQUIL, the fire
+POKéMON?*, where A means yes and yes is right, and *Give a nickname to the
+CYNDAQUIL you received?*, where A also means yes and yes is wrong. So the
+mashing answers both, walks into the naming screen, and every further press
+types the letter under the cursor. `declineNickname` is called afterwards, by
+which time there is nothing left to decline.
+
+**Twelve runs and five approaches, and it is still not fixed.** Each failure
+says something, so each is written down:
+
+| tried | measured |
+| --- | --- |
+| decline the question when the screen says *nickname* | fired, but `answerNo` returned false: **`wWindowStackSize` reads 0 the whole time the text types** |
+| require a window to be open as well | fired on the *text* half, drove `answerNo` against a cursor left over from the menu before it, and its A landed on YES — starter named **SSSSSSSSSS** |
+| require the words *and* the drawn options | never fired: traced sample by sample, the question sits there for two dozen samples with no YES or NO drawn |
+| stop pressing and wait for the options | never fired either, for the same reason — and twenty polls later the window was still shut |
+| press **B** instead, which is NO on a choice | reached the naming screen anyway: starter named **BBBBBBBBBB** |
+| stop the moment the party grows, then decline | the stop is exact — the screen reads `G`, the first letter of *Give a nickname to* — and `declineNickname` still returns false |
+
+What the traces establish is why nothing simpler works: **the press that turns
+the text into a question is also the press the question receives.** The box is
+not drawn until the text in front of it is dismissed, so there is nothing to
+wait for and nothing to look at; and the same box *is* declined correctly when
+catching, because `watchThrow` presses A in a loop and checks between presses,
+so its caller has already done the waiting the primitive does not do.
+
+None of the five attempts shipped. Shipping a mechanism whose comment has to say
+it does not work is the "second way to do a thing" this repository has a check
+against, so the code is as it was and the defect is written down instead. It is
+cosmetic — the Pokémon is the right species at the right level — and it is real,
+and it is now the fifth [standing gap](#what-was-measured-and-what-was-not).
+
+### And one the same question turned up
+
+`catch_` **threw away what it saw.** `hunt` has counted every species it fled
+since it was written, and the interface paints that list; `catch_` ran the same
+encounter loop, fled the same wrong species, and reported only counts. So a
+catch that spent two hundred encounters said *saw 200 encounters without
+catching SENTRET* while holding, unsaid, the list of the two hundred things it
+had seen — which is the answer the failure raises. Found by running
+`catch_(null, ...)` by mistake and watching it flee thirty encounters looking
+for `null`.
+
+`_menuRowCount` had the eleventh pass's defect in the primitive two features
+stand on: it pressed DOWN and looked **once**. The menu is not interactive the
+instant `_openStartMenu` sees a live cursor, so the first press is the likeliest
+of the lot to be dropped — and a dropped press leaves the cursor where it was,
+which read as the wrap. **One row.** `_openPack` then tried row 1 only and
+reported *the pack never opened*; `saveGame` tried row 1 only and could not find
+SAVE. Confirmed by mutation: reverting the fix makes the count read 1 of 7.
 
 ## The part that had to be redesigned
 

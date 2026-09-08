@@ -459,6 +459,18 @@ Two bugs surfaced while measuring that, both from walking into people:
   matches the disassembly's `object_event` lists on Route 29 and Route 30, in
   order.
 
+### And it tells you what the grass gave instead
+
+A hunt or a catch that spends its whole budget used to report the count and
+nothing else: *saw 200 encounters without catching SENTRET*. The pilot had been
+counting every species it ran from the whole time, so both now finish the
+sentence — *— this grass gives PIDGEY x8, RATTATA x3* — and the line under the
+picker says the same thing in full. It is usually the answer to the question the
+failure raises: you are on the wrong route for what you asked for.
+
+Until the twenty-eighth pass only **Hunt** did this. Catch ran the same walk
+through the same grass and threw the tally away.
+
 ## Take: what the map is holding
 
 Routes have things lying on them — item balls, and fruit trees you can pick from
@@ -849,7 +861,7 @@ deployed, which is not the question you are asking when a bug you saw fixed is
 still in front of you. `tools/check-app` asserts that number matches the service
 worker's cache name, because a version display that lies is worse than none.
 
-<!-- covers: sw.js @ 7d94c4515440 -->
+<!-- covers: sw.js @ 79103c790804 -->
 
 The worker fetches **network first, falling back to the cache**. That is the
 opposite of the usual offline-first advice, on purpose.

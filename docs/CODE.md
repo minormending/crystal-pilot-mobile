@@ -107,9 +107,9 @@ of the subtleties in sections 6 and 7.
 
 ## 2. The shape of it
 
-<!-- covers-api: app/main.js gen2/journey.js titles/crystal.js gen2/tasks.js gen2/nav.js gen2/world.js gen2/collision.js gen2/state.js gen2/romdata.js gen2/symbols.js gbcore/gb.js @ 676f0dc0075d -->
+<!-- covers-api: app/main.js gen2/journey.js titles/crystal.js gen2/tasks.js gen2/nav.js gen2/world.js gen2/collision.js gen2/state.js gen2/romdata.js gen2/symbols.js gbcore/gb.js @ 5938f9e65f3c -->
 
-Twenty-seven modules, in four directories, and the directories are the design:
+Twenty-eight modules, in four directories, and the directories are the design:
 **an import may point down this list and never up.**
 
 | | holds | may import from |
@@ -187,6 +187,7 @@ flowchart LR
         coll["collision.js<br/>what is walkable"]
         state["state.js<br/>live game state"]
         rom["romdata.js<br/>cartridge tables"]
+        scr["screen.js<br/>the words on screen"]
         sym["symbols.js<br/>the .sym file"]
         eng["engine.js<br/>the machine's own numbers"]
     end
@@ -252,6 +253,7 @@ flowchart LR
 | `symbols.js` | "where does `wPartyCount` live?" |
 | `state.js` | "what is happening right now?" |
 | `romdata.js` | "what is species 155 called?" |
+| `screen.js` | "what does the box on screen say, and which row is selected?" |
 | `collision.js` | "can I stand there, and how do I get there?" |
 | `nav.js` | "walk to this tile" |
 | `world.js` | "which map is west of here?" |
@@ -425,7 +427,7 @@ watching.
 
 ### `symbols.js` — where things live
 
-<!-- covers: gen2/symbols.js @ 837a7d0005b4 -->
+<!-- covers: gen2/symbols.js @ bf560292b9d1 -->
 
 Parses the `.sym` file into `name → { bank, addr }`. First definition wins;
 later duplicates are aliases and locals.
@@ -453,7 +455,7 @@ enforces it, so it is a fact about the build rather than a habit.
 
 ### `state.js` — what the game is doing right now
 
-<!-- covers: gen2/state.js @ 458defb6dc4e -->
+<!-- covers: gen2/state.js @ c4c94c998b52 -->
 
 One snapshot, many answers: `inBattle`, `party`, `pos`, `onGrass`,
 `worldLoaded`, `menu`, `balls`, `items`, each party member's `status`, and the
@@ -629,6 +631,111 @@ because the bag reader still uses it.
   `normalise` still folds `é`, because somebody typing *poke ball* means
   `POKé BALL` — and deliberately does **not** fold `♀` and `♂`, which would undo
   the fix by making the two names match again.
+
+</details>
+
+**And `state.screen(wram)` is the door onto [`screen.js`](#screenjs--the-words-on-screen).**
+It lives here because this class already carries the address and the engine
+profile, so nothing else has to be handed either — and it returns `null` where
+the symbol file does not name the tilemap, which is *cannot read* rather than
+*says nothing*, the same distinction `liveObjects` makes.
+
+### `screen.js` — the words on screen
+
+<!-- covers: gen2/screen.js @ 2948af74bfc9 -->
+
+Gen 2 renders text into `wTilemap` — twenty by eighteen bytes of tile ids — and
+the letters *are* tiles. So the words a person is reading have been sitting in
+work RAM the whole time, and until the twenty-eighth pass nothing here looked at
+them.
+
+Every box this app drives had been identified by its **shape**, the pair
+`wMenuDataItems`/`wMenuBorderTopCoord`, since the eleventh pass. That was a real
+advance over counting presses, and it is as far as shape goes:
+
+| the problem | what the screen answers |
+| --- | --- |
+| three boxes share `2/7`, two share `2/0` | the words say which one is up |
+| the START menu grows, so PACK moves | PACK is the row that *says* PACK |
+| a box whose cursor is nowhere findable | the arrow is *drawn*, so it can be followed |
+
+Everything in the module is a pure function of a snapshot, an address and an
+engine profile. Nothing presses a button.
+
+```mermaid
+flowchart LR
+    TM["wTilemap<br/>20 x 18 tile ids"] --> CH["charmap<br/><i>engine profile</i>"]
+    CH --> L["screenLines()"]
+    L --> T["screenText()<br/><i>the readable lines</i>"]
+    L --> S["screenSays(word)<br/><i>folded to letters and digits</i>"]
+    TM --> A["arrowAt()<br/><i>the drawn cursor</i>"]
+    A --> SEL["selectedLine()<br/><i>the row a person would read</i>"]
+```
+
+The charmap was measured rather than copied out of `charmap.asm`, by dumping the
+raw tilemap beside the picture and reading them against each other:
+
+| tiles | what | measured on |
+| --- | --- | --- |
+| `$80`–`$99` | A–Z | *WITHDRAW ITEM* on the bedroom PC |
+| `$a0`–`$b9` | a–z | *What do you want to do?* under it |
+| `$f6`–`$ff` | 0–9 | *21/ 21* and *Lv6* on the party screen |
+| `$7f` | space | the blank inside every box |
+| `$f3` `$e6` `$6d` | `/` `?` `:` | an HP reading, that question, the save panel's *0:03* |
+| `$ed` | the cursor arrow | at tilemap rows 2, 4, 6, 8, 10 as `wMenuCursorY` read 1–5 |
+
+Matching **folds to letters and digits** before comparing, because the screen is
+not a string: `POKéDEX` draws its accented letter as a tile this charmap does not
+name, `POKéGEAR`'s logo is drawn as graphics entirely so the row reads `  GEAR`,
+and an item count reads `x 1`. Folding is what lets a caller ask for `PACK` and
+mean it. Phrases are matched **per line**, so two unrelated lines that happen to
+abut are not a sentence.
+
+<details>
+<summary><b>Advanced detail:</b> what the arrow can and cannot do</summary>
+
+`_arrowMoved` is `_packMoved` generalised to every box there is. `_packMoved`
+waits on a variable, which works for the pack because the pack keeps its index
+in one; measured on the bedroom PC's BILL'S-PC submenu, **eight DOWN presses
+over six hundred frames moved `wMenuCursorY` not at all** — a work-RAM diff
+across a press turned up thirty-seven changed bytes, every one of them in the
+sprite buffer, and the only named change was the game clock. That box keeps its
+selection somewhere this app cannot find. The arrow is drawn, so it can be
+followed anyway.
+
+`_driveToSaying(word)` is what the two row-hunting hacks become. `_openPack`
+used to open rows one at a time and ask each time whether the pack had appeared;
+`saveGame` counts SAVE from the bottom, on the reasoning that the last three
+rows are always SAVE, OPTION, EXIT. Both now ask the screen first and keep their
+search as the fallback — because a row that says the right thing and opens the
+wrong box is exactly the kind of thing this app stopped believing several passes
+ago, so the shape is still checked afterwards.
+
+Measured on Route 29 right after the intro, the START menu reads:
+
+```
+>POKéMON      (no POKéDEX yet)
+ PACK
+   GEAR       (the logo is graphics)
+ CHRIS
+ SAVE
+ OPTION
+ EXIT
+```
+
+Seven rows, and `_menuRowCount` agrees. PACK is row 2 here and row 3 once the
+Pokédex arrives, which is the whole reason nothing counts to it.
+
+**A screen with no arrow is not a menu**, and `_driveToSaying` returns false
+without pressing anything when it sees one — because DOWN in an overworld is a
+step into the grass. Out on the map the tilemap is empty and there is no arrow,
+so the guard costs nothing and prevents the one way this could do harm.
+
+**And a failure can quote the screen.** `saying(message)` puts what is showing
+on the end of a report: *the USE box never appeared* says what the pilot
+expected, and not what turned up instead. That difference was measured the hard
+way while driving the bedroom PC — three probes failed to identify a box by its
+shape, and one look at its words, *CHRIS turned on the PC*, settled it.
 
 </details>
 
@@ -918,7 +1025,7 @@ point those coordinates mean somewhere else entirely.
 
 ## 5. Crossing to the next map
 
-<!-- covers: gen2/journey.js gen2/world.js @ 4586d58926a6 -->
+<!-- covers: gen2/journey.js gen2/world.js @ 799a7894bf4a -->
 
 A connection spans only part of a shared edge, so "walk west until something
 happens" does not work. `crossEdge()` closes the distance in stages, then tries
@@ -1080,7 +1187,7 @@ eight kilobytes a full snapshot copies, which is worth keeping distinct.
 
 ## 6. Battles
 
-<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 8827673af488 -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 17dafed612d1 -->
 
 ### Which move, and which question
 
@@ -1544,7 +1651,7 @@ fainted.
 
 ## 7. Catching something
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ 932307615857 -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ 38bbf1902738 -->
 
 Catching is the most involved loop, because a Poké Ball's odds turn on how much
 HP is left. Throwing at a full-health target is mostly throwing balls away.
@@ -1628,9 +1735,20 @@ precedes it defaults to yes, which is what we want; the nickname box does not.
 
 ---
 
+**And both loops now say what the grass actually gave.** `hunt` has counted
+every species it fled since it was written, and the interface paints that list
+under the picker. `catch_` ran the same encounter loop, fled the same wrong
+species and **threw the tally away** — so a catch that spent its whole budget
+reported *saw 200 encounters without catching SENTRET* while holding, unsaid,
+the list of the two hundred things it had seen. Which is the answer the failure
+raises: you are on the wrong route. Both messages now end with
+*— this grass gives PIDGEY x8, RATTATA x3*, commonest first and capped at
+three, and the `#seen` line is painted by one function with two callers rather
+than by one handler that happened to have the data.
+
 ## 7a. Five that act on where you already are
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ e816a5dac205 -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ 4b6d47444a2a -->
 
 Grind, hunt and catch all go *looking* for something. These five do the obvious
 thing with the situation you are already in, and take no parameters:
@@ -1901,7 +2019,7 @@ said *trainer battle: lost* **seven times**. One loss, reported seven ways.
 
 ## 7d. The counter, and the money it takes
 
-<!-- covers: gen2/menus.js gen2/state.js titles/crystal.js @ 43f3542af4d2 -->
+<!-- covers: gen2/menus.js gen2/state.js titles/crystal.js @ 26ac418d526c -->
 
 Everything the pilot could do until now used what it found. **Shop** walks to a
 mart and buys, which is the first thing it does that spends rather than
@@ -1978,7 +2096,7 @@ counter and came away with **five potions and ¥1800**, in 49 seconds.
 
 ## 7b. Saving, and getting the save out
 
-<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 8827673af488 -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 17dafed612d1 -->
 
 ```mermaid
 flowchart TD
@@ -2220,7 +2338,7 @@ because that failure is only otherwise discovered by reaching for the undo.
 
 ## 8. The errands
 
-<!-- covers: titles/crystal.js gen2/journey.js @ cb8fad5f6e89 -->
+<!-- covers: titles/crystal.js gen2/journey.js @ ae415224ff3d -->
 
 Everything in this section is `crystal.js` — the only file in the app that names
 a Crystal map, a Crystal door or a Crystal NPC. What it stands on is
@@ -2519,7 +2637,7 @@ This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ b96f65bb12e8 -->
+<!-- covers: app/main.js index.html @ efda3fdb8334 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -3048,7 +3166,7 @@ seconds by a page whose loop was supposedly running.
 
 ### One thing at a time
 
-<!-- covers: app/main.js @ e20676eb0bc0 -->
+<!-- covers: app/main.js @ 01e19fc98b26 -->
 
 One Game Boy, one joypad, one canvas — so a great deal of this app is about
 making sure two things are never driving them at once. There are three claims,
@@ -3681,7 +3799,7 @@ they have been installed.
 
 ### Watching the other device's screen
 
-<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ 9af312f0b3ae -->
+<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ 406731b7fe45 -->
 
 One device shows its screen; the other watches it, and plays it if the first
 one says so. The picture goes straight between them over WebRTC and never
