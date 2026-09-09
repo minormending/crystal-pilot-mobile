@@ -4,7 +4,7 @@
 // three of them share one. The screen says which. These tests run over a
 // tilemap painted by the harness through the same charmap the reader uses, so
 // what is under test is the decoding and the matching rather than the table.
-import { paintScreen, symbols, test, worldRam } from '../harness.mjs';
+import { blindTo, paintScreen, symbols, test, worldRam } from '../harness.mjs';
 import { GameState } from '../../gen2/state.js';
 import { gen2 } from '../../gen2/engine.js';
 import { arrowAt, charOf, fold, screenLines, screenSays, screenText,
@@ -112,8 +112,7 @@ test('a cartridge whose symbol file has no tilemap reads no screen',
      async (t) => {
   // "Cannot read" rather than "says nothing", which is the distinction every
   // caller of this leans on: it keeps the row counting it had.
-  const bare = { has: (n) => n !== 'wTilemap' && sym.has(n),
-                 addr: (n) => sym.addr(n), bank: (n) => sym.bank(n) };
+  const bare = blindTo(sym, 'wTilemap');
   const state = new GameState(bare);
   t.eq(state.screen(showing([' >PACK'])), null, 'no reader at all');
 
@@ -153,8 +152,7 @@ test('a message is unchanged where the screen cannot be read', async (t) => {
   // So a caller can wrap every failure without asking first.
   const { Tasks } = await import('../../gen2/tasks.js');
   const { FakeGameBoy, fakeRom } = await import('../harness.mjs');
-  const bare = { has: (n) => n !== 'wTilemap' && sym.has(n),
-                 addr: (n) => sym.addr(n), bank: (n) => sym.bank(n) };
+  const bare = blindTo(sym, 'wTilemap');
   const gb = new FakeGameBoy({ wram: showing(['CHRIS turned on']) });
   const tasks = new Tasks(gb, new GameState(bare), () => {}, fakeRom());
   t.eq(await tasks.saying('the pack never opened'), 'the pack never opened',

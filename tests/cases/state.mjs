@@ -1,8 +1,8 @@
 // state.js: turning a work-RAM snapshot into something the pilot can reason
 // about. Cheap to test and worth testing, because everything downstream trusts
 // it -- a misread here shows up much later as a bad decision.
-import { FakeGameBoy, symbols, test, worldRam, markSaved } from '../harness.mjs';
-import { GameState, statusOf } from '../../gen2/state.js';
+import { FakeGameBoy, blindTo, markSaved, symbols, test, worldRam } from '../harness.mjs';
+import { dvsOf, GameState, statusOf } from '../../gen2/state.js';
 import { gen2 } from '../../gen2/engine.js';
 
 test('a party is read back with levels, HP and moves intact', async (t) => {
@@ -253,8 +253,7 @@ test('a cartridge whose symbol file has no badges says so, and not zero',
   const sym = symbols();
   // The same shape the tilemap's absence is tested with: a symbol table that
   // answers `has` with no rather than one that throws on `addr`.
-  const bare = { has: (n) => n !== 'wJohtoBadges' && sym.has(n),
-                 addr: (n) => sym.addr(n), bank: (n) => sym.bank(n) };
+  const bare = blindTo(sym, 'wJohtoBadges');
   t.eq(new GameState(bare).read(worldRam(sym, { badges: 4 })).badges, null,
        'it cannot say, which is not the same as none');
   t.eq(new GameState(sym).read(worldRam(sym, { badges: 4 })).badges, 4,
@@ -312,11 +311,120 @@ test('a cartridge that will not say answers null, not false', async (t) => {
   // a confident wrong answer, which is this repository's most expensive class
   // of bug.
   const sym = symbols();
-  const blind = new GameState({ ...sym, has: (n) => n !== 'wEventFlags',
-                                addr: sym.addr, bank: sym.bank });
+  const blind = new GameState(blindTo(sym, 'wEventFlags'));
   const s = worldRam(sym, { events: [0x2d] });
   t.eq(blind.hasEvent(s, 0x2d), null, 'no wEventFlags, no answer');
   const state = new GameState(sym);
   t.eq(state.hasEvent(s, null), null, 'and no bit asked about is no answer');
   t.eq(state.hasEvent(s, undefined), null, 'either way of not asking');
+});
+
+// --- the rest of the party entry, and the two bit arrays --------------------
+
+test('the four DV nibbles come out of the two bytes in the right order',
+     async (t) => {
+  // Handed over as the raw word, not as four numbers, so the fake does not
+  // hold a second copy of the packing and agree with a reader that unpacks it
+  // the same wrong way. $A73C is attack 10, defence 7, speed 3, special 12.
+  const got = dvsOf(0xa73c);
+  t.eq(got.atk, 10, 'the high nibble of the first byte');
+  t.eq(got.def, 7, 'and the low one');
+  t.eq(got.spd, 3, 'the high nibble of the second');
+  t.eq(got.spc, 12, 'and its low one');
+});
+
+test('the HP DV is not stored anywhere and is assembled from the other four',
+     async (t) => {
+  // The one thing about DVs a reader cannot get by reading. Low bit of attack,
+  // defence, speed, special, most significant first.
+  t.eq(dvsOf(0x0000).hp, 0, 'all even is nothing');
+  t.eq(dvsOf(0xffff).hp, 15, 'all odd is perfect');
+  // atk 1 (odd), def 0 (even), spd 1 (odd), spc 0 (even) -> 1010 = 10
+  t.eq(dvsOf(0x1010).hp, 10, 'and the bits keep their places');
+  t.eq(dvsOf(0x0001).hp, 1, 'special is the least significant of the four');
+  t.eq(dvsOf(0x1000).hp, 8, 'and attack the most');
+});
+
+test('a party entry says what a stat screen says', async (t) => {
+  const sym = symbols();
+  const state = new GameState(sym);
+  const wram = worldRam(sym, {
+    party: [{ species: 155, level: 13, hp: 35, maxHp: 37,
+              stats: { atk: 22, def: 18, spd: 25, satk: 23, sdef: 19 },
+              statExp: { hp: 1200, atk: 900, def: 400, spd: 1600, spc: 100 },
+              dvWord: 0xa73c, happiness: 70, item: 73, exp: 1234 }],
+  });
+  const mon = state.monDetail(wram, 0);
+  t.eq(mon.stats, { hp: 37, atk: 22, def: 18, spd: 25, satk: 23, sdef: 19 },
+       'six stats, and HP is the max the party list already reads');
+  t.eq(mon.statExp,
+       { hp: 1200, atk: 900, def: 400, spd: 1600, spc: 100 },
+       'five counters, because Special is one spent on two stats');
+  t.eq(Object.keys(mon.dvs).length, 5, 'four nibbles and the derived HP');
+  t.eq(mon.dvs.spc, 12, 'read from the word, not from a second layout');
+  t.eq(mon.happiness, 70, 'happiness');
+  t.eq(mon.item, 73, 'what it is holding');
+  t.eq(mon.exp, 1234, 'and three big-endian bytes of experience');
+  t.eq(mon.species, 155, 'with everything the party list already gave');
+  t.eq(mon.hp, 35, 'including the HP the pilot flies on');
+});
+
+test('a slot the party does not hold is null, not an entry of zeroes',
+     async (t) => {
+  const sym = symbols();
+  const state = new GameState(sym);
+  const wram = worldRam(sym, { party: [{ species: 155, level: 5 }] });
+  t.ne(state.monDetail(wram, 0), null, 'the one that is there');
+  t.eq(state.monDetail(wram, 1), null, 'and the five that are not');
+  t.eq(state.monDetail(wram, -1), null, 'nor before the first');
+});
+
+test('a caught record the save does not hold is null rather than Lv0',
+     async (t) => {
+  const sym = symbols();
+  const state = new GameState(sym);
+  const wram = worldRam(sym, {
+    party: [{ species: 155, level: 5 },
+            { species: 16, level: 3, caughtBytes: [0xc5, 0x02] }],
+  });
+  t.eq(state.monDetail(wram, 0).caught, null,
+       'zeroes are what a starter and a Gold save both hold');
+  const got = state.monDetail(wram, 1).caught;
+  t.eq(got.level, 5, 'the low six bits are the level it was caught at');
+  t.eq(got.when, 'night', 'the top two are the time of day');
+  t.eq(got.place, 2, 'and the second byte is the landmark');
+});
+
+test('the Pokedex bit arrays are two lists of species, bounded by the count',
+     async (t) => {
+  const sym = symbols();
+  const state = new GameState(sym);
+  const wram = worldRam(sym, { caught: [1, 16, 155], seen: [1, 16, 155, 19] });
+  const dex = state.dex(wram);
+  t.eq(dex.caught, [1, 16, 155], 'species ids, in order, one bit each');
+  t.eq(dex.seen, [1, 16, 155, 19].sort((a, b) => a - b),
+       'and seen is the wider of the two');
+});
+
+test('the caught array stops at the last species, not at the last byte',
+     async (t) => {
+  // The two arrays are adjacent in work RAM -- wEndPokedexCaught and
+  // wPokedexSeen are the same address on the cartridge -- so a reader that
+  // rounded 251 bits up to a comfortable 256 would report the first five
+  // species of *seen* as caught. Nothing in the bytes says where to stop; the
+  // bound comes from the engine's species count.
+  const sym = symbols();
+  const state = new GameState(sym);
+  const wram = worldRam(sym, { caught: [250], seen: [1, 2, 3, 4, 5] });
+  const dex = state.dex(wram);
+  t.eq(dex.caught, [250], 'nothing from the array next door');
+  t.eq(dex.seen, [1, 2, 3, 4, 5], 'which is itself read correctly');
+});
+
+test('a cartridge with no Pokedex flags says nothing rather than "none caught"',
+     async (t) => {
+  const sym = symbols();
+  const blind = new GameState(blindTo(sym, 'wPokedexCaught', 'wPokedexSeen'));
+  t.eq(blind.dex(worldRam(sym, { caught: [1] })), null,
+       'null, which is a different answer from an empty dex');
 });

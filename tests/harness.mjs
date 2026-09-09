@@ -229,6 +229,13 @@ const WRAM_NAMES = [
   // cartridge's own table, which is the right trade for a fake: the addresses
   // are relative and only the ones a test sets are ever looked at.
   ['wEventFlags', 16],
+  // The two Pokedex bit arrays, **adjacent and exactly 32 bytes each**, as the
+  // cartridge has them: `wEndPokedexCaught` and `wPokedexSeen` are the same
+  // address there. A fake that padded between them would hide the bug the
+  // reader's derived bound exists to prevent -- 251 species is 31 bytes and a
+  // bit, so a reader that rounded up to 256 bits reports the first five of
+  // *seen* as caught.
+  ['wPokedexCaught', 32], ['wPokedexSeen', 32],
   // The map, so a CollisionMap can be built at all. wOverworldMapBlocks is the
   // real size -- a stride of mapWidth+6 over a tall map indexes a long way in.
   ['wOverworldMapBlocks', 0x510], ['wMapWidth', 1], ['wMapHeight', 1],
@@ -285,6 +292,29 @@ function buildSymText() {
 
 export function symbols() {
   return new Symbols(buildSymText());
+}
+
+/**
+ * The same symbol table with some names taken out of it.
+ *
+ * Six tests wrote this by hand and **two of them wrote it wrong** -- as
+ * `{ ...sym, has: (n) => n !== 'wEventFlags' }`, which spreads the instance's
+ * own fields, loses the prototype's `has`, and answers *true* for every name
+ * in the world. Those two passed for as long as nothing new was optional, and
+ * broke the moment `state.js` learned to ask for `wPokedexCaught`: `has` said
+ * yes and `addr` threw, in a test about event flags.
+ *
+ * The failure is the wrong way round, which is what makes it worth a helper. A
+ * fake that claims to have everything makes an app *more* confident than the
+ * real thing, so the tests it breaks are the ones nobody was changing.
+ */
+export function blindTo(sym, ...names) {
+  const gone = new Set(names);
+  return {
+    has: (n) => !gone.has(n) && sym.has(n),
+    addr: (n) => sym.addr(n),
+    bank: (n) => sym.bank(n),
+  };
 }
 
 // --- a Game Boy that is not there -------------------------------------------
@@ -395,6 +425,8 @@ export function worldRam(sym, {
   // rather than a count, because *which* event is the whole question here: a
   // gate names one bit and nothing else about the table matters.
   events = [],
+  // Species the Pokedex has flagged, as ids.
+  caught = [], seen = [],
   // The map's size in *blocks*; a block is two tiles each way. `objects` are
   // MAPOBJECT entries, whose coordinates the cartridge stores four higher than
   // the map's own -- given here the way the game gives them, so a test that
@@ -425,6 +457,27 @@ export function worldRam(sym, {
     // The status byte, given as the raw byte the cartridge holds so a test can
     // say "asleep for three turns" and mean 3.
     w8(wram, base + 0x20, mon.statusByte ?? 0);
+    // The rest of the entry, for the dex card. Two of these are handed over as
+    // **raw bytes** and the rest as numbers, and the split is the same one the
+    // ROM fakes make: `dvWord` and `caughtBytes` are packed fields, so a fake
+    // that took them decoded would hold a second copy of the packing and agree
+    // with a reader that unpacked them the same wrong way. The stat-experience
+    // counters and the stats are plain 16-bit values with nothing to get wrong.
+    w8(wram, base + 0x01, mon.item ?? 0);
+    if (mon.exp !== undefined) {
+      w8(wram, base + 0x08, (mon.exp >> 16) & 0xff);
+      w8(wram, base + 0x09, (mon.exp >> 8) & 0xff);
+      w8(wram, base + 0x0a, mon.exp & 0xff);
+    }
+    ['hp', 'atk', 'def', 'spd', 'spc'].forEach((key, i) => {
+      w16(wram, base + 0x0b + i * 2, (mon.statExp || {})[key] ?? 0);
+    });
+    w16(wram, base + 0x15, mon.dvWord ?? 0);
+    w8(wram, base + 0x1b, mon.happiness ?? 0);
+    (mon.caughtBytes || []).forEach((v, i) => w8(wram, base + 0x1d + i, v));
+    ['atk', 'def', 'spd', 'satk', 'sdef'].forEach((key, i) => {
+      w16(wram, base + 0x26 + i * 2, (mon.stats || {})[key] ?? 0);
+    });
   });
   w8(wram, sym.addr('wBattleMode'), battleMode);
   w8(wram, sym.addr('wMapGroup'), map[0]);
@@ -446,6 +499,15 @@ export function worldRam(sym, {
   for (const bit of events) {
     const at = sym.addr('wEventFlags') + (bit >> 3);
     wram[at - 0xc000] |= 1 << (bit & 7);
+  }
+  // One bit per species, from species 1 at bit 0. Given as species ids because
+  // that is what a caller of `state.dex` gets back, so a test can say "these
+  // three are caught" and assert on the same three.
+  for (const [name, ids] of [['wPokedexCaught', caught], ['wPokedexSeen', seen]]) {
+    for (const id of ids) {
+      const at = sym.addr(name) + ((id - 1) >> 3);
+      wram[at - 0xc000] |= 1 << ((id - 1) & 7);
+    }
   }
   w8(wram, sym.addr('wMenuDataItems'), menuItems);
   w8(wram, sym.addr('wMenuBorderTopCoord'), menuTop);

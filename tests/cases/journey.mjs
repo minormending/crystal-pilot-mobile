@@ -6,8 +6,7 @@
 // before, and it is the piece most likely to be quietly wrong -- a cost model
 // that picks the wrong Center costs a minute of walking and looks like a bug in
 // the walk.
-import { FakeGameBoy, fakeRom, paintScreen, symbols, test,
-         worldRam } from '../harness.mjs';
+import { FakeGameBoy, blindTo, fakeRom, paintScreen, symbols, test, worldRam } from '../harness.mjs';
 import { GameState } from '../../gen2/state.js';
 import { Journey } from '../../gen2/journey.js';
 
@@ -2547,8 +2546,7 @@ test('a cartridge that cannot read events says nothing rather than "shut"',
   // symbol file has no `wEventFlags`, and null must not become a sentence
   // claiming the road is closed -- an app that cannot tell has to stay quiet.
   const gb = new FakeGameBoy({ wram: worldRam(sym, {}) });
-  const blind = new GameState({ ...sym, has: (n) => n !== 'wEventFlags',
-                                addr: sym.addr, bank: sym.bank });
+  const blind = new GameState(blindTo(sym, 'wEventFlags'));
   const j = new Journey(gb, blind, null, null, { mapKey: async () => 1 },
                         () => {}, {},
                         { gates: [{ from: 1, to: 10, event: 0x2d,

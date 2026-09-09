@@ -12,7 +12,7 @@
 // mutations caught, in the file that decides where the pilot may walk. Line
 // coverage had said fifty-one, which sounds like a gap and reads as a plateau;
 // what it was measuring is that the lines *ran*.
-import { collisionRom, symbols, test, worldRam } from '../harness.mjs';
+import { blindTo, collisionRom, symbols, test, worldRam } from '../harness.mjs';
 import { CollisionMap } from '../../gen2/collision.js';
 
 // Route 30 in blocks, because the tiles below are its real ones and the default
@@ -31,8 +31,7 @@ function mapWith({ mapBlocks = [5, 6], objects = [], spawned = null,
 /** The same map with no object structs in its symbol file at all. */
 function noStructs({ objects = [], mapBlocks = [5, 6] } = {}) {
   const sym = symbols();
-  const bare = { has: (n) => n !== 'wObjectStructs' && sym.has(n),
-                 addr: (n) => sym.addr(n), bank: (n) => sym.bank(n) };
+  const bare = blindTo(sym, 'wObjectStructs');
   const cm = new CollisionMap(bare, { romByte: () => 0 });
   return cm.use(worldRam(sym, { mapBlocks, objects }));
 }
