@@ -1,0 +1,195 @@
+#!/usr/bin/env node
+// The in-game clock: which hours are which, and how to move them.
+//
+//     tools/clock                     morning, day and night, out of the ROM
+//     tools/clock --save              the clock offset in the .sav in dev/
+//     tools/clock --shift 8           move that clock forward eight hours
+//     tools/clock --shift -3 --out /tmp/back.sav
+//     tools/clock --verify            the decode against the cartridge
+//
+// **Gen 2's clock is the hardware clock plus an offset the game keeps in the
+// save**, and that is the fact this tool exists to make usable. `FixTime` at
+// 00:061d *adds* `wStartSecond`/`Minute`/`Hour`/`Day` to the MBC3 clock's own
+// reading and carries upward, so the in-game hour is
+// `(wStartHour + rtcHours) mod 24`. All four bytes are inside the saved block.
+//
+// Which means the time of day can be moved without the emulator's clock
+// running at all: edit the offset, re-seal the checksum, load the save. The
+// arithmetic is the game's own -- `DSTChecks.SetClockForward` at 05:64b9 shifts
+// the clock an hour by incrementing exactly that byte.
+//
+// **This runs `gen2/romdata.js` and `gen2/state.js`.** Same rule as every other
+// tool here: the table printed and the bytes written are the app's own reading,
+// so `--verify` is a check on the app rather than one standing beside it.
+//
+// Needs a ROM and a symbol file in `dev/`; `--save` and `--shift` also need a
+// `.sav` there. Without them it says so and exits 0.
+import { readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+
+import { Symbols } from '../gen2/symbols.js';
+import { RomData } from '../gen2/romdata.js';
+import { GameState } from '../gen2/state.js';
+import { gen2 } from '../gen2/engine.js';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const DEV = join(HERE, '..', 'dev');
+const ROM = join(DEV, 'pokecrystal.gbc');
+const SYM = join(DEV, 'pokecrystal.sym');
+
+if (!existsSync(ROM) || !existsSync(SYM)) {
+  console.log('no cartridge in dev/ — nothing to read');
+  console.log('(a ROM is not in this repository and never will be)');
+  process.exit(0);
+}
+
+const rom = readFileSync(ROM);
+const symbols = new Symbols(readFileSync(SYM, 'utf8'));
+const gb = { romByte: (bank, addr) => rom[bank * 0x4000 + (addr & 0x3fff)] };
+const data = new RomData(symbols, gb, []);
+const state = new GameState(symbols, gen2);
+
+const args = process.argv.slice(2);
+const flag = (name) => args.indexOf(name);
+const value = (name) => (flag(name) >= 0 ? args[flag(name) + 1] : null);
+const hhmm = (h) => `${String(h).padStart(2, '0')}:00`;
+
+/** The newest `.sav` in dev/, or null. */
+function findSave() {
+  const found = readdirSync(DEV).filter((f) => f.toLowerCase().endsWith('.sav'));
+  return found.length ? join(DEV, found.sort()[0]) : null;
+}
+
+/** Which hours are which, as the cartridge has it. */
+function showBlocks() {
+  const map = data.hourBlocks();
+  if (!map) {
+    console.log('this cartridge does not name its time-of-day table');
+    return 1;
+  }
+  for (let block = 0; block < gen2.timeNames.length; block++) {
+    const run = data.hoursOf(block);
+    if (!run) { console.log(`  ${gen2.timeNames[block]}: no hours at all`); continue; }
+    const wraps = run.to < run.from ? '  (wraps midnight)' : '';
+    console.log(`  ${gen2.timeNames[block].padEnd(8)} ${hhmm(run.from)}`
+      + ` to ${hhmm(run.to)}   ${String(run.hours).padStart(2)} hours${wraps}`);
+  }
+  return 0;
+}
+
+/** The clock offset a battery is carrying. */
+function showSave(sram, file) {
+  const at = (name) => state.savedAt(symbols.addr(name));
+  const c = gen2.clock;
+  console.log(`${file}`);
+  console.log(`  save markers   ${state.saveIsPresent(sram) ? 'present' : 'MISSING'}`);
+  const made = state.checksum(sram), held = state.storedChecksum(sram);
+  console.log(`  checksum       computed ${made}, stored ${held}`
+    + `   ${made === held ? 'ok' : 'MISMATCH'}`);
+  console.log(`  clock offset   +${sram[at(c.startDay)]}d `
+    + `${sram[at(c.startHour)]}h ${sram[at(c.startMinute)]}m `
+    + `${sram[at(c.startSecond)]}s`);
+  console.log('');
+  console.log('  The in-game hour is that offset plus the cartridge clock\'s own,');
+  console.log('  so the offset alone does not say what time it is — it says how');
+  console.log('  far the game has been moved from the hardware.');
+  return made === held ? 0 : 1;
+}
+
+function shift(sram, file, hours) {
+  if (!state.saveIsPresent(sram)) {
+    console.log(`${file}: the cartridge would not load this — no save markers`);
+    return 1;
+  }
+  if (state.checksum(sram) !== state.storedChecksum(sram)) {
+    console.log(`${file}: the checksum already disagrees with the bytes.`);
+    console.log('Refusing to edit a save that is broken before we touch it.');
+    return 1;
+  }
+  const out = state.advanceClock(sram, hours);
+  if (!out) {
+    console.log('this cartridge does not keep its clock where the profile says');
+    return 1;
+  }
+  const c = gen2.clock;
+  const at = (name) => state.savedAt(symbols.addr(name));
+  console.log(`  hour offset  ${sram[at(c.startHour)]} -> ${out[at(c.startHour)]}`);
+  console.log(`  day offset   ${sram[at(c.startDay)]} -> ${out[at(c.startDay)]}`);
+  console.log(`  checksum     ${state.storedChecksum(sram)}`
+    + ` -> ${state.storedChecksum(out)}`);
+  // Never over the file it was read from. A tool that edits a save in place is
+  // one bad run away from being the reason somebody lost a playthrough.
+  const dest = value('--out') || `${file}.shifted`;
+  writeFileSync(dest, out);
+  console.log(`\nwritten to ${dest}`);
+  console.log('Load it with Import in the app, or copy it over your own save'
+    + ' once you have a backup.');
+  return 0;
+}
+
+/**
+ * The decode against the cartridge, and against what was true before this.
+ *
+ * The boundaries are the check worth having: everybody *believes* Gen 2's day
+ * runs 4-9, 10-17, 18-3, and until this tool nothing in the repository had
+ * read it. A table decoded as *starts* rather than as *upper bounds* comes out
+ * shifted by one block and still looks like a table.
+ */
+function verify() {
+  const bad = [];
+  const map = data.hourBlocks();
+  if (!map) return (console.log('  ✗ no readable time-of-day table'), 1);
+  if (map.length !== gen2.hoursInDay) bad.push(`${map.length} hours in a day`);
+  const KNOWN = [[4, 'morning'], [9, 'morning'], [10, 'day'], [17, 'day'],
+                 [18, 'night'], [23, 'night'], [0, 'night'], [3, 'night']];
+  for (const [hour, want] of KNOWN) {
+    const got = gen2.timeNames[map[hour]];
+    if (got !== want) bad.push(`${hhmm(hour)} reads ${got} and is ${want}`);
+  }
+  // Every block used, and none of them the whole day -- which is what a table
+  // read as one pair decodes into.
+  const used = new Set(map);
+  if (used.size !== gen2.timeNames.length) {
+    bad.push(`${used.size} of ${gen2.timeNames.length} blocks are used`);
+  }
+  // Night is the one that wraps, and a reader that normalised the range away
+  // would report it as one run from 3 to 18, which is the daytime.
+  const night = data.hoursOf(2);
+  if (!night || night.to >= night.from) {
+    bad.push('night does not wrap midnight, which on this cartridge it does');
+  }
+  for (const b of bad) console.log(`  ✗ ${b}`);
+  if (bad.length) return 1;
+  console.log(`  ok  ${gen2.hoursInDay} hours across ${used.size} blocks, and the`
+    + ' eight boundary hours everybody already knew');
+  console.log('  ok  night wraps midnight, so the range is not an interval');
+  console.log('  ok  the clock offset is inside the saved block:'
+    + ` wStartHour -> flat ${state.savedAt(symbols.addr('wStartHour'))}`);
+  return 0;
+}
+
+if (flag('--verify') >= 0) process.exit(verify());
+
+const shiftBy = value('--shift');
+if (flag('--save') >= 0 || shiftBy !== null) {
+  const file = findSave();
+  if (!file) {
+    console.log('no .sav in dev/ — nothing to read');
+    console.log('(a save is not in this repository either)');
+    process.exit(0);
+  }
+  const sram = new Uint8Array(readFileSync(file));
+  if (shiftBy === null) process.exit(showSave(sram, file));
+  const hours = Number(shiftBy);
+  if (!Number.isInteger(hours)) {
+    console.log('--shift wants a whole number of hours');
+    process.exit(1);
+  }
+  console.log(`${file}: moving the in-game clock ${hours >= 0 ? 'forward' : 'back'}`
+    + ` ${Math.abs(hours)} hour(s)`);
+  process.exit(shift(sram, file, hours));
+}
+
+console.log("this cartridge's day:");
+process.exit(showBlocks());

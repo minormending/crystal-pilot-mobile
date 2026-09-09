@@ -15,7 +15,7 @@ what CI checks and what the pre-commit hook blocks on.
 ```mermaid
 flowchart LR
     E[an edit] --> H{{".githooks/pre-commit"}}
-    H --> T["./run-tests<br/>878 behaviour tests"]
+    H --> T["./run-tests<br/>899 behaviour tests"]
     H --> C["tools/check-app<br/>30 groups"]
     H --> D["tools/docs-check<br/>45 tracked sections"]
     T --> OK[commit]
@@ -39,29 +39,29 @@ git config core.hooksPath .githooks
 ./run-tests -v         # notes and stack lines
 ```
 
-878 tests in 27 files, and what each file is about says more than the count:
+899 tests in 27 files, and what each file is about says more than the count:
 
 | file | tests | what it pins down |
 | --- | --- | --- |
 | `journey.mjs` | 163 | the walking: routes, doors, shut legs, healers, gyms, and the map graph |
-| `rows.mjs` | 129 | what every row and offer says, when its button works, and what the runner picks |
+| `rows.mjs` | 133 | what every row and offer says, when its button works, and what the runner picks |
 | `menus.mjs` | 73 | the order the START menu is driven in, and what is closed between tries |
 | `battle.mjs` | 84 | whose turn it is, which Pokémon is out, and a win from a whiteout |
 | `collision.mjs` | 34 | which tiles can be walked, and which have somebody standing on them |
 | `capture.mjs` | 41 | weakening, ball choice, the party prompt, and the refusals before a throw |
 | `grind.mjs` | 22 | what a grind says while it works, and the bounds that make it stop |
-| `clock.mjs` | 10 | waiting for an hour, and telling a clock that will not move from a game that is not running |
+| `clock.mjs` | 20 | waiting for an hour, and telling a clock that will not move from a game that is not running |
 | `world.mjs` | 22 | reading a cartridge's own maps: sizes, warps, objects and triggers |
 | `control.mjs` | 30 | the task lifecycle: stopping, failing, undo points, and loops that must end |
 | `state.mjs` | 39 | reading the party, the map, the badges and the battery out of work RAM |
 | `titles.mjs` | 19 | choosing a profile for a cartridge, and falling back to generic |
-| `romdata.mjs` | 75 | the cartridge's own character encoding and tables, byte by byte |
+| `romdata.mjs` | 78 | the cartridge's own character encoding and tables, byte by byte |
 | `remember.mjs` | 14 | which remembered choices are believed, and which dropped |
 | `worker.mjs` | 14 | the idle loop: one step outstanding, and a lost step recovered |
 | `nav.mjs` | 14 | the walk loop: what it decides between two steps, and every reason it stops |
 | `screen.mjs` | 17 | the frames that go between two devices, and who may press what |
 | `runner.mjs` | 13 | running the list: the budget, the evidence something moved, and the save at the end |
-| `saves.mjs` | 11 | which battery record belongs to the cartridge in the machine |
+| `saves.mjs` | 15 | which battery record belongs to the cartridge in the machine |
 | `room.mjs` | 15 | the merge rules and the handshake, so two devices settle rather than fight |
 | `engine.mjs` | 8 | that a changed engine number is actually followed |
 | `symbols.mjs` | 7 | the shared address digest a second device boots from |
@@ -127,7 +127,7 @@ section gives. Everything by hand runs against a local build.
 
 ```mermaid
 flowchart BT
-    C["the app"] --> T["./run-tests<br/>878 behaviour tests"]
+    C["the app"] --> T["./run-tests<br/>899 behaviour tests"]
     C --> A["tools/check-app<br/>30 groups"]
     C --> D["tools/docs-check<br/>45 tracked sections"]
     C --> V["tools/coverage<br/>what the suite never runs"]
@@ -734,6 +734,40 @@ where an independent derivation belongs, the same way `tools/types --verify`
 asserts matchups nobody read out of the chart.
 
 </details>
+
+### The in-game clock, and moving it
+
+```
+tools/clock                            morning, day and night, out of the ROM
+tools/clock --save                     the clock offset the .sav is carrying
+tools/clock --shift 8                  eight hours on, to a new file
+tools/clock --shift -3 --out /tmp/x.sav
+tools/clock --verify                   the decode against the cartridge
+```
+
+**Gen 2's clock is the hardware clock plus an offset the game keeps in the
+save**, which is the fact this tool exists to make usable — and the fact the
+documentation had backwards for four versions. `FixTime` at 00:061d *adds*
+`wStartSecond`/`Minute`/`Hour`/`Day` to the MBC3 clock's own reading and
+carries upward, so the in-game hour is `(wStartHour + rtcHours) mod 24`. All
+four bytes are inside the saved block, so the time of day can be moved without
+the emulator's clock running at all.
+
+The arithmetic is the game's own rather than invented: `DSTChecks` at 05:64b9
+shifts the clock an hour by incrementing exactly that byte, wrapping at 24 and
+carrying into the day. The label names are the trap — `SetClockForward`
+*increments* the offset, which only reads as forward because the offset is
+added — and getting that backwards sends the clock the wrong way.
+
+`--verify` reads `TimesOfDay` and holds the decode to the eight boundary hours
+everybody already knew: morning 4–9, day 10–17, night 18–3. The table is
+**upper bounds** walked until one exceeds the hour, so reading it as starts
+shifts every boundary by a block and still produces a table — which is the
+failure worth a check.
+
+It never writes over the file it read, and it refuses a save whose checksum
+already disagrees with its bytes: re-sealing that would turn a save the game
+refuses into a save the game accepts and is wrong about.
 
 ### Asking the cartridge, without running it
 
