@@ -339,14 +339,14 @@ second, which is there so the core's own waits finish, not to run a game.
 ## The audits, and how each defect was actually found
 
 Everything above was watched happening. This section was the exception, and the
-exception was the point of it: after the ROM-hack work shipped, **forty-five**
-passes went looking for defects in code that already worked, and found **205** —
+exception was the point of it: after the ROM-hack work shipped, **forty-six**
+passes went looking for defects in code that already worked, and found **211** —
 a handful of them created by a fix on the way, which are in the table in italics
 because they are a different kind of thing. None of them announced itself.
 
 **Reading found twenty-three**, more than any other single method, which is why
 it comes first in the table and why it is worth doing before touching the game.
-But the interesting number is the tail: the remaining hundred and eighty-two were
+But the interesting number is the tail: the remaining hundred and eighty-eight were
 found almost as many different ways, and almost every entry in that column is a sentence rather than
 a category — *measuring the fix*, *asking a second tile*, *feeding it the wrong
 thing*, *writing a cartridge Crystal is not*, *a test, before the cartridge*,
@@ -583,6 +583,12 @@ exactly why nothing failed.
 | 45 | the walk loop's refusal counter resets after a good step and nothing asserted the reset — the same consecutive-versus-cumulative shape as the grind loop's, one module along | a walk past two separate people | writing the fourteen tests |
 | 45 | *the harness allocated `wXCoord` before `wYCoord`, where the cartridge has Y first — so any test reading a position through the real `Nav` would have transposed them* | *—* | *checking the fake against the symbol file* |
 | 45 | `tools/renumber` could correct a number but not add a row, so a new test file left `counts` failing with nothing the writer could do — the state a check gets edited around in | add a test file | adding one |
+| 46 | **the runner's sequencing lived in the DOM layer**, so the half that chooses had thirty tests and the half that loops had none | — | the coverage correction the pass before |
+| 46 | **an unattended sequence never saved the game**, so up to eight jobs of progress lived only in the emulator — and a phone discards a background tab whenever it likes | run the list, then look at something else | asking what finishing means |
+| 46 | **`wordAt`'s `<< 8` could be deleted with the whole suite green**, because every HP in the tests is 20 or 44 and the high byte of a small number is zero. A Gen 2 Pokémon can have seven hundred | any Pokémon over 255 HP | `tools/mutate` on the module it rated 12% |
+| 46 | `romByte`'s banking, and both guards around a library that has been seen answering with 10 MB instead of the slice asked for, were unasserted | a section read from the wrong base | the same |
+| 46 | a tie in the option merge could be broken differently on each device, so each keeps its own answer for ever with nothing on either screen saying so | two devices, one stamp | the same, on the sharing layer |
+| 46 | *six tests that looked like they covered `needsOffer` killed nothing: `made = null` returns at the identity check one line above the default they meant to exercise* | *—* | *checking the tests against the tool rather than trusting them* |
 
 Five things in that table are worth more than the individual rows.
 
@@ -3200,6 +3206,46 @@ Route 32's south end is the mouth of Union Cave. The pilot tries, is refused,
 writes the leg off and re-routes through the cave, which is also in the graph.
 Demanding every leg be walkable would mean asserting terrain this cannot read.
 Demanding a route exist catches the thing worth catching.
+
+### A forty-sixth pass: a test that looked like it covered the line
+
+**The feature is where the runner lives.** Its choosing has been in `rows.js`
+with thirty tests since it was written; its *looping* — the budget, the evidence
+that something moved, the four ways a step can end — was in `main.js`, which no
+test can import. Half a feature held by tests and half by nothing, and the
+coverage tool only admitted it once the pass before made it count the files the
+suite never loads.
+
+That is worth stating as a rule, because it is the second time: **a decision in
+the DOM layer is a decision nothing can check.** The first was the offers
+ordering, whose comment and list disagreed for a version.
+
+`app/runner.js` takes a function that reads a situation and a function that runs
+a job. A whole sequence is now a script of answers instead of an afternoon on a
+cartridge — and thirteen tests later, the thing it was missing became obvious:
+**it never saved.** Eight jobs of progress living only in the emulator, on a
+platform that discards background tabs whenever it likes. A sequence whose whole
+result can be lost by looking at something else is not finished.
+
+**The audit half found the arithmetic everything trusts.** `gbcore/gb.js` scored
+12%, most of it out of reach because it wraps an emulator — but every line that
+turns an address into an offset is pure, and `wordAt`'s `<< 8` **could be
+deleted with the whole suite green.** Every HP in these tests is 20 or 44, and
+the high byte of a small number is zero. A Gen 2 Pokémon can have seven hundred
+HP.
+
+Then the tool did the thing it is really for. Six new tests for `room.js`'s
+merge rules killed **nothing** — the score did not move by a single mutation.
+The one they were aimed at is a default that `made = null` never reaches,
+because the identity check one line above returns first. The case that
+discriminates is a note with *no stamp on it*, and it has to read as older than
+an ask in both directions or the handshake restarts on every poll.
+
+A test that looks like it covers a line is the most expensive kind of test:
+it costs the same to write, it passes, and it buys nothing. Checking the tests
+against the tool rather than trusting them is the only way to tell — which is
+the same argument `tools/check-checks` makes about the checks, one directory
+over.
 
 ## The part that had to be redesigned
 

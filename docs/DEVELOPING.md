@@ -211,6 +211,24 @@ A **survivor** is one of three things and all three are worth reading:
   than tested, which is the better outcome.
 * a mutation that is not really a change — `x > 0` to `x >= 0` where x is never 0
 
+**A test that looks like it covers a line is worth nothing, and only the tool
+can tell you.** Six tests were written for `room.js`'s merge rules in the
+forty-sixth pass and the score did not move by a single mutation: the default
+they were aimed at is one that `made = null` never reaches, because the
+identity check a line above it returns first. The case that discriminates is a
+note with no stamp on it.
+
+That is the same argument `tools/check-checks` makes about the checks, one
+directory over — and the practical habit is the same: when a test is written
+*for* a survivor, re-run the tool and see the number move. If it does not, the
+test is decoration.
+
+```bash
+tools/mutate gbcore/room.js --all      # before: 45 of 92
+# write the tests
+tools/mutate gbcore/room.js --all      # after: 45 of 92 — so they bought nothing
+```
+
 **And one class of mutation was removed, because it could only ever survive.**
 `n → n + 1` asks *is this exact value right?*, which is the classic off-by-one
 and is worth asking of an index, a bit position or a count of two. It is not
