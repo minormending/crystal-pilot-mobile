@@ -339,14 +339,14 @@ second, which is there so the core's own waits finish, not to run a game.
 ## The audits, and how each defect was actually found
 
 Everything above was watched happening. This section was the exception, and the
-exception was the point of it: after the ROM-hack work shipped, **forty-eight**
-passes went looking for defects in code that already worked, and found **241** —
+exception was the point of it: after the ROM-hack work shipped, **forty-nine**
+passes went looking for defects in code that already worked, and found **252** —
 a handful of them created by a fix on the way, which are in the table in italics
 because they are a different kind of thing. None of them announced itself.
 
 **Reading found twenty-three**, more than any other single method, which is why
 it comes first in the table and why it is worth doing before touching the game.
-But the interesting number is the tail: the remaining two hundred and eighteen were
+But the interesting number is the tail: the remaining two hundred and twenty-nine were
 found almost as many different ways, and almost every entry in that column is a sentence rather than
 a category — *measuring the fix*, *asking a second tile*, *feeding it the wrong
 thing*, *writing a cartridge Crystal is not*, *a test, before the cartridge*,
@@ -619,6 +619,17 @@ exactly why nothing failed.
 | 48 | *`BaseData` has no terminator to run off the end of, so a symbol file pointing elsewhere reads zeroes — and `[0, 0]` is NORMAL/NORMAL, a real type pair* | *a wrong address* | *writing the reader, and asking what a bad read would return* |
 | 48 | *`tools/rom-events --find` folded its query to upper case, and Gen 2 gives capitals and lower case separate blocks — so "sent to BILL" came back "not in this ROM" while sitting in it* | *search for anything lower case* | *searching for a phrase already known to be there* |
 | 48 | **nothing checked that a phrase the app looks for on screen is one the cartridge says.** A phrase that is not in the ROM never matches and never *fails*: the screen is read as tiles and compared as folded text, so a typo quietly stops a feature working | mistype `boxed` | building the search, then asking what it could now hold to the cartridge |
+| 49 | **the Gym row could say where a Gym was and who was in it, and not whether it was worth going** — the levels waiting in there and whether anything you carry can hurt them were both in the cartridge, and reachable before the walk | press Gym underlevelled | asking what the row could not answer |
+| 49 | *the first draft read a trainer class as running to the end of the data, and nothing between two trainers says a class ended — so Falkner's class contained every gym leader in Johto* | *ask which class anybody is in* | *checking a class name against a second table* |
+| 49 | *a gym declaration's `door` — the one number that sends the pilot walking — was hand-measured with nothing behind it* | *mistype it* | *building the tool that derives it, then asking what it could now check* |
+| 49 | *deriving the map table in Python came back with **1536 maps out of 388**: a row past the end of a group still resolves to some attributes pointer, and some land on a real `_MapAttributes` symbol* | *count them* | *the count being four times too large to believe* |
+| 49 | *a misremembered fact in a new check: CLAIR was written down as two DRATINI and a DRAGONAIR and she has three DRAGONAIR* | *run the check* | *the decode disagreeing with the rule, which is the direction that check can usefully fail in* |
+| 49 | **the wait for the item pocket answered on its first look** if read as *at or below* — and the first look is exactly the read that has not caught up, which is the whole reason the wait exists | use an item and watch `spent` | `tools/mutate` on the module it rated 44% |
+| 49 | and the other half of the same guard: an item gone from the bag entirely leaves no entry, which is the strongest evidence there is — both versions return the same snapshot and only one of them stops | the last item of a kind | the same, asserting the number of *looks* rather than the answer |
+| 49 | three decisions in the START menu's row arithmetic had nothing behind them: the floor below which a menu cannot hold a SAVE row, the number itself, and whether reading the word SAVE short-circuits the counting | a cartridge with a short menu | the same |
+| 49 | seven boundaries in the new trainer reader — the one-byte `$ff` between parties, the class bound in both directions, the name bound in both directions, and `outlook` on a spent move, a power-1 move and a Pokémon at one hit point | any of the seven | the same |
+| 49 | *and two survivors that were spare decisions rather than gaps: a class bound asking "is g+1 below the count" where "is there a next pointer" is the same question with no off-by-one, and a pointer list counted up to instead of built from its length* | *—* | *the same, and reading the line rather than testing it* |
+| 49 | the Pokédex's last entry: the species bound is *above* the count rather than at it, and read the other way CELEBI has no types | ask about 251 | the same |
 
 Five things in that table are worth more than the individual rows.
 
@@ -3515,6 +3526,94 @@ case separate blocks — `A` is `$80`, `a` is `$a0`. So `sent to BILL` came back
 *not in this ROM* while sitting in it. A confident wrong answer out of a tool
 written to prevent confident wrong answers, caught on its first real query
 only because the phrase was already known to be there.
+
+### A forty-ninth pass: what is behind the door before you open it
+
+The Gym row could say where a Gym was and who was in it. **Whether it was
+worth going** it could not say, and both facts that decide it were in the
+cartridge all along:
+
+```
+$ tools/types --outlook MORTY rattata:25
+MORTY: 4 Pokémon, topping out at Lv25
+your party tops out at Lv25 — ahead
+  nothing you carry can touch GASTLY Lv21
+  nothing you carry can touch HAUNTER Lv21
+  nothing you carry can touch GENGAR Lv25
+  nothing you carry can touch HAUNTER Lv23
+```
+
+Level for level with the gym and unable to take a single point off any of it,
+because the room is four Ghosts and a Rattata's moves are Normal. **Another
+level does not fix that**, so it gets its own sentence — the level sentence
+would be true and would be the wrong advice.
+
+A trainer's party comes through `TrainerGroups`: a `dw` per class, then a
+terminated name, a **type** byte, that many Pokémon, and `$ff`. Three ways to
+read it wrongly and get a plausible table out:
+
+- **The type byte is the only part the bytes cannot say.** It selects one of
+  four handlers, so it decides whether a Pokémon is two bytes or seven. Guess
+  it and the party is nonsense at a believable length.
+- **A class runs from its pointer to the *next* class's**, and nothing between
+  two trainers says a class ended. Read without that bound — which the first
+  draft did — Falkner's class contains every gym leader in Johto.
+- **The class count is derived from where the first pointer lands**, so a hack
+  with more classes needs nothing changed.
+
+Confirmed twice over: classes 1 to 8 all come out `LEADER`, 9 is `RIVAL`, 11
+is `ELITE FOUR` — a second reading of the same rows through a different table
+— and the parties are the ones anybody who has played this game knows.
+
+**One of the new check's rules failed in the right direction.** CLAIR was
+written down as two DRATINI and a DRAGONAIR; she has three DRAGONAIR. The
+decode corrected the rule, which is the only direction a check over
+independent facts can usefully fail in — and the reason to write the rules as
+facts about the game rather than as expected output.
+
+### The afternoon a tool took back
+
+A gym declaration needs six numbers, and every one of them was found by hand
+over two earlier passes: dump a map's objects, look for a script named after
+the leader, dump the town's warps, find the one pointing at that room.
+
+```
+  WHITNEY in GoldenrodGym at (8,3)  — 2 Pokémon, up to Lv20
+      { map: key(11, 2), inside: key(11, 3), door: [24, 7], leader: 'WHITNEY',
+        leaderAt: [8, 3], badge: 2 }
+```
+
+All eight, ready to paste — and **the two already declared came out byte for
+byte identical** to the hand-measured ones, which is what makes the other six
+worth having. The badge bit is the one number not read: the Johto badges run
+ZEPHYR, HIVE, PLAIN, FOG, STORM, MINERAL, GLACIER, RISING, so the leader's
+index is the bit. A fact about the game rather than the tables, said out loud
+rather than computed quietly.
+
+**It strengthened the check it was built beside.** A declaration's `door` is
+the one number that sends the pilot walking, and it was hand-measured with
+nothing behind it. `--gyms` compares it against the town's warp table now.
+
+And the first draft of the map table it needed came back with **1536 maps out
+of 388**: a (group, number) past the end of a group still resolves to *some*
+attributes pointer, and some of those land on a real `_MapAttributes` symbol.
+The fifth confident wrong answer out of a second reader of these tables, so
+`tools/route --maps` prints `World`'s own and the Python tool asks it.
+
+### And the wait that answered before it had waited
+
+`_settled` exists because `wItems` lags a use — measured, a BERRY healed ten
+HP and was still listed forty seconds later — so it asks until the count goes
+**down**. Read as *at or below*, the first poll answers, and **the first poll
+is exactly the read that has not caught up.** The guard and the reason for the
+guard, cancelling out.
+
+Its other half needed the *number of looks* asserted rather than the answer:
+an item gone from the bag entirely leaves no entry, which is the strongest
+evidence there is, so one look is enough. Both versions return the same
+snapshot; only one of them stops. That is a shape worth remembering — **when a
+guard only changes how long something takes, the test has to be about the
+count.**
 
 ## The part that had to be redesigned
 
