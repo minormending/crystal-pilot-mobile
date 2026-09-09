@@ -7,9 +7,10 @@ import { GameBoy } from '../gbcore/gb.js';
 import { Symbols, sharedNames } from '../gen2/symbols.js';
 import { runSequence, sequenceSaid } from './runner.js';
 import {
-  describeAuto, describeHandoff, describeOffers, describeParty, describeReplaced,
-  describeRoom, describeRows, describeSaying, describeScreen, describeSlot,
-  describeTitle, describeUndo, hoursLine, joinFailure, otherHour,
+  describeAuto, describeDex, describeDexTotals, describeHandoff, describeOffers,
+  describeParty, describeReplaced, describeRoom, describeRows, describeSaying,
+  describeScreen, describeSlot, describeTitle, describeUndo, hoursLine,
+  joinFailure, otherHour,
 } from './rows.js';
 import { VERSION } from '../gbcore/version.js';
 import { adoptable, forgetKept, keepBattery, keepRom, keepSym, keptMeta,
@@ -1756,17 +1757,165 @@ function paintJobs(s) {
   paintRow(rows.export, '#exportstate');
 }
 
-/** One party member: who it is, and how close it is to fainting. */
-function monRow(m) {
+/**
+ * Text going into markup.
+ *
+ * The charmap this app decodes names with has `&` in it -- `0xe9`, and the
+ * cartridge really uses it -- so a name reaching `innerHTML` raw can start an
+ * entity and eat the characters behind it. It has no `<` or `>`, so this is
+ * not a hole so much as a name that would render wrong; it costs one function
+ * either way, and every string built into markup below goes through it.
+ */
+function esc(text) {
+  return String(text ?? '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// Which party slot has its card open, or null. Held here rather than in the
+// DOM because `refresh` rewrites the whole party list on every poll, so an
+// open <details> would snap shut about once a second. Re-rendered open
+// instead, which also means the numbers in it stay live while it is being
+// looked at.
+let dexSlot = null;
+// Which caught species the dex list is showing, or null.
+let dexSpecies = null;
+// How many chips the caught list shows before it folds. The species picker
+// folds at the same point and for the same reason: past two rows of chips the
+// list stops being scannable and starts being a wall.
+const DEX_CHIPS = 24;
+let dexFolded = true;
+
+/** One party member: who it is, how close it is to fainting, and what it is. */
+function monRow(m, snap) {
   const frac = m.maxHp ? m.hp / m.maxHp : 0;
   const name = romdata ? romdata.speciesName(m.species) : `#${m.species}`;
   const cls = m.hp === 0 ? 'out' : frac < 0.34 ? 'low' : '';
   const right = m.hp === 0
     ? '<span class="fnt">FNT</span>'
     : `<span class="hpnum">${m.hp}/${m.maxHp}</span>`;
-  return `<div class="mon"><span class="who">${name}` +
-         `<span>Lv${m.level}</span></span>${right}` +
-         `<span class="hp ${cls}"><i style="width:${Math.round(frac * 100)}%"></i></span></div>`;
+  const open = dexSlot === m.slot;
+  const row = `<summary class="mon" data-slot="${m.slot}"><span class="who">${esc(name)}`
+    + `<span>Lv${m.level}</span></span>${right}`
+    + `<span class="hp ${cls}"><i style="width:${Math.round(frac * 100)}%"></i></span></summary>`;
+  // Only the open one is built. Six cards a second, five of them behind a
+  // closed triangle, is work nobody asked for -- and the ROM reads behind it
+  // are cached, so the one that is open costs almost nothing to rebuild.
+  const body = open && snap && state
+    ? dexCard(state.monDetail(snap.wram, m.slot)) : '';
+  return `<details class="monbox"${open ? ' open' : ''}>${row}${body}</details>`;
+}
+
+/** A meter, as a fraction of its own ceiling. */
+function meter(kind, part) {
+  const pct = Math.round(Math.max(0, Math.min(1, part || 0)) * 100);
+  return `<span class="meter ${kind}"><i style="width:${pct}%"></i></span>`;
+}
+
+/**
+ * One Pokémon's card: six stats with what rolled them and what grew them,
+ * what it knows, and what is coming.
+ *
+ * The words are `describeDex`'s and the shapes are this file's, which is the
+ * division the rest of the interface already keeps -- a wrong string here
+ * would be a wrong string, and a wrong string tangled up with the DOM is a bug
+ * you can only find by loading a phone and squinting at it.
+ */
+function dexCard(mon) {
+  const engine = state ? state.e : {};
+  const dvMax = engine.dvMax || 15;
+  const d = describeDex(mon, { rom: romdata, engine });
+  if (!d) return '<div class="dexcard">nothing to say about this one</div>';
+  const head = d.types.length
+    ? `<div class="dextypes">${d.types.map(esc).join(' / ')}</div>` : '';
+  const rows = [
+    '<div class="statrow head"><span>stat</span><span>now</span>'
+    + '<span>DV</span><span>rolled</span><span>trained</span></div>',
+  ];
+  for (const st of d.stats) {
+    rows.push(`<div class="statrow"><span>${esc(st.label)}</span>`
+      + `<b>${st.value ?? '—'}</b>`
+      + `<span>${st.dv ?? '—'}</span>`
+      + meter('dv', st.dv === null ? 0 : st.dv / dvMax)
+      + meter('ev', st.effortPart));
+  }
+  const lines = [];
+  if (d.knows.length) {
+    lines.push(`<div class="dexline"><b>knows</b> ${d.knows
+      .map((m) => `${esc(m.name)}${m.pp === null ? '' : ` ${m.pp}`}`)
+      .join(' · ')}</div>`);
+  }
+  if (d.next) lines.push(`<div class="dexline"><b>next</b> ${esc(d.next)}</div>`);
+  for (const phrase of d.becomes) {
+    lines.push(`<div class="dexline"><b>becomes</b> ${esc(phrase)}</div>`);
+  }
+  if (d.origin) lines.push(`<div class="dexline">${esc(d.origin)}</div>`);
+  if (d.extra) lines.push(`<div class="dexline">${esc(d.extra)}</div>`);
+  if (d.shy) lines.push(`<div class="dexline">${esc(d.shy)}</div>`);
+  // Inside the card, not after it. They were siblings, so `.dexcard .dexline`
+  // matched nothing and four lines of a monospace card rendered in the body
+  // font at body size -- which looked like two different components stacked.
+  return `<div class="dexcard">${head}${rows.join('')}${lines.join('')}</div>`;
+}
+
+/**
+ * The record: everything this cartridge has ever caught.
+ *
+ * A different list from the six being carried, and worth its own box for that
+ * reason -- the party is what the pilot is flying and this is what the game
+ * remembers. Hidden outright on a cartridge whose symbol file does not name
+ * the flag arrays, because an empty Pokédex and a Pokédex nobody can read are
+ * different things and only one of them is worth a heading.
+ */
+function paintDex(s) {
+  const box = $('#dexpanel');
+  const dex = state && s.wram ? state.dex(s.wram) : null;
+  const caught = dex ? (dex.caught || []) : [];
+  box.classList.toggle('hide', !dex || !s.worldLoaded);
+  if (!dex) return;
+  $('#dexline').textContent = describeDexTotals(dex, { engine: state.e });
+  const list = $('#dexchips');
+  list.innerHTML = '';
+  if (!caught.length) {
+    const none = document.createElement('span');
+    none.className = 'seen';
+    none.textContent = 'nothing caught yet';
+    list.appendChild(none);
+    $('#dexentry').classList.add('hide');
+    return;
+  }
+  const show = dexFolded ? caught.slice(0, DEX_CHIPS) : caught;
+  for (const id of show) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = romdata ? romdata.speciesName(id) : `#${id}`;
+    b.className = dexSpecies === id ? 'on' : '';
+    b.onclick = () => {
+      // A second tap on the open one closes it. The chip is the heading of
+      // what is below it, so tapping it again to put it away is the gesture
+      // the party rows already use.
+      dexSpecies = dexSpecies === id ? null : id;
+      refresh();
+    };
+    list.appendChild(b);
+  }
+  if (caught.length > show.length) {
+    const more = document.createElement('button');
+    more.type = 'button';
+    more.className = 'morechip';
+    more.textContent = `+${caught.length - show.length} more`;
+    more.onclick = () => { dexFolded = false; refresh(); };
+    list.appendChild(more);
+  }
+  const entry = $('#dexentry');
+  entry.classList.toggle('hide', dexSpecies === null);
+  if (dexSpecies !== null) {
+    // A species out of the record rather than out of the party: there is no
+    // party entry behind it, so the stats, the DVs and the counters have
+    // nothing to say. `describeDex` is given what there is -- the species and
+    // a level of zero -- and answers with the half it can, which is what a
+    // Pokédex entry is: what this *is*, not what yours happens to be.
+    entry.innerHTML = dexCard({ species: dexSpecies, level: 0, moves: [], pp: [] });
+  }
 }
 
 async function refresh() {
@@ -1791,8 +1940,9 @@ async function refresh() {
   $('#panel').classList.toggle('hide', !s.party.length);
   $('#leadline').textContent = describeParty(s, { rom: romdata });
   $('#party').innerHTML = s.party.length
-    ? s.party.map(monRow).join('')
+    ? s.party.map((m) => monRow(m, s)).join('')
     : '<span class="seen">no party yet</span>';
+  paintDex(s);
   await refreshSpecies(s);
   await refreshPlaces(s);
   if (romdata) refreshBag(s);
@@ -1911,6 +2061,26 @@ const NEEDED_SYMBOLS = [
   // else, which reallyStart says out loud.
   'PokemonNames', 'wTimeOfDay',
 ];
+
+// One listener for six rows that are rebuilt every poll. Delegated rather than
+// bound per row for exactly that reason: `refresh` replaces the markup about
+// once a second, so a handler attached to a summary is attached to an element
+// that will not exist by the time it could fire.
+//
+// `toggle` rather than `click`, because a <details> can also be opened by the
+// keyboard and by find-in-page, and the state has to follow the element rather
+// than the gesture.
+$('#party').addEventListener('toggle', (e) => {
+  const box = e.target;
+  if (!box.classList || !box.classList.contains('monbox')) return;
+  const slot = Number(box.querySelector('summary').dataset.slot);
+  // Only one at a time. Six open cards is a scroll rather than a glance, and
+  // the box above them is already the summary of all six.
+  const want = box.open ? slot : (dexSlot === slot ? null : dexSlot);
+  if (want === dexSlot) return;
+  dexSlot = want;
+  refresh();
+}, true);
 
 $('#romFile').addEventListener('change', async (e) => {
   const f = e.target.files[0];

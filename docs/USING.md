@@ -497,6 +497,75 @@ The refusal still exists for a cartridge nobody has described, because that
 phrase is written down per title, the same way the healing items are. It says
 which fact is missing rather than pretending the job is impossible.
 
+## The Pokédex: what it is made of, and what it will become
+
+Tap a Pokémon in the party list and it opens.
+
+```
+CYNDAQUIL Lv13 ▴                                 35/37
+ FIRE
+ stat   now  DV  rolled          trained
+ HP      37   2  ▬▭▭▭▭▭▭▭▭▭      ▬▭▭▭▭▭▭▭▭▭
+ Atk     22  10  ▬▬▬▬▬▬▭▭▭▭      ▬▭▭▭▭▭▭▭▭▭
+ Def     18   7  ▬▬▬▬▭▭▭▭▭▭      ▭▭▭▭▭▭▭▭▭▭
+ Speed   25   3  ▬▬▭▭▭▭▭▭▭▭      ▬▭▭▭▭▭▭▭▭▭
+ Sp.Atk  23  12  ▬▬▬▬▬▬▬▬▭▭      ▭▭▭▭▭▭▭▭▭▭
+ Sp.Def  19  12  ▬▬▬▬▬▬▬▬▭▭      ▭▭▭▭▭▭▭▭▭▭
+ knows  TACKLE 35 · LEER 30 · SMOKESCREEN 20 · EMBER 25
+ next   QUICK ATTACK at Lv19 — 6 levels away
+ becomes QUILAVA at Lv14 — 1 level away
+ caught at Lv5 in NEW BARK TOWN at night
+ friendship 70 · medium-slow growth
+```
+
+Everything there comes off your own cartridge — the party entry for the numbers
+about *this* Pokémon, and the ROM's own tables for what the species does. None
+of it is shipped with the app, so it is right for the build you are driving
+even if that build is a hack that changed it.
+
+**The two columns are the two things that made the stat.**
+
+- **DV** — a number from 0 to 15 the game rolled when this Pokémon appeared,
+  and never changes. Fifteen is as good as that stat can be; two is not. This
+  is the thing people call an IV.
+- **trained** — what it has earned by fighting, the thing people call an EV.
+  It fills slowly on purpose: what actually reaches the stat is the *square
+  root* of a counter that runs to 65535, so a Pokémon forty battles in has
+  genuinely earned about a fortieth of what it can, and a bar that looked
+  fuller would be flattering you.
+
+Two things in there look wrong and are not. **The two special rows always show
+the same DV and the same training** — Gen 2 rolls one Special value and grows
+one Special counter, and spends both on the two stats, so they cannot differ.
+And **a single-typed Pokémon says FIRE once**, not FIRE / FIRE, even though the
+cartridge stores it twice.
+
+**`next` and `becomes` are the grinding questions**, which is why they are the
+two lines in bold. If you are about to set a grind target, this is where you
+find out that six more levels buys a new move and one more buys an evolution.
+A species that evolves by a stone, a trade or friendship says what it needs
+instead of counting down, because there is nothing to count.
+
+### Everything you have ever caught
+
+Under the party sits a second line:
+
+```
+24 caught of 251 · 61 seen                        ▾
+```
+
+That is the game's own Pokédex, read out of the same memory the game writes it
+to — so it counts what you caught on a different device and brought over in a
+save, and it does not count anything the pilot merely walked past. Tap a name
+to see what that species is, what it becomes, and every move it learns by
+levelling. There are no stats there, because those belong to a Pokémon and not
+to a species.
+
+If your cartridge's symbol file does not name the Pokédex flags, this box is
+not there at all — see [what the two pickers
+refuse](#what-the-two-pickers-refuse). That is the same rule the rest of the
+app follows: a thing it cannot read is a thing it does not claim.
+
 ## What the game is saying, while the pilot works
 
 The status line under the screen has always shown the pilot's newest step —
@@ -1398,7 +1467,7 @@ deployed, which is not the question you are asking when a bug you saw fixed is
 still in front of you. `tools/check-app` asserts that number matches the service
 worker's cache name, because a version display that lies is worse than none.
 
-<!-- covers: sw.js @ d10579d7e328 -->
+<!-- covers: sw.js @ c22bc9a55a91 -->
 
 The worker fetches **network first, falling back to the cache**. That is the
 opposite of the usual offline-first advice, on purpose.

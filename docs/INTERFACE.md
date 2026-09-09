@@ -423,6 +423,70 @@ half that matters. Nothing is deleted: that line is a `<summary>` and the bars
 are one tap under it. With no party the whole thing is hidden rather than
 summarising nothing.
 
+### And one more tap, for the numbers behind the bar
+
+A Pokémon is one tap under its own row, and the gesture is the one already
+there rather than a new place to go: the party is one tap down from the line,
+and a Pokémon is one more.
+
+```
+CYNDAQUIL Lv13 ▴                                 35/37
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ FIRE
+ stat   now  DV  rolled          trained
+ HP      37   2  ▬▭▭▭▭▭▭▭▭▭      ▬▭▭▭▭▭▭▭▭▭
+ Atk     22  10  ▬▬▬▬▬▬▭▭▭▭      ▭▭▭▭▭▭▭▭▭▭
+ …
+ knows  TACKLE 35 · LEER 30 · SMOKESCREEN 20 · EMBER 25
+ next   QUICK ATTACK at Lv19 — 6 levels away
+ becomes QUILAVA at Lv14 — 1 level away
+```
+
+**Two bars per stat, because two different things made it.** The one the game
+rolled when the Pokémon appeared and never changes, and the one it has earned
+by fighting. A stat screen inside the game shows neither, which is the reason
+this card exists at all.
+
+Three decisions in it are worth naming, because each is a thing that would read
+as a bug if it were not deliberate:
+
+- **The two special rows show the same DV and the same training.** They are not
+  duplicated by accident — Gen 2 rolls one Special value and grows one Special
+  counter and spends both on two stats. Showing six independent pairs would be
+  showing two numbers twice and implying they can differ.
+- **The trained bar is nearly empty for a long time, and that is honest.** The
+  counter behind it runs to 65535 and what reaches the stat is its *square
+  root*, so the bar is drawn against the point where the root stops moving
+  rather than against the counter. A Pokémon forty battles in really has earned
+  about a fortieth of what it can.
+- **A single-typed Pokémon says FIRE, not FIRE / FIRE.** The cartridge stores
+  the one type in both slots, which is storage rather than an answer — the same
+  detail that made the damage calculation square its own multipliers once.
+
+**Only the open one is built**, and it is rebuilt on every poll rather than
+left alone. The party list is replaced about once a second, so a card that was
+merely opened would snap shut; instead the app remembers which slot is open and
+renders that one open with live numbers in it. One at a time, because six open
+cards is a scroll and the line above them is already the summary of all six.
+
+### The record, which is not the party
+
+Underneath sits a second box for everything the cartridge has ever caught —
+a different list from the six being carried, and worth its own heading for
+exactly that reason. Its summary is three numbers and the third is what makes
+the other two mean anything:
+
+```
+24 caught of 251 · 61 seen                        ▾
+```
+
+Tapping a name shows what that species *is* — its types, what it becomes and
+what it learns — rather than what yours happens to be, because there is no
+party entry behind it to have stats. On a cartridge whose symbol file does not
+name the Pokédex flags the box is not there at all: a Pokédex nobody can read
+and a Pokédex with nothing in it are different, and only one of them deserves a
+heading.
+
 ## What the pilot is doing, and how you stop it
 
 There were once two Stop buttons, one per card, at 1181px and 1463px down the
@@ -1085,4 +1149,4 @@ So this page carries a marker naming the files it describes and the hash they
 had when it was last read against them. `tools/docs-check` reports it when they
 move, and the pre-commit hook blocks on that report.
 
-<!-- covers: index.html app/main.js app/rows.js @ 1096cdcaeb34 -->
+<!-- covers: index.html app/main.js app/rows.js @ 93978f2f5c1a -->

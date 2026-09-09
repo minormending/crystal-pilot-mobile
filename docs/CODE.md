@@ -49,6 +49,7 @@ and the code disagree, the code is right and the section is a bug — see
    · [One thing at a time](#one-thing-at-a-time)
    · [Reading a gym out of the cartridge](#reading-a-gym-out-of-the-cartridge)
    · [Gates: asking the cartridge what it wants](#gates-asking-the-cartridge-what-it-wants)
+   · [The card behind a party row](#the-card-behind-a-party-row)
    · [Running the list](#running-the-list)
    · [The settings and the save card](#the-settings-and-the-save-card)
    · [Colour](#colour) · [What it remembers](#what-it-remembers)
@@ -1668,7 +1669,7 @@ mechanism's evidence spans two runs rather than one.
 
 ### The bigger number is not the harder hit
 
-<!-- covers: gen2/romdata.js gen2/engine.js gen2/battle.js @ f70eacf4189e -->
+<!-- covers: gen2/romdata.js gen2/engine.js gen2/battle.js @ 3a540a1fc9da -->
 
 For twenty-three passes the pilot ranked its moves by one number: the `power`
 byte out of the cartridge's move table. `romdata.move()` had been returning the
@@ -1810,7 +1811,7 @@ pilot uses, not a second one beside it. See section 10.
 
 ### Sending out somebody who can touch it
 
-<!-- covers: gen2/battle.js gen2/engine.js @ 360c40e120fc -->
+<!-- covers: gen2/battle.js gen2/engine.js @ 438d1be287e9 -->
 
 The pass before could tell that the Pokémon on the field takes nothing off a
 Ghost, and said so. The remedy it named — *a different Pokémon* — was one the
@@ -3947,7 +3948,7 @@ sent the reader at it.
 
 ## 8h. What a species becomes, and when
 
-<!-- covers: gen2/romdata.js gen2/engine.js @ 709facfd0832 -->
+<!-- covers: gen2/romdata.js gen2/engine.js @ 31e69e04aa7d -->
 
 Two questions a party entry cannot answer: *what will this turn into*, and
 *what is it about to learn*. Both are in one table, because in Gen 2 they are
@@ -4043,7 +4044,7 @@ This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ e9b62c0bf1a7 -->
+<!-- covers: app/main.js index.html @ 2d8968831675 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -4592,7 +4593,7 @@ seconds by a page whose loop was supposedly running.
 
 ### One thing at a time
 
-<!-- covers: app/main.js @ 78bfb2452e6d -->
+<!-- covers: app/main.js @ 5d0455ae5df6 -->
 
 One Game Boy, one joypad, one canvas — so a great deal of this app is about
 making sure two things are never driving them at once. There are three claims,
@@ -4734,7 +4735,7 @@ before a step is taken, so a stopped walk does not move at all.
 
 ### What is behind the Gym door, before you open it
 
-<!-- covers: gen2/romdata.js gen2/engine.js app/rows.js @ 344e9c5fd3bd -->
+<!-- covers: gen2/romdata.js gen2/engine.js app/rows.js @ 5552d19869f8 -->
 
 The Gym row could say where the Gym is and who is in it. **Whether it is worth
 going** is two facts the cartridge has had all along, and neither of them
@@ -5096,9 +5097,81 @@ a conversation.
 
 </details>
 
+### The card behind a party row
+
+<!-- covers: app/rows.js app/main.js index.html @ 93978f2f5c1a -->
+
+Two questions the game itself will not answer about a Pokémon you are
+carrying — *what is this made of* and *what is it about to become* — and both
+are readable. The first is [the rest of the party
+entry](#statejs--what-the-game-is-doing-right-now); the second is [what a
+species becomes](#8h-what-a-species-becomes-and-when).
+
+The split is the one the rest of the interface keeps. `describeDex` in
+`rows.js` is pure: it takes a `monDetail` entry and the cartridge's tables and
+returns text and numbers. `main.js` decides what a bar looks like. A wrong
+string in the first is a wrong string; a wrong string tangled up with the DOM
+is a bug you can only find by loading a phone and squinting at it.
+
+**The awkward part is that the party list is rebuilt about once a second.**
+`refresh` replaces `#party`'s markup on every poll, so a `<details>` the person
+opened would snap shut almost immediately, and a handler bound to a summary
+would be bound to an element that no longer exists by the time it could fire.
+Both are solved the same way — the open slot is app state, not DOM state:
+
+```mermaid
+flowchart LR
+    T["tap a row"] --> E["toggle event,<br/>delegated on #party"]
+    E --> S["dexSlot = that slot<br/>(or null, if it was already open)"]
+    S --> R["refresh()"]
+    R --> P["party.map(monRow)"]
+    P --> O{"is this the open slot?"}
+    O -- no --> C["summary only"]
+    O -- yes --> D["summary + dexCard(monDetail(wram, slot))"]
+    D --> L["rendered &lt;details open&gt;,<br/>with this poll's numbers in it"]
+```
+
+Which also buys something the simple version would not have: the open card is
+re-read from the newest snapshot every poll, so the HP and the PP in it are
+live while it is being looked at rather than frozen at the moment it opened.
+
+Only the open one is built. Six cards a second, five of them behind a closed
+triangle, is work nobody asked for — and the ROM reads behind the one that is
+open are cached in `RomData`, so rebuilding it costs a string.
+
+<details>
+<summary><b>Advanced detail:</b> three things that would read as bugs, and the
+one that was</summary>
+
+- **Both special rows show the same DV and the same counter.** Gen 2 rolls one
+  Special DV and grows one Special stat experience and spends both on two
+  stats. `engine.statSource` is where that is stated, so the card is reading a
+  fact about the machine rather than deciding a layout.
+- **The trained bar is nearly empty for a long time.** The counter runs to
+  65535 and what reaches the stat is its square root, so the bar is drawn
+  against `statExpUseful` — 255 squared, the point past which the root stops
+  moving — and not against the counter. Drawn from the raw number it would sit
+  at nothing for a Pokémon that is nearly done.
+- **A single-typed Pokémon says FIRE once.** The cartridge stores the one type
+  in both slots; the card deduplicates, the same way `effectiveness` does
+  before multiplying, and for the same reason.
+
+And the one that really was a bug, found by looking at it on a phone-sized
+window rather than by reading: the vendor stylesheet gives **every** `summary`
+a chevron of its own. The party row is a two-column grid, so that chevron
+arrived as a third grid item and drew itself on a line of its own underneath
+the HP bar. `.partybox` had already dealt with this one level up and the new
+nesting had not. Two other things in the same screenshot: `Sp. Atk` wrapped in
+a 4.2em label column and turned six rows into ten, and the four summary lines
+were built as *siblings* of `.dexcard` rather than children, so
+`.dexcard .dexline` matched nothing and half the card rendered in the body font
+at body size.
+
+</details>
+
 ### Running the list
 
-<!-- covers: app/rows.js app/main.js @ 536197751379 -->
+<!-- covers: app/rows.js app/main.js @ 4ee61fb875b4 -->
 
 The app has spent forty passes learning to answer one question — *what can the
 pilot do here, and which of those is worth most?* — and twenty showing the
@@ -5222,7 +5295,7 @@ to deposit your last Pokémon.
 
 ### The settings and the save card
 
-<!-- covers: index.html app/main.js @ e9b62c0bf1a7 -->
+<!-- covers: index.html app/main.js @ 2d8968831675 -->
 
 The pilot's own list got a glyph column, shorter names and a slot to fill in
 v165. These two cards did not, and reading them found that they had a different
@@ -5850,7 +5923,7 @@ they have been installed.
 
 ### Watching the other device's screen
 
-<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ 7d6e6e35d61e -->
+<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ c7d5d87025b8 -->
 
 One device shows its screen; the other watches it, and plays it if the first
 one says so. The picture goes straight between them over WebRTC and never

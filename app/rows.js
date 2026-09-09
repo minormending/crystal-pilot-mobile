@@ -1163,3 +1163,188 @@ export function describeScreen({ hosting = false, watching = false, host = null,
   }
   return { text: 'not showing this screen', button: 'Show', second: 'View only' };
 }
+
+// --- the dex card -----------------------------------------------------------
+// What one Pokémon is, said in words. Pure like everything else here: it takes
+// a `monDetail` entry and the cartridge's tables and returns text and numbers,
+// and `main.js` decides what a bar looks like.
+
+// How the six stats are labelled, in the order `engine.statNames` has them.
+// Labels rather than keys because "satk" is not a word, and the abbreviations
+// are the game's own -- a Gen 2 stat screen says SPCL.ATK.
+const STAT_LABELS = { hp: 'HP', atk: 'Atk', def: 'Def', spd: 'Speed',
+                      satk: 'Sp.Atk', sdef: 'Sp.Def' };
+// The engine profile's growth-rate keys, in English. A key the profile has no
+// word for is a number, and it is shown as one rather than as a wrong word --
+// which is the same bargain `romdata.baseStats` makes when it hands the key
+// through unchanged.
+const GROWTH_WORDS = {
+  mediumFast: 'medium-fast', slightlyFast: 'slightly fast',
+  slightlySlow: 'slightly slow', mediumSlow: 'medium-slow',
+  fast: 'fast', slow: 'slow',
+};
+
+/** `12 · 7 · 3` — a level distance, said the way somebody grinding thinks. */
+function away(levels) {
+  if (levels <= 0) return 'now';
+  return levels === 1 ? '1 level away' : `${levels} levels away`;
+}
+
+/**
+ * One evolution as a phrase, with how far off it is when that can be said.
+ *
+ * Only two of the five kinds have a distance at all. A stone or a trade
+ * happens when you do it, and friendship happens when it happens — so those
+ * say what is needed and stop, rather than inventing a number to be tidy with.
+ */
+function evolutionPhrase(rec, mon, rom) {
+  const into = rom.speciesName(rec.into);
+  const item = () => rom.itemName(rec.item) || 'something';
+  switch (rec.kind) {
+    case 'level':
+      return rec.level > mon.level
+        ? `${into} at Lv${rec.level} — ${away(rec.level - mon.level)}`
+        : `${into} at Lv${rec.level}`;
+    case 'item':
+      return `${into} with a ${item()}`;
+    case 'trade':
+      return rec.item ? `${into} if traded holding a ${item()}`
+                      : `${into} if traded`;
+    case 'happiness': {
+      const when = { morningDay: ', in the morning or day', night: ', at night' };
+      return `${into} with friendship${when[rec.when] || ''}`;
+    }
+    case 'stat': {
+      const how = { atkOverDef: 'attack beats defence',
+                    atkUnderDef: 'defence beats attack',
+                    atkEqualsDef: 'they are equal' };
+      const far = rec.level > mon.level ? ` — ${away(rec.level - mon.level)}` : '';
+      return `${into} at Lv${rec.level} if ${how[rec.compare] || rec.compare}${far}`;
+    }
+    default:
+      return into;
+  }
+}
+
+/**
+ * One party member, in full: what it is, what it is made of, and what is
+ * coming.
+ *
+ * `mon` is a `monDetail` entry. Everything the cartridge cannot say comes back
+ * null rather than as a hedge in a sentence, because the card leaves a row out
+ * rather than printing "unknown" six times — a cartridge whose symbol file is
+ * short of a table should look like a smaller card, not a broken one.
+ *
+ * **The two special stats deliberately show the same DV and the same
+ * counter.** That is not a bug being rendered: Gen 2 rolls one Special DV and
+ * grows one Special stat experience, and spends both on the two stats. Showing
+ * six independent pairs would be showing two numbers twice and implying they
+ * can differ. `engine.statSource` is where that is stated.
+ */
+export function describeDex(mon, ctx = {}) {
+  const { rom = null, engine = {} } = ctx;
+  if (!mon) return null;
+  const name = rom ? rom.speciesName(mon.species) : `#${mon.species}`;
+  const statNames = engine.statNames || [];
+  const source = engine.statSource || {};
+  const base = rom && rom.baseStats ? rom.baseStats(mon.species) : null;
+  const ea = rom && rom.evosAttacks ? rom.evosAttacks(mon.species) : null;
+
+  // Deduplicated, because Gen 2 stores a single-typed Pokemon as both of its
+  // types -- the same reason `effectiveness` deduplicates before multiplying.
+  // A card reading "FIRE / FIRE" is showing the storage rather than the answer.
+  const types = base && rom.typeName
+    ? [...new Set(base.types)].map((t) => rom.typeName(t) || `type ${t}`)
+      .filter(Boolean)
+    : [];
+
+  const stats = statNames.map((key) => ({
+    key,
+    label: STAT_LABELS[key] || key,
+    value: (mon.stats || {})[key] ?? null,
+    base: base ? base.stats[key] : null,
+    dv: (mon.dvs || {})[source[key]] ?? null,
+    // Gen 2 spends the *square root* of this counter, so the counter itself is
+    // a number nobody can read anything into: 1600 and 2500 look far apart and
+    // are forty points and fifty. Both are given -- the raw counter because it
+    // is what the cartridge holds, and a fraction of the *useful* ceiling
+    // (255 squared, past which the square root stops moving) because that is
+    // the one a bar can honestly be drawn from.
+    effort: (mon.statExp || {})[source[key]] ?? null,
+    effortPart: engine.statExpUseful
+      ? Math.min(1, ((mon.statExp || {})[source[key]] || 0) / engine.statExpUseful)
+      : null,
+  }));
+
+  const knows = (mon.moves || [])
+    .map((id, i) => (id && rom
+      ? { name: rom.moveName(id) || `move ${id}`, pp: (mon.pp || [])[i] ?? null }
+      : null))
+    .filter(Boolean);
+
+  // The next thing it learns, and the next thing it becomes. Both are "after
+  // this level", both are the question somebody grinding is actually asking,
+  // and both are null where the cartridge will not say -- which reads as a
+  // shorter card rather than as a claim that nothing is coming.
+  const later = ea ? ea.learns.filter((m) => m.level > mon.level)
+    .sort((a, b) => a.level - b.level) : [];
+  const next = later.length
+    ? `${rom.moveName(later[0].move) || `move ${later[0].move}`}`
+      + ` at Lv${later[0].level} — ${away(later[0].level - mon.level)}`
+    : null;
+  const becomes = ea && ea.evolves.length
+    ? ea.evolves.map((rec) => evolutionPhrase(rec, mon, rom)) : [];
+
+  const bits = [];
+  if (mon.happiness !== undefined) bits.push(`friendship ${mon.happiness}`);
+  if (mon.item && rom) bits.push(`holding ${rom.itemName(mon.item) || 'something'}`);
+  if (base) bits.push(`${GROWTH_WORDS[base.growth] || base.growth} growth`);
+
+  return {
+    name,
+    level: mon.level,
+    types,
+    stats,
+    knows,
+    next,
+    becomes,
+    origin: describeOrigin(mon.caught, ctx),
+    extra: bits.join(' · '),
+    // Said once, at the bottom, rather than as a gap in every row above it.
+    shy: ea ? null : 'this cartridge does not say what it learns or becomes',
+  };
+}
+
+/**
+ * Where a Pokemon came from, or null where the save does not hold it.
+ *
+ * Null is common and not a failure: a starter was never caught, and a save
+ * brought in from Gold or Silver holds zeroes in this field.
+ */
+function describeOrigin(caught, ctx = {}) {
+  const { rom = null } = ctx;
+  if (!caught) return null;
+  const place = rom && rom.landmarkName ? rom.landmarkName(caught.place) : '';
+  const bits = [`caught at Lv${caught.level}`];
+  if (place) bits.push(`in ${place}`);
+  if (caught.when) bits.push(`at ${caught.when}`);
+  return bits.join(' ');
+}
+
+/**
+ * The one line above the caught list.
+ *
+ * Three numbers, and the third is the one that makes the other two mean
+ * anything: "24 caught" says nothing without how many there are to catch, and
+ * the count is the cartridge's rather than 251 written down here.
+ */
+export function describeDexTotals(dex, ctx = {}) {
+  const { engine = {} } = ctx;
+  if (!dex) return 'this cartridge does not keep a Pokédex';
+  const total = engine.speciesCount || 0;
+  const caught = (dex.caught || []).length;
+  const seen = (dex.seen || []).length;
+  // Seen is the wider list and includes everything caught, so saying both
+  // without saying that reads as two competing totals.
+  return `${caught} caught of ${total} · ${seen} seen`;
+}

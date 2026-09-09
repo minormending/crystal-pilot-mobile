@@ -638,6 +638,43 @@
   .partybox>summary::after{content:'▾';font-size:9px;color:var(--dim)}
   .partybox[open]>summary::after{content:'▴'}
   .partybox #party{padding-bottom:6px}
+  /* One party member opened up. A nested details rather than a card of its
+     own, because the gesture is already there: the party is one tap down from
+     the summary and a Pokemon is one more. The row keeps its own grid, which
+     is why `.mon` is on the summary and not on a wrapper. */
+  .monbox>summary{list-style:none;cursor:pointer}
+  .monbox>summary::-webkit-details-marker{display:none}
+  /* The vendor stylesheet gives every summary a chevron of its own, and the
+     row is a two-column grid -- so it landed as a third grid item on a line of
+     its own under the HP bar. Suppressed, and the affordance moves inside the
+     name where it belongs, which is what `.partybox` already does one level up. */
+  .monbox>summary::after{content:none}
+  .monbox>summary .who::after{content:'▾';font-size:9px;color:var(--dim);
+                              margin-left:6px;font-weight:400}
+  .monbox[open]>summary .who::after{content:'▴'}
+  .dexcard{padding:2px 0 12px 6px;font-size:12px;
+           font-family:ui-monospace,Menlo,monospace;color:var(--dim)}
+  .dexcard .dextypes{color:var(--ink);letter-spacing:.04em}
+  /* Five columns: what the stat is, what it is now, the DV as a number, and
+     two bars. The numbers are tabular so six rows of them line up, which is
+     the whole reason to draw them as a table rather than as a sentence. */
+  /* 4.6em because "Sp. Atk" is the widest label and 4.2 wrapped it onto two
+     lines on a 320px phone, which turned a six-row table into a ten-row one. */
+  .dexcard .statrow{display:grid;
+                    grid-template-columns:4.6em 2.4em 1.6em 1fr 1fr;
+                    gap:5px;align-items:center;padding:1px 0;
+                    font-variant-numeric:tabular-nums;white-space:nowrap}
+  .dexcard .statrow.head{color:var(--dim);opacity:.7;padding-bottom:3px}
+  .dexcard .statrow b{font-weight:600;color:var(--ink)}
+  .dexcard .meter{height:4px;border-radius:2px;background:var(--track);
+                  overflow:hidden}
+  .dexcard .meter i{display:block;height:100%;border-radius:2px}
+  .dexcard .meter.dv i{background:var(--action)}
+  .dexcard .meter.ev i{background:var(--ok)}
+  .dexcard .dexline{padding-top:6px;line-height:1.6}
+  .dexcard .dexline b{color:var(--ink);font-weight:600}
+  .dexbox .chips{padding-bottom:8px}
+  .dexbox .chips button{min-height:32px;padding:5px 10px;font-size:12px}
   /* Open, it needs an edge: the first offer below it wears no top rule, being
      the one that ranks first, so three HP bars ran straight into "Catch". */
   .partybox[open]{border-bottom:1px solid var(--line);margin-bottom:8px}
@@ -1229,6 +1266,15 @@
     <details class="partybox hide" id="panel">
       <summary id="leadline">no party yet</summary>
       <div id="party"></div>
+    </details>
+
+    <!-- Everything this cartridge has ever caught, which is a different list
+         from the six being carried: the party box above is what the pilot is
+         flying, and this is the record. Hidden until the game keeps one. -->
+    <details class="partybox dexbox hide" id="dexpanel">
+      <summary id="dexline">no Pokédex yet</summary>
+      <div class="chips" id="dexchips"></div>
+      <div class="dexcard hide" id="dexentry"></div>
     </details>
 
     <!-- The six rows sit in their own flex column so the pilot can rank them

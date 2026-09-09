@@ -75,6 +75,14 @@ export const gen2 = {
   statNames: ['hp', 'atk', 'def', 'spd', 'satk', 'sdef'],
   statExpNames: ['hp', 'atk', 'def', 'spd', 'spc'],
   dvNames: ['atk', 'def', 'spd', 'spc'],
+  // Which counter and which nibble feed which stat, which is where the three
+  // lists above meet. The only interesting row is the last two: **both special
+  // stats are grown by one counter and rolled from one nibble**, so a screen
+  // showing six independent pairs is showing two numbers twice and saying they
+  // are different. That is a fact about the machine, not about the screen,
+  // which is why it is here and not in the thing that draws it.
+  statSource: { hp: 'hp', atk: 'atk', def: 'def', spd: 'spd',
+                satk: 'spc', sdef: 'spc' },
   // A DV is a nibble, so fifteen is perfect and there is no separate maximum to
   // state. Stat experience is a sixteen-bit counter that the game caps at
   // 65535, and what reaches the stat is its square root -- so the *useful*
