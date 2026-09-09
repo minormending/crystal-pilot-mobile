@@ -15,7 +15,7 @@ what CI checks and what the pre-commit hook blocks on.
 ```mermaid
 flowchart LR
     E[an edit] --> H{{".githooks/pre-commit"}}
-    H --> T["./run-tests<br/>655 behaviour tests"]
+    H --> T["./run-tests<br/>668 behaviour tests"]
     H --> C["tools/check-app<br/>25 groups"]
     H --> D["tools/docs-check<br/>25 tracked sections"]
     T --> OK[commit]
@@ -39,7 +39,7 @@ git config core.hooksPath .githooks
 ./run-tests -v         # notes and stack lines
 ```
 
-655 tests in 25 files, and what each file is about says more than the count:
+668 tests in 26 files, and what each file is about says more than the count:
 
 | file | tests | what it pins down |
 | --- | --- | --- |
@@ -61,13 +61,14 @@ git config core.hooksPath .githooks
 | `screen.mjs` | 13 | the frames that go between two devices, and who may press what |
 | `runner.mjs` | 13 | running the list: the budget, the evidence something moved, and the save at the end |
 | `saves.mjs` | 11 | which battery record belongs to the cartridge in the machine |
-| `room.mjs` | 9 | the merge rules and the handshake, so two devices settle rather than fight |
+| `room.mjs` | 15 | the merge rules and the handshake, so two devices settle rather than fight |
 | `engine.mjs` | 8 | that a changed engine number is actually followed |
 | `symbols.mjs` | 7 | the shared address digest a second device boots from |
 | `wilds.mjs` | 7 | what the grass here gives, at this hour |
 | `cartridge.mjs` | 4 | reading a ROM's own header: the logo, the title, Color-only |
 | `codec.mjs` | 3 | packing a save small enough for a room to carry |
 | `input.mjs` | 3 | held buttons, and releasing them |
+| `gb.mjs` | 7 | — |
 
 No ROM, no browser, no emulator — which is the point rather than a compromise.
 The ROM is not in this repository and never will be, so a test that needs one
@@ -125,7 +126,7 @@ section gives. Everything by hand runs against a local build.
 
 ```mermaid
 flowchart BT
-    C["the app"] --> T["./run-tests<br/>655 behaviour tests"]
+    C["the app"] --> T["./run-tests<br/>668 behaviour tests"]
     C --> A["tools/check-app<br/>25 groups"]
     C --> D["tools/docs-check<br/>31 tracked sections"]
     C --> V["tools/coverage<br/>what the suite never runs"]

@@ -97,3 +97,97 @@ test('the newer symbol digest wins, and an absent one never does', async (t) => 
   t.eq(mergeSymbols({ sym: { tag: 'A' } }, { sym: { tag: 'B', at: 1 } }).sym.tag, 'B',
        'a digest with no stamp loses to one that has any');
 });
+
+// --- the tie-breaks that make two devices agree -----------------------------
+//
+// `room.js` scored 48%, and the survivors that matter are all the same shape: a
+// comparison whose *direction* decides whether two devices converge. The
+// comments in that file say why each one is the way it is; nothing was checking
+// that any of them still was.
+
+test('a tie in options is broken the same way on both devices', async (t) => {
+  // **The failure this guards is silent and permanent.** Two devices whose
+  // option groups carry the same stamp have to pick the same winner, or each
+  // keeps its own answer and they never agree -- and nothing on either screen
+  // says anything is wrong. The rule is the device id, which is the same rule
+  // `baton` uses for a tied revision.
+  const a = { opts: { speed: 1 }, optsAt: 100, optsBy: 'aaa' };
+  const b = { opts: { speed: 2 }, optsAt: 100, optsBy: 'bbb' };
+  // Asked from both sides, which is the only way to see convergence at all.
+  const fromA = mergeOptions(a, b);
+  const fromB = mergeOptions(b, a);
+  t.eq(fromA.optsBy, fromB.optsBy, 'both sides name the same winner');
+  t.eq(fromA.opts.speed, fromB.opts.speed, 'and keep the same answer');
+});
+
+test('the newer option group wins, and it is not a maximum', async (t) => {
+  // Preferences, not progress: a `Math.max` over a speed step would make the
+  // fastest speed either device ever chose the speed neither can leave.
+  const older = { opts: { speed: 3 }, optsAt: 100, optsBy: 'a' };
+  const newer = { opts: { speed: 1 }, optsAt: 200, optsBy: 'b' };
+  t.eq(mergeOptions(older, newer).opts.speed, 1, 'the newest group, wholesale');
+  t.eq(mergeOptions(newer, older).opts.speed, 1, 'from either side');
+});
+
+test('a second ask from the same device still needs an offer', async (t) => {
+  // Watch, Leave, Watch again on the one tablet you own: identity alone says
+  // nothing new has happened, and the host makes no offer while the tablet
+  // waits fifteen seconds and blames the network. The question is about the
+  // asking, not the asker.
+  t.false(needsOffer({ id: 'tab', at: 100 }, { to: 'tab', at: 100 }),
+          'the same ask, already answered');
+  t.true(needsOffer({ id: 'tab', at: 200 }, { to: 'tab', at: 100 }),
+         'a newer ask from the same device');
+  t.true(needsOffer({ id: 'other', at: 50 }, { to: 'tab', at: 100 }),
+         'and a different device, whatever the stamp');
+  t.false(needsOffer(null, { to: 'tab', at: 1 }), 'nobody asking, nothing to do');
+  t.true(needsOffer({ id: 'tab', at: 1 }, null), 'and no offer yet means yes');
+  // **A note with no stamp on it**, which is the case that reaches the
+  // default at all. `made = null` returns at the identity check one line
+  // above, so it never gets there -- which is why the first draft of this
+  // test looked like it covered the line and `tools/mutate` said otherwise.
+  // An unstamped note is an older build's, or a half-written one, and it has
+  // to read as *older than any ask* rather than as newer than one.
+  t.true(needsOffer({ id: 'tab', at: 1 }, { to: 'tab' }),
+         'an offer with no stamp is older than an ask that has one');
+  // And the same asymmetry the other way up: an *ask* with no stamp must not
+  // read as newer than an offer that has one, or the host makes a fresh offer
+  // on every poll and the handshake restarts for ever.
+  t.false(needsOffer({ id: 'tab' }, { to: 'tab', at: 0 }),
+          'an ask with no stamp is not newer than an answered one');
+});
+
+test('the newer half of an introduction wins, per field', async (t) => {
+  // Three fields written by two devices -- a watcher asks, the host offers, the
+  // watcher answers -- so a whole-object rule would have each side's write
+  // erase the other's half and the handshake would never complete.
+  const local = { rtc: { watching: { at: 200 }, offer: { at: 100 } } };
+  const remote = { rtc: { offer: { at: 300 } } };
+  const merged = mergeSignal(local, remote).rtc;
+  t.eq(merged.watching.at, 200, 'a field only one side has survives');
+  t.eq(merged.offer.at, 300, 'and the newer of a shared one wins');
+  t.eq(mergeSignal(remote, local).rtc.offer.at, 300, 'from either side');
+});
+
+test('a withdrawn note stays withdrawn', async (t) => {
+  // Withdrawing is a *note*, not a deletion: an absent key always loses to a
+  // present one in the merge, so deleting a copy has it handed straight back
+  // by the other device's stale one -- and after a reload, where the
+  // already-answered marks are gone, that resurrected offer is answered again
+  // against a connection that no longer exists.
+  const live = liveNotes({ offer: { at: 1 }, answer: { gone: true, at: 2 } });
+  t.eq(Object.keys(live), ['offer'], 'the withdrawn one is hidden');
+  const merged = mergeSignal({ rtc: { answer: { at: 1 } } },
+                             { rtc: { answer: { gone: true, at: 2 } } }).rtc;
+  t.true(merged.answer.gone, 'and the withdrawal is what the merge keeps');
+});
+
+test('the newer symbol digest wins, and neither side loses one it has',
+     async (t) => {
+  const mine = { sym: { at: 100, map: { a: 1 } } };
+  const theirs = { sym: { at: 200, map: { b: 2 } } };
+  t.eq(mergeSymbols(mine, theirs).sym.at, 200, 'the newer one');
+  t.eq(mergeSymbols(theirs, mine).sym.at, 200, 'from either side');
+  t.eq(mergeSymbols(mine, {}).sym.at, 100, 'and nothing loses what only it has');
+  t.eq(mergeSymbols({}, {}).sym, undefined, 'with nothing invented');
+});
