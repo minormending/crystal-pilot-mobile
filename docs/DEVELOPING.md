@@ -15,7 +15,7 @@ what CI checks and what the pre-commit hook blocks on.
 ```mermaid
 flowchart LR
     E[an edit] --> H{{".githooks/pre-commit"}}
-    H --> T["./run-tests<br/>899 behaviour tests"]
+    H --> T["./run-tests<br/>903 behaviour tests"]
     H --> C["tools/check-app<br/>30 groups"]
     H --> D["tools/docs-check<br/>45 tracked sections"]
     T --> OK[commit]
@@ -39,12 +39,12 @@ git config core.hooksPath .githooks
 ./run-tests -v         # notes and stack lines
 ```
 
-899 tests in 27 files, and what each file is about says more than the count:
+903 tests in 27 files, and what each file is about says more than the count:
 
 | file | tests | what it pins down |
 | --- | --- | --- |
 | `journey.mjs` | 163 | the walking: routes, doors, shut legs, healers, gyms, and the map graph |
-| `rows.mjs` | 133 | what every row and offer says, when its button works, and what the runner picks |
+| `rows.mjs` | 137 | what every row and offer says, when its button works, and what the runner picks |
 | `menus.mjs` | 73 | the order the START menu is driven in, and what is closed between tries |
 | `battle.mjs` | 84 | whose turn it is, which Pokémon is out, and a win from a whiteout |
 | `collision.mjs` | 34 | which tiles can be walked, and which have somebody standing on them |
@@ -127,7 +127,7 @@ section gives. Everything by hand runs against a local build.
 
 ```mermaid
 flowchart BT
-    C["the app"] --> T["./run-tests<br/>899 behaviour tests"]
+    C["the app"] --> T["./run-tests<br/>903 behaviour tests"]
     C --> A["tools/check-app<br/>30 groups"]
     C --> D["tools/docs-check<br/>45 tracked sections"]
     C --> V["tools/coverage<br/>what the suite never runs"]

@@ -11,8 +11,8 @@ import { describeHandoff, describeOffers, describeParty, describeReplaced,
          describeRoom, describeScreen, joinFailure, describeRows, describeSlot,
          betterGrind, betterHour, hoursLine, otherHour,
          describeUndo, describeSaying, describeAuto, describeDex,
-         describeDexTotals, describeTitle, shiftTo,
-         waitOffer } from '../../app/rows.js';
+         describeDexTotals, describeTitle, saySpan, shiftTo,
+         waitCost, waitOffer } from '../../app/rows.js';
 import { gen2 } from '../../gen2/engine.js';
 
 const sym = symbols();
@@ -1982,4 +1982,55 @@ test('the row carries the hours to move, not a name', async (t) => {
   })), { rom: CLOCKROM, hours: HOURS, hourNow: 1, quarry: 'HOOTHOOT' });
   t.eq(r.wait.waitFor, 2, 'the block to wait for');
   t.eq(r.wait.skip, 8, 'and the hours that would get there in one edit');
+});
+
+test('what a wait costs is a range, because the hour is not known', async (t) => {
+  // From anywhere in the day, 10:00 to 17:59, the next night is between one
+  // hour and eight away. Both ends are computed rather than one and a guess,
+  // because they come out the opposite way round to how it reads: the *latest*
+  // hour this block could be is the *shortest* wait.
+  const cost = waitCost(CLOCKROM, 1, 2);
+  t.eq(cost.least, 1, 'from 17:00, one hour to night');
+  t.eq(cost.most, 8, 'from 10:00, eight');
+  const back = waitCost(CLOCKROM, 2, 0);
+  t.eq(back.least, 1, 'from 03:00, one hour to morning');
+  t.eq(back.most, 10, 'and from 18:00, the whole night');
+});
+
+test('the time it would take is measured off this device, not assumed',
+     async (t) => {
+  // The game counts its own time one frame at a time whatever speed those
+  // frames arrive at, so an hour is 216,000 of them on any machine — which is
+  // why the answer differs between a laptop and a phone and has to be measured.
+  const fast = waitCost(CLOCKROM, 1, 2, 2200);   // ~37x, a laptop
+  const slow = waitCost(CLOCKROM, 1, 2, 900);    // ~15x, a phone
+  t.eq(Math.round(fast.seconds), Math.round(8 * 216000 / 2200), 'eight hours of frames');
+  t.true(slow.seconds > fast.seconds * 2, 'and the slower device takes longer');
+  t.eq(waitCost(CLOCKROM, 1, 2, null).seconds, undefined,
+       'with nothing measured it says the hours and no minutes');
+  t.eq(waitCost(fakeRom({}), 1, 2, 2200), null,
+       'and a cartridge that will not say when night starts says nothing');
+});
+
+test('a span is said at the precision it deserves', async (t) => {
+  t.eq(saySpan(9), '9s', 'seconds while it is seconds');
+  t.eq(saySpan(240), '4m', 'then minutes');
+  t.eq(saySpan(4800), '80m', 'and minutes for as long as they read easily');
+  t.eq(saySpan(6000), '1h 40m', 'then hours, with the minutes padded');
+  t.eq(saySpan(93 * 60), '1h 33m', 'just past the threshold');
+  t.eq(saySpan(121 * 60), '2h 01m', 'and the padding, which keeps them lining up');
+  t.eq(saySpan(0), '', 'nothing at all for nothing');
+  t.eq(saySpan(-5), '', 'and for a negative, which is a bug upstream');
+});
+
+test('the button carries the cost, and says nothing before there is one',
+     async (t) => {
+  const world = { party: [{ species: CYNDAQUIL, level: 8, hp: 20, maxHp: 20 }] };
+  const ctx = { rom: CLOCKROM, hours: HOURS, hourNow: 1, quarry: 'HOOTHOOT' };
+  const cold = describeRows(state.read(worldRam(sym, world)), ctx);
+  t.eq(cold.cost, undefined, 'no cost on the row object itself');
+  t.eq(cold.wait.cost, '', 'and none on the button until something has been timed');
+  t.eq(cold.wait.hours, 8, 'though the game hours are known either way');
+  const warm = describeRows(state.read(worldRam(sym, world)), { ...ctx, rate: 2200 });
+  t.eq(warm.wait.cost, '13m', 'and with a rate, what it would cost you');
 });

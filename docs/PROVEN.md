@@ -3906,6 +3906,31 @@ the checksum deciding whether the game accepts them. That checksum was measured
 on a real cartridge: over flat [8201, 11139) the sum came to 58439 and the
 stored bytes held 58439.
 
+### And the button says what it will cost, in minutes of yours
+
+Two halves, and neither is a guess. **The hours are arithmetic**: `hoursOf`
+says which hours are night, `wTimeOfDay` says which third of the day it is, so
+the wait is *between* one and eight hours from anywhere in the day — and the
+button shows the eight, because *at most this long* is what decides whether
+somebody walks away from the phone.
+
+**The minutes are measured.** The game counts its own time one frame at a time
+whatever speed those frames arrive at, so an hour of game time is 216,000
+frames on any machine and the only unknown is this device's throughput.
+`gb.rate()` times it — and only on calls of 240 frames or more, which is the
+part worth recording: on a visible page the library's `_runNumberOfFrames`
+opens by awaiting an animation frame, so timing a sixteen-frame call measures
+how often the idle loop ticks rather than how fast the core steps. The overhead
+still inside the samples that do count makes the rate a slight underestimate
+and therefore the time a slight overestimate, which is the right direction for
+this particular number.
+
+The button says plain `Wait` until something has run long enough to time,
+because a number before then would be a guess and a number on a screen is
+believed. And the job reports what the wait *actually* cost when it ends, in
+game hours and in minutes — which is the only way the estimate ever gets
+checked.
+
 ### And the job that measures rather than assuming is still worth having
 
 Which is the shape this repository keeps arriving at, and it is better here
