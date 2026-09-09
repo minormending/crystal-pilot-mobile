@@ -42,6 +42,12 @@ export function stateSignature(s) {
     (s.party || []).map((m) => `${m.species}/${m.level}/${m.hp}`).join(','),
     (s.items || []).map(([id, n]) => `${id}x${n}`).join(','),
     (s.balls || []).map(([id, n]) => `${id}x${n}`).join(','),
+    // And the time of day, which is the only thing one job on the list moves
+    // and none of the others do. Without it a wait that worked perfectly --
+    // morning to night, the species back in the grass -- reads as *Wait ran
+    // and changed nothing*, and the sequence stops one step before the thing
+    // it was waiting for.
+    s.timeOfDay,
   ].join('|');
 }
 
