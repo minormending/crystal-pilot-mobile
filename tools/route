@@ -4,6 +4,7 @@
 //     tools/route 10.5 8.7          the way from Violet City to Azalea Town
 //     tools/route --exits 10.1      every way out of Route 32
 //     tools/route --reach           every map a title declares, from the start
+//     tools/route --maps            every map the cartridge has, by name
 //     tools/route --json 10.5 8.7   the same, for a script to read
 //
 // **This runs `gen2/world.js`, and that is the whole point of it.** The first
@@ -102,6 +103,21 @@ function way(from, to) {
 const argv = process.argv.slice(2);
 const json = argv.includes('--json');
 const plain = argv.filter((a) => !a.startsWith('--'));
+
+// Every map this cartridge has, with the name its symbol file gives it.
+//
+// Here rather than in the Python tool that wanted it, and that is the rule
+// this file exists for: which (group, number) pairs are maps is `World`'s
+// answer, deliberately permissive where a group's size cannot be derived, and
+// a second reader of it produced 1536 "maps" out of 388 by asking about rows
+// that are not there and getting names back.
+if (argv.includes('--maps')) {
+  const out = {};
+  for (const [key, name] of NAME) out[`${key >> 8}.${key & 0xff}`] = name;
+  if (json) console.log(JSON.stringify(out));
+  else for (const [k, v] of Object.entries(out)) console.log(`${k}  ${v}`);
+  process.exit(0);
+}
 
 if (argv.includes('--exits')) {
   const key = parse(plain[0] || '');

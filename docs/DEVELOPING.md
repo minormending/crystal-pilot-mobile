@@ -506,6 +506,7 @@ before that line is written.
 tools/route 10.5 8.7        the way from Violet City to Azalea Town
 tools/route --exits 10.1    every way out of Route 32
 tools/route --reach         every map a title declares, from where a game starts
+tools/route --maps          every map the cartridge has, by its symbol name
 ```
 
 **It runs `gen2/world.js`.** That is the whole point of it: the app builds its
@@ -526,6 +527,15 @@ cannot tell. That is the fourth divergence in two passes between this app's ROM
 reading and a copy of it, three of them constants. So the copy is gone.
 
 **What routing does *not* claim is walkability**, and the difference is
+**`--maps` exists because a Python reader of the same table came back with
+1536 maps out of 388.** A (group, number) past the end of a group still
+resolves to *some* attributes pointer, and some of those land on a real
+`_MapAttributes` symbol — so the obvious loop over 26 × 64 produces four
+times too many maps, every one of them named. Which is the fifth time a
+second reader of this app's map tables gave a confident wrong answer, so
+`--maps` prints `World`'s own table and `tools/rom-events --findgyms` asks it
+rather than deriving one.
+
 instructive. `tools/route` says Violet City → Azalea Town is three legs: down
 to Route 32, down to Route 33, left into Azalea. A walker cannot take the
 second one — Route 32's south end is the mouth of Union Cave — so the pilot
@@ -599,6 +609,7 @@ tools/rom-events --script Route32CooltrainerMContinueScene
 tools/rom-events --text Route32CooltrainerMText_AideIsWaiting
 tools/rom-events --gates                    every declared gate, against the ROM
 tools/rom-events --gyms                     every declared gym, against the ROM
+tools/rom-events --findgyms                 where every gym leader stands
 tools/rom-events --verify                   the object layout, over all 388 maps
 tools/rom-events --menus                    every box the app drives, by shape
 tools/rom-events --phrases                  every phrase it looks for, in the ROM
@@ -733,6 +744,44 @@ confirmed is unique is not a fingerprint.
 The Safari Zone's column 0 is *not* acted on, and that is a separate
 judgement: 0 is the commonest left edge in the ROM — twenty-five headers — so
 it identifies nothing, and Gen 2's Safari Zone is closed anyway.
+
+**`--findgyms` is the step that costs an afternoon each time a gym is added.**
+A title needs six numbers for one gym — the town's map key, the room's map
+key, the door tile in the town, the leader's tile in the room, and the badge
+bit — and every one of them used to be found by hand: dump a map's objects,
+look for a script named after the leader, then dump the town's warps and find
+the one pointing at that room. All of it is in the ROM, so all of it is read:
+
+```
+  WHITNEY in GoldenrodGym at (8,3)  — 2 Pokémon, up to Lv20
+      { map: key(11, 2), inside: key(11, 3), door: [24, 7], leader: 'WHITNEY',
+        leaderAt: [8, 3], badge: 2 }
+      // GoldenrodCity -> GoldenrodGym
+```
+
+A line that can be pasted into a title's `gyms` list — and the two gyms this
+build already declares came out **byte for byte identical** to the ones
+measured by hand over two earlier passes, which is the confirmation that makes
+the other six worth having.
+
+Two filters earn their keep, and both are scope rather than fact. The script
+must be on a map whose name contains **Gym**: without that Morty comes back
+twice, because he has a cameo in the Burned Tower and a cameo is not a gym —
+so the others are printed underneath rather than dropped in silence. And the
+door must be a warp from a *different* map, ordered by destination warp
+number, because a room's warps back out sit in the same table and a map does
+not lead into itself.
+
+The badge bit is the one number that is not read. The Johto badges run ZEPHYR,
+HIVE, PLAIN, FOG, STORM, MINERAL, GLACIER, RISING, so the leader's index *is*
+the bit — a fact about the game rather than about the tables, said out loud in
+the tool rather than computed quietly, with `check-app gyms` holding a declared
+bit to `EngineFlags` afterwards.
+
+**And it strengthened the check it was built beside.** A gym declaration's
+`door` is the one number that sends the pilot walking, and it was
+hand-measured with nothing behind it. `--gyms` compares it against the town's
+warp table now: a warp at that tile whose destination is that room.
 
 **`--verify` is there because two maps is not a sample**, and it earned its
 keep on its first run. The object type looked like byte four: in Violet Gym

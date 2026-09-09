@@ -80,8 +80,10 @@ table's check skips itself, because a tool that fails a clean checkout is a
 tool somebody removes from CI.
 """
 import bisect
+import json
 import pathlib
 import re
+import subprocess
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -289,6 +291,13 @@ CHECKEVENT = 0x31
 # `gen2/world.js` holds the same layout because the app reads warps and coord
 # events at run time. Two copies of a structure is the defect; the check is the
 # repair.
+# How far to look for a map. Bounds rather than counts: the cartridge has 26
+# groups and no group has 64 maps, and asking about one that is not there
+# answers nothing rather than failing -- which is the same permissiveness
+# `gen2/world.js` is deliberately built with, for the reason a Python copy of
+# its traversal learned the hard way.
+MAP_GROUPS, MAPS_PER_GROUP = 26, 64
+
 FILLER = 2
 WARP_BYTES, COORD_BYTES, BG_BYTES, OBJECT_BYTES = 5, 8, 5, 13
 OBJ_SPRITE, OBJ_Y, OBJ_X, OBJ_SCRIPT = 0, 1, 2, 9
@@ -819,6 +828,28 @@ def gyms(cart, name_of=None):
             if not room_name:
                 print(f'  ?? no symbol found for map {keys[room][0]}.{keys[room][1]}')
                 continue
+            # **The door, which nothing checked.** A declaration carries the
+            # tile in the *town* that leads into the room, and it was
+            # hand-measured -- so the one number in a gym declaration that
+            # sends the pilot walking was the one number with nothing behind
+            # it. The warp table has it: a warp at that tile whose
+            # destination is the room.
+            town_name = name_of(keys[town]) if name_of else None
+            if town_name:
+                want = (int(dx), int(dy))
+                into = [(w['x'], w['y']) for w in map_warps(cart, town_name)
+                        if w['to'] == ((keys[room][0] << 8) | keys[room][1])]
+                if want in into:
+                    print(f'  door ({dx},{dy}) in {town_name} warps into '
+                          f'{room_name}')
+                elif into:
+                    print(f'  !! ({dx},{dy}) is not a way into {room_name}; '
+                          f'{town_name} warps in at '
+                          f'{", ".join(f"({x},{y})" for x, y in into)}')
+                    bad += 1
+                else:
+                    print(f'  !! {town_name} has no warp into {room_name}')
+                    bad += 1
             objects = gym_objects(cart, room_name)
             at = [(sym, xy) for sym, xy in objects.items()
                   if (xy[0], xy[1]) == (int(lx), int(ly))]
@@ -842,6 +873,160 @@ def gyms(cart, name_of=None):
                     print(f'  !! badge bit {badge} is not a badge in EngineFlags')
                     bad += 1
     return bad
+
+
+# The eight Johto gym leaders, by the name the *trainer table* gives them --
+# so this list is a list of nothing but names, and everything else about them
+# is read. It could be derived too, by taking every trainer whose class name
+# is LEADER, and is not: the Kanto leaders are in the same table and this app
+# declares no Kanto maps, so a list of eight is the honest scope rather than a
+# shortcut.
+# **In badge order**, which is the one fact here that is not read: the Johto
+# badge bits run ZEPHYR, HIVE, PLAIN, FOG, STORM, MINERAL, GLACIER, RISING,
+# and that is a fact about the game rather than about the cartridge's tables.
+# So the index *is* the badge bit, said out loud rather than computed
+# silently -- and `check-app gyms` holds a declared bit to `EngineFlags`
+# afterwards, which is the half that can be checked.
+JOHTO_LEADERS = ('FALKNER', 'BUGSY', 'WHITNEY', 'MORTY',
+                 'CHUCK', 'JASMINE', 'PRYCE', 'CLAIR')
+
+
+def find_gyms(cart, name_of=None):
+    """Where every gym leader stands, ready to declare.
+
+    **The step that costs an afternoon each time a gym is added.** A title
+    needs six numbers for one gym -- the town's map key, the room's map key,
+    the door tile in the town, the leader's tile in the room, and the badge
+    bit -- and every one of them was found by hand: dump a map's objects, look
+    for a script named after the leader, then dump the town's warps and look
+    for the one pointing at that room.
+
+    All of it is in the ROM, so all of it is read here. The output is a line
+    that can be pasted into a title's `gyms` list, which is the point: a
+    declaration nobody had to measure is a declaration nobody got wrong.
+
+    Reported rather than written: which gyms a title *declares* is a scope
+    decision, not a fact about the cartridge -- see the eight-name list above.
+    """
+    # **Asked of `tools/route --maps`, which runs the app's own `World`.**
+    # This wanted the whole table rather than one key at a time, and the
+    # obvious way to get it -- ask `map_symbol` about every (group, number)
+    # the cartridge could have -- produced **1536 maps out of 388**: a row
+    # past the end of a group still resolves to some attributes pointer, and
+    # some of those land on a real `_MapAttributes` symbol. Which is the fifth
+    # time a second reader of this app's map tables produced a confident wrong
+    # answer, so it is the app's reader that answers.
+    name_of = name_of or route_maps()
+    bits = badge_bits(cart)
+    # Every map's objects, once. 388 maps is two seconds and the alternative
+    # is 388 scans per leader.
+    where = {}
+    for key, name in name_of.items():
+        for sym, (x, y, kind) in gym_objects(cart, name).items():
+            where.setdefault(sym, []).append((key, name, x, y, kind))
+    # And every warp, so the door into a room can be found from the town side.
+    doors = {}
+    for key, name in name_of.items():
+        for w in map_warps(cart, name):
+            doors.setdefault(w['to'], []).append(
+                (key, name, w['x'], w['y'], w['id']))
+
+    print(f'{len(JOHTO_LEADERS)} leader(s), against {len(name_of)} named maps')
+    missing = 0
+    for badge, who in enumerate(JOHTO_LEADERS):
+        party = cart_trainer(cart, who)
+        hits = [v for sym, vs in where.items()
+                if who.title() in sym or who.capitalize() in sym
+                for v in vs]
+        # A script object named for the leader, **on a map called a Gym.**
+        # Without that last clause Morty comes back twice: he has a cameo in
+        # the Burned Tower, and a cameo is not a gym. Which is the tool's
+        # scope rather than a fact about him -- so the others are reported
+        # underneath rather than dropped in silence.
+        rooms = [h for h in hits if h[4] == 0 and 'Gym' in h[1]]
+        elsewhere = [h for h in hits if h[4] == 0 and 'Gym' not in h[1]]
+        if not rooms:
+            print(f'  ??  {who}: no script object named for them on a Gym map')
+            missing += 1
+            continue
+        for key, name, x, y, _ in rooms:
+            # A warp from a *different* map, because a room's warps back out
+            # are in the same table and a map does not lead into itself. The
+            # destination warp number orders them: the front door is 1.
+            town = sorted((d for d in doors.get(key, []) if d[0] != key),
+                          key=lambda d: d[4])
+            print(f'  {who} in {name} at ({x},{y})'
+                  + (f'  — {len(party)} Pokémon, up to Lv'
+                     f'{max(m["level"] for m in party)}' if party else ''))
+            if not town:
+                print(f'      ?? no other map warps into '
+                      f'{key >> 8}.{key & 0xff}')
+                missing += 1
+                continue
+            tkey, tname, tx, ty, _ = town[0]
+            print(f'      {{ map: key({tkey >> 8}, {tkey & 0xff}), '
+                  f'inside: key({key >> 8}, {key & 0xff}), '
+                  f'door: [{tx}, {ty}], leader: \'{who}\', '
+                  f'leaderAt: [{x}, {y}], badge: {badge} }}')
+            print(f'      // {tname} -> {name}'
+                  + (f', and {len(town) - 1} other way(s) in'
+                     if len(town) > 1 else ''))
+        for key, name, x, y, _ in elsewhere:
+            print(f'      also at ({x},{y}) in {name}, which is not a Gym')
+    return missing
+
+
+def route_maps():
+    """{key: symbol name} for every map, out of `tools/route --maps`."""
+    out = subprocess.run(['node', str(ROOT / 'tools' / 'route'), '--maps', '--json'],
+                         capture_output=True, text=True)
+    try:
+        raw = json.loads(out.stdout or '{}')
+    except ValueError:
+        return {}
+    named = {}
+    for text, name in raw.items():
+        group, _, number = text.partition('.')
+        named[(int(group) << 8) | int(number)] = name
+    return named
+
+
+def map_warps(cart, name):
+    """`[{x, y, to}]` for one map: where each warp is and which map it enters.
+
+    The same block `gym_objects` walks, stopping at the first count instead of
+    the fourth -- and the two readings share every stride, which is why they
+    are in one file and checked by `romlayout`.
+    """
+    out = []
+    key = f'{name}_MapEvents'
+    if key not in cart.by_name:
+        return out
+    bank, addr = cart.by_name[key]
+    rd = lambda i: cart.rom[offset(bank, addr + i)]
+    at = FILLER
+    warps = rd(at)
+    at += 1
+    for i in range(warps):
+        b = at + i * WARP_BYTES
+        # y, x, the destination warp number, then the destination map as
+        # group and number.
+        out.append({'y': rd(b), 'x': rd(b + 1), 'id': rd(b + 2),
+                    'to': (rd(b + 3) << 8) | rd(b + 4)})
+    return out
+
+
+def cart_trainer(cart, who):
+    """One trainer's party, through the app's reader rather than a second one."""
+    out = subprocess.run(['node', str(ROOT / 'tools' / 'types'),
+                           '--trainer', who],
+                         capture_output=True, text=True)
+    party = []
+    for line in out.stdout.splitlines():
+        m = re.match(r'\s+Lv\s*(\d+)\s+(\S+)', line)
+        if m:
+            party.append({'level': int(m.group(1)), 'name': m.group(2)})
+    return party
 
 
 def load():
@@ -981,6 +1166,8 @@ def main(argv):
         for line in cart.script(argv[argv.index('--script') + 1]):
             print(line)
         return 0
+    if '--findgyms' in argv:
+        return 1 if find_gyms(cart) else 0
     if '--gyms' in argv:
         return 1 if gyms(cart, map_symbol(cart)) else 0
     if '--verify' in argv:

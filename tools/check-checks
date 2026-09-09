@@ -124,7 +124,7 @@ def mutations(root):
         # class appears to contain every gym leader in Johto, because nothing
         # between two trainers says a class ended.
         "trainers": lambda: edit("gen2/romdata.js", sub(
-            "const stop = g + 1 < count ? ptr[g + 1] : null;",
+            "const stop = ptr[g + 1] === undefined ? null : ptr[g + 1];",
             "const stop = null;")),
         # A phrase the cartridge does not say, which never matches and never
         # fails -- for `boxed` that is a successful catch reported as a
@@ -146,9 +146,11 @@ def mutations(root):
             "chartEnd: 0xff, chartForesight: 0xff0")),
         # The leader moved one tile, which is what a hand-measured
         # coordinate off by one looks like -- and it would send the pilot to
-        # press A at an empty floor.
+        # press A at an empty floor. The *door* is checked the same way now,
+        # against the town's warp table, so either coordinate biting proves
+        # the group.
         "gyms": lambda: edit("titles/crystal.js", sub(
-            "leaderAt: [5, 7], badge: 1", "leaderAt: [5, 8], badge: 1")),
+            "door: [10, 15]", "door: [10, 16]")),
         # One stride moved in the tool, which is what happened by hand and
         # cost an hour of confident nonsense.
         "romlayout": lambda: edit("tools/rom-events", sub(
