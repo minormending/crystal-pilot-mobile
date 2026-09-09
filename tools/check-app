@@ -1680,6 +1680,63 @@ def check_types():
     return ok(out.stdout.strip().splitlines()[-1])
 
 
+def check_trainers():
+    """What every gym leader carries, against the cartridge's own table.
+
+    **Static:** the app has to declare the one part of the layout that cannot
+    be guessed from the bytes -- the type byte's stride table -- and the class
+    count must *not* be written down, because the pointer table ends where its
+    own first pointer lands and a hack with more classes should need nothing
+    changed.
+
+    **With a cartridge:** `tools/types --verify` reads the eight Johto gym
+    leaders and their parties. Those are facts about the game rather than
+    about this code, which is what makes them able to fail usefully -- and one
+    of them did, in the right direction: CLAIR was written down as two DRATINI
+    and a DRAGONAIR and she has three DRAGONAIR, so the decode corrected the
+    rule rather than the other way round.
+
+    The class *name* is a second reading of the same rows through a different
+    table: all eight have to come out LEADER.
+    """
+    engine = (ROOT / "gen2" / "engine.js").read_text()
+    romdata = (ROOT / "gen2" / "romdata.js").read_text()
+    problems = []
+    m = re.search(r"trainerMonBytes:\s*\{([^}]*)\}", engine)
+    if not m:
+        problems.append("gen2/engine.js  declares no trainerMonBytes, and the "
+                        "type byte's stride is the one thing the bytes cannot "
+                        "say")
+    else:
+        strides = dict(re.findall(r"(\d+):\s*(\d+)", m.group(1)))
+        if len(strides) != 4:
+            problems.append(f"gen2/engine.js  trainerMonBytes has "
+                            f"{len(strides)} stride(s); Gen 2 dispatches four "
+                            f"trainer types")
+    # And the count stays derived. A literal beside the pointer table is the
+    # thing that rots when a hack adds a class.
+    if not re.search(r"first - addr\) >> 1", romdata):
+        problems.append("gen2/romdata.js  no longer derives the class count "
+                        "from where the first pointer lands")
+    for p in problems:
+        print(f"        {p}")
+    if problems:
+        return fail(f"{len(problems)} thing(s) the trainer reader needs")
+
+    if not (ROOT / "dev" / "pokecrystal.gbc").exists():
+        return ok("the trainer layout is declared and its count derived; no "
+                  "cartridge here, so the parties are not checked")
+    out = subprocess.run(["node", str(HERE / "types"), "--verify"],
+                         capture_output=True, text=True)
+    bad = [l for l in out.stdout.splitlines() if "WRONG" in l]
+    for l in bad:
+        print(f"        {l.strip()}")
+    if out.returncode or bad:
+        return fail(f"{len(bad) or 1} leader(s) the cartridge does not agree with")
+    said = [l for l in out.stdout.splitlines() if "leader(s) over" in l]
+    return ok(said[-1] if said else "the trainer table agrees")
+
+
 def check_menus():
     """The boxes the app drives by shape are the shapes the cartridge draws.
 
@@ -1826,6 +1883,7 @@ CHECKS = {
     "types": check_types,
     "menus": check_menus,
     "phrases": check_phrases,
+    "trainers": check_trainers,
 }
 
 

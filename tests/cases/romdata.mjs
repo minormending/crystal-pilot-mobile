@@ -395,3 +395,209 @@ test('an entry that is not whose it should be is not an entry', async (t) => {
   t.eq(real.speciesTypes(152), [GRASS, GRASS], 'and a real entry still reads');
   t.eq(real.speciesTypes(153), null, 'while its neighbour, which is not there, does not');
 });
+
+// --- what a trainer is carrying --------------------------------------------
+//
+// Laid out as *bytes* at the real address, so the pointers in the fixture are
+// real pointers and the reader's "the table ends where its own first pointer
+// lands" arithmetic is the thing under test. Handing over a decoded class
+// list could not be read wrongly.
+
+const TRAINER_BASE = 0x5999;
+/**
+ * A pointer table and the classes behind it.
+ *
+ * `classes` is a list of lists of `[name, type, [[level, species], ...]]`.
+ * The bytes come out in the cartridge's own shape: a `dw` per class, then a
+ * terminated name, a type byte, the Pokémon, and `$ff`.
+ */
+function trainerBytes(classes) {
+  const enc = (t) => [...t].map((c) => (c === ' ' ? 0x7f : 0x80 + c.charCodeAt(0) - 65));
+  const bodies = classes.map((trainers) => {
+    const out = [];
+    for (const [name, kind, party] of trainers) {
+      out.push(...enc(name), 0x50, kind);
+      for (const [level, species] of party) {
+        out.push(level, species);
+        // The padding the type byte promises: type 1 is six bytes a Pokémon,
+        // so four move bytes follow. A fixture that left them out would make
+        // the stride untestable.
+        if (kind === 1) out.push(33, 0, 0, 0);
+        if (kind === 2) out.push(0);
+        if (kind === 3) out.push(0, 33, 0, 0, 0);
+      }
+      out.push(0xff);
+    }
+    return out;
+  });
+  const head = classes.length * 2;
+  const bytes = [];
+  let at = TRAINER_BASE + head;
+  for (const body of bodies) {
+    bytes.push(at & 0xff, at >> 8);
+    at += body.length;
+  }
+  for (const body of bodies) bytes.push(...body);
+  return bytes;
+}
+
+const LEADERS = [
+  [['FALKNER', 1, [[7, 16], [9, 17]]]],
+  [['WHITNEY', 1, [[18, 35], [20, 241]]]],
+  [['BUGSY', 1, [[14, 11], [14, 14], [16, 123]]]],
+];
+const CLASS_NAMES = (() => {
+  const out = [];
+  // Class 1's name is the *first* entry, not the second: the cartridge
+  // numbers classes from one and packs their names from the start, so there
+  // is no filler entry to skip. Written with one here at first, which is how
+  // this fixture came to disagree with the real cartridge -- where
+  // `trainerClass(1)` reads LEADER, as Falkner's class should.
+  for (const n of ['LEADER', 'LEADER', 'LEADER']) {
+    for (const c of n) out.push(c === '-' ? 0xe3 : 0x80 + c.charCodeAt(0) - 65);
+    out.push(0x50);
+  }
+  return out;
+})();
+const withTrainers = (classes = LEADERS) => romReading(TYPED, {
+  chart: CHART, trainers: trainerBytes(classes), classes: CLASS_NAMES,
+  species: { 16: [N, 0x02], 17: [N, 0x02], 11: [BUG, BUG],
+             14: [BUG, 0x03], 123: [BUG, 0x02], 35: [N, N], 241: [N, N] },
+});
+
+test('a trainer comes out of the cartridge with the party they have',
+     async (t) => {
+  const rom = withTrainers();
+  const falkner = rom.trainer('FALKNER');
+  t.eq(falkner.party.map((m) => [m.level, m.species]), [[7, 16], [9, 17]],
+       'PIDGEY Lv7 and PIDGEOTTO Lv9, which is what he has');
+  t.eq(rom.trainer('BUGSY').party.length, 3, 'and Bugsy has three');
+  t.eq(rom.trainer('BUGSY').party[2].level, 16, 'the Scyther being the Lv16');
+});
+
+test('a class runs from its pointer to the next one, not to the end',
+     async (t) => {
+  // Nothing between two trainers says a class ended. Read without the next
+  // pointer as a bound, Falkner's class appears to contain every gym leader
+  // in Johto — which is how the first draft of this read it.
+  const rom = withTrainers();
+  t.eq(rom.trainer('FALKNER').group, 1, 'Falkner is class one');
+  t.eq(rom.trainer('WHITNEY').group, 2, 'Whitney is her own class');
+  t.eq(rom.trainer('BUGSY').group, 3, 'and Bugsy is his');
+  t.eq(rom.trainerClass(1), 'LEADER', 'and the class has a name');
+});
+
+test('the class count is derived from where the first pointer lands',
+     async (t) => {
+  // No number written down: the pointer table ends where its own first entry
+  // points, so a cartridge with more classes needs nothing changed here.
+  t.eq(withTrainers().trainerIndex().size, 3, 'three classes, three trainers');
+  t.eq(withTrainers([...LEADERS, [['SILVER', 1, [[5, 158]]]]])
+       .trainerIndex().size, 4, 'and a fourth is read without being told');
+});
+
+test('a type byte nobody has heard of is not a trainer', async (t) => {
+  // The one part of this that cannot be guessed from the bytes: the type byte
+  // says how *wide* a Pokémon is. Read it wrongly and the party is nonsense
+  // at a plausible length, so an unknown value stops the read rather than
+  // picking a stride.
+  const rom = withTrainers([[['MYSTERY', 9, [[5, 16]]]]]);
+  t.eq(rom.trainerIndex().size, 0, 'nothing was read');
+  t.eq(rom.trainer('MYSTERY'), null, 'and it says so');
+});
+
+test('a name with no terminator inside its bound is not a trainer', async (t) => {
+  const rom = romReading(TYPED, {
+    chart: CHART, classes: CLASS_NAMES,
+    trainers: [0x9b, 0x59, ...Array.from({ length: 40 }, () => 0x80)],
+  });
+  t.eq(rom.trainerIndex().size, 0, 'a bank of letters is not a table');
+});
+
+test('a pointer table whose first pointer is not past it is not one',
+     async (t) => {
+  // A bank of zeroes, or a symbol file pointing at data. The count comes from
+  // subtracting the table's own address, so a first pointer at or below it
+  // gives a count of zero or a negative one — and a negative count read as a
+  // loop bound is a table of nothing that looks like a table.
+  t.eq(romReading(TYPED, { chart: CHART, trainers: [0, 0, 0, 0] })
+       .trainerIndex(), null, 'zeroes');
+  const none = withTrainers();
+  none.trainers = null;
+  none._trainers = undefined;
+  t.eq(none.trainerIndex(), null, 'and no symbol at all is the same');
+});
+
+test('two trainers with the same name are answered by the first', async (t) => {
+  // Dozens share a name on the real cartridge — every JOEY, every MIKEY. The
+  // rule is the symbol table's: first definition wins, because answering with
+  // the last is no better and answering with both is not an answer.
+  const rom = withTrainers([[['JOEY', 1, [[4, 19]]]], [['JOEY', 1, [[9, 19]]]]]);
+  t.eq(rom.trainer('JOEY').party[0].level, 4, 'the first one');
+  t.eq(rom.trainerIndex().size, 1, 'and the name appears once');
+});
+
+test('the outlook is two facts about a door you have not opened yet',
+     async (t) => {
+  // The level you are up against, and whether anything you carry can take HP
+  // off what is in there. Both readable before the walk, which is the point:
+  // a Gym row could say where the Gym was and who was in it, and not whether
+  // it was worth going.
+  const rom = withTrainers();
+  const mine = [{ species: 155, level: 9, hp: 20, maxHp: 20,
+                  moves: [52, 0, 0, 0], pp: [25, 0, 0, 0] }];
+  const view = rom.outlook(mine, rom.trainer('BUGSY').party);
+  t.eq(view.top, 16, 'Bugsy tops out at Lv16');
+  t.eq(view.best, 9, 'and a Lv9 starter is seven short');
+  t.eq(view.helpless, [], 'but Ember can hurt everything in the room');
+});
+
+test('and it names the ones nothing can touch', async (t) => {
+  // The sharp half. A whole party of Ghosts is the case it was written for —
+  // a Normal-only Pokémon level-for-level with Morty cannot take a single
+  // point off him, and no amount of levelling changes that.
+  const ghosts = [[['MORTY', 1, [[21, 92], [25, 94]]]]];
+  const rom = romReading(TYPED, {
+    chart: CHART, trainers: trainerBytes(ghosts), classes: CLASS_NAMES,
+    species: { 92: [GHOST, 0x03], 94: [GHOST, 0x03] },
+  });
+  const normalOnly = [{ species: 19, level: 25, hp: 20, maxHp: 20,
+                        moves: [33, 0, 0, 0], pp: [35, 0, 0, 0] }];
+  const view = rom.outlook(normalOnly, rom.trainer('MORTY').party);
+  t.eq(view.best, 25, 'level for level');
+  t.eq(view.helpless.length, 2, 'and helpless against both');
+
+  const withFire = [...normalOnly,
+                    { species: 155, level: 5, hp: 20, maxHp: 20,
+                      moves: [52, 0, 0, 0], pp: [25, 0, 0, 0] }];
+  t.eq(rom.outlook(withFire, rom.trainer('MORTY').party).helpless, [],
+       'one Ember anywhere in the party is enough');
+});
+
+test('a fainted Pokémon is not your best level', async (t) => {
+  // `best` is what you can send out, not what you own. A knocked-out Lv30 in
+  // slot one is not an answer to anything.
+  const rom = withTrainers();
+  const mine = [{ species: 155, level: 30, hp: 0, maxHp: 40,
+                  moves: [52, 0, 0, 0], pp: [25, 0, 0, 0] },
+                { species: 155, level: 8, hp: 20, maxHp: 20,
+                  moves: [52, 0, 0, 0], pp: [25, 0, 0, 0] }];
+  t.eq(rom.outlook(mine, rom.trainer('BUGSY').party).best, 8,
+       'the one still standing');
+});
+
+test('an outlook nobody can price is not an outlook', async (t) => {
+  // A warning nobody can price is worse than none, so every way of not being
+  // able to read one answers null rather than guessing.
+  const rom = withTrainers();
+  const mine = [{ species: 155, level: 9, hp: 20, maxHp: 20,
+                  moves: [52, 0, 0, 0], pp: [25, 0, 0, 0] }];
+  t.eq(rom.outlook(mine, []), null, 'nobody to look at');
+  t.eq(rom.outlook(mine, null), null, 'nor no party at all');
+  t.eq(rom.outlook(null, rom.trainer('BUGSY').party), null, 'nor without yours');
+  // A species the base-stat table cannot answer for: no types, no matchup.
+  const blind = romReading(TYPED, {
+    chart: CHART, trainers: trainerBytes(LEADERS), classes: CLASS_NAMES });
+  t.eq(blind.outlook(mine, blind.trainer('BUGSY').party), null,
+       'and not without knowing what they are');
+});

@@ -433,7 +433,7 @@ watching.
 
 ### `symbols.js` — where things live
 
-<!-- covers: gen2/symbols.js @ 9d8bdf66c5e0 -->
+<!-- covers: gen2/symbols.js @ 5a4612d05803 -->
 
 Parses the `.sym` file into `name → { bank, addr }`. First definition wins;
 later duplicates are aliases and locals.
@@ -599,7 +599,7 @@ and in `bootstrap.js`, with nothing able to notice if they drifted.
 
 ### `romdata.js` — what the cartridge knows
 
-<!-- covers: gen2/romdata.js @ 8691cf4d4ae2 -->
+<!-- covers: gen2/romdata.js @ a665f1552888 -->
 
 Species names, item names, move names, wild-encounter tables, move power and
 the type chart. All read out of the ROM, not shipped as a copy, so they cannot
@@ -617,6 +617,11 @@ drift from the build being driven.
   question marks when no terminator turns up inside twenty-four bytes, because
   `decodeText` will turn any bytes at all into something that reads like a
   name.
+- `TrainerGroups` and `TrainerClassNames` — every trainer in the game and
+  what they are carrying. See [what is behind the Gym
+  door](#what-is-behind-the-gym-door-before-you-open-it); the awkward parts
+  are the type byte, which decides how wide a Pokémon is, and the class
+  boundaries, which only the *next* class's pointer marks.
 - `BaseData` — 32 bytes an entry: the species' own id, **six** stats, then the
   two types. It is the only place a party member's types can be read from,
   because Gen 2 does not keep them in the party struct. Two things about it
@@ -1579,7 +1584,7 @@ mechanism's evidence spans two runs rather than one.
 
 ### The bigger number is not the harder hit
 
-<!-- covers: gen2/romdata.js gen2/engine.js gen2/battle.js @ 4390601337e5 -->
+<!-- covers: gen2/romdata.js gen2/engine.js gen2/battle.js @ 7a033b552b73 -->
 
 For twenty-three passes the pilot ranked its moves by one number: the `power`
 byte out of the cartridge's move table. `romdata.move()` had been returning the
@@ -1721,7 +1726,7 @@ pilot uses, not a second one beside it. See section 10.
 
 ### Sending out somebody who can touch it
 
-<!-- covers: gen2/battle.js gen2/engine.js @ 506ff891d852 -->
+<!-- covers: gen2/battle.js gen2/engine.js @ 9b3b7e04d32f -->
 
 The pass before could tell that the Pokémon on the field takes nothing off a
 Ghost, and said so. The remedy it named — *a different Pokémon* — was one the
@@ -2076,7 +2081,7 @@ fainted.
 
 ## 7. Catching something
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ a82d8d83eaad -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ 5647eef15933 -->
 
 Catching is the most involved loop, because a Poké Ball's odds turn on how much
 HP is left. Throwing at a full-health target is mostly throwing balls away.
@@ -3324,7 +3329,7 @@ after](#8d-a-route-the-game-itself-refuses).
 
 ## 8b. Asking the cartridge what its places are called
 
-<!-- covers: gen2/romdata.js gen2/world.js @ 5db35e99fa1e -->
+<!-- covers: gen2/romdata.js gen2/world.js @ 87e7f91ded13 -->
 
 The one table that **retires** hand-written data rather than adding to it. A map
 used to be called whatever the title profile said, and everything else was
@@ -4551,6 +4556,81 @@ before a step is taken, so a stopped walk does not move at all.
 
 </details>
 
+### What is behind the Gym door, before you open it
+
+<!-- covers: gen2/romdata.js gen2/engine.js app/rows.js @ 58ee1bfe0212 -->
+
+The Gym row could say where the Gym is and who is in it. **Whether it is worth
+going** is two facts the cartridge has had all along, and neither of them
+needed a walk to find out.
+
+```
+$ tools/types --outlook MORTY rattata:25
+MORTY: 4 Pokémon, topping out at Lv25
+your party tops out at Lv25 — ahead
+  nothing you carry can touch GASTLY Lv21
+  nothing you carry can touch HAUNTER Lv21
+  nothing you carry can touch GENGAR Lv25
+  nothing you carry can touch HAUNTER Lv23
+```
+
+Level for level with the gym, and unable to take a single point off any of it,
+because the whole room is Ghost and a Rattata's moves are Normal. **Another
+level does not fix that**, which is why it gets its own sentence rather than
+the level one — the level sentence would be true and would be the wrong
+advice.
+
+**A trainer's party is in `data/trainers/parties.asm`**, reached through
+`TrainerGroups`: a `dw` per trainer class, then for each trainer in it a
+terminated name, a **type** byte, that many Pokémon, and `$ff`.
+
+```
+0e:5a1f  85 80 8b 8a 8d 84 91 50   "FALKNER@"
+         01                        type 1 — six bytes a Pokémon
+         07 10  21 bd 00 00        Lv7  PIDGEY,    TACKLE, MUD-SLAP
+         09 11  21 bd 10 00        Lv9  PIDGEOTTO, TACKLE, MUD-SLAP, GUST
+         ff
+```
+
+Three things about that layout, each of which is a way to read it wrongly and
+get a plausible table out:
+
+- **The type byte is the only part the bytes cannot say.** It selects one of
+  four handlers — level and species, plus optionally an item and optionally
+  four moves — so it decides whether a Pokémon is two bytes or seven. Guess it
+  and the party is nonsense at a believable length, which is why an unknown
+  value stops the read instead of picking a stride.
+- **A class runs from its pointer to the *next* class's**, and nothing between
+  two trainers says a class ended. Read without that bound — which is what the
+  first draft did — Falkner's class appears to contain every gym leader in
+  Johto.
+- **The class count is derived, not written down.** The pointer table ends
+  where its own first pointer lands: 67 classes here, and a hack with more
+  needs nothing changed. A first pointer at or below the table itself is not a
+  pointer table, and answers null.
+
+**Independently confirmed twice over**, which is the point of deriving it
+rather than copying it. Classes 1 to 8 all come out `LEADER`, 9 is `RIVAL`, 11
+is `ELITE FOUR` — a second reading of the same rows through a different table.
+And the parties are the ones anybody who has played this game knows.
+
+`check-app trainers` holds all eight Johto leaders to it, and one of those
+rules **failed in the right direction**: CLAIR was written down as two DRATINI
+and a DRAGONAIR, and she has three DRAGONAIR. The decode corrected the rule,
+which is the only direction a check over independent facts can usefully fail
+in.
+
+**`outlook` is where the two facts meet.** `top` and `best` are the level
+either side tops out at — and `best` counts only what is still standing,
+because a knocked-out Lv30 in slot one is not an answer to anything.
+`helpless` is the same reading `nothingLands` does inside a battle, asked in
+front of the door instead of forty turns in. Null wherever the chart or the
+base stats cannot be read: a warning nobody can price is worse than none.
+
+The hint says nothing when you are ahead on level and can hurt everything in
+the room. That is the good state, and a line explaining that a job would work
+is the noise this list exists to replace.
+
 ### Reading a gym out of the cartridge
 
 <!-- covers: titles/crystal.js @ 732db74f14eb -->
@@ -4743,7 +4823,7 @@ a conversation.
 
 ### Running the list
 
-<!-- covers: app/rows.js app/main.js @ 48d769000734 -->
+<!-- covers: app/rows.js app/main.js @ 536197751379 -->
 
 The app has spent forty passes learning to answer one question — *what can the
 pilot do here, and which of those is worth most?* — and twenty showing the
@@ -5302,7 +5382,7 @@ this needed upstream rather than in the vendored copy.
 The options went through this room first on purpose: the small half, standing up
 the whole path — config, rules, anonymous sign-in, merge, debounce — with a
 slider position at stake rather than a save. Three things travel this way, and
-all three merge: the remembered options, the 61 addresses out of the symbol
+all three merge: the remembered options, the 63 addresses out of the symbol
 file, and the notes two devices use to introduce their screens to each other.
 The save goes over the same room and does *not* merge, which is the next
 section.
@@ -5771,16 +5851,16 @@ and change what a past handover said.
 
 ### The symbol file stops travelling
 
-The `.sym` is 1.8MB and this app looks up **61 symbols in it**. So the room
-carries those 61 lines — about a kilobyte, `{name: [bank, addr]}` — and a
+The `.sym` is 1.8MB and this app looks up **63 symbols in it**. So the room
+carries those 63 lines — about a kilobyte, `{name: [bank, addr]}` — and a
 second device needs the ROM and nothing else. `Symbols.fromDigest` builds a
 table that behaves like the parsed file; `size` is the only honest difference,
-and it reports 61 because that is how many symbols it has.
+and it reports 63 because that is how many symbols it has.
 
 ```mermaid
 flowchart LR
     F["the .sym file<br/>1.8MB, 58,456 symbols"] --> S["Symbols<br/>the parsed table"]
-    S -->|"digest(SHARED_SYMBOLS)"| D["{name: [bank, addr]}<br/>61 entries, ~1KB"]
+    S -->|"digest(SHARED_SYMBOLS)"| D["{name: [bank, addr]}<br/>63 entries, ~1KB"]
     D --> R[["the room"]]
     R --> D2["the same 47 entries"]
     D2 -->|"Symbols.fromDigest"| T["a table that behaves<br/>like the parsed file"]
@@ -6108,7 +6188,7 @@ about that code did not.
 
 ### The other checks
 
-<!-- covers: tools/check-app @ c10068bd8e43 -->
+<!-- covers: tools/check-app @ 50f76709dc8c -->
 
 `tools/check-app` runs everything that can be verified without a ROM:
 

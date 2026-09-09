@@ -134,6 +134,26 @@ export const gen2 = {
     chartScan: 256, stab: 1.5,
   },
 
+  // --- what a trainer is carrying ------------------------------------------
+  // data/trainers/parties.asm, reached through `TrainerGroups`: a `dw` per
+  // trainer class, then for each trainer in it a terminated name, a **type**
+  // byte, that many Pokemon, and $ff.
+  //
+  // The type byte says how wide a Pokemon is, and it is the only part of this
+  // that cannot be guessed from the bytes: level and species, then optionally
+  // an item and optionally four moves. Falkner reads type 1 -- so six bytes a
+  // Pokemon -- and comes out PIDGEY Lv7 with TACKLE and MUD-SLAP, PIDGEOTTO
+  // Lv9 with TACKLE, MUD-SLAP and GUST, which is exactly what he has.
+  //
+  // **The class count is derived rather than written down**, because the
+  // pointer table ends where its own first pointer lands: 67 classes on this
+  // cartridge, and a hack that added one does not need this file changed.
+  trainerMonBytes: { 0: 2, 1: 6, 2: 3, 3: 7 },
+  trainerEnd: 0xff,
+  // A bound on a terminated name, not a size. "COOLTRAINER♀" is the longest
+  // class name; a trainer's own name is shorter still.
+  trainerNameMax: 14,
+
   // --- wild encounters -----------------------------------------------------
   // A grass entry is: map group, map number, three rates, then three blocks of
   // seven (level, species) -- morning, day, night.

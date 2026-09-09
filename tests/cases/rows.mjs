@@ -1548,3 +1548,93 @@ test('an errand needs somebody along, like every other walk', async (t) => {
   t.contains(empty.errand.text, 'without a Pok', 'and it says which');
   t.false(offers({}, {}).offered.includes('errand'), 'so it is not drawn');
 });
+
+// --- what is behind the Gym door, before the walk -------------------------
+//
+// The row can say where the Gym is and who is in it. Whether it is worth
+// going is two facts the cartridge has had all along: the levels waiting in
+// there, and whether anything you carry can take HP off them.
+
+const BUG = 0x07, GHOST = 0x08, FIRE = 0x14, NORMAL = 0x00, POISON = 0x03;
+const SCYTHER = 123, METAPOD = 11, GASTLY = 92, RATTATA = 19;
+/** A rom that knows one leader and what their Pokémon are. */
+const withLeader = (party, types) => fakeRom({
+  species: { 155: 'CYNDAQUIL', 19: 'RATTATA', 123: 'SCYTHER',
+             11: 'METAPOD', 92: 'GASTLY' },
+  types,
+  trainers: { BUGSY: { name: 'BUGSY', group: 3, party },
+              MORTY: { name: 'MORTY', group: 4, party } },
+});
+const GYM = { at: 'Azalea Town', leader: 'BUGSY', legs: 2 };
+
+test('the Gym hint says the level you are walking into', async (t) => {
+  const r = describeOffers(state.read(worldRam(sym, {
+    party: [{ species: CYNDAQUIL, level: 9, hp: 20, maxHp: 20,
+              moves: [52, 0, 0, 0], pp: [25, 0, 0, 0] }],
+    map: [3, 1],
+  })), {
+    rom: withLeader([{ level: 14, species: METAPOD }, { level: 16, species: SCYTHER }],
+                    { [METAPOD]: [BUG, BUG], [SCYTHER]: [BUG, 0x02] }),
+    gym: GYM,
+  });
+  t.contains(r.hint, 'BUGSY tops out at Lv16', `said it: ${r.hint}`);
+  t.contains(r.hint, 'your best is Lv9', 'and what you have against it');
+});
+
+test('and says nothing when you are ahead and can hurt everything',
+     async (t) => {
+  // The good state. A line explaining that a job would work is the noise this
+  // whole list exists to replace.
+  const r = describeOffers(state.read(worldRam(sym, {
+    party: [{ species: CYNDAQUIL, level: 20, hp: 20, maxHp: 20,
+              moves: [52, 0, 0, 0], pp: [25, 0, 0, 0] }],
+    map: [3, 1],
+  })), {
+    rom: withLeader([{ level: 14, species: METAPOD }],
+                    { [METAPOD]: [BUG, BUG] }),
+    gym: GYM,
+  });
+  t.false(r.hint.includes('tops out'), `quiet: ${r.hint}`);
+  t.false(r.hint.includes('touch'), 'and nothing about touching');
+});
+
+test('a room nothing you carry can touch gets its own sentence', async (t) => {
+  // A Normal-only Pokémon against a gym of Ghosts. Level is not the problem
+  // and another level will not fix it, so the level sentence would be the
+  // wrong advice as well as the less useful one.
+  const r = describeOffers(state.read(worldRam(sym, {
+    party: [{ species: RATTATA, level: 30, hp: 20, maxHp: 20,
+              moves: [33, 0, 0, 0], pp: [35, 0, 0, 0] }],
+    map: [3, 1],
+  })), {
+    rom: withLeader([{ level: 21, species: GASTLY }],
+                    { [GASTLY]: [GHOST, POISON] }),
+    gym: { ...GYM, leader: 'MORTY' },
+  });
+  t.contains(r.hint, 'nothing you carry can touch anything MORTY has',
+             `said it: ${r.hint}`);
+  t.false(r.hint.includes('tops out'), 'and not the level, which is not it');
+});
+
+test('one of theirs that nothing can touch is named', async (t) => {
+  const r = describeOffers(state.read(worldRam(sym, {
+    party: [{ species: RATTATA, level: 30, hp: 20, maxHp: 20,
+              moves: [33, 0, 0, 0], pp: [35, 0, 0, 0] }],
+    map: [3, 1],
+  })), {
+    rom: withLeader([{ level: 14, species: METAPOD }, { level: 21, species: GASTLY }],
+                    { [METAPOD]: [BUG, BUG], [GASTLY]: [GHOST, POISON] }),
+    gym: GYM,
+  });
+  t.contains(r.hint, 'nothing you carry can touch GASTLY Lv21',
+             `named it: ${r.hint}`);
+});
+
+test('a cartridge that cannot say what is in there says nothing', async (t) => {
+  // `fakeRom()`'s default has no trainer table, which is the same as a symbol
+  // file that does not name one — and an absent warning is the honest answer.
+  const r = offers({ party: [{ species: CYNDAQUIL, level: 5, hp: 8, maxHp: 20 }],
+                     map: [3, 1] }, { gym: GYM });
+  t.false(r.hint.includes('tops out'), `quiet: ${r.hint}`);
+  t.true(r.rank.gym > 0 || r.offered.length >= 0, 'and the row is unaffected');
+});

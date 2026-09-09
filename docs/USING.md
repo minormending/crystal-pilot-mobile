@@ -907,6 +907,27 @@ you rather than pacing for ever.
 If you see the message outside a grind, the answer is a Center, or an Ether, or
 a different Pokémon in front.
 
+### The Gym tells you what is in it before you walk there
+
+A Gym is two maps and a walk away, and until now the only way to find out
+whether you could win was to go. The pilot reads the leader's party out of the
+cartridge instead, and says the one thing that would have changed your mind:
+
+> BUGSY tops out at Lv16 and your best is Lv9
+
+Or, when levels are not the problem:
+
+> nothing you carry can touch anything MORTY has
+
+Morty's gym is four Ghosts, and a Normal-type move does **nothing at all** to
+a Ghost. That is not a warning about being underlevelled — it stays true at
+Lv50 — so it gets its own sentence, because *go and grind* would be the wrong
+advice as well as the less useful one.
+
+**It says nothing when you are ahead and can hurt everything in there.** That
+is the good state, and a line telling you a job would work is exactly the
+noise this list exists to replace.
+
 ### And a battle you cannot touch, which no amount of PP fixes
 
 A Normal-type move does **nothing at all** to a Ghost. Not less — nothing. So a
@@ -1359,7 +1380,7 @@ deployed, which is not the question you are asking when a bug you saw fixed is
 still in front of you. `tools/check-app` asserts that number matches the service
 worker's cache name, because a version display that lies is worse than none.
 
-<!-- covers: sw.js @ db7788f4d19a -->
+<!-- covers: sw.js @ 5525630972cc -->
 
 The worker fetches **network first, falling back to the cache**. That is the
 opposite of the usual offline-first advice, on purpose.

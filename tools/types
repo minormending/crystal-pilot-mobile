@@ -7,6 +7,9 @@
 //     tools/types --rank cyndaquil caterpie
 //                                     which move a pilot would swing, and why
 //     tools/types --move 75           one move's numbers and name
+//     tools/types --trainer BUGSY     what a trainer is carrying
+//     tools/types --outlook BUGSY cyndaquil:9 chikorita:8
+//                                     whether that party should walk in
 //
 // **This runs `gen2/romdata.js`.** The lesson is the one `tools/route` was
 // written for and learned the hard way four times: a second reader in another
@@ -145,6 +148,69 @@ const RULES = [
   ['WATER', 'ELECTRIC', 1, 'the chart is not symmetric and this proves it'],
 ];
 
+// What the trainer table has to agree with: eight gym leaders and what they
+// carry. Facts about the game that were true before this app existed, and a
+// decode that lost a class boundary or picked the wrong stride gets them
+// wrong -- the first draft read Falkner's class as containing every leader in
+// Johto, which is exactly the shape of error that produces a plausible table.
+const LEADERS = [
+  ['FALKNER', 1, [[7, 'PIDGEY'], [9, 'PIDGEOTTO']]],
+  ['BUGSY', 3, [[14, 'METAPOD'], [14, 'KAKUNA'], [16, 'SCYTHER']]],
+  ['WHITNEY', 2, [[18, 'CLEFAIRY'], [20, 'MILTANK']]],
+  ['MORTY', 4, [[21, 'GASTLY'], [21, 'HAUNTER'], [25, 'GENGAR'], [23, 'HAUNTER']]],
+  ['PRYCE', 5, [[27, 'SEEL'], [29, 'DEWGONG'], [31, 'PILOSWINE']]],
+  ['JASMINE', 6, [[30, 'MAGNEMITE'], [30, 'MAGNEMITE'], [35, 'STEELIX']]],
+  ['CHUCK', 7, [[27, 'PRIMEAPE'], [30, 'POLIWRATH']]],
+  // Three DRAGONAIR, not two DRATINI and one. Written down wrongly the first
+  // time and corrected by the decode, which is the direction this check is
+  // supposed to be able to fail in: the rules are independent facts, so one
+  // of them being misremembered is a thing the run tells you.
+  ['CLAIR', 8, [[37, 'DRAGONAIR'], [37, 'DRAGONAIR'], [37, 'DRAGONAIR'],
+                [40, 'KINGDRA']]],
+];
+
+function verifyTrainers() {
+  let bad = 0;
+  const index = data.trainerIndex();
+  if (!index) {
+    console.log('  WRONG  no readable trainer table');
+    return 1;
+  }
+  for (const [name, group, party] of LEADERS) {
+    const got = data.trainer(name);
+    if (!got) {
+      bad++;
+      console.log(`  WRONG  ${name} is not in the trainer table`);
+      continue;
+    }
+    if (got.group !== group) {
+      bad++;
+      console.log(`  WRONG  ${name} reads as class ${got.group}, not ${group}`
+                  + ' — a class boundary is being lost');
+    }
+    const mine = got.party.map((m) => [m.level, data.speciesName(m.species)]);
+    if (JSON.stringify(mine) !== JSON.stringify(party)) {
+      bad++;
+      console.log(`  WRONG  ${name} reads ${JSON.stringify(mine)}, `
+                  + `should be ${JSON.stringify(party)}`);
+    }
+  }
+  // Every leader is a LEADER, which is a second reading of the same rows
+  // through a different table.
+  for (const [name] of LEADERS) {
+    const got = data.trainer(name);
+    const cls = got && data.trainerClass(got.group);
+    if (cls !== 'LEADER') {
+      bad++;
+      console.log(`  WRONG  ${name}'s class reads "${cls}", not LEADER`);
+    }
+  }
+  console.log(`${LEADERS.length} leader(s) over ${index.size} trainer(s): `
+              + (bad ? `${bad} disagreement(s)`
+                     : 'the table agrees about every one'));
+  return bad;
+}
+
 function verify() {
   let bad = 0;
   for (const [a, d, want, why] of RULES) {
@@ -242,15 +308,79 @@ function rank(mineText, themText, moveIds) {
   return 0;
 }
 
+/** One trainer's party, named and levelled. */
+function trainer(name) {
+  const found = data.trainer(name);
+  if (!found) {
+    const index = data.trainerIndex();
+    console.log(index
+      ? `no trainer called "${name}" — ${index.size} names in this cartridge`
+      : 'this cartridge has no readable trainer table');
+    return 1;
+  }
+  const cls = data.trainerClass(found.group);
+  console.log(`${found.name}${cls ? ` (${cls}, class ${found.group})` : ''}`);
+  for (const mon of found.party) {
+    const types = data.speciesTypes(mon.species);
+    console.log(`  Lv${String(mon.level).padStart(2)}  `
+                + `${data.speciesName(mon.species).padEnd(12)}`
+                + (types ? types.map(typeName).join('/') : ''));
+  }
+  return 0;
+}
+
+/**
+ * Whether a described party should walk into that trainer.
+ *
+ * The party is given as `species:level` pairs, and every Pokemon is assumed
+ * to be carrying one neutral 40-power move -- which is deliberately generous:
+ * the point of this output is the *level* gap and the Pokemon nothing can
+ * touch, and inventing a moveset would make the second half a fiction.
+ */
+function outlook(name, described) {
+  const found = data.trainer(name);
+  if (!found) { console.log(`no trainer called "${name}"`); return 1; }
+  const mine = [];
+  for (const text of described) {
+    const [who, lv] = text.split(':');
+    const id = species(who);
+    if (id === null) { console.log(`no species called "${who}"`); return 1; }
+    // 33 is TACKLE on this cartridge: normal, 35 power, and something every
+    // starter has. Stated rather than hidden, because it is an assumption.
+    mine.push({ species: id, level: Number(lv) || 5, hp: 1,
+                moves: [33, 0, 0, 0], pp: [35, 0, 0, 0] });
+  }
+  const view = data.outlook(mine, found.party);
+  if (!view) { console.log('cannot price this matchup'); return 1; }
+  console.log(`${found.name}: ${found.party.length} Pokémon, `
+              + `topping out at Lv${view.top}`);
+  console.log(`your party tops out at Lv${view.best}`
+              + (view.best < view.top
+                 ? ` — ${view.top - view.best} short` : ' — ahead'));
+  if (view.helpless.length) {
+    for (const m of view.helpless) {
+      console.log(`  nothing you carry can touch `
+                  + `${data.speciesName(m.species)} Lv${m.level}`);
+    }
+  } else {
+    console.log('  and everything in there can be hurt by something you have');
+  }
+  return 0;
+}
+
 const args = process.argv.slice(2);
 if (args[0] === '--verify') {
-  process.exit(verify() ? 1 : 0);
+  process.exit(verify() + verifyTrainers() ? 1 : 0);
 } else if (args[0] === '--move') {
   const id = Number(args[1]);
   const m = data.move(id);
   if (!m) { console.log(`no move ${args[1]}`); process.exit(1); }
   console.log(`${data.moveName(id) || `move ${id}`}: power ${m.power}, `
               + `${typeName(m.type)}, ${m.pp} PP, effect ${m.effect}`);
+} else if (args[0] === '--trainer') {
+  process.exit(trainer(args.slice(1).join(' ')));
+} else if (args[0] === '--outlook') {
+  process.exit(outlook(args[1], args.slice(2)));
 } else if (args[0] === '--rank') {
   process.exit(rank(args[1], args[2],
                     args.slice(3).map(Number).filter(Number.isInteger)));

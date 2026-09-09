@@ -725,6 +725,31 @@ export function describeOffers(s, ctx = {}) {
   for (const g of ctx.gated || []) {
     hint.push(`${g.where} wants ${g.needs}`);
   }
+  // **What is behind the Gym door, before the walk rather than after it.**
+  // The row can only say where the Gym is and who is in it; whether it is
+  // worth going is two facts the cartridge has had all along -- the levels
+  // waiting in there, and whether anything you carry can take HP off them.
+  //
+  // Only when there is something to say. A party that is ahead on level and
+  // can hurt everything in the room is the good state, and a line explaining
+  // that is the noise this list exists to replace.
+  const gymRom = ctx.rom || null;
+  if (afoot && ctx.gym && gymRom && gymRom.trainer && s.party.length) {
+    const them = gymRom.trainer(ctx.gym.leader);
+    const view = them ? gymRom.outlook(s.party, them.party) : null;
+    if (view && view.helpless.length === them.party.length) {
+      // The sharp one, and it is worth its own sentence: a party that cannot
+      // touch *anything* in the room is not a party that needs another level.
+      hint.push(`nothing you carry can touch anything ${them.name} has`);
+    } else if (view && view.helpless.length) {
+      const who = view.helpless
+        .map((m) => `${gymRom.speciesName(m.species)} Lv${m.level}`);
+      hint.push(`nothing you carry can touch ${who.join(' or ')}`);
+    } else if (view && view.top > view.best) {
+      hint.push(`${them.name} tops out at Lv${view.top} `
+                + `and your best is Lv${view.best}`);
+    }
+  }
   // Nobody near, and somebody further on. This is the one hint that is purely
   // about distance, and it is here rather than in the row because the row is
   // hidden whenever it cannot run: the map's total is exactly the fact you

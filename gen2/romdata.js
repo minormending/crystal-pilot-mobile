@@ -116,6 +116,12 @@ export class RomData {
     // struct at all. They are copied out of here when it is sent out, which
     // is why `wBattleMonType1` exists and there is no `wPartyMon1Type1`.
     this.base = symbols.has('BaseData') ? this.at('BaseData') : null;
+    // What every trainer in the game is carrying. Optional like the rest: a
+    // cartridge whose symbol file does not name them keeps every job and
+    // loses the ability to say what is waiting in a Gym.
+    this.trainers = symbols.has('TrainerGroups') ? this.at('TrainerGroups') : null;
+    this.trainerClasses = symbols.has('TrainerClassNames')
+      ? this.at('TrainerClassNames') : null;
     this.moveNames = symbols.has('MoveNames') ? this.at('MoveNames') : null;
     // Optional, like the wild tables: a cartridge whose symbol file does not
     // name it keeps every map it was told about and loses the rest.
@@ -299,6 +305,150 @@ export class RomData {
     // it -- NORMAL against NORMAL, immune -- and the pilot would rank every
     // move it owns at nothing rather than falling back to raw power.
     return (this._matchups = null);
+  }
+
+  /**
+   * Every trainer in the cartridge, by name, read once and kept.
+   *
+   * `TrainerGroups` is a `dw` per trainer class; each class holds one or more
+   * trainers, and each trainer is a terminated name, a **type** byte, that
+   * many Pokemon, and `$ff`. The type byte is the only part that cannot be
+   * guessed from the bytes -- it says whether a Pokemon is two bytes or
+   * seven, level and species plus an optional item and optional four moves.
+   *
+   * **The class count is derived, not written down.** The pointer table ends
+   * where its own first pointer lands, which is 67 classes on this cartridge
+   * and needs no number here for one that has more. A class's trainers run
+   * from its pointer to the *next* class's, which matters: read without that
+   * bound, Falkner's class appears to contain every gym leader in Johto,
+   * because nothing between two trainers says a class ended.
+   *
+   * Independently confirmed, which is the point of doing it this way at all:
+   * classes 1 to 8 all come out `LEADER`, 9 is `RIVAL`, 11 is `ELITE FOUR` --
+   * and the parties are the ones anyone who has played this game knows.
+   *
+   * Null where the symbol file does not name the table.
+   */
+  trainerIndex() {
+    if (this._trainers !== undefined) return this._trainers;
+    if (!this.trainers) return (this._trainers = null);
+    const { bank, addr } = this.trainers;
+    const word = (at) => this.gb.romByte(bank, at) | (this.gb.romByte(bank, at + 1) << 8);
+    const first = word(addr);
+    // The table ends where its first pointer lands. A first pointer at or
+    // below the table itself is not a pointer table.
+    if (!(first > addr)) return (this._trainers = null);
+    const count = (first - addr) >> 1;
+    const ptr = [];
+    for (let i = 0; i < count; i++) ptr.push(word(addr + i * 2));
+    const out = new Map();
+    for (let g = 0; g < count; g++) {
+      const stop = g + 1 < count ? ptr[g + 1] : null;
+      let at = ptr[g];
+      for (let guard = 0; guard < 64; guard++) {
+        if (stop !== null && at >= stop) break;
+        const read = this._trainerAt(bank, at);
+        if (!read) break;
+        // First definition wins, the same rule the symbol table uses: a name
+        // shared by two trainers -- and dozens are -- is asked about by
+        // whoever asks first, and answering with the last is no better.
+        if (!out.has(read.name)) {
+          out.set(read.name, { name: read.name, group: g + 1,
+                               party: read.party });
+        }
+        at = read.next;
+      }
+    }
+    return (this._trainers = out);
+  }
+
+  /**
+   * One trainer's entry, or null when the bytes are not one.
+   *
+   * Separate so the two ways of failing are separate: a name that does not
+   * terminate inside its bound, and a type byte the profile has never heard
+   * of. Both mean "this is not a trainer", and reading on past either is how
+   * a table of 541 entries becomes a table of nonsense.
+   */
+  _trainerAt(bank, at) {
+    const bytes = [];
+    let i = at;
+    for (; i < at + this.e.trainerNameMax; i++) {
+      const b = this.gb.romByte(bank, i);
+      if (b === NAME_TERMINATOR) break;
+      bytes.push(b);
+    }
+    if (this.gb.romByte(bank, i) !== NAME_TERMINATOR) return null;
+    const kind = this.gb.romByte(bank, i + 1);
+    const wide = this.e.trainerMonBytes[kind];
+    if (!wide) return null;
+    const party = [];
+    let cur = i + 2;
+    while (party.length <= this.e.maxParty) {
+      const lead = this.gb.romByte(bank, cur);
+      if (lead === this.e.trainerEnd || lead === undefined) break;
+      party.push({ level: lead, species: this.gb.romByte(bank, cur + 1) });
+      cur += wide;
+    }
+    if (this.gb.romByte(bank, cur) !== this.e.trainerEnd) return null;
+    return { name: decodeText(bytes), party, next: cur + 1 };
+  }
+
+  /** What one named trainer is carrying, or null. */
+  trainer(name) {
+    const index = this.trainerIndex();
+    if (!index) return null;
+    return index.get(normalise(name).toUpperCase())
+      || index.get(name) || null;
+  }
+
+  /** A trainer class's name, out of the packed table. */
+  trainerClass(group) {
+    if (!this.trainerClasses || !group) return '';
+    if (!this._classes) this._classes = new Map();
+    if (this._classes.has(group)) return this._classes.get(group);
+    const out = this._packedName(this.trainerClasses, group);
+    this._classes.set(group, out);
+    return out;
+  }
+
+  /**
+   * How a party of yours looks against a party of theirs.
+   *
+   * The question the Gym row could not answer: *is it worth walking there?*
+   * Two facts decide it, and both are readable before the walk.
+   *
+   * `top` and `best` are the level either side tops out at, which is the
+   * blunt one and the one that is usually the answer -- Bugsy's Scyther is
+   * Lv16, and a Lv9 starter is not going to beat it however well it is
+   * driven.
+   *
+   * `helpless` is the sharp one: the Pokemon of theirs that **nothing in your
+   * party can take HP off at all.** That is the same reading `nothingLands`
+   * does inside a battle, asked in front of the door instead of forty turns
+   * in.
+   *
+   * Null where the chart cannot be read, because a warning nobody can price
+   * is worse than none.
+   */
+  outlook(mine, theirs) {
+    if (!this.matchups() || !mine || !theirs || !theirs.length) return null;
+    const helpless = [];
+    for (const them of theirs) {
+      const types = this.speciesTypes(them.species);
+      if (!types) return null;
+      const lands = mine.some((m) => (m.moves || []).some((id, i) => {
+        if (!id || !((m.pp || [])[i] > 0)) return false;
+        const info = this.move(id);
+        if (!info || info.power <= 0) return false;
+        const eff = this.effectiveness(id, types);
+        return eff === null || eff > 0;
+      }));
+      if (!lands) helpless.push(them);
+    }
+    const levels = (list) => list.reduce((n, m) => Math.max(n, m.level || 0), 0);
+    return { top: levels(theirs), best: levels(mine.filter((m) => m.hp > 0)),
+             helpless };
   }
 
   /**

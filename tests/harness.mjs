@@ -260,6 +260,8 @@ function buildSymText() {
   lines.push('0d:4bb1 TypeMatchups');
   lines.push('72:5f29 MoveNames');
   lines.push('14:5424 BaseData');
+  lines.push('0e:5999 TrainerGroups');
+  lines.push('0b:41ef TrainerClassNames');
   lines.push('01:a008 sCheckValue1');
   lines.push('01:ad0f sCheckValue2');
   return lines.join('\n') + '\n';
@@ -522,7 +524,7 @@ export const TYPE = {
 };
 
 export function fakeRom({ moves = {}, species = {}, items = {}, chart = [],
-                          landmarks = {} } = {}) {
+                          landmarks = {}, trainers = {}, types = {} } = {}) {
   const MOVES = {
     33: { id: 33, name: 'TACKLE', power: 35, effect: 0, pp: 35, type: TYPE.NORMAL },
     43: { id: 43, name: 'LEER', power: 0, effect: 19, pp: 30, type: TYPE.NORMAL },
@@ -569,6 +571,14 @@ export function fakeRom({ moves = {}, species = {}, items = {}, chart = [],
     // single-typed Pokemon's two slots, and the same-type bonus -- which are
     // the three things that can be wrong.
     e: gen2,
+    // What a trainer is carrying, as a table -- the reading is held by
+    // `romdata.mjs` against real bytes, and a caller only needs the answer.
+    // `outlook` is the real method, borrowed, because the reasoning it does
+    // over that answer is the part that can be wrong.
+    trainer: (name) => trainers[name] || null,
+    trainerClass: (group) => `class ${group}`,
+    speciesTypes: (id) => types[id] || null,
+    outlook: RomData.prototype.outlook,
     matchups() { return CHART; },
     matchup: RomData.prototype.matchup,
     effectiveness: RomData.prototype.effectiveness,
@@ -631,12 +641,16 @@ export function collisionRom(perms = {}) {
  * mistake this made and a test can only catch from the bytes out.
  */
 export function romReading(moveTable, { chart = null, names = null,
-                                       species = null } = {}) {
+                                       species = null, trainers = null,
+                                       classes = null } = {}) {
   const sym = symbols();
   const { bank, addr } = { bank: sym.bank('Moves'), addr: sym.addr('Moves') };
   const chartAt = { bank: sym.bank('TypeMatchups'), addr: sym.addr('TypeMatchups') };
   const namesAt = { bank: sym.bank('MoveNames'), addr: sym.addr('MoveNames') };
   const baseAt = { bank: sym.bank('BaseData'), addr: sym.addr('BaseData') };
+  const trAt = { bank: sym.bank('TrainerGroups'), addr: sym.addr('TrainerGroups') };
+  const clAt = { bank: sym.bank('TrainerClassNames'),
+                 addr: sym.addr('TrainerClassNames') };
   const MOVE_BYTES = 7, BASE_BYTES = 32;
   const gb = {
     romByte(b, at) {
@@ -667,6 +681,19 @@ export function romReading(moveTable, { chart = null, names = null,
       if (names && b === namesAt.bank && at >= namesAt.addr
           && at < namesAt.addr + names.length) {
         return names[at - namesAt.addr];
+      }
+      // `trainers` is handed over as *bytes* from the pointer table onwards,
+      // laid out at the real address -- so the pointers in it are real
+      // pointers and the reader's "the table ends where its first pointer
+      // lands" arithmetic is the arithmetic under test. A fake that handed
+      // over a class list could not be read wrongly.
+      if (trainers && b === trAt.bank && at >= trAt.addr
+          && at < trAt.addr + trainers.length) {
+        return trainers[at - trAt.addr];
+      }
+      if (classes && b === clAt.bank && at >= clAt.addr
+          && at < clAt.addr + classes.length) {
+        return classes[at - clAt.addr];
       }
       if (b !== bank) return 0;
       const offset = at - addr;

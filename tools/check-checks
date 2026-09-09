@@ -119,6 +119,13 @@ def mutations(root):
         # table came to claim 143 while 576 ran.
         "counts": lambda: edit("tests/cases/input.mjs", append(
             "\ntest('probe', async (t) => { t.true(true); });\n")),
+        # A class boundary lost, which is what the first draft of the
+        # trainer reader did -- and it produces a plausible table: Falkner's
+        # class appears to contain every gym leader in Johto, because nothing
+        # between two trainers says a class ended.
+        "trainers": lambda: edit("gen2/romdata.js", sub(
+            "const stop = g + 1 < count ? ptr[g + 1] : null;",
+            "const stop = null;")),
         # A phrase the cartridge does not say, which never matches and never
         # fails -- for `boxed` that is a successful catch reported as a
         # getaway.
