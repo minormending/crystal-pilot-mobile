@@ -1757,6 +1757,79 @@ test('where it was caught is left out rather than guessed at', async (t) => {
        'and where the save does say, the landmark is named');
 });
 
+test('an evolution already due does not count down to itself', async (t) => {
+  // A Pokemon standing at exactly its evolution level -- which happens, because
+  // Gen 2 evolves *after* the battle that levelled it and a fainted or
+  // cancelled evolution leaves it there. "QUILAVA at Lv14 — 0 levels away" is
+  // arithmetic pretending to be information.
+  const d = describeDex({ ...MY_CYNDAQUIL, level: 14 },
+                        { rom: DEX_ROM(), engine: gen2 });
+  t.eq(d.becomes, ['QUILAVA at Lv14'], 'the fact, and no countdown');
+  const early = describeDex({ ...MY_CYNDAQUIL, level: 13 },
+                            { rom: DEX_ROM(), engine: gen2 });
+  t.contains(early.becomes[0], '1 level away', 'one below, and it counts');
+});
+
+test('a stat-branch evolution counts down too, and stops when it is due',
+     async (t) => {
+  const rom = fakeRom({
+    species: { 236: 'TYROGUE', 106: 'HITMONLEE' },
+    evos: { 236: { evolves: [{ kind: 'stat', into: 106, level: 20,
+                               compare: 'atkOverDef' }], learns: [] } },
+  });
+  const soon = describeDex({ ...MY_CYNDAQUIL, species: 236, level: 18 },
+                           { rom, engine: gen2 });
+  t.eq(soon.becomes, ['HITMONLEE at Lv20 if attack beats defence — 2 levels away'],
+       'the condition and the distance');
+  const due = describeDex({ ...MY_CYNDAQUIL, species: 236, level: 20 },
+                          { rom, engine: gen2 });
+  t.eq(due.becomes, ['HITMONLEE at Lv20 if attack beats defence'],
+       'and no countdown to a level it is already standing on');
+});
+
+test('a card with no cartridge behind it is a smaller card, not a crash',
+     async (t) => {
+  // Every one of the ROM tables is optional in `romdata.js`, and the interface
+  // has to survive the whole lot being absent -- which is also the state
+  // before a ROM is picked.
+  const d = describeDex(MY_CYNDAQUIL, { engine: gen2 });
+  t.eq(d.name, '#155', 'the id, because nothing can name it');
+  t.eq(d.types, [], 'no types claimed');
+  t.eq(d.knows, [], 'no move names');
+  t.eq(d.becomes, [], 'and nothing about what it becomes');
+  t.eq(d.stats.length, 6, 'but the six stats are the save\'s, not the ROM\'s');
+  t.eq(d.stats[0].value, 37, 'and they are still right');
+  // Including where it was caught, which reaches for a landmark name -- the
+  // one line on this card that asks the ROM a question about a *number* the
+  // save gave it, so it is the one that throws if the guard is wrong.
+  const caught = describeDex(
+    { ...MY_CYNDAQUIL, caught: { level: 5, when: 'night', place: 2 } },
+    { engine: gen2 });
+  t.eq(caught.origin, 'caught at Lv5 at night',
+       'the level and the hour, and no place it cannot name');
+});
+
+test('a stat the engine names and the interface does not keeps its own key',
+     async (t) => {
+  // The labels are a table in the interface and the stat list is the engine's,
+  // so a cartridge that added a stat would have one the labels do not cover.
+  // Showing the key is worse than showing a word and better than showing
+  // nothing where a row should be.
+  const odd = { ...gen2, statNames: [...gen2.statNames, 'luck'],
+                statSource: { ...gen2.statSource, luck: 'spc' } };
+  const d = describeDex(MY_CYNDAQUIL, { rom: DEX_ROM(), engine: odd });
+  t.eq(d.stats.length, 7, 'the row is drawn');
+  t.eq(d.stats[6].label, 'luck', 'labelled with the key it could not translate');
+});
+
+test('a cartridge that can say what it becomes says nothing extra about it',
+     async (t) => {
+  // The other side of the "says so once" test: the line at the bottom has to
+  // be absent, not empty, when there is nothing missing.
+  const d = describeDex(MY_CYNDAQUIL, { rom: DEX_ROM(), engine: gen2 });
+  t.eq(d.shy, null, 'no apology on a card that has everything');
+});
+
 test('the dex total is three numbers because two of them mean nothing alone',
      async (t) => {
   t.eq(describeDexTotals({ caught: [1, 2], seen: [1, 2, 3] }, { engine: gen2 }),

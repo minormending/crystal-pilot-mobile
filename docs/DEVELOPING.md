@@ -15,8 +15,8 @@ what CI checks and what the pre-commit hook blocks on.
 ```mermaid
 flowchart LR
     E[an edit] --> H{{".githooks/pre-commit"}}
-    H --> T["./run-tests<br/>840 behaviour tests"]
-    H --> C["tools/check-app<br/>29 groups"]
+    H --> T["./run-tests<br/>855 behaviour tests"]
+    H --> C["tools/check-app<br/>30 groups"]
     H --> D["tools/docs-check<br/>44 tracked sections"]
     T --> OK[commit]
     C --> OK
@@ -39,12 +39,12 @@ git config core.hooksPath .githooks
 ./run-tests -v         # notes and stack lines
 ```
 
-840 tests in 26 files, and what each file is about says more than the count:
+855 tests in 26 files, and what each file is about says more than the count:
 
 | file | tests | what it pins down |
 | --- | --- | --- |
 | `journey.mjs` | 163 | the walking: routes, doors, shut legs, healers, gyms, and the map graph |
-| `rows.mjs` | 115 | what every row and offer says, when its button works, and what the runner picks |
+| `rows.mjs` | 120 | what every row and offer says, when its button works, and what the runner picks |
 | `menus.mjs` | 73 | the order the START menu is driven in, and what is closed between tries |
 | `battle.mjs` | 84 | whose turn it is, which Pokémon is out, and a win from a whiteout |
 | `collision.mjs` | 34 | which tiles can be walked, and which have somebody standing on them |
@@ -52,9 +52,9 @@ git config core.hooksPath .githooks
 | `grind.mjs` | 22 | what a grind says while it works, and the bounds that make it stop |
 | `world.mjs` | 22 | reading a cartridge's own maps: sizes, warps, objects and triggers |
 | `control.mjs` | 30 | the task lifecycle: stopping, failing, undo points, and loops that must end |
-| `state.mjs` | 29 | reading the party, the map, the badges and the battery out of work RAM |
+| `state.mjs` | 35 | reading the party, the map, the badges and the battery out of work RAM |
 | `titles.mjs` | 19 | choosing a profile for a cartridge, and falling back to generic |
-| `romdata.mjs` | 71 | the cartridge's own character encoding and tables, byte by byte |
+| `romdata.mjs` | 75 | the cartridge's own character encoding and tables, byte by byte |
 | `remember.mjs` | 14 | which remembered choices are believed, and which dropped |
 | `worker.mjs` | 14 | the idle loop: one step outstanding, and a lost step recovered |
 | `nav.mjs` | 14 | the walk loop: what it decides between two steps, and every reason it stops |
@@ -126,15 +126,15 @@ section gives. Everything by hand runs against a local build.
 
 ```mermaid
 flowchart BT
-    C["the app"] --> T["./run-tests<br/>840 behaviour tests"]
-    C --> A["tools/check-app<br/>29 groups"]
+    C["the app"] --> T["./run-tests<br/>855 behaviour tests"]
+    C --> A["tools/check-app<br/>30 groups"]
     C --> D["tools/docs-check<br/>44 tracked sections"]
     C --> V["tools/coverage<br/>what the suite never runs"]
     T --> M["tools/mutate<br/>break a line, see who notices"]
     A --> K["tools/check-checks<br/>break each group's own subject"]
     T -.-> V
     M -.->|"survivors, by file"| R(["the suite is load-bearing"])
-    K -.->|"29 of 29 bite"| R2(["the groups are awake"])
+    K -.->|"30 of 30 bite"| R2(["the groups are awake"])
     V -.->|"59%, and where"| R3(["the gaps are known"])
 ```
 
@@ -463,7 +463,7 @@ is wrong, not the check. It is not in the pre-commit hook: it runs `check-app`
 about fifty times, which is the wrong price for every commit and the right
 one for the commit that changes a check.
 
-`tools/check-app` is twenty-nine groups, each one a class of mistake that parses
+`tools/check-app` is thirty groups, each one a class of mistake that parses
 fine and is wrong at run time:
 
 | group | asserts |

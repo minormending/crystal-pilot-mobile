@@ -379,6 +379,34 @@ test('a slot the party does not hold is null, not an entry of zeroes',
   t.eq(state.monDetail(wram, -1), null, 'nor before the first');
 });
 
+test('every move and every PP keeps its own slot', async (t) => {
+  // Four indices written out four times, which is four chances to type the
+  // same number twice. `tools/mutate` swapped them one at a time and nothing
+  // failed, because every test until now gave a party member the same value
+  // in every slot -- so the reader could have collapsed all four onto one and
+  // passed.
+  const sym = symbols();
+  const state = new GameState(sym);
+  const wram = worldRam(sym, {
+    party: [{ species: 155, level: 5, moves: [33, 43, 108, 52],
+              pp: [35, 30, 20, 25] }],
+  });
+  t.eq(state.party(wram)[0].moves, [33, 43, 108, 52], 'in the order they are in');
+  t.eq(state.party(wram)[0].pp, [35, 30, 20, 25], 'and the PP beside them');
+  t.eq(state.monDetail(wram, 0).moves, [33, 43, 108, 52],
+       'and the deep read is the same read');
+});
+
+test('experience is three bytes, and the top one is not decoration',
+     async (t) => {
+  // 1234 fits in two, so a reader that dropped the top byte answered right for
+  // every test there was. A Lv40 Pokemon on a slow curve is past a million.
+  const sym = symbols();
+  const state = new GameState(sym);
+  const wram = worldRam(sym, { party: [{ species: 155, level: 40, exp: 1250000 }] });
+  t.eq(state.monDetail(wram, 0).exp, 1250000, 'all three, big-endian');
+});
+
 test('a caught record the save does not hold is null rather than Lv0',
      async (t) => {
   const sym = symbols();
@@ -393,6 +421,46 @@ test('a caught record the save does not hold is null rather than Lv0',
   t.eq(got.level, 5, 'the low six bits are the level it was caught at');
   t.eq(got.when, 'night', 'the top two are the time of day');
   t.eq(got.place, 2, 'and the second byte is the landmark');
+});
+
+test('the caught level is believed at both ends of its range and nowhere else',
+     async (t) => {
+  // Six bits hold 0 to 63, and the field is shared with a time-of-day in the
+  // top two -- so the bound is doing real work rather than being tidy. Lv0 is
+  // the save that does not say; anything else in range is a level.
+  const sym = symbols();
+  const state = new GameState(sym);
+  const at = (byte) => {
+    const wram = worldRam(sym, {
+      party: [{ species: 155, level: 5, caughtBytes: [byte, 0] }],
+    });
+    return state.monDetail(wram, 0).caught;
+  };
+  t.eq(at(0), null, 'zero is not a level');
+  t.eq(at(1).level, 1, 'one is');
+  t.eq(at(63).level, 63, 'and so is the highest six bits can hold');
+  // And 63 is genuinely the top: the two bits above it are the time of day, so
+  // a byte of 0x45 is Lv5 in the morning and not a Pokemon caught at 69. There
+  // is no upper bound in the code because the mask is one -- a `<= 100` there
+  // would be a comparison with no path to being false.
+  t.eq(at(0x45), { level: 5, when: 'morning', place: 0 },
+       'the bits above the level are a different field entirely');
+  t.eq(at(0x40), null, 'and a level of zero under them is still no record');
+});
+
+test('a time of day the record does not give is null, not a missing key',
+     async (t) => {
+  // The top two bits are 0 for "unknown", which the profile names as a null
+  // entry rather than leaving off the end of the list -- so the reader answers
+  // the same shape whether the save says or not.
+  const sym = symbols();
+  const state = new GameState(sym);
+  const wram = worldRam(sym, {
+    party: [{ species: 155, level: 5, caughtBytes: [0x05, 0] }],
+  });
+  const got = state.monDetail(wram, 0).caught;
+  t.eq(got.when, null, 'null, and the level beside it is still read');
+  t.eq(got.level, 5, 'which is the point of not refusing the whole record');
 });
 
 test('the Pokedex bit arrays are two lists of species, bounded by the count',
@@ -415,10 +483,35 @@ test('the caught array stops at the last species, not at the last byte',
   // bound comes from the engine's species count.
   const sym = symbols();
   const state = new GameState(sym);
-  const wram = worldRam(sym, { caught: [250], seen: [1, 2, 3, 4, 5] });
+  const wram = worldRam(sym, { caught: [251], seen: [1, 2, 3, 4, 5] });
   const dex = state.dex(wram);
-  t.eq(dex.caught, [250], 'nothing from the array next door');
+  t.eq(dex.caught, [251], 'the last species is in, and nothing next door is');
   t.eq(dex.seen, [1, 2, 3, 4, 5], 'which is itself read correctly');
+});
+
+test('and it starts at the first species, not at the byte before it',
+     async (t) => {
+  // The other end of the same arithmetic. Species ids are 1-based and the bits
+  // are 0-based, so a loop starting at 0 asks for bit -1 -- which is the top
+  // bit of the byte *in front of* the array, and reads as a species 0 nobody
+  // has. wEventFlags ends immediately before it in the fake, as it does on the
+  // cartridge, so setting its last bit is what makes that visible.
+  const sym = symbols();
+  const state = new GameState(sym);
+  const wram = worldRam(sym, { events: [127], caught: [1, 2] });
+  t.eq(state.dex(wram).caught, [1, 2], 'no species zero, whatever is behind it');
+});
+
+test('a cartridge that keeps one of the two arrays answers with the one it has',
+     async (t) => {
+  // `caught` and `seen` are named separately in the symbol file and a hack
+  // could carry either alone. Refusing both because one is missing would lose
+  // a list that is sitting right there.
+  const sym = symbols();
+  const half = new GameState(blindTo(sym, 'wPokedexCaught'));
+  const dex = half.dex(worldRam(sym, { caught: [1], seen: [1, 16] }));
+  t.eq(dex.caught, null, 'cannot say, which is not "none"');
+  t.eq(dex.seen, [1, 16], 'and the half it can read is read');
 });
 
 test('a cartridge with no Pokedex flags says nothing rather than "none caught"',

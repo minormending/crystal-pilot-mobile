@@ -3711,6 +3711,96 @@ at the end, so an interrupted run leaves the repository mutated. A mutated
 repository that still compiles is exactly the state this tool exists to create
 on purpose and nowhere else.
 
+### A fifty-first pass: a Pokédex, and the six defects it took to get one
+
+The question was whether the app could show what a captured Pokémon is made of
+— its DVs and stat experience, the level it learns its next move, the level it
+evolves. All of it turned out to be readable, and getting it read found six
+things wrong, four of them in the code written this pass and two of them
+older.
+
+**The pointer guard was backwards, and one run of a new tool said so.**
+`EvosAttacksPointers` was read the way `trainerIndex` reads `TrainerGroups` —
+"a pointer below the table is not a pointer" — because that is where the
+trainer parties sit. This table keeps its entries *above* its pointers, so all
+251 species refused. Nothing about reading the code would have caught it;
+`tools/dex --verify` named it in a line.
+
+**And the obvious check for the other failure mode was wrong.** A learnset out
+of level order is what a record read at the wrong width looks like, so the
+verifier asserted the levels climb — and MUK failed. MUK's entry genuinely runs
+Lv45 SLUDGE in front of Lv23 MINIMIZE on this cartridge, verified against
+`MukEvosAttacks` byte for byte; the game does not care because it scans the
+whole list, and it is the only species in the game that does it. The check that
+replaced it is structural and much stronger: the pointers ascend and the
+entries sit end to end, so **a species' record must be exactly as long as the
+gap to the next pointer** — and the length is recomputed from the *decoded*
+record, so a record read at the wrong width comes out the wrong length even
+when every field in it looks plausible. All 251 pass: 122 evolutions, 2215
+level-up moves.
+
+**The growth rate is at 0x16 and was read at 0x15**, which is the CHIKORITA
+failure one field along and just as quiet: at 0x15 every one of the 251 species
+comes back `mediumFast`, a real curve and a believable answer for the handful
+anybody checks first. The verifier fails the whole table if it ever sees fewer
+than two curves in use, because *everybody has the same one* is the signature.
+
+**Two readers turned a missing table into a decoding bug.** `_packedName` has
+refused an unterminated run since it was written; `landmarkName` and the new
+`typeName` read a fixed bound and handed it to `decodeText`, which will turn
+any bytes at all into something. A cartridge naming `TypeNames` with a pointer
+into zeroes answered `????????????` — which reads like a charmap that lost its
+punctuation, not like a table that could not be found. Both go through
+`_terminatedName` now. Found by a test asking what a cartridge with *no* type
+table says.
+
+**A test fake claimed to have every symbol in the world.** Six tests build a
+symbol table with a name taken out; two built it as
+`{ ...sym, has: (n) => n !== 'wEventFlags' }`, which spreads the instance's own
+fields, loses the prototype's `has`, and answers true for everything. They
+passed for as long as nothing new was optional and broke the moment `state.js`
+asked for `wPokedexCaught` — `has` said yes and `addr` threw, in two tests
+about event flags. The failure is the wrong way round, which is what makes it
+worth a helper rather than two fixes: **a fake more confident than the real
+thing breaks the tests nobody was changing.** `blindTo` is the only form now.
+
+**And six `<div>`s that were never closed, in markup no check was reading.**
+`dexCard` builds its stat rows in a loop and the closing tag was missing from
+the template, so the browser nested them six deep. Every row still *rendered* —
+a grid row inside a grid row inside a grid row — which is why it survived being
+built, screenshotted at 375px, and looked at. `check_markup` reads
+`index.html`; the party list, the offers and this card are template literals in
+`app/*.js` and nothing looked at those at all. There is a `builtmarkup` group
+now, asked per function because markup is built across several statements — a
+header, a loop pushing rows, a join at the end — and it has an entry in
+`check-checks` that puts the missing `</div>` back and insists the group fails.
+
+Writing that check found its own trap immediately, which is worth recording
+because it is the same shape as everything above: scanning string literals one
+at a time finds `</summary>` and never `<summary>`, because `${...}` splits the
+template in the middle of the opening tag. The fragments are joined before
+matching, on a character an attribute may hold and a tag name may not.
+
+### And two comparisons with no path to being false
+
+`tools/mutate` over the three changed modules, before and after the tests this
+pass added: `state.js` went from 76% of mutations caught to **88%**, and the
+survivors it left named two decisions that were not decisions.
+
+`caughtLevel <= 100` sits behind a six-bit mask, so it can never be false —
+the mask *is* the bound, and Gen 2 clamps a catch above 63. And
+`this.e.badgeBytes || 2` and `this.e.moneyBytes || 3` are fallbacks for a state
+`engineFor` cannot produce: it returns `{ ...gen2, ...title.engine }`, so both
+fields are always there. All three are gone. This is the fourth time the
+mutation tool has been more useful for what it deletes than for what it covers.
+
+The rest of what it left is honest test debt and now has tests: every move and
+every PP keeping its own slot (four indices written out four times, and every
+test until now gave a party member the same value in all four), experience
+using all three of its bytes, the caught level believed at both ends of its
+range, the Pokédex bit array starting at the first species and stopping at the
+last, and a card built with no cartridge behind it at all.
+
 ## The part that had to be redesigned
 
 The desktop pilot hangs its whole design on CPU hooks: the game's own routines

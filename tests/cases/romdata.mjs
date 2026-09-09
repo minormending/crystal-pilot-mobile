@@ -1032,6 +1032,49 @@ test('a cartridge with no evolution table says so rather than guessing',
   t.eq(rom.evosAttacks(155), null, 'null, and no exception on the way');
 });
 
+test('the species range is asked about at both ends', async (t) => {
+  const sym = symbols();
+  const rom = romReading({}, {
+    evos: evosRegion({ 1: { learns: [[1, 33]] },
+                       [gen2.speciesCount]: { learns: [[1, 33]] } }, sym),
+  });
+  t.eq(rom.evosAttacks(0), null, 'there is no species zero to ask about');
+  t.ne(rom.evosAttacks(1), null, 'the first is in');
+  t.ne(rom.evosAttacks(gen2.speciesCount), null, 'and so is the last');
+  t.eq(rom.evosAttacks(gen2.speciesCount + 1), null, 'one past it is not');
+});
+
+test('a run with no terminator stops rather than reading the bank', async (t) => {
+  // The guards are a bound, not a size. A species whose pointer is right and
+  // whose data is not -- a hack mid-edit, a symbol file one build stale -- must
+  // give up somewhere, and "somewhere" has to be short of walking out of the
+  // bank and into whatever is next.
+  const sym = symbols();
+  const bytes = evosRegion({ 1: { learns: [[1, 33]] } }, sym);
+  // Overwrite the terminators behind species one with more pairs, so the
+  // learnset never ends.
+  const head = gen2.speciesCount * 2;
+  for (let i = head; i < bytes.length; i++) bytes[i] = i % 2 ? 33 : 5;
+  const rom = romReading({}, { evos: bytes });
+  const got = rom.evosAttacks(1);
+  t.eq(got.learns.length, gen2.evo.maxLearn,
+       'it stops at the bound rather than running on');
+  t.lte(got.learns.length, 64, 'which is a bound, and a small one');
+});
+
+test('an entry that could not be read stays unreadable when asked twice',
+     async (t) => {
+  // The refusal is cached like an answer, and a cache holding `undefined`
+  // where it meant `null` answers the second caller differently from the
+  // first -- which is the shape of bug that only shows on a redraw.
+  const sym = symbols();
+  const rom = romReading({}, {
+    evos: evosRegion({ 1: { evolves: [[9, 1, 2]] } }, sym),
+  });
+  t.eq(rom.evosAttacks(1), null, 'the first time');
+  t.eq(rom.evosAttacks(1), null, 'and the same the second');
+});
+
 test('a base-stats entry is six named stats and a growth rate', async (t) => {
   const sym = symbols();
   const rom = romReading({}, {
@@ -1078,4 +1121,15 @@ test('a cartridge that will not name its types says nothing, not "type 20"',
      async (t) => {
   const rom = romReading({}, {});
   t.eq(rom.typeName(20), '', 'empty, so the caller decides what to show instead');
+});
+
+test('a type nobody asked about is not type zero', async (t) => {
+  // `typeName(0)` is NORMAL and `typeName(null)` is a caller with nothing to
+  // ask -- and zero is falsy, so the guard has to name null and undefined
+  // rather than testing the id for truth.
+  const sym = symbols();
+  const rom = romReading({}, { typeNames: typeNameRegion({ 0: 'NORMAL' }, sym) });
+  t.eq(rom.typeName(0), 'NORMAL', 'zero is a real type id');
+  t.eq(rom.typeName(null), '', 'null is not');
+  t.eq(rom.typeName(undefined), '', 'nor is nothing at all');
 });
