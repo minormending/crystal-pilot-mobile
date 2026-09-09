@@ -29,7 +29,14 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..') + '/';
 // sw.js is in here and app/main.js is not, and the difference is what can be
 // loaded without a browser: the worker evaluates in a `vm` context holding
 // fakes for the four globals it uses, and main.js needs a DOM.
-const WATCHED = /^(gbcore|gen2|titles)\/|^sw\.js$/;
+// **`app/` is in here now, and used not to be.** The comment that excluded it
+// said "main.js needs a DOM", which is true and was the wrong conclusion: it
+// also excluded `app/rows.js`, which is the most heavily tested module in the
+// repository, and it made the headline percentage a number computed over a
+// subset chosen to look good. A file the suite never loads is counted at zero
+// below, with its own `reach:` note beside it, which is the honest way to
+// carry a module a test cannot reach.
+const WATCHED = /^(app|gbcore|gen2|titles)\/|^sw\.js$/;
 const dir = mkdtempSync(join(tmpdir(), 'cov-'));
 
 try {
@@ -52,6 +59,16 @@ for (const f of readdirSync(dir)) {
   }
 }
 rmSync(dir, { recursive: true, force: true });
+
+// Every source file the suite *could* have loaded, so that one it never
+// touches lands in the denominator instead of vanishing from it.
+const onDisk = [];
+for (const dir of ['app', 'gbcore', 'gen2', 'titles']) {
+  for (const f of readdirSync(join(ROOT, dir))) {
+    if (f.endsWith('.js')) onDisk.push(`${dir}/${f}`);
+  }
+}
+onDisk.push('sw.js');
 
 const dead = process.argv.includes('--dead');
 const rows = [];
@@ -102,11 +119,33 @@ for (const [rel, s] of scripts) {
   }
 }
 
+// The ones nothing imported. Counted the same way, run at nought.
+for (const rel of onDisk) {
+  if (scripts.has(rel)) continue;
+  const src = readFileSync(ROOT + rel, 'utf8');
+  let code = 0;
+  for (const line of src.split('\n')) {
+    const t = line.trim();
+    if (t && !t.startsWith('//') && !t.startsWith('*') && !t.startsWith('/*')) code++;
+  }
+  if (code) rows.push([rel, code, 0, 0]);
+}
+
 if (dead) console.log('');
 rows.sort((a, b) => a[3] - b[3]);
 console.log('module                    code   run     %');
 for (const [rel, code, run, pct] of rows) {
-  console.log(`${rel.padEnd(24)} ${String(code).padStart(5)} ${String(run).padStart(5)} ${String(pct).padStart(5)}%`);
+  // A module that cannot be reached from a test says so in its own first
+  // comment, as a `reach:` note, and the mark points at it -- because a reader
+  // told only that `app/main.js` runs 0% of its lines concludes neglect, and
+  // that is the wrong lesson to leave lying around. It needs a DOM.
+  const note = /^\/\/ reach:/m.test(readFileSync(rel, 'utf8')) ? ' ·' : '';
+  console.log(`${rel.padEnd(24)} ${String(code).padStart(5)} ${String(run).padStart(5)} ${String(pct).padStart(5)}%${note}`);
+}
+if (rows.some(([rel]) => /^\/\/ reach:/m.test(readFileSync(rel, 'utf8')))) {
+  console.log('\n· out of reach from a test — the file says why, in its own'
+    + ' `reach:` note.\n  Those are held by the checks in tools/check-app'
+    + ' instead of by this number.');
 }
 const c = rows.reduce((a, r) => a + r[1], 0), r2 = rows.reduce((a, r) => a + r[2], 0);
 console.log(`\n${r2}/${c} lines of code run by the suite — ${Math.round(r2 * 100 / c)}%`);

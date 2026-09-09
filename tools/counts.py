@@ -172,7 +172,23 @@ def rewrite():
         changed.append(('docs/DEVELOPING.md', f'{name} {was} → {real[name]}'))
         return f'| `{name}` | {real[name]} |'
 
-    new = re.sub(r'^\|\s*`([\w.]+\.mjs)`\s*\|\s*(\d+)\s*\|', row, text, flags=re.M)
-    if new != text:
-        path.write_text(new)
+    text = re.sub(r'^\|\s*`([\w.]+\.mjs)`\s*\|\s*(\d+)\s*\|', row, text,
+                  flags=re.M)
+
+    # **A file the table has never heard of gets a row.** This could only
+    # update numbers at first, so a *new* test file left the check failing with
+    # nothing the writer could do about it -- which is the state a check
+    # somebody edits around ends up in. The description is left as a dash on
+    # purpose: what a file pins down is the one thing here that cannot be
+    # computed, and a placeholder asks for it plainly.
+    listed = set(re.findall(r'^\|\s*`([\w.]+\.mjs)`', text, re.M))
+    for name in sorted(set(real) - listed):
+        rows = list(re.finditer(r'^\|\s*`[\w.]+\.mjs`\s*\|.*\|$', text, re.M))
+        if not rows:
+            break
+        at = rows[-1].end()
+        text = text[:at] + f'\n| `{name}` | {real[name]} | — |' + text[at:]
+        changed.append(('docs/DEVELOPING.md', f'{name} added, with no description'))
+    if text != path.read_text():
+        path.write_text(text)
     return changed

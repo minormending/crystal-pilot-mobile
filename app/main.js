@@ -1,4 +1,7 @@
 // Wiring: file pickers, the render loop, and dispatching a task.
+// reach: needs a DOM, so no test here can import it. Held instead by the
+//   checks that read the markup: wiring, labels, listeners, markup, counts.
+
 import { readHeader } from '../gbcore/cartridge.js';
 import { GameBoy } from '../gbcore/gb.js';
 import { Symbols, sharedNames } from '../gen2/symbols.js';

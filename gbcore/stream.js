@@ -23,6 +23,9 @@
 // tell them their own public address. Anything stricter than that needs a TURN
 // relay, which is a server to run, and this app does not have one: across
 // networks, this may simply not connect.
+// reach: needs RTCPeerConnection and canvas.captureStream, neither of which
+//   exists in node. Faking them would produce a suite that cannot fail.
+
 const ICE = [{ urls: 'stun:stun.l.google.com:19302' }];
 
 // Long enough for host and STUN candidates on any sane network, short enough

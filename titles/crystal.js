@@ -19,6 +19,9 @@
 // Crystal map.
 //
 // A hack of the same base game replaces this file and keeps the other one.
+// reach: mostly driving code, which needs a cartridge. Its *data* is held to
+//   the ROM by the gates, gyms and moves checks.
+
 import { Journey } from '../gen2/journey.js';
 
 const key = (group, number) => group * 256 + number;

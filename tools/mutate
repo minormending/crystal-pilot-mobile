@@ -40,6 +40,7 @@ import random
 import re
 import shutil
 import subprocess
+import textwrap
 import sys
 import tempfile
 
@@ -254,6 +255,26 @@ OPERATORS = [
     _drop_negation,
     _num,
 ]
+
+
+REACH = re.compile(r"^// reach:(.*(?:\n//   .*)*)", re.M)
+
+
+def reach_note(rel):
+    """A module's own note about why it cannot be reached from a test.
+
+    In the file rather than in a list here, because a list of exemptions is a
+    thing that outlives its reasons -- and this one has to be read next to the
+    code it excuses.
+    """
+    path = REPO / rel
+    if not path.exists():
+        return None
+    m = REACH.search(path.read_text())
+    if not m:
+        return None
+    return " ".join(part.strip().lstrip("/").strip()
+                    for part in m.group(1).split("\n")).strip()
 
 
 def candidates(rel, src):
@@ -507,6 +528,20 @@ def main(argv):
         for name, (total, lived) in rows:
             pct = 100 * (total - lived) // total
             print(f"  {pct:3}%  {name}  ({total - lived} of {total})")
+        # And *why*, for the files where a low score is a fact about where the
+        # module runs rather than a gap in the testing. `app/main.js` scores 0%
+        # of 922 because no test can import a DOM -- and a reader who is told
+        # only the number concludes neglect, which is the wrong lesson to leave
+        # lying around. The note lives in the file it is about, as a `reach:`
+        # comment, so it cannot drift from it.
+        notes = [(name, reach_note(name)) for name, _ in rows]
+        notes = [(n, r) for n, r in notes if r]
+        if notes:
+            print("\nand why, where the module is out of reach from node:")
+            for name, note in notes:
+                print(f"  {name}")
+                for line in textwrap.wrap(note, 74):
+                    print(f"      {line}")
 
     print(f"\ncaught {killed + hung} of {len(pool)} ({score}%)"
           + (f", {hung} by hanging" if hung else ""))

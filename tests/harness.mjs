@@ -184,7 +184,17 @@ export async function run(pattern = null, verbose = false) {
 const WRAM_NAMES = [
   ['wPartyCount', 1], ['wPartyMon1', 6 * 0x30],
   ['wBattleMode', 1], ['wMapGroup', 1], ['wMapNumber', 1], ['wMapStatus', 1],
-  ['wScriptMode', 1], ['wXCoord', 1], ['wYCoord', 1], ['wPlayerTileCollision', 1],
+  // **Y then X, because that is the cartridge's order** and `Nav.pos()` reads
+  // both from one address: `wYCoord` at $dcb7 and `wXCoord` at $dcb8, checked
+  // in the real symbol file. This fake allocated them the other way round, so
+  // any test reading a position through the real `Nav` rather than through
+  // `worldRam`'s named writes would have got the two transposed.
+  ['wScriptMode', 1], ['wYCoord', 1], ['wXCoord', 1], ['wPlayerTileCollision', 1],
+  // The two `Nav` needs to find the screen's scroll offset. Missing until now,
+  // which is *why* nav.js had no tests: its constructor throws on a symbol
+  // table without them, so no test could construct one and nobody noticed the
+  // module was untested at all.
+  ['wPlayerBGMapOffsetX', 1], ['wPlayerBGMapOffsetY', 1],
   ['wMenuCursorX', 1], ['wMenuCursorY', 1], ['wBattleMenuCursorPosition', 1],
   ['wEnemyMonSpecies', 1], ['wEnemyMonLevel', 1], ['wEnemyMonHP', 2],
   ['wEnemyMonMaxHP', 2], ['wBattleMonHP', 2], ['wBattleMonMaxHP', 2],
