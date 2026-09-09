@@ -340,13 +340,13 @@ second, which is there so the core's own waits finish, not to run a game.
 
 Everything above was watched happening. This section was the exception, and the
 exception was the point of it: after the ROM-hack work shipped, **forty-eight**
-passes went looking for defects in code that already worked, and found **239** —
+passes went looking for defects in code that already worked, and found **241** —
 a handful of them created by a fix on the way, which are in the table in italics
 because they are a different kind of thing. None of them announced itself.
 
 **Reading found twenty-three**, more than any other single method, which is why
 it comes first in the table and why it is worth doing before touching the game.
-But the interesting number is the tail: the remaining two hundred and sixteen were
+But the interesting number is the tail: the remaining two hundred and eighteen were
 found almost as many different ways, and almost every entry in that column is a sentence rather than
 a category — *measuring the fix*, *asking a second tile*, *feeding it the wrong
 thing*, *writing a cartridge Crystal is not*, *a test, before the cartridge*,
@@ -617,6 +617,8 @@ exactly why nothing failed.
 | 48 | `weakenTo: 0` means throw, not weaken a little first — read as *at or above zero* and every catch takes a swing, which against a Lv2 Rattata at full health is how the thing being caught is knocked out | catch with the threshold at zero | the same |
 | 48 | `otherBattleMenu` needs both of its numbers, `switchFor` counts a power-1 move as damage, the switch budget bounds the loop in both directions, and `chip` reports a knockout only when the enemy is down — four guards with nothing behind them | any of the four boundaries | the same |
 | 48 | *`BaseData` has no terminator to run off the end of, so a symbol file pointing elsewhere reads zeroes — and `[0, 0]` is NORMAL/NORMAL, a real type pair* | *a wrong address* | *writing the reader, and asking what a bad read would return* |
+| 48 | *`tools/rom-events --find` folded its query to upper case, and Gen 2 gives capitals and lower case separate blocks — so "sent to BILL" came back "not in this ROM" while sitting in it* | *search for anything lower case* | *searching for a phrase already known to be there* |
+| 48 | **nothing checked that a phrase the app looks for on screen is one the cartridge says.** A phrase that is not in the ROM never matches and never *fails*: the screen is read as tiles and compared as folded text, so a typo quietly stops a feature working | mistype `boxed` | building the search, then asking what it could now hold to the cartridge |
 
 Five things in that table are worth more than the individual rows.
 
@@ -3483,6 +3485,36 @@ The two together are the same shape as the forty-sixth pass's finding about
 the runner, and it is worth naming as a rule rather than a coincidence: **a
 path that was measured once on a cartridge and then wired up is the path least
 likely to have a test.** Measuring it felt like verifying it.
+
+### And a check for the words the game says
+
+`--find` also made a check possible that had never existed: **every phrase the
+app matches against the screen has to be one the cartridge actually says.**
+
+A phrase that is not in the ROM **never matches and never fails.** The screen
+is read as tiles and compared as folded text, so a typo does not error — it
+just never fires, and the feature resting on it quietly stops working. For the
+title's `boxed` phrase that means a *successful* catch reported as a getaway,
+which is the one outcome that branch exists to prevent. There are three of
+them, and all three land on the symbol that names them:
+
+```
+  "sent to BILL" — _WasSentToBillsPCText+9 and 1 more
+  "PACK" — StartMenu.PackString and 11 more
+  "SAVE" — StartMenu.SaveString and 11 more
+```
+
+The static half is a layering claim: a phrase is **content**, so no engine
+module may compare a literal one. `sc.says(boxed)` takes the title's word;
+`sc.says('sent to BILL')` would put a fact about one cartridge's English where
+a hack cannot change it and `check_layers` cannot see it.
+
+And the search itself went in wrong, which is worth recording because of what
+it was: it folded the query to upper case, and Gen 2 gives capitals and lower
+case separate blocks — `A` is `$80`, `a` is `$a0`. So `sent to BILL` came back
+*not in this ROM* while sitting in it. A confident wrong answer out of a tool
+written to prevent confident wrong answers, caught on its first real query
+only because the phrase was already known to be there.
 
 ## The part that had to be redesigned
 
