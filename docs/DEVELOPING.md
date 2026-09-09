@@ -152,6 +152,8 @@ tools/mutate gen2 --all            # no sampling
 tools/mutate --limit 60 --seed 7   # a reproducible slice
 tools/mutate -k shut               # only lines whose text matches
 tools/mutate gen2/state.js --list  # print the mutations, run nothing
+tools/mutate gen2/battle.js --save /tmp/s.txt   # keep the survivors
+tools/mutate --from /tmp/s.txt     # replay just those, verdict each
 ```
 
 **And it counts every source file, including the ones it cannot reach.** That
@@ -228,6 +230,39 @@ tools/mutate gbcore/room.js --all      # before: 45 of 92
 # write the tests
 tools/mutate gbcore/room.js --all      # after: 45 of 92 — so they bought nothing
 ```
+
+**And the third step is `--from`, because it was the one that cost.** Re-running
+the module re-runs every mutation of it — two minutes for `gen2/battle.js`, to
+find out about the four lines you have just written tests for. So the first run
+can keep its survivors and the tool can replay exactly those:
+
+```bash
+tools/mutate gen2/battle.js --save /tmp/s.txt   # 72 survivors, and a to-do list
+# write the tests for the ones worth testing
+tools/mutate --from /tmp/s.txt                  # a verdict against each
+```
+
+The output is verdicts rather than a score, because that is the question:
+
+```
+  killed    gen2/battle.js:137  0 to 1
+      return party.find((m) => m.hp > 0) || party[0] || null;
+  SURVIVED  gen2/battle.js:147  1 to 2
+      len: Math.max(...watched) - Math.min(...watched) + 1,
+```
+
+The save file is one line per survivor, tab separated, and it is read by a
+person at least as often as by the tool — it *is* the to-do list. Replay
+matches by **line text, not by byte offset**: adding tests does not move the
+source, but fixing it does, and a replay that quietly mutated the wrong bytes
+would report verdicts about something else entirely. A line that has changed
+since it was saved is reported as skipped, which is the honest answer — it
+needs measuring again rather than replaying.
+
+Before this, every one of those third steps was a Python heredoc written by
+hand, one per survivor, which is precisely the step this tool exists to stop
+anybody doing. Five were written that way in the forty-seventh pass alone
+before it became obvious they should be a flag.
 
 **And one class of mutation was removed, because it could only ever survive.**
 `n → n + 1` asks *is this exact value right?*, which is the classic off-by-one

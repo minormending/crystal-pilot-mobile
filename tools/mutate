@@ -26,6 +26,24 @@ tool now.
     tools/mutate --limit 60 --seed 7   a reproducible slice
     tools/mutate -k shut               only mutations on lines matching "shut"
 
+    tools/mutate gen2/battle.js --save /tmp/s.txt     keep the survivors
+    ...write the tests...
+    tools/mutate --from /tmp/s.txt                    just those, per verdict
+
+`--save` and `--from` are the loop this repository already says out loud --
+*measure, write the test for the survivor, measure again* -- and the third step
+was the one that cost. Re-running the module re-runs every mutation of it,
+which for `gen2/battle.js` is two minutes to find out about the four lines you
+just wrote tests for; the alternative was a python heredoc per survivor, by
+hand, which is exactly the step this tool exists to stop people doing. `--from`
+replays a saved list and prints a verdict against each one.
+
+Matched by line text rather than by byte offset, deliberately: adding tests
+does not move the source, but *fixing* it does, and a replay that silently
+mutated the wrong bytes would report verdicts about something else. A line that
+has been edited since it was saved is reported as such and skipped, which is
+also the honest answer -- it needs measuring again, not replaying.
+
 **Comments and strings are never touched.** That is not a nicety in this
 repository: the prose outweighs the code better than two to one, and it is full
 of `&&`, of numbers, and of the words the game says. A masker walks each file
@@ -392,6 +410,106 @@ def _worker(job):
     return cand, ok, note
 
 
+def save_list(path, survivors):
+    """Write the survivors somewhere a later run can read them back.
+
+    One line each, tab separated, because it is read by a person as often as
+    by this tool -- the file *is* the to-do list for the tests that follow.
+    """
+    out = pathlib.Path(path)
+    lines = [f"{c['file']}\t{c['label']}\t{c['context']}" for c in survivors]
+    out.write_text("\n".join(lines) + ("\n" if lines else ""))
+    return len(lines)
+
+
+def replay(path, only, jobs):
+    """Re-run exactly the mutations in a `--save` file, with a verdict each.
+
+    The verdicts are the whole output: this is not asking for a score, it is
+    asking whether the tests written since have earned their keep. A survivor
+    that is still a survivor is a test that looks like it covers the line.
+    """
+    want = []
+    for raw in pathlib.Path(path).read_text().splitlines():
+        if not raw.strip():
+            continue
+        parts = raw.split("\t")
+        if len(parts) != 3:
+            print(f"  not a line this tool wrote: {raw[:60]}")
+            return 2
+        want.append(tuple(parts))
+
+    # Re-derive the candidates rather than trusting the saved offsets: a fix
+    # between the two runs moves every byte after it.
+    have, missing = [], []
+    by_file = {}
+    for rel, label, context in want:
+        if rel not in by_file:
+            src = (REPO / rel)
+            if not src.exists():
+                missing.append((rel, label, context, "the file is gone"))
+                by_file[rel] = {}
+                continue
+            by_file[rel] = {(c["label"], c["context"]): c
+                            for c in candidates(rel, src.read_text())}
+        found = by_file[rel].get((label, context))
+        if found is None:
+            missing.append((rel, label, context, "that line has changed"))
+        else:
+            have.append(found)
+
+    for rel, label, context, why in missing:
+        print(f"  skipped  {rel}  {label}  — {why}")
+        print(f"      {context}")
+    if not have:
+        print("\nnothing left to replay: measure the module again")
+        return 0
+
+    jobs = jobs or min(8, multiprocessing.cpu_count())
+    print(f"mutate: replaying {len(have)} saved mutation(s), {jobs} at a time")
+    roots, tmps = [], []
+    lived = []
+    try:
+        for _ in range(jobs):
+            t = tempfile.mkdtemp(prefix="mutate-")
+            tmps.append(t)
+            copy_tree(pathlib.Path(t))
+            roots.append(t)
+        import time
+        t0 = time.monotonic()
+        ok, _ = suite_ok(roots[0], only)
+        clean = time.monotonic() - t0
+        if not ok:
+            print("  the suite does not pass on a clean tree; fix that first")
+            return 2
+        set_timeout(clean)
+        queue = multiprocessing.Queue()
+        for r in roots:
+            queue.put(r)
+        results = []
+        with multiprocessing.Pool(jobs, _claim, (queue,)) as mp:
+            for cand, alive, note in mp.imap_unordered(
+                    _worker, [(c, only) for c in have], 1):
+                results.append((cand, alive, note))
+                if alive and note != "hung":
+                    lived.append(cand)
+    finally:
+        for t in tmps:
+            shutil.rmtree(t, ignore_errors=True)
+
+    print()
+    results.sort(key=lambda r: (r[0]["file"], r[0]["line"]))
+    for cand, alive, note in results:
+        verdict = "SURVIVED" if (alive and note != "hung") else "killed  "
+        print(f"  {verdict}  {cand['file']}:{cand['line']}  {cand['label']}")
+        print(f"      {cand['context']}")
+    print(f"\n{len(have) - len(lived)} of {len(have)} now caught")
+    if lived:
+        print("the ones still standing are tests that look like they cover "
+              "the line")
+    return 1 if lived else 0
+
+
 def main(argv):
     ap = argparse.ArgumentParser(add_help=False)
     ap.add_argument("targets", nargs="*")
@@ -406,11 +524,18 @@ def main(argv):
                     help="pass -k to run-tests, for a fast targeted check")
     ap.add_argument("--list", action="store_true",
                     help="print the mutations and run nothing")
+    ap.add_argument("--save", default=None,
+                    help="write the survivors to this file, for --from")
+    ap.add_argument("--from", dest="source", default=None,
+                    help="replay exactly the mutations in a --save file")
     ap.add_argument("-h", "--help", action="store_true")
     args = ap.parse_args(argv)
     if args.help:
         print(__doc__)
         return 0
+
+    if args.source:
+        return replay(args.source, args.tests, args.jobs)
 
     files = sources(args.targets)
     pool = []
@@ -502,6 +627,10 @@ def main(argv):
             print(f"      {c['context']}")
     else:
         print("no survivors: every mutation was caught")
+    if args.save:
+        n = save_list(args.save, survivors)
+        print(f"\n{n} survivor(s) written to {args.save} — "
+              f"`tools/mutate --from {args.save}` replays them")
     killed = len(pool) - len(survivors) - hung
     score = 100 * (killed + hung) // len(pool)
 
