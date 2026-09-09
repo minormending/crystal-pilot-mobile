@@ -536,6 +536,35 @@ test('a party at full health is not the bag’s business', async (t) => {
   t.contains(r.message, 'nothing the bag can mend', 'and it says so');
 });
 
+test('a Pokémon that reaches full health mid-way is left alone', async (t) => {
+  // The `hurt` filter is taken once, at the start, so the guard inside the
+  // loop is the only thing that notices a Pokémon topped up by the potion
+  // before this one. Read as strictly-greater and a full Pokémon is handed
+  // another — 90 of 100, one potion, and the second is spent on nothing.
+  const j = mender({ party: [{ hp: 90, maxHp: 100 }], items: [[18, 9]],
+                     gain: 20 });
+  const r = await j.healFromBag();
+  t.true(r.ok, 'it mended it');
+  t.eq(j.used.length, 1, 'one potion, with nine in the bag');
+});
+
+test('a fainted Pokémon is not cured of anything either', async (t) => {
+  // Poison on something at 0 HP is not the problem: the faint is, and only a
+  // Center answers that. An antidote spent here buys nothing and is gone.
+  const j = mender({ party: [{ hp: 0, maxHp: 40, status: ['psn'] }],
+                     items: [[12, 3]] });
+  const r = await j.healFromBag();
+  t.false(r.ok, 'the bag is not the answer');
+  t.eq(j.used.length, 0, 'and no antidote went into it');
+});
+
+test('a Pokémon with no status at all is not cured of anything', async (t) => {
+  const j = mender({ party: [{ hp: 20, maxHp: 40, status: [] }],
+                     items: [[12, 3], [18, 2]] });
+  await j.healFromBag();
+  t.eq(j.used.map((u) => u.id), [18], 'the potion, and not the antidote');
+});
+
 test('healNow spends the bag before it spends the walk', async (t) => {
   // The caller-level test, and it is here because its absence let a patch land
   // in the wrong method: the bag block went into `healUp` instead of `healNow`,
@@ -2763,4 +2792,109 @@ test('a crossing with no openings at all gives up rather than looping',
   const { j, asked } = crossing({ size: [10, 8], open: [] });
   t.false(await j.crossEdge('LEFT', 999, 1), 'it says no');
   t.eq(asked.length, 0, 'having walked at nothing');
+});
+
+// --- saying hello to whoever pushed you back --------------------------------
+//
+// `talkPast` had no test at all, which is worth saying plainly: it is the
+// whole of the fourth-pass lesson about scripted tiles — a tile that pushes
+// you back usually belongs to somebody standing beside it, and pressing on
+// through them is not how you get past. Every decision in it was a decision
+// nothing could check.
+
+/**
+ * A Journey standing on a map with one scripted tile and some people near it.
+ *
+ * `triggers` and `people` are given in the shapes `world.coordEventsOn` and
+ * `collision.liveObjects` actually return, coordinates and all, so a reach
+ * that is measured wrongly is measured wrongly here too.
+ */
+function pushedBack({ at = [18, 8], triggers = [{ x: 18, y: 8 }],
+                      people = [{ index: 1, type: 0, x: 19, y: 8 }],
+                      approach = true } = {}) {
+  const sym = symbols();
+  const state = new GameState(sym);
+  const gb = new FakeGameBoy({ wram: worldRam(sym, {}) });
+  const steps = [];
+  const j = new Journey(gb, state, null,
+                        { off: 0, calibrate: () => true, playerPos: () => at,
+                          walkable: () => true, mapSize: () => [30, 20],
+                          liveObjects: () => people },
+                        { mapKey: async () => 2561,
+                          step: async (face) => { steps.push(face); } },
+                        () => {}, { coordEventsOn: () => triggers }, {});
+  j.said = [];
+  j.say = (m) => j.said.push(m);
+  j.settled = async () => gb.wram;
+  j.runScripts = async () => true;
+  j._approach = async (tile) => (approach ? { tile, face: 'RIGHT' } : null);
+  return { j, gb, steps };
+}
+
+test('the person beside the tile that turned you back gets spoken to',
+     async (t) => {
+  // Route 32, which is the case that taught the rule: the coord event at
+  // (18,8) pushes the player north, and the man who checks the badge is
+  // standing one tile east at (19,8).
+  const { j, gb, steps } = pushedBack();
+  t.true(await j.talkPast(), 'somebody was found');
+  t.eq(steps, ['RIGHT'], 'turned to face them');
+  t.eq(gb.count('A'), 1, 'and spoken to, once');
+  t.true(j.said.some((l) => l.includes('19,8')), `said who: ${j.said}`);
+});
+
+test('nobody near the tile is nobody to talk to', async (t) => {
+  // Two ways of being out of reach, and they are different distances: the
+  // trigger has to be near *us*, and the person has to be near the *trigger*.
+  const far = pushedBack({ at: [1, 1] });
+  t.false(await far.j.talkPast(), 'a trigger across the map is not the one that fired');
+  const away = pushedBack({ people: [{ index: 1, type: 0, x: 18, y: 30 }] });
+  t.false(await away.j.talkPast(), 'nor is somebody standing twenty tiles off');
+  const empty = pushedBack({ triggers: [] });
+  t.false(await empty.j.talkPast(), 'and a map with no scripted tile has nobody');
+  const alone = pushedBack({ people: [] });
+  t.false(await alone.j.talkPast(), 'nor one with the tile and nobody by it');
+});
+
+test('the tile that fired is the one within three of where it left you',
+     async (t) => {
+  // A script that pushes you back leaves you within a step or two of its own
+  // tile — that is how it stopped you. Three is the slack; four is a
+  // different tile, belonging to somebody else, and this is the boundary.
+  const three = pushedBack({ at: [18, 11] });
+  t.true(await three.j.talkPast(), 'three tiles back is the tile that pushed us');
+  const four = pushedBack({ at: [18, 12] });
+  t.false(await four.j.talkPast(), 'four is somebody else’s tile');
+});
+
+test('the reach around the tile is exactly two, not nearly two', async (t) => {
+  // Measured on the cartridge: the man is one tile east. Two is the slack for
+  // somebody standing diagonally, and a third tile away is somebody else — so
+  // this is the boundary, and it is inclusive on purpose.
+  const two = pushedBack({ people: [{ index: 1, type: 0, x: 20, y: 8 }] });
+  t.true(await two.j.talkPast(), 'two tiles away is still beside it');
+  const three = pushedBack({ people: [{ index: 1, type: 0, x: 21, y: 8 }] });
+  t.false(await three.j.talkPast(), 'three is somebody else');
+});
+
+test('the player is not one of the people standing near the tile', async (t) => {
+  // Object zero is the player. Talking to yourself walks a step and presses A
+  // into the air, which is exactly the "pressing on through" this replaced.
+  const me = pushedBack({ people: [{ index: 0, type: 0, x: 18, y: 8 }] });
+  t.false(await me.j.talkPast(), 'index zero is us');
+});
+
+test('a thing beside the tile that is not a person is not spoken to',
+     async (t) => {
+  // An item ball and a trainer both live in the same object list. Only a
+  // script object is somebody with something to say.
+  const ball = pushedBack({ people: [{ index: 1, type: 1, x: 19, y: 8 }] });
+  t.false(await ball.j.talkPast(), 'an item ball has no conversation');
+});
+
+test('somebody who cannot be got next to is not talked to from here',
+     async (t) => {
+  const boxed = pushedBack({ approach: false });
+  t.false(await boxed.j.talkPast(), 'no way to stand beside them');
+  t.eq(boxed.steps, [], 'and no step was taken trying');
 });

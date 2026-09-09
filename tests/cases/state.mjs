@@ -66,6 +66,58 @@ test('a battery with no save in it is not mistaken for one that has', async (t) 
          'the cartridge markers are');
 });
 
+test('one of the two markers is not a save, and neither is a short battery',
+     async (t) => {
+  // The game validates a save with *two* magic bytes at two addresses, and
+  // the whole point of there being two is that both have to be right. A
+  // check that took either one would call a half-written battery a save --
+  // and the thing downstream of this answer is whether the pilot overwrites
+  // somebody's game.
+  const sym = symbols();
+  const s = new GameState(sym);
+  const at = (name) => sym.bank(name) * 0x2000 + (sym.addr(name) - 0xa000);
+  const one = new Uint8Array(32768);
+  one[at('sCheckValue1')] = 99;
+  t.false(s.saveIsPresent(one), 'the first marker alone');
+  const two = new Uint8Array(32768);
+  two[at('sCheckValue2')] = 127;
+  t.false(s.saveIsPresent(two), 'the second marker alone');
+  const wrong = markSaved(new Uint8Array(32768), sym);
+  wrong[at('sCheckValue2')] = 126;
+  t.false(s.saveIsPresent(wrong), 'and the right pair of addresses, off by one');
+
+  // A battery too short to hold the bank the markers live in cannot be read
+  // at all, and reading past the end gives `undefined` -- which compares
+  // unequal to everything and would answer "no save" by accident rather than
+  // on purpose. Both markers sit above one bank, so one bank is the bound.
+  t.false(s.saveIsPresent(new Uint8Array(0x2000 - 1)), 'a battery under a bank');
+  t.false(s.saveIsPresent(markSaved(new Uint8Array(0x2000), sym).slice(0, 0x2000)),
+          'and one exactly a bank long, which does not reach the markers');
+  t.false(s.saveIsPresent(null), 'nor no battery at all');
+});
+
+test('the intro name menu is told apart by all three of its numbers', async (t) => {
+  // Five items, a right border at 10, and a top border at 0. It is asked
+  // after every press during the intro, so a check that any one of those
+  // three satisfies would answer yes to some other box mid-intro and start
+  // typing a name into it.
+  const sym = symbols();
+  const s = new GameState(sym);
+  const win = (items, right, top) => {
+    const w = new Uint8Array(s.menuWindow.len);
+    w[s.a.menuItems - s.menuWindow.addr] = items;
+    w[s.a.menuRight - s.menuWindow.addr] = right;
+    w[s.a.menuTop - s.menuWindow.addr] = top;
+    return w;
+  };
+  const { items, right } = s.e.nameMenu;
+  t.true(s.nameMenuUp(win(items, right, 0)), 'all three, and it is the name menu');
+  t.false(s.nameMenuUp(win(items + 1, right, 0)), 'one item more is not');
+  t.false(s.nameMenuUp(win(items, right + 1, 0)), 'nor a wider box');
+  t.false(s.nameMenuUp(win(items, right, 1)), 'nor one a row further down');
+  t.false(s.nameMenuUp(win(0, 0, 0)), 'nor nothing drawn at all');
+});
+
 test('the shared constants are the ones the game uses', async (t) => {
   // On the profile now, not exported from this module. They were module-level
   // constants computed from the stock profile at import time, which meant a

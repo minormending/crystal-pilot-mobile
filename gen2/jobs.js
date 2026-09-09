@@ -232,6 +232,15 @@ export function withJobs(Base) {
         if (snap.enemy.hp <= mem.biggestHit) {
           weakening = false;
           this.say('any more would knock it out — throwing now');
+        } else if (this.nothingLands(onField(snap), snap.enemy.types)) {
+          // **Weakening something nothing can touch.** The bound below caught
+          // this and cost eight turns to do it, once per encounter, and the
+          // message it printed -- "weakening is getting nowhere" -- was a
+          // guess about a fact the cartridge will state: a Normal-only lead
+          // chipping a GASTLY takes nothing off it, ever. So the odds are the
+          // odds at a full bar, and the honest move is to throw at them.
+          weakening = false;
+          this.say('nothing it carries can touch this one — throwing as it is');
         } else {
           // Bounded, because weakening does not spend a ball: without this a
           // move that keeps missing would loop here for good, the ball budget

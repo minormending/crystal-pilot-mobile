@@ -461,7 +461,7 @@ enforces it, so it is a fact about the build rather than a habit.
 
 ### `state.js` — what the game is doing right now
 
-<!-- covers: gen2/state.js @ 567bb5c25968 -->
+<!-- covers: gen2/state.js @ 3311ebf6120a -->
 
 One snapshot, many answers: `inBattle`, `party`, `pos`, `onGrass`,
 `worldLoaded`, `menu`, `balls`, `items`, each party member's `status`, the
@@ -1352,7 +1352,7 @@ and a Pokémon Center restores PP, so the grind treats it as a trip it already
 knew how to make. See [the tiles that run a
 script](#8g-the-tiles-that-run-a-script-and-saying-hello) for the walk half.
 
-<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 85d11ba68bcd -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ ce12f7617b6c -->
 
 ### Which move, and which question
 
@@ -1956,7 +1956,7 @@ fainted.
 
 ## 7. Catching something
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ 6dff25440aa2 -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ 837fc8d9700c -->
 
 Catching is the most involved loop, because a Poké Ball's odds turn on how much
 HP is left. Throwing at a full-health target is mostly throwing balls away.
@@ -1994,6 +1994,12 @@ the eleven moves that store 0 or 1 while taking half the bar, your level in HP,
 or all of it. The memory below cannot cover for that one — it learns from the
 swing it just took, so opening with Guillotine teaches it the maximum and costs
 the target to do it.
+
+**And it does not weaken something it cannot touch at all.** The bound on
+chipping caught that already — eight turns, once per encounter — and the
+message it printed, *weakening is getting nowhere*, was a guess about a fact
+the cartridge states outright. The odds at a full bar are the odds, so the
+honest move is to throw at them.
 
 **Nor off the power byte and the type chart alone, though both are read now.**
 "Gentlest" is the *softest landing*, so it is ranked by the same
@@ -2104,7 +2110,7 @@ flowchart TD
 
 ## 7a. Five that act on where you already are
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ e2fc7ce61c29 -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ 0fdc0fbd522a -->
 
 Grind, hunt and catch all go *looking* for something. These five do the obvious
 thing with the situation you are already in, and take no parameters:
@@ -2375,7 +2381,7 @@ said *trainer battle: lost* **seven times**. One loss, reported seven ways.
 
 ## 7d. The counter, and the money it takes
 
-<!-- covers: gen2/menus.js gen2/state.js titles/crystal.js @ e53de6ced7f4 -->
+<!-- covers: gen2/menus.js gen2/state.js titles/crystal.js @ 93acf307f8b6 -->
 
 Everything the pilot could do until now used what it found. **Shop** walks to a
 mart and buys, which is the first thing it does that spends rather than
@@ -2484,7 +2490,7 @@ counter and came away with **five potions and ¥1800**, in 49 seconds.
 
 ## 7b. Saving, and getting the save out
 
-<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 85d11ba68bcd -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ ce12f7617b6c -->
 
 ```mermaid
 flowchart TD
@@ -2567,6 +2573,20 @@ second accepts a save that was already there while this attempt did nothing.
 `sCheckValue1 == 99 && sCheckValue2 == 127`. `GameState.saveIsPresent` resolves
 both out of the symbol file — an SRAM symbol carries a bank, so the offset into
 the flat 32KB is `bank * 0x2000 + (addr - 0xA000)`.
+
+**Both markers**, and that is the whole reason there are two: either one alone
+is a battery in the middle of being written, and downstream of this answer is
+whether the pilot overwrites somebody's game. The mutation run found nothing
+standing behind it — widening the `&&` to `||` broke no test — so there are
+tests now for each marker alone and for the right pair of addresses holding
+the wrong pair of values.
+
+**And the length test in front of it was doing nothing.** It read
+`sram.length < bankBytes`, which never once decided anything: an offset that
+lands past the end of the array is caught by the very next comparison, the one
+that also catches an offset before the start. Found by widening the `<` to
+`<=` and watching nothing fail either way — which is the second time this pass
+that a mutation survivor turned out to be a branch pretending to be two.
 
 Counting non-zero bytes does **not** work, and it was the first thing written: a
 battery never saved to still reads five non-zero bytes, so "any non-zero byte
@@ -3334,7 +3354,7 @@ by, which is the only leg it can measure.
 
 ## 8d. A route the game itself refuses
 
-<!-- covers: gen2/journey.js gen2/state.js @ e639f56a9b42 -->
+<!-- covers: gen2/journey.js gen2/state.js @ aba5067691b6 -->
 
 The pass before this one taught the walk to *quote* the man who turns it back.
 This is the pilot doing something about it.
@@ -3542,7 +3562,7 @@ costs however long it takes somebody to notice their money is gone.
 
 ## 8f. Going and winning a badge
 
-<!-- covers: gen2/journey.js gen2/state.js titles/crystal.js @ 06000e05b634 -->
+<!-- covers: gen2/journey.js gen2/state.js titles/crystal.js @ ace0876b85d8 -->
 
 The pilot has been turned back from Route 32 since the pass it learned to find
 Pokémon Centers. `reopen` throws away every written-off road the moment a badge
@@ -3658,6 +3678,17 @@ flowchart TD
 usually belongs to somebody standing beside it, and pressing on through them is
 not how you get past. Both walks try it once — once, because a second go at the
 same conversation is the loop this exists to break — before writing a road off.
+
+**The two distances in that diagram are different distances, and until pass 47
+neither was checked by anything.** `talkPast` had no test at all, which is
+worth stating plainly for a method that is the whole of this lesson: every
+decision in it — three tiles from the player to the tile, two from the tile to
+the person, index zero being the player, a script object rather than an item
+ball, a person there is no way to stand beside — was a decision nothing could
+see. Six of the seven mutations of those lines survived the suite. They are
+each a test now, at the boundary rather than near it: three tiles back is the
+tile that pushed you, four is somebody else's; two tiles aside is beside it,
+three is somebody else.
 
 <details>
 <summary><b>Advanced detail:</b> a battle nothing can play, and two wrong
@@ -4474,7 +4505,7 @@ reads all seven out of both files and compares them, which is the repair for
 
 ### Gates: asking the cartridge what it wants
 
-<!-- covers: gen2/state.js gen2/journey.js titles/crystal.js @ 06000e05b634 -->
+<!-- covers: gen2/state.js gen2/journey.js titles/crystal.js @ ace0876b85d8 -->
 
 Two kinds of closed road, and the difference is everything:
 

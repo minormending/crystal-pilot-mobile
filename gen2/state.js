@@ -171,7 +171,14 @@ export class GameState {
    */
   saveIsPresent(sram) {
     const { start, bankBytes } = this.e.sram;
-    if (!sram || sram.length < bankBytes) return false;
+    // No battery at all, and that is the whole of what can be asked here.
+    // There used to be a length test beside it -- `sram.length < bankBytes`
+    // -- and it never once decided anything: an offset that lands past the
+    // end of the array is caught below, by the same comparison that catches
+    // one landing before the start, so any answer the length test could give
+    // was already given. `tools/mutate` is what proved it, by widening the
+    // `<` to `<=` and finding nothing that failed either way.
+    if (!sram) return false;
     const at = (name) => {
       if (!this.s.has(name)) return -1;
       return this.s.bank(name) * bankBytes + (this.s.addr(name) - start);

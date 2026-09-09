@@ -13,6 +13,10 @@ const POKE_BALL = 5;
 
 /** A pilot in a wild battle, with the primitives replaced by scripted ones. */
 function inBattle({ enemyHp = 20, enemyMax = 20, party = 1, balls = 10,
+                    // What the target *is*. Default NORMAL, which is what a
+                    // RATTATA is and what every test here meant before the
+                    // pilot could read a type chart.
+                    enemyTypes = 0,
                     // What is on the field. Separate from the party on purpose:
                     // once a lead can faint and be replaced, "our HP" and "slot
                     // one's HP" are two different facts.
@@ -30,7 +34,8 @@ function inBattle({ enemyHp = 20, enemyMax = 20, party = 1, balls = 10,
   const tasks = new Tasks(gb, state, () => {}, fakeRom({}, {}));
   tasks.snap = async () => state.read(worldRam(sym, {
     battleMode: 1, party: mons, balls: balls > 0 ? [[POKE_BALL, balls]] : [],
-    enemy: { species: 16, level: 3, hp: live.hp, maxHp: enemyMax },
+    enemy: { species: 16, level: 3, hp: live.hp, maxHp: enemyMax,
+             types: enemyTypes },
     active, menuItems: 34, menuTop: 12, menu: [1, 1],
   }));
   tasks.log = [];
@@ -370,4 +375,27 @@ test('a catch that cannot run from the wrong species says which one',
   const r = await tasks.catch_('PIDGEY', POKE_BALL, { maxEncounters: 5 });
   t.false(r.ok, 'stopped');
   t.contains(r.message, 'RATTATA', 'naming what it could not get away from');
+});
+
+test('it does not spend eight turns weakening something it cannot touch',
+     async (t) => {
+  // A Normal-only lead against a GHOST. The bound on chipping caught this
+  // already and cost eight turns per encounter to do it, printing "weakening
+  // is getting nowhere" — a guess about a fact the cartridge states outright.
+  // The odds are the odds at a full bar, so the honest move is to throw.
+  const { tasks } = inBattle({ enemyHp: 20, enemyMax: 20, enemyTypes: [8, 3] });
+  const r = await tasks.captureHere(POKE_BALL, { weakenTo: 0.5,
+                                                 memory: { biggestHit: 0 } });
+  t.eq(tasks.log.filter((x) => x === 'chip').length, 0, 'not one swing');
+  t.gte(tasks.log.filter((x) => x === 'throw').length, 1, 'straight to the ball');
+  t.eq(r.chips, 0, 'and it reports none');
+});
+
+test('and it still weakens something it can touch', async (t) => {
+  // The other half, because a guard that refuses everything is not a guard.
+  const { tasks } = inBattle({ enemyHp: 20, enemyMax: 20, enemyTypes: [0, 0],
+                               chip: (l) => { l.hp -= 8; return 'ok'; } });
+  await tasks.captureHere(POKE_BALL, { weakenTo: 0.5,
+                                       memory: { biggestHit: 0 } });
+  t.gte(tasks.log.filter((x) => x === 'chip').length, 1, 'it swung');
 });
