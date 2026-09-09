@@ -1437,6 +1437,51 @@ def check_counts():
               f"{len(counts_mod.test_counts())} test files all say the true number")
 
 
+def check_gates():
+    """Every declared gate names an event some *script* in the ROM sets.
+
+    Skipped without a cartridge, like `moves`, and for the same reason: the
+    point is that the check can exist at all with nothing game-derived in the
+    repository.
+
+    A gate is a title saying *this road is shut until event N*, and the number
+    is the entire content of the claim. Get it wrong and the app confidently
+    tells somebody to go and do a thing that has no bearing on the road -- a
+    worse failure than the silence it replaced, and one nothing else here could
+    notice, because a wrong bit reads exactly like a bit that is not set yet.
+
+    So the number is checked against the cartridge: search the ROM for
+    `setevent N` and require that *something* sets it. That is the weaker of
+    the two claims worth making and the only one this can prove -- it catches a
+    gate that can never open, which is the failure that matters.
+
+    **It cannot tell a number that means nothing from one that means something
+    else**, and pretending otherwise was tried twice. Requiring the containing
+    symbol to look like a script rejects real setters:
+    `RuinsOfAlphHoOhChamberPuzzle.PuzzleComplete` matches no such word.
+    Requiring the following byte to decode as a command does not discriminate
+    either -- the one known data coincidence, inside `DunsparceFrames.frame3`,
+    is followed by `34`, which is `checkflag`. With a twenty-command table
+    roughly one byte in twelve reads as an instruction.
+
+    So `tools/rom-events --gates` names every hit and a person reads the list,
+    which is also how this gate was found in the first place. A check that
+    silently dropped a real setter would be worse than the noise.
+    """
+    if not (ROOT / "dev" / "pokecrystal.gbc").exists():
+        return ok("no cartridge here, so the declared gates are not checked")
+    out = subprocess.run([sys.executable, str(HERE / "rom-events"), "--gates"],
+                         capture_output=True, text=True)
+    lines = [l for l in out.stdout.splitlines() if "!!" in l]
+    for l in lines:
+        print(f"        {l.strip()}")
+    if out.returncode or lines:
+        return fail(f"{len(lines) or 1} gate(s) the ROM does not agree with")
+    named = [l for l in out.stdout.splitlines() if l.startswith("  set by:")]
+    return ok(f"every declared gate names an event the ROM sets, in "
+              f"{len(named)} place(s)")
+
+
 CHECKS = {
     "syntax": check_syntax,
     "layers": check_layers,
@@ -1460,6 +1505,7 @@ CHECKS = {
     "markers": check_markers,
     "labels": check_labels,
     "counts": check_counts,
+    "gates": check_gates,
 }
 
 

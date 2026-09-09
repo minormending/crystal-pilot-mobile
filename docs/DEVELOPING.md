@@ -16,7 +16,7 @@ what CI checks and what the pre-commit hook blocks on.
 flowchart LR
     E[an edit] --> H{{".githooks/pre-commit"}}
     H --> T["./run-tests<br/>596 behaviour tests"]
-    H --> C["tools/check-app<br/>22 groups"]
+    H --> C["tools/check-app<br/>23 groups"]
     H --> D["tools/docs-check<br/>25 tracked sections"]
     T --> OK[commit]
     C --> OK
@@ -124,7 +124,7 @@ section gives. Everything by hand runs against a local build.
 ```mermaid
 flowchart BT
     C["the app"] --> T["./run-tests<br/>596 behaviour tests"]
-    C --> A["tools/check-app<br/>22 groups"]
+    C --> A["tools/check-app<br/>23 groups"]
     C --> D["tools/docs-check<br/>31 tracked sections"]
     C --> V["tools/coverage<br/>what the suite never runs"]
     T --> M["tools/mutate<br/>break a line, see who notices"]
@@ -335,7 +335,7 @@ is wrong, not the check. It is not in the pre-commit hook: it runs `check-app`
 about fifty times, which is the wrong price for every commit and the right
 one for the commit that changes a check.
 
-`tools/check-app` is twenty-two groups, each one a class of mistake that parses
+`tools/check-app` is twenty-three groups, each one a class of mistake that parses
 fine and is wrong at run time:
 
 | group | asserts |
@@ -359,7 +359,45 @@ fine and is wrong at run time:
 | `markers` | nothing here draws an affordance the vendor stylesheet already draws — replacing Pico's chevron is fine, having two is not |
 | `deadcss` | no single-class rule is overridden on every element that could carry it, which is how `.slots{display:block}` lost to `.param{display:flex}` |
 | `labels` | every job row is named after its own key, capitalised — which is the word the runner prints, built from the key rather than from a second table |
+| `gates` | every road a title declares shut names an event the ROM actually sets — skipped without a cartridge |
 | `counts` | every number in the prose that the repository can compute is right — the test table, the group count, the digest's size, the audit's rows. Two have shipped wrong: *143 tests in seventeen files* while 576 ran, and a digest drawn as 47 entries carrying 53 |
+
+### Asking the cartridge, without running it
+
+```
+tools/rom-events --set 0x2d                 which script sets this event
+tools/rom-events --script Route32CooltrainerMContinueScene
+tools/rom-events --text Route32CooltrainerMText_AideIsWaiting
+tools/rom-events --gates                    every declared gate, against the ROM
+```
+
+Every gate in Gen 2 is a script reading one bit of `wEventFlags`, so *why does
+this road turn me back?* has an answer in the ROM — and answering it needs no
+emulator, which matters because a running cartridge is not always available.
+
+The forty-second pass worked one out by hand in four steps: dump the bytes,
+decode enough of the command set from the label names, decode the text with the
+app's own character table, then search the whole file for the instruction that
+sets the bit and ask the symbol file whose script it landed in. This is those
+four steps.
+
+**The command table was derived, not looked up**, and the derivation is the
+interesting part: `Route32Noop1Scene` is one byte, `91`, which gives `end`; a
+`dw` that lands on a `.Text` symbol gives `writetext`; a branch onto
+`.DontHaveZephyrBadge` gives the `iffalse` before it. It stops decoding after
+three unknown bytes in a row, because reading on past the end of the table is
+inventing things.
+
+**What it will not do is decide.** A byte search over 2MB finds coincidences —
+`setevent $2d` also reads out of three bytes of `DunsparceFrames.frame3` — and
+two ways of telling a real setter from a coincidence were tried and both
+failed: the containing symbol's name rejects real ones
+(`RuinsOfAlphHoOhChamberPuzzle.PuzzleComplete` looks like data by that rule),
+and requiring the next byte to be a command discriminates barely at all,
+because one byte in twelve reads as an instruction. So it labels every hit and
+a person reads the list. `check-app gates` therefore claims only the weaker
+half — that *something* sets the event — which catches a gate that can never
+open, and that is the failure worth catching.
 
 `tools/renumber` is the writing half of `counts`, and the reason there is one:
 a check that can only say no is a check somebody edits around at the end of a

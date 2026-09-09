@@ -1,0 +1,283 @@
+#!/usr/bin/env python3
+"""Ask the cartridge what a road wants, without running it.
+
+Every gate in Gen 2 is a script reading one bit of `wEventFlags`, and the
+answer to *why does this road turn me back?* is therefore in the ROM. The
+forty-second pass worked one out by hand -- dump the bytes, decode enough of
+the command set from the label names, decode the text with the app's own
+character table, then search the whole file for the instruction that sets the
+bit and ask the symbol file whose script it landed in. Four steps, an hour, and
+the same four steps next time.
+
+So it is a tool.
+
+    tools/rom-events --set 0x2d
+        which script sets this event -- the step that turns a reading into a
+        fact. Coincidental byte matches are named too; the symbol file is what
+        tells them from scripts.
+
+    tools/rom-events --script Route32CooltrainerMContinueScene
+        the bytes, with the branches and the text pointers resolved to names
+
+    tools/rom-events --text Route32CooltrainerMText_AideIsWaiting
+        what it says, in the game's own words
+
+    tools/rom-events --gates
+        every gate the titles declare, checked against the ROM: the event it
+        names, and which script sets it
+
+Needs a ROM and a symbol file in `dev/`, which are not in this repository and
+never will be. Without them it says so and exits 0 -- the same way the move
+table's check skips itself, because a tool that fails a clean checkout is a
+tool somebody removes from CI.
+"""
+import bisect
+import pathlib
+import re
+import sys
+
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+DEV = ROOT / 'dev'
+
+# Enough of the script command set to read a gate, and every one of these was
+# derived from the symbol file rather than looked up -- the derivation is in
+# docs/CODE.md. `Route32Noop1Scene` is one byte, `91`, which gives `end`; a
+# `dw` landing on a `.Text` symbol gives `writetext`; a branch onto
+# `.DontHaveZephyrBadge` gives the `iffalse` before it.
+#
+# (byte, name, argument shape) where the shape is a string of:
+#   b = one byte    w = a two-byte pointer, resolved to a label
+#   e = a two-byte event id
+COMMANDS = {
+    0x00: ('scall', 'w'),
+    0x03: ('jump', 'w'),
+    0x06: ('ifequal', 'bw'),
+    0x08: ('iffalse', 'w'),
+    0x09: ('iftrue', 'w'),
+    0x1c: ('readvar', 'b'),
+    0x31: ('checkevent', 'e'),
+    0x32: ('clearevent', 'e'),
+    0x33: ('setevent', 'e'),
+    0x34: ('checkflag', 'e'),
+    0x47: ('opentext', ''),
+    0x49: ('closetext', ''),
+    0x4c: ('writetext', 'w'),
+    0x4e: ('yesorno', ''),
+    0x54: ('waitbutton', ''),
+    0x6b: ('faceplayer', ''),
+    0x6e: ('disappear', 'b'),
+    0x6f: ('appear', 'b'),
+    0x90: ('endcallback', ''),
+    0x91: ('end', ''),
+}
+SETEVENT = 0x33
+
+# The game's own encoding, as far as a line of dialogue uses it. The letter and
+# digit ranges are the same ones `gen2/romdata.js` decodes names with; the
+# control bytes are the ones that only turn up in text.
+PUNCT = {0xe0: "'", 0xe3: '-', 0xe6: '?', 0xe7: '!', 0xe8: '.', 0xe9: '&',
+         0xea: 'e', 0xef: '♂', 0xf1: 'x', 0xf3: '/', 0xf4: ',',
+         0xf5: '♀'}
+TERMINATOR, LIGATURE, SPACE = 0x50, 0x54, 0x7f
+BREAKS = {0x1f, 0x4e, 0x4f, 0x51, 0x55}
+STOPS = {0x57: '<done>', 0x58: '<prompt>'}
+
+
+def offset(bank, addr):
+    """Where a banked address lives in the file."""
+    return bank * 0x4000 + (addr - 0x4000)
+
+
+class Cart:
+    def __init__(self, rom, sym):
+        self.rom = rom
+        self.by_name = {}
+        self.at = []                       # [(file offset, name)], sorted
+        for line in sym.splitlines():
+            head, _, name = line.partition(' ')
+            bank, _, addr = head.partition(':')
+            name = name.strip()
+            try:
+                bank, addr = int(bank, 16), int(addr, 16)
+            except ValueError:
+                continue
+            if addr < 0x4000:              # RAM, not a script
+                self.by_name.setdefault(name, (bank, addr))
+                continue
+            off = offset(bank, addr)
+            self.by_name.setdefault(name, (bank, addr))
+            self.at.append((off, name))
+        self.at.sort()
+        self.offs = [o for o, _ in self.at]
+
+    def label(self, off):
+        """The nearest symbol at or before a file offset, with the distance."""
+        i = bisect.bisect_right(self.offs, off) - 1
+        if i < 0:
+            return f'${off:06x}'
+        name, base = self.at[i][1], self.offs[i]
+        return name if base == off else f'{name}+{off - base}'
+
+    def near(self, bank, addr):
+        """A label for a pointer inside a bank, for resolving a branch."""
+        return self.label(offset(bank, addr))
+
+    def text(self, bank, addr, limit=300):
+        out = []
+        for byte in self.rom[offset(bank, addr):offset(bank, addr) + limit]:
+            if byte == TERMINATOR:
+                break
+            if byte in STOPS:
+                out.append('\n' + STOPS[byte])
+                break
+            if byte == LIGATURE:
+                out.append('POKé')
+            elif byte == SPACE:
+                out.append(' ')
+            elif byte in BREAKS:
+                out.append('\n')
+            elif byte in PUNCT:
+                out.append(PUNCT[byte])
+            elif 0x80 <= byte <= 0x99:
+                out.append(chr(65 + byte - 0x80))
+            elif 0xa0 <= byte <= 0xb9:
+                out.append(chr(97 + byte - 0xa0))
+            elif 0xf6 <= byte <= 0xff:
+                out.append(chr(48 + byte - 0xf6))
+            else:
+                out.append(f'<{byte:02x}>')
+        return ''.join(out)
+
+    def script(self, name, limit=120):
+        """One script, decoded as far as the command table reaches."""
+        if name not in self.by_name:
+            return [f'{name}: not in the symbol file']
+        bank, addr = self.by_name[name]
+        out, here, unknown = [], addr, 0
+        while here < addr + limit:
+            byte = self.rom[offset(bank, here)]
+            cmd = COMMANDS.get(byte)
+            label = self.near(bank, here)
+            tag = f'  {here:04x}  ' + (f'{label:44}' if label != name else ' ' * 44)
+            if not cmd:
+                out.append(f'{tag}{byte:02x}  ?')
+                unknown += 1
+                here += 1
+                # Three unknowns in a row is the table running out rather than
+                # one odd byte, and reading on past that is inventing things.
+                if unknown >= 3:
+                    out.append('        ... command table ends here')
+                    break
+                continue
+            unknown = 0
+            word, args, at = cmd[0], [], here + 1
+            for shape in cmd[1]:
+                if shape == 'b':
+                    args.append(f'${self.rom[offset(bank, at)]:02x}')
+                    at += 1
+                else:
+                    ptr = (self.rom[offset(bank, at)]
+                           | self.rom[offset(bank, at + 1)] << 8)
+                    args.append(f'${ptr:04x}' if shape == 'e'
+                                else f'{self.near(bank, ptr)}')
+                    at += 2
+            out.append(f'{tag}{word} {" ".join(args)}'.rstrip())
+            here = at
+            if word in ('end', 'endcallback', 'jump'):
+                break
+        return out
+
+    def setters(self, event):
+        """Every place in the ROM that sets this event, named."""
+        want = bytes([SETEVENT, event & 0xff, (event >> 8) & 0xff])
+        hits, start = [], 0
+        while True:
+            found = self.rom.find(want, start)
+            if found < 0:
+                return hits
+            hits.append((found, self.label(found)))
+            start = found + 1
+
+
+def load():
+    rom, sym = DEV / 'pokecrystal.gbc', DEV / 'pokecrystal.sym'
+    if not rom.exists() or not sym.exists():
+        print(f'no cartridge in {DEV.name}/ — nothing to read')
+        print('(a ROM is not in this repository and never will be)')
+        return None
+    return Cart(rom.read_bytes(), sym.read_text())
+
+
+GATE = re.compile(r'\{\s*from:\s*(\w+),\s*to:\s*(\w+),\s*event:\s*(0x[0-9a-f]+)'
+                  r'[^}]*?needs:\s*[\'"]([^\'"]*)', re.S)
+
+
+# A hit *may* be a coincidence: a byte search over 2MB finds them, and
+# `setevent $2d` also reads out of three bytes of `DunsparceFrames.frame3`.
+#
+# Two discriminators were tried and both failed honestly, which is why this is
+# a comment rather than a filter. Requiring the containing symbol to look like
+# a script (`Script`, `Scene`, `Callback`) rejects real ones --
+# `RuinsOfAlphHoOhChamberPuzzle.PuzzleComplete` sets an event and matches none
+# of those words. Requiring the *next* byte to decode as a command does not
+# discriminate either: the Dunsparce byte is `34`, which is `checkflag`. With a
+# twenty-command table roughly one byte in twelve looks like an instruction.
+#
+# So this labels rather than judges. Naming every hit and letting a person read
+# the list is the honest tool; a filter that silently drops a real setter would
+# be worse than the noise.
+DATA_ISH = re.compile(r'Frames|Gfx|Palette|Tiles|Anim')
+
+
+def gates(cart):
+    """Every declared gate, against what the ROM says sets its event."""
+    bad = 0
+    for path in sorted((ROOT / 'titles').glob('*.js')):
+        for m in GATE.finditer(path.read_text()):
+            frm, to, event, needs = m.groups()
+            # The declaration is read out of JavaScript source, so an escaped
+            # apostrophe arrives as six characters. Decoded for the eye only.
+            needs = re.sub(r'\\u([0-9a-fA-F]{4})',
+                           lambda e: chr(int(e.group(1), 16)), needs)
+            print(f'{path.name}: {frm} → {to}  event {event}')
+            print(f'  needs: {needs}')
+            hits = cart.setters(int(event, 16))
+            if not hits:
+                print('  !! nothing in the ROM sets it')
+                bad += 1
+            for off, name in hits:
+                kind = 'probably data' if DATA_ISH.search(name) else 'set by'
+                print(f'  {kind}: {name}   (${off:06x})')
+    return bad
+
+
+def main(argv):
+    cart = load()
+    if not cart:
+        return 0
+    if '--set' in argv:
+        event = int(argv[argv.index('--set') + 1], 0)
+        hits = cart.setters(event)
+        print(f'setevent ${event:04x}: {len(hits)} match(es) in the ROM')
+        for off, name in hits:
+            print(f'  {name}   (${off:06x})')
+        return 0
+    if '--script' in argv:
+        for line in cart.script(argv[argv.index('--script') + 1]):
+            print(line)
+        return 0
+    if '--text' in argv:
+        name = argv[argv.index('--text') + 1]
+        if name not in cart.by_name:
+            print(f'{name}: not in the symbol file')
+            return 1
+        print(cart.text(*cart.by_name[name]))
+        return 0
+    if '--gates' in argv or not argv:
+        return 1 if gates(cart) else 0
+    print(__doc__)
+    return 2
+
+
+if __name__ == '__main__':
+    sys.exit(main(sys.argv[1:]))

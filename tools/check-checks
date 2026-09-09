@@ -119,6 +119,11 @@ def mutations(root):
         # table came to claim 143 while 576 ran.
         "counts": lambda: edit("tests/cases/input.mjs", append(
             "\ntest('probe', async (t) => { t.true(true); });\n")),
+        # The event number changed to one no script sets, which is the whole
+        # content of a gate's claim -- and a wrong bit reads exactly like a bit
+        # that is not set yet.
+        "gates": lambda: edit("titles/crystal.js", sub(
+            "event: 0x2d", "event: 0x7f0")),
         # A row renamed out from under the runner, which builds the word it
         # prints from the key rather than from a table.
         "labels": lambda: edit("index.html", sub(

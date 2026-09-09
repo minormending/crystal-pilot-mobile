@@ -2954,6 +2954,23 @@ tests changing, which is written up with a table in
 the reassuring part: `taskbase.js` is frame counts and gained ten points,
 `rows.js` is logic and gained none.
 
+**And the four steps are a tool now**, because the next gate will want the
+same four. `tools/rom-events` takes an event number and names every script
+that sets it, dumps a script with its branches and text pointers resolved, and
+decodes a line of dialogue — and `check-app gates` runs it over every declared
+gate, skipping itself without a cartridge the way the move table's check does.
+
+What that tool will *not* do is decide. Two ways of telling a real setter from
+a byte coincidence were tried and both failed honestly: the containing symbol's
+name rejects real ones, since `RuinsOfAlphHoOhChamberPuzzle.PuzzleComplete`
+matches no word like *Script*; and requiring the following byte to decode as a
+command barely discriminates, because with a twenty-command table one byte in
+twelve reads as an instruction — the known Dunsparce coincidence is followed by
+`34`, which is `checkflag`. So it labels every hit and a person reads the list,
+and the check claims only the weaker half: that *something* sets the event,
+which catches a gate that can never open. A filter that silently dropped a real
+setter would be worse than the noise it removed.
+
 The one thing it will never do is guess. `hasEvent` answers null where the
 symbol file cannot say, and `gateSaid` turns null into silence rather than into
 *the road is shut* — because *I do not know* dressed up as a fact is exactly

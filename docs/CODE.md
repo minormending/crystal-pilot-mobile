@@ -5626,7 +5626,7 @@ about that code did not.
 
 ### The other checks
 
-<!-- covers: tools/check-app @ 20c5d178de99 -->
+<!-- covers: tools/check-app @ c9b9b641bc1a -->
 
 `tools/check-app` runs everything that can be verified without a ROM:
 
@@ -5659,6 +5659,7 @@ tools/check-app contrast     # or one group
 | `deadcss` | no single-class rule is overridden on every element that could carry it |
 | `labels` | every job row is named after its own key, which is the word the runner prints |
 | `counts` | every number in the prose the repository can compute is right — `tools/renumber` writes them in |
+| `gates` | a declared gate names an event the ROM sets — skipped without a cartridge |
 
 Half of that table was missing until the marker above was added: six groups had
 been written and never listed, so the document described five checks while
