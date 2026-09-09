@@ -2202,7 +2202,7 @@ said *trainer battle: lost* **seven times**. One loss, reported seven ways.
 
 ## 7d. The counter, and the money it takes
 
-<!-- covers: gen2/menus.js gen2/state.js titles/crystal.js @ e9c7c035dc93 -->
+<!-- covers: gen2/menus.js gen2/state.js titles/crystal.js @ 6983031ac9c6 -->
 
 Everything the pilot could do until now used what it found. **Shop** walks to a
 mart and buys, which is the first thing it does that spends rather than
@@ -2553,7 +2553,7 @@ because that failure is only otherwise discovered by reaching for the undo.
 
 ## 8. The errands
 
-<!-- covers: titles/crystal.js gen2/journey.js @ 5d278653fade -->
+<!-- covers: titles/crystal.js gen2/journey.js @ 4c9d6a9bfdf9 -->
 
 Everything in this section is `crystal.js` — the only file in the app that names
 a Crystal map, a Crystal door or a Crystal NPC. What it stands on is
@@ -3077,7 +3077,7 @@ go](#8c-naming-a-city-is-a-feature).
 
 ## 8c. Naming a city is a feature
 
-<!-- covers: titles/crystal.js gen2/world.js @ c1ec58904560 -->
+<!-- covers: titles/crystal.js gen2/world.js @ 4404447c7888 -->
 
 The map graph has always reached most of Johto. A flood over its exits from
 Route 31 finds sixty-odd maps in five legs — and every feature in this app was
@@ -3369,7 +3369,7 @@ costs however long it takes somebody to notice their money is gone.
 
 ## 8f. Going and winning a badge
 
-<!-- covers: gen2/journey.js gen2/state.js titles/crystal.js @ 7acb5701bb42 -->
+<!-- covers: gen2/journey.js gen2/state.js titles/crystal.js @ 4724f5edf0c2 -->
 
 The pilot has been turned back from Route 32 since the pass it learned to find
 Pokémon Centers. `reopen` throws away every written-off road the moment a badge
@@ -3529,7 +3529,7 @@ This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ 00d328c31819 -->
+<!-- covers: app/main.js index.html @ 43a421ef7131 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -4078,7 +4078,7 @@ seconds by a page whose loop was supposedly running.
 
 ### One thing at a time
 
-<!-- covers: app/main.js @ 87832b788ce2 -->
+<!-- covers: app/main.js @ dfed2a1e95b3 -->
 
 One Game Boy, one joypad, one canvas — so a great deal of this app is about
 making sure two things are never driving them at once. There are three claims,
@@ -4220,7 +4220,7 @@ before a step is taken, so a stopped walk does not move at all.
 
 ### Reading a gym out of the cartridge
 
-<!-- covers: titles/crystal.js @ 5cb1b3d95800 -->
+<!-- covers: titles/crystal.js @ 732db74f14eb -->
 
 A gym declaration is five hand-written facts:
 
@@ -4301,7 +4301,7 @@ reads all seven out of both files and compares them, which is the repair for
 
 ### Gates: asking the cartridge what it wants
 
-<!-- covers: gen2/state.js gen2/journey.js titles/crystal.js @ 7acb5701bb42 -->
+<!-- covers: gen2/state.js gen2/journey.js titles/crystal.js @ 4724f5edf0c2 -->
 
 Two kinds of closed road, and the difference is everything:
 
@@ -4410,7 +4410,7 @@ a conversation.
 
 ### Running the list
 
-<!-- covers: app/rows.js app/main.js @ 182db900588c -->
+<!-- covers: app/rows.js app/main.js @ 4076441eb6c5 -->
 
 The app has spent forty passes learning to answer one question — *what can the
 pilot do here, and which of those is worth most?* — and twenty showing the
@@ -4514,7 +4514,7 @@ to deposit your last Pokémon.
 
 ### The settings and the save card
 
-<!-- covers: index.html app/main.js @ 00d328c31819 -->
+<!-- covers: index.html app/main.js @ 43a421ef7131 -->
 
 The pilot's own list got a glyph column, shorter names and a slot to fill in
 v165. These two cards did not, and reading them found that they had a different
@@ -5142,7 +5142,7 @@ they have been installed.
 
 ### Watching the other device's screen
 
-<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ 79aa3bb56ca2 -->
+<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ 17843d17ecfb -->
 
 One device shows its screen; the other watches it, and plays it if the first
 one says so. The picture goes straight between them over WebRTC and never

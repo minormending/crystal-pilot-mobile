@@ -152,6 +152,31 @@ tools/mutate -k shut               # only lines whose text matches
 tools/mutate gen2/state.js --list  # print the mutations, run nothing
 ```
 
+**And it counts every source file, including the ones it cannot reach.** That
+is a correction rather than a feature. `app/` used to be excluded by a comment
+reading *main.js needs a DOM* — true, and the wrong conclusion: it also
+excluded `app/rows.js`, the most heavily tested module here, and a file the
+suite never *loads* appeared in neither the numerator nor the denominator. The
+headline was a percentage over a subset. Counting the rest puts it at **54%**,
+and the first thing that fell out was `gen2/nav.js` at 0 of 130 lines — the
+module that walks the player, untested because every test fakes it, and
+*untestable* because the harness's fake symbol table was missing the two
+symbols `Nav`'s constructor asks for.
+
+**A module out of reach from a test says so in its own first comment**, as a
+`reach:` note, and both tools surface it:
+
+| module | why | held instead by |
+| --- | --- | --- |
+| `app/main.js` | needs a DOM | `wiring`, `labels`, `listeners`, `markup`, `counts` |
+| `gbcore/stream.js` | needs WebRTC and a canvas | reading it, and the room tests either side |
+| `titles/crystal.js` | mostly driving code | `gates`, `gyms`, `moves` — against the ROM |
+
+The note lives in the file rather than in a list here, because a list of
+exemptions outlives its reasons. And it exists because a reader told only that
+`main.js` runs 0% concludes neglect, which is the wrong lesson to leave lying
+around: faking a DOM to raise that number would buy a suite that cannot fail.
+
 **Coverage answers which lines ran, which is much weaker than it looks.** A line
 runs every time the suite touches the function around it, whether or not
 anything asserted on what it did. This changes one small thing — `&&` to `||`, a
