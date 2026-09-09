@@ -340,13 +340,13 @@ second, which is there so the core's own waits finish, not to run a game.
 
 Everything above was watched happening. This section was the exception, and the
 exception was the point of it: after the ROM-hack work shipped, **forty-four**
-passes went looking for defects in code that already worked, and found **193** —
+passes went looking for defects in code that already worked, and found **197** —
 a handful of them created by a fix on the way, which are in the table in italics
 because they are a different kind of thing. None of them announced itself.
 
 **Reading found twenty-three**, more than any other single method, which is why
 it comes first in the table and why it is worth doing before touching the game.
-But the interesting number is the tail: the remaining hundred and seventy were
+But the interesting number is the tail: the remaining hundred and seventy-four were
 found almost as many different ways, and almost every entry in that column is a sentence rather than
 a category — *measuring the fix*, *asking a second tile*, *feeding it the wrong
 thing*, *writing a cartridge Crystal is not*, *a test, before the cartridge*,
@@ -571,6 +571,10 @@ exactly why nothing failed.
 | 44 | *an errand written on the title's own class named no Crystal anything — it was engine behaviour in a title's coat* | *—* | *reading the first draft back* |
 | 44 | *the gate regex stopped at the first field it wanted, so `tile:` and `errand:` were invisible and the new tile check silently did nothing* | *the check, on its first run* | *the check printing nothing where it should have printed a tile* |
 | 44 | *the static half of `gates` looked for an errand only in the title, and failed for real the moment the method moved into the engine* | *—* | *the check itself, unmutated* |
+| 44 | **the ordering comment and the order disagreed** — the comment said an errand outranks levelling up and the list put it below Grind | the offers list, for a whole version | asking the *deployed build* for a rank and reading it back |
+| 44 | `crossEdge` held 99 mutation survivors, the biggest cluster in the biggest module: which tiles form an edge, that only openings are tried, and that they are tried centre-out — every claim in a comment and none in a test | a westward walk in a build where any of it was wrong | `tools/mutate`, grouped by function |
+| 44 | **seven test fixtures had drifted from the shapes the app passes** — `bagHeal` as an item where `main.js` passes a name, `wilds` as a list where it passes `{low, high}` | any assertion on those rows' text, which there were none of | `tools/rank`, printing "1 hurt · [object Object] in the bag" in its first minute |
+| 44 | nothing asserted the whole ranking, only pairs of it, which is how a comment and a list came to disagree | — | writing the one line that spells it out |
 
 Five things in that table are worth more than the individual rows.
 
@@ -3084,6 +3088,29 @@ contribution is two fields on a gate.
 whole claim one entry — *the thing that sets this event stands on this tile on
 this map* — and `check-app gates` now checks it whole against the ROM. Split
 across two tables it could only ever have been checked in halves.
+
+**The audit half found the same shape of defect twice, in prose and in
+fixtures.** Both are things that cannot be wrong in a way a program notices.
+
+A comment beside the offers ordering said an errand outranks levelling up; the
+list beside it put the errand below Grind. Prose contradicting code, inside the
+one part of the app `docs-check` cannot see — it watches whether prose was
+re-read when code moved, and here the prose and the code moved together and
+disagreed. Found by asking the **deployed build** for a rank and reading
+`{catch: 1, grind: 2, errand: 3}` back. There is a test asserting the whole
+order now, because a comment could not.
+
+And seven fixtures in `rows.mjs` had drifted from the shapes `main.js` passes:
+`bagHeal` as an item object where the app passes a *name*, `wilds` as a list
+where it passes `{low, high}`. Nothing noticed for however long, because every
+test asserted `enabled` or a key and **none asserted the text those fields
+feed**. `tools/rank` printed `1 hurt · [object Object] in the bag` the first
+time it ran. The general guard is now a test: no row, in a dozen situations,
+may say *undefined*, *NaN* or *[object Object]*. A row says words.
+
+`crossEdge` was the mutation half — 99 survivors, the biggest cluster in the
+biggest module, all of it pure geometry at the heart of every walk between two
+maps, every claim in a comment and none in a test. 48% now.
 
 **Two checks earned their keep before any mutation testing**, which is the
 happiest way for a check to be justified:
