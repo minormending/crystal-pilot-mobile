@@ -2662,3 +2662,105 @@ test('the errand refuses a cartridge that declares none', async (t) => {
   t.false(r.ok, 'nothing to do');
   t.contains(r.message, 'no such errand', 'said rather than crashed');
 });
+
+// --- the edge a crossing walks at -------------------------------------------
+//
+// `crossEdge` held 99 mutation survivors, the biggest cluster in the biggest
+// module, and most of them are *pure geometry* at the heart of every walk
+// between two maps: which tiles form a map's edge, which of those are
+// openings, and the order they are tried in. Every one of those claims is in a
+// comment and none was in a test.
+//
+// Driven rather than extracted: a fake `walkTo` that refuses everything and
+// records what it was asked for shows the order the real code chooses, which is
+// the observable thing. A pure function lifted out for testing would be a
+// second copy of the arithmetic.
+
+/** A crossing whose walks all refuse, so only the tiles it tries are visible. */
+function crossing({ size = [10, 8], open = null, dir = 'LEFT' } = {}) {
+  const asked = [];
+  const gb = new FakeGameBoy({ wram: worldRam(sym, {}) });
+  const collision = {
+    off: 0,
+    calibrate: () => true,
+    playerPos: () => [5, 3],
+    mapSize: () => size,
+    // Everything walkable unless a test says otherwise, so the filter is the
+    // only thing removing candidates.
+    walkable: (x, y) => (open ? open.some(([a, b]) => a === x && b === y) : true),
+    // `crossEdge` pushes toward the edge first and only then tries the edge
+    // tiles themselves. Answering with the player's own position ends that
+    // first phase immediately, which is what leaves the *second* one -- the
+    // geometry these tests are about -- visible.
+    furthestToward: (at) => at,
+  };
+  const j = new Journey(gb, new GameState(sym), null, collision,
+                        { mapKey: async () => HOME,
+                          walkTo: async (_c, goal) => {
+                            asked.push([...goal]);
+                            return { stopped: 'refused' };
+                          },
+                          step: async () => {} },
+                        () => {}, {}, {});
+  j.say = () => {};
+  j.settled = async () => gb.wram;
+  j.snap = async () => ({ inBattle: false, wram: gb.wram, party: [], balls: [],
+                          items: [], windowOpen: false });
+  j.escapeBattle = async () => {};
+  j.wordsOnScreen = async () => '';
+  j.runScripts = async () => true;
+  return { j, asked, dir };
+}
+
+test('a crossing walks at the edge the direction names', async (t) => {
+  // LEFT is column 0 for every row; RIGHT is the last column; UP is row 0 and
+  // DOWN the last row. Four branches, and swapping any two of them survived
+  // every test — which would send every westward walk at the eastern fence.
+  for (const [dir, check] of [
+    ['LEFT', ([x]) => x === 0],
+    ['RIGHT', ([x]) => x === 9],
+    ['UP', ([, y]) => y === 0],
+    ['DOWN', ([, y]) => y === 7],
+  ]) {
+    const { j, asked } = crossing({ size: [10, 8] });
+    await j.crossEdge(dir, 999, 1);
+    t.true(asked.length > 0, `${dir}: it tried something`);
+    t.true(asked.every(check), `${dir}: every tile is on that edge`);
+  }
+});
+
+test('only the openings are tried, and walls are never walked at', async (t) => {
+  // Filtering *before* sorting is the documented fix: New Bark's west side
+  // opens at rows 8, 9, 12 and 13 while the player leaves the lab at row 3, so
+  // ordering first and filtering second tried eight fences in a row.
+  const gaps = [[0, 2], [0, 6]];
+  const { j, asked } = crossing({ size: [10, 8], open: gaps });
+  await j.crossEdge('LEFT', 999, 1);
+  t.true(asked.length > 0, 'it tried the gaps');
+  t.true(asked.every(([x, y]) => gaps.some(([a, b]) => a === x && b === y)),
+         `only openings: ${JSON.stringify(asked)}`);
+});
+
+test('the openings are tried centre-out, not nearest-first', async (t) => {
+  // A route's connection sits inland of its corners, and the tile beside you is
+  // often walkable but cut off from the opening by a ledge — so the order is
+  // distance from the middle of the edge, and the player standing at row 3 does
+  // not pull it towards row 3.
+  const { j, asked } = crossing({ size: [10, 8],
+                                  open: [[0, 0], [0, 3], [0, 4], [0, 7]] });
+  await j.crossEdge('LEFT', 999, 1);
+  const rows = asked.map(([, y]) => y).filter((y, i, a) => a.indexOf(y) === i);
+  // The middle of an eight-row edge is 3.5, so rows 3 and 4 are equidistant and
+  // come first; 0 and 7 are furthest and come last.
+  t.true(rows.slice(0, 2).every((y) => y === 3 || y === 4),
+         `middle first, got ${rows.join(',')}`);
+  t.true(rows.slice(-2).every((y) => y === 0 || y === 7),
+         `corners last, got ${rows.join(',')}`);
+});
+
+test('a crossing with no openings at all gives up rather than looping',
+     async (t) => {
+  const { j, asked } = crossing({ size: [10, 8], open: [] });
+  t.false(await j.crossEdge('LEFT', 999, 1), 'it says no');
+  t.eq(asked.length, 0, 'having walked at nothing');
+});

@@ -4410,7 +4410,7 @@ a conversation.
 
 ### Running the list
 
-<!-- covers: app/rows.js app/main.js @ c330dbf7a622 -->
+<!-- covers: app/rows.js app/main.js @ 2f53a12d5401 -->
 
 The app has spent forty passes learning to answer one question — *what can the
 pilot do here, and which of those is worth most?* — and twenty showing the
@@ -4436,6 +4436,13 @@ flowchart TD
     C -->|"yes"| S
     C -->|"eight jobs"| E["stop · one press's worth"]
 ```
+
+**And an errand is the one row the runner most wants.** It is ranked above
+Grind and Gym — finite, and a precondition for everything on the far side of
+the road — so pressing *Run the list* in Violet with the badge in hand fetches
+the Egg and opens the way south without anybody choosing to. Which is the
+runner's whole argument in one step: the ranking was already the answer, and
+running it is not a second decision.
 
 **Two jobs are never taken on their own, for two different reasons.** Travel is
 a destination, and a destination is somebody's choice — the row carries a slot

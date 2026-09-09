@@ -1384,6 +1384,10 @@ test('an errand is offered where a gated road has something to do about it',
   const list = offers(world, { gated });
   t.true(list.offered.includes('errand'), 'and on the list');
   t.true(list.rank.errand < (list.rank.gym ?? 99), 'above Gym');
+  // And above Grind, which is the half the first draft got wrong: the comment
+  // said "worth more than levelling up" while the order said otherwise. An
+  // errand is finite and a precondition; grinding is infinite and can wait.
+  t.true(list.rank.errand < (list.rank.grind ?? 99), 'and above Grind');
 });
 
 test('a gate with no errand is a hint and not a row', async (t) => {

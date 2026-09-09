@@ -590,12 +590,23 @@ export function describeOffers(s, ctx = {}) {
   // Grind first, therefore, and Duel immediately after it.
   // Gym sits between Duel and Heal: it is the job that opens roads, so it is
   // worth more than tidying up and less than being able to fight at all.
-  // An errand sits with Gym, above it, and for the same reason Gym sits where
-  // it does: **it is the job that opens roads.** A gate is worth more than
-  // levelling up, because everything else on this list is reachable afterwards
-  // and the road is not reachable without it -- and it is worth less than
-  // being able to fight at all, which is why Heal is still below both.
-  order.push('catch', 'hunt', 'grind', 'duel', 'errand', 'gym', 'heal', 'take',
+  // **An errand outranks everything the pilot could do again tomorrow**, and
+  // the first draft of this line said so in a comment while putting it below
+  // Grind -- the prose and the order disagreeing, which is the failure this
+  // repository has a whole tool for one directory over.
+  //
+  // The reason it goes high is not urgency, which is what the rest of this
+  // ordering is about. It is that an errand is **finite and a
+  // precondition**: run it once and it is gone, and until it is run the place
+  // on the other side of the road cannot be reached at all. Grinding is
+  // infinite and always available, so it can wait; a road cannot, because
+  // nothing beyond it is on the list to be waited for.
+  //
+  // Below Hunt and Catch, because those are what somebody has already chosen
+  // by picking a species, and above everything else bar a fainted party --
+  // which is still first, since none of this can be done at all without
+  // somebody able to fight.
+  order.push('catch', 'hunt', 'errand', 'grind', 'duel', 'gym', 'heal', 'take',
              'travel', 'shop');
 
   const offered = [];

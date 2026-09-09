@@ -868,12 +868,19 @@ name, because the ball errand is the same shape of thing and the next cartridge
 will have its own — and a row called *Egg* would be a row that could only ever
 mean one thing on one game.
 
-**It is ranked above Gym**, which is the only interesting decision in it. The
-ordering on this list has been about urgency and cost since v89; a gate is
-neither. It is about *reachability*: everything else on the list can be done
-afterwards, and the place on the other side of the road cannot be reached at
-all until the errand is run. So it goes above the job that opens roads by
-force.
+**It is ranked above Grind and above Gym**, which is the only interesting
+decision in it — and the first draft got it half wrong in the most instructive
+way: the comment said *worth more than levelling up* while the order put it
+below Grind. Prose and code disagreeing, which is the failure this repository
+has a whole tool for one directory over, appearing inside the ordering that
+tool cannot see.
+
+The ordering on this list has been about urgency and cost since v89. A gate is
+neither. It is about **reachability, and being finite**: run an errand once and
+it is gone, and until it is run the place on the other side of the road cannot
+be reached at all — so it is not on the list to be waited for. Grinding is
+infinite and always available, so it can wait. A test pins the two orderings
+now, because a comment could not.
 
 **And it is drawn only where there is something to press**, which is where the
 hint and the row divide cleanly:
@@ -1063,4 +1070,4 @@ So this page carries a marker naming the files it describes and the hash they
 had when it was last read against them. `tools/docs-check` reports it when they
 move, and the pre-commit hook blocks on that report.
 
-<!-- covers: index.html app/main.js app/rows.js @ f2de25bf3d82 -->
+<!-- covers: index.html app/main.js app/rows.js @ babbeb879d06 -->

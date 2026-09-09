@@ -946,9 +946,10 @@ and a walk that gets turned back reports the remedy instead of the quote:
 
 There is a row for it. **Errand** — *the Egg from Elm's aide* — walks to Violet
 City, in through the Pokémon Center door, up to the aide, and says yes. It sits
-above Gym on the list, because a road being open is worth more than a level:
-everything else is reachable afterwards, and Azalea is not reachable without
-it.
+near the top of the list — above Grind and above Gym — because an errand is
+**finite and a precondition**: run it once and it is gone, and until it is run
+the place on the other side of the road cannot be reached at all. Grinding is
+always available, so it can wait.
 
 Which means **Run the list opens the road by itself.** Press it in Violet with
 the badge in hand and the pilot fetches the Egg, and the walk south stops being
