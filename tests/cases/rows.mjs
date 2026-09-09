@@ -330,19 +330,26 @@ test('only jobs that would start are offered, and the rest go unmentioned',
   t.eq(o.hint, '', 'and nothing is missing, so nothing is explained');
 });
 
-test('the catch row survives having no balls, because it holds the errand',
+test('with no balls, Catch goes and the Errand row carries the way out',
      async (t) => {
-  const world = { party: [{ species: CYNDAQUIL, level: 5, hp: 20, maxHp: 20 }] };
-  const o = offers(world, { huntWanted: 'SENTRET' });
-  t.true(o.offered.includes('catch'), 'the way to get balls stays reachable');
-  t.false(look(world, { huntWanted: 'SENTRET' }).catch.enabled,
-          'even though catching itself would refuse');
-
-  const fighting = offers({ ...world, battleMode: 1,
-                            enemy: { species: PIDGEY, level: 3, hp: 15, maxHp: 15 } },
-                          { huntWanted: 'SENTRET' });
-  t.false(fighting.offered.includes('catch'),
-          'but an errand that walks to a mart is not offered mid-battle');
+  // **This replaces the opposite rule.** v165 kept Catch on the list without
+  // balls, because the errand that fetches them was a second button on that
+  // row and hiding the row would have hidden the way out of the very state it
+  // described.
+  //
+  // The errand is a row of its own now, ranked high, so the way out is on the
+  // list either way -- and said by a row that can actually be pressed rather
+  // than by one that cannot. Which matters because of the runner: it presses a
+  // row's *own* button, so a secondary button was invisible to it and "Run the
+  // list" could never fetch the first balls.
+  const world = { party: [{ species: CYNDAQUIL, level: 5, hp: 20, maxHp: 20 }],
+                  map: [3, 1] };
+  const ctx = { huntWanted: 'PIDGEY', huntable: 2,
+                wilds: { low: 2, high: 3 } };
+  const list = offers(world, ctx);
+  t.false(list.offered.includes('catch'), 'Catch cannot run, so it is not drawn');
+  t.true(list.offered.includes('errand'), 'and the errand is');
+  t.eq(look(world, ctx).errand.text, 'the first Poké Balls', 'saying what it fetches');
 });
 
 test('the hint only names things there is something to do about', async (t) => {
@@ -480,27 +487,19 @@ test('a slot from another cartridge is named rather than offered', async (t) => 
   t.false(theirs.enabled, 'but putting it back is not offered');
 });
 
-test('a cartridge that cannot fetch balls does not offer a catch it cannot run',
+test('a cartridge that cannot fetch balls offers neither the catch nor an errand',
      async (t) => {
-  const world = { party: [{ species: CYNDAQUIL, level: 5, hp: 20, maxHp: 20 }] };
-
-  // With an errand, Catch stays on the list holding the way out of its own
-  // empty state -- which is the rule the errand button was built on.
-  const can = offers(world, { huntWanted: 'SENTRET' });
-  t.true(can.offered.includes('catch'), 'the errand is reachable, so the row is');
-
-  const cannot = offers(world, { huntWanted: 'SENTRET', canFetch: false });
-  t.false(cannot.offered.includes('catch'),
-          'no errand means no way out, so the row is not drawn');
-  t.contains(cannot.hint, 'needs Poké Balls',
-             'and the hint is what explains the absence');
-
-  // Not said when it is not the thing in the way: with balls in hand, a title
-  // without an errand has nothing to explain.
-  const armed = offers(world, { huntWanted: 'SENTRET', ballId: POKE_BALL,
-                                canFetch: false });
-  t.true(armed.offered.includes('catch'), 'balls in the bag need no errand');
-  t.eq(armed.hint, '', 'and nothing is missing, so nothing is said');
+  // `canFetch` is a title question: the trip that gets the first balls is a
+  // scripted walk to particular places, and a cartridge nobody has described
+  // has no such walk. Then there is nothing to draw and a sentence to say.
+  const world = { party: [{ species: CYNDAQUIL, level: 5, hp: 20, maxHp: 20 }],
+                  map: [3, 1] };
+  const ctx = { canFetch: false, huntWanted: 'PIDGEY', huntable: 2,
+                wilds: { low: 2, high: 3 } };
+  const list = offers(world, ctx);
+  t.false(list.offered.includes('catch'), 'no catch');
+  t.false(list.offered.includes('errand'), 'and no errand to unstick it');
+  t.contains(list.hint, 'cannot fetch them', 'but the reason is said');
 });
 
 // --- travel -----------------------------------------------------------------
@@ -1155,8 +1154,11 @@ test('the runner takes the front of the list, and says which row that is',
   // only a fainted one does, and the ranking says so two hundred lines above.
   // Worth writing the test around, because it is the whole claim: the runner
   // has no ranking of its own and takes whatever the screen is showing.
-  const world = { party: [{ species: CYNDAQUIL, level: 5, hp: 8, maxHp: 20 }] };
-  const ctx = { bagHeal: 'POTION' };
+  // Balls in the bag, so the *ball* errand is not the front of the list --
+  // these tests are about the runner's choosing, not about being unstuck.
+  const world = { party: [{ species: CYNDAQUIL, level: 5, hp: 8, maxHp: 20 }],
+                  items: [[POKE_BALL, 5]] };
+  const ctx = { bagHeal: 'POTION', ballId: POKE_BALL };
   const list = offers(world, ctx);
   const rows = look(world, ctx);
   const a = autoFor(world, ctx);
@@ -1217,8 +1219,9 @@ test('a job that ran and changed nothing stops the sequence', async (t) => {
   // of the map, the money, the badges, the party and the bag -- and a job that
   // reports success while all of that stands still did nothing, whatever it
   // said.
-  const world = { party: [{ species: CYNDAQUIL, level: 5, hp: 8, maxHp: 20 }] };
-  const ctx = { bagHeal: 'POTION' };
+  const world = { party: [{ species: CYNDAQUIL, level: 5, hp: 8, maxHp: 20 }],
+                  items: [[POKE_BALL, 5]] };
+  const ctx = { bagHeal: 'POTION', ballId: POKE_BALL };
   const again = autoFor(world, ctx, { last: 'grind', changed: true });
   t.eq(again.key, 'grind', 'the same job twice is fine while something moves');
   const stuck = autoFor(world, ctx, { last: 'grind', changed: false });
@@ -1227,6 +1230,8 @@ test('a job that ran and changed nothing stops the sequence', async (t) => {
 });
 
 test('an empty list stops it rather than picking something', async (t) => {
+  // No party at all, which is the only state where the list is truly empty --
+  // every job here is a walk or a fight and both want somebody along.
   const a = autoFor({});
   t.eq(a.key, null, 'nothing to start');
   t.false(a.enabled, 'so the row is not drawn');
@@ -1239,7 +1244,8 @@ test('the runner is never one of the jobs it can choose', async (t) => {
   const world = { party: [{ species: CYNDAQUIL, level: 5, hp: 8, maxHp: 20 }] };
   const a = autoFor(world, { bagHeal: 'POTION' });
   t.ne(a.key, 'auto', 'not itself');
-  t.true(['heal', 'grind', 'duel', 'gym', 'take', 'shop', 'catch'].includes(a.key),
+  t.true(['heal', 'grind', 'duel', 'gym', 'take', 'shop', 'catch',
+          'errand'].includes(a.key),
          'always one of the jobs with a button');
 });
 
@@ -1394,13 +1400,17 @@ test('a gate with no errand is a hint and not a row', async (t) => {
   // A road the pilot cannot open is worth saying and not worth a button. This
   // is the same rule the whole list runs on: nothing is drawn that cannot be
   // done.
-  const world = { party: [{ species: CYNDAQUIL, level: 5, hp: 20, maxHp: 20 }] };
+  // Balls in the bag, so the *only* candidate errand is the gate's -- and it
+  // has none, which is the case under test.
+  const world = { party: [{ species: CYNDAQUIL, level: 5, hp: 20, maxHp: 20 }],
+                  items: [[POKE_BALL, 5]] };
   const gated = [{ where: 'ROUTE 32', needs: 'a badge', errand: null }];
-  const rows = look(world, { gated });
+  const rows = look(world, { gated, ballId: POKE_BALL });
   t.false(rows.errand.enabled, 'no offer');
   t.contains(rows.errand.text, 'nothing to fetch', 'and it says why');
-  t.false(offers(world, { gated }).offered.includes('errand'), 'not on the list');
-  t.contains(offers(world, { gated }).hint, 'ROUTE 32', 'but still hinted');
+  const list = offers(world, { gated, ballId: POKE_BALL });
+  t.false(list.offered.includes('errand'), 'not on the list');
+  t.contains(list.hint, 'ROUTE 32', 'but still hinted');
 });
 
 test('the whole ranking, in one assertion', async (t) => {
@@ -1509,4 +1519,32 @@ test('no row ever says "undefined" or "[object Object]"', async (t) => {
     t.false(String(list.hint).includes('[object'),
             `${what}: the hint says "${list.hint}"`);
   }
+});
+
+test('the runner can now fetch the first balls, which it never could',
+     async (t) => {
+  // **The defect this arrangement exists for.** The runner presses a row's own
+  // button; the ball errand was a *second* button on the Catch row; Catch is
+  // not enabled without balls. So "Run the list" in a fresh game reached the
+  // one state it could not get out of, and stopped one step before the thing
+  // that would have unstuck it.
+  const world = { party: [{ species: CYNDAQUIL, level: 5, hp: 20, maxHp: 20 }],
+                  map: [3, 1] };
+  const ctx = { huntWanted: 'PIDGEY', huntable: 2, wilds: { low: 2, high: 3 } };
+  const s = state.read(worldRam(sym, world));
+  const c = { rom, ...ctx };
+  const pick = describeAuto(describeOffers(s, c), describeRows(s, c));
+  t.eq(pick.key, 'errand', `the runner takes it: ${pick.text}`);
+  t.contains(pick.text, 'Errand', 'and names it');
+});
+
+test('an errand needs somebody along, like every other walk', async (t) => {
+  // The state Shop was caught offering itself in, found the same way -- by a
+  // mechanism with no judgement pressing the front of the list. The game will
+  // not let anybody leave the first town without a Pokémon, so a trip to
+  // another one is not a thing that can be done.
+  const empty = look({}, {});
+  t.false(empty.errand.enabled, 'nothing to fetch with nobody to fetch it');
+  t.contains(empty.errand.text, 'without a Pok', 'and it says which');
+  t.false(offers({}, {}).offered.includes('errand'), 'so it is not drawn');
 });

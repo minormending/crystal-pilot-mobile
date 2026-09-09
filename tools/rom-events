@@ -16,6 +16,15 @@ So it is a tool.
         fact. Coincidental byte matches are named too; the symbol file is what
         tells them from scripts.
 
+    Routing and reachability live in `tools/route`, which runs the app's own
+    `gen2/world.js` rather than a second reader. A Python copy of that
+    traversal was written here first and diverged immediately -- it reported
+    Cherrygrove City as "not a map this cartridge has", because the obvious way
+    to derive a group's size does not work for every group and the app's
+    version is deliberately permissive where it cannot tell. Four divergences
+    in two passes, three of them constants: the reader that matters is the
+    app's.
+
     tools/rom-events --gyms
         every gym a title declares, against the cartridge: who stands on the
         leader's tile, whether that object is one you talk to, and whether the

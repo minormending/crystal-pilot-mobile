@@ -1,0 +1,169 @@
+#!/usr/bin/env node
+// Where the pilot can get to, asked of the app's own map graph.
+//
+//     tools/route 10.5 8.7          the way from Violet City to Azalea Town
+//     tools/route --exits 10.1      every way out of Route 32
+//     tools/route --reach           every map a title declares, from the start
+//     tools/route --json 10.5 8.7   the same, for a script to read
+//
+// **This runs `gen2/world.js`, and that is the whole point of it.** The first
+// version of this was a second reader written in Python beside
+// `tools/rom-events`, and it diverged the moment it met a group whose size the
+// obvious arithmetic cannot derive: Cherrygrove City came back as "not a map
+// this cartridge has". That is the fourth time copying this app's ROM reading
+// into another language produced a confident wrong answer -- three constants
+// and now a whole traversal -- so this asks the app instead.
+//
+// Which makes the check underneath it worth much more. `--reach` is not asking
+// whether *a* graph reaches a declared place; it is asking whether **the graph
+// the pilot will actually plan over** does. A gym in a town no route reaches is
+// a row that can never be pressed, and until now the only way to find one out
+// was to press it and watch a walk fail.
+//
+// Needs a ROM and a symbol file in `dev/`, which are not in this repository and
+// never will be. Without them it says so and exits 0.
+import { readFileSync, existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+
+import { Symbols } from '../gen2/symbols.js';
+import { World, mapKey } from '../gen2/world.js';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const DEV = join(HERE, '..', 'dev');
+const ROM = join(DEV, 'pokecrystal.gbc');
+const SYM = join(DEV, 'pokecrystal.sym');
+
+if (!existsSync(ROM) || !existsSync(SYM)) {
+  console.log('no cartridge in dev/ — nothing to read');
+  console.log('(a ROM is not in this repository and never will be)');
+  process.exit(0);
+}
+
+const rom = readFileSync(ROM);
+const symbols = new Symbols(readFileSync(SYM, 'utf8'));
+// The one thing `World` asks of a Game Boy: a byte of ROM. Bank 0 is mapped
+// low and every other bank pages into 0x4000, which is `GameBoy.romByte`'s
+// arithmetic and is repeated here rather than imported because `gb.js` reaches
+// for a canvas on the way in.
+const gb = { romByte: (bank, addr) => rom[bank * 0x4000 + (addr & 0x3fff)] };
+const world = new World(symbols, gb);
+
+/** Every map's own symbol name, via the attributes pointer it is filed under. */
+function names() {
+  const attrs = new Map();
+  for (const [name, at] of symbols.map) {
+    if (name.endsWith('_MapAttributes')) {
+      attrs.set(`${at.bank}:${at.addr}`, name.slice(0, -'_MapAttributes'.length));
+    }
+  }
+  const out = new Map();
+  for (let group = 1; group <= 26; group++) {
+    for (let number = 1; number <= 64; number++) {
+      if (!world.hasMap(group, number)) continue;
+      try {
+        const a = world._attributes(group, number);
+        const found = attrs.get(`${a.bank}:${a.addr}`);
+        if (found) out.set(mapKey(group, number), found);
+      } catch (e) { /* not a map: the honest answer is nothing */ }
+    }
+  }
+  return out;
+}
+
+const NAME = names();
+const label = (key) => NAME.get(key) || `${key >> 8}.${key & 0xff}`;
+
+const parse = (text) => {
+  if (/^\d+\.\d+$/.test(text)) {
+    const [g, n] = text.split('.').map(Number);
+    return mapKey(g, n);
+  }
+  for (const [key, name] of NAME) if (name === text) return key;
+  return null;
+};
+
+/** The shortest way between two maps, as the app's own graph has it. */
+function way(from, to) {
+  const legs = world.route(from, to);
+  if (legs === null) return null;
+  const out = [];
+  let at = from;
+  for (const leg of legs) {
+    out.push({ how: leg.kind === 'edge' ? leg.dir.toLowerCase()
+                                        : `warp at (${leg.tile.join(',')})`,
+               to: leg.key });
+    at = leg.key;
+  }
+  void at;
+  return out;
+}
+
+const argv = process.argv.slice(2);
+const json = argv.includes('--json');
+const plain = argv.filter((a) => !a.startsWith('--'));
+
+if (argv.includes('--exits')) {
+  const key = parse(plain[0] || '');
+  if (key === null) { console.log('give a map as group.number'); process.exit(2); }
+  console.log(`${label(key)} exits:`);
+  for (const e of world.exits(key)) {
+    const how = e.kind === 'edge' ? e.dir.toLowerCase()
+                                  : `warp at (${e.tile.join(',')})`;
+    console.log(`  ${how.padEnd(24)} → ${label(e.key)}`);
+  }
+  process.exit(0);
+}
+
+if (argv.includes('--reach')) {
+  // Every `key(group, number)` a title declares, and whether the graph the
+  // pilot plans over has any route to it from where a game begins.
+  const titles = join(HERE, '..', 'titles');
+  const { readdirSync } = await import('node:fs');
+  let problems = 0;
+  for (const file of readdirSync(titles).filter((f) => f.endsWith('.js')).sort()) {
+    const src = readFileSync(join(titles, file), 'utf8');
+    const declared = [...src.matchAll(/^const (\w+) = key\((\d+),\s*(\d+)\);/gm)]
+      .map((m) => [m[1], mapKey(Number(m[2]), Number(m[3]))]);
+    if (!declared.length) continue;
+    const start = declared.find(([n]) => n === 'PLAYERS_HOUSE_2F')
+      || declared.find(([n]) => n === 'NEW_BARK_TOWN');
+    if (!start) { console.log(`${file}: no starting map to measure from`); continue; }
+    console.log(`${file}: ${declared.length} declared map(s), from ${label(start[1])}`);
+    for (const [name, key] of declared) {
+      if (key === start[1]) continue;
+      const legs = way(start[1], key);
+      if (legs === null) {
+        console.log(`  !! ${name} (${label(key)}) is in no route from the start`);
+        problems += 1;
+      } else if (!json) {
+        console.log(`  ${String(legs.length).padStart(2)} leg(s)  ${name} — ${label(key)}`);
+      }
+    }
+  }
+  process.exit(problems ? 1 : 0);
+}
+
+const [a, b] = plain;
+if (!a || !b) {
+  console.log(readFileSync(fileURLToPath(import.meta.url), 'utf8')
+    .split('\n').filter((l) => l.startsWith('//')).map((l) => l.slice(3)).join('\n'));
+  process.exit(2);
+}
+const from = parse(a), to = parse(b);
+if (from === null || to === null) {
+  console.log('give maps as group.number, e.g. tools/route 10.5 8.7');
+  process.exit(2);
+}
+const legs = way(from, to);
+if (json) {
+  console.log(JSON.stringify(
+    { from: label(from), to: label(to),
+      legs: legs && legs.map((l) => ({ ...l, to: label(l.to) })) }, null, 1));
+} else if (legs === null) {
+  console.log(`${label(from)} → ${label(to)}: no route in the app's own graph`);
+  process.exit(1);
+} else {
+  console.log(`${label(from)} → ${label(to)}: ${legs.length} leg(s)`);
+  for (const leg of legs) console.log(`  ${leg.how.padEnd(24)} → ${label(leg.to)}`);
+}

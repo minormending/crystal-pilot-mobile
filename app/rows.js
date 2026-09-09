@@ -44,7 +44,7 @@ const SAYING_MAX = 46;
 export function describeRows(s, ctx = {}) {
   const { rom = null, target = 5, huntWanted = null, ballId = null,
           savedThisSession = false, healPlace = null, healShut = null,
-          gated = [],
+          gated = [], canFetch = null,
           gym = null,
           places = [], travelTo = null, wilds = null, takeables = [],
           bagHeal = null, bagCure = null, marts = false, shopFor = null,
@@ -61,16 +61,35 @@ export function describeRows(s, ctx = {}) {
 
   const lead = s.party[0];
   const leadName = lead ? name(lead.species) : null;
-  // The first gated road with something the pilot can go and do about it.
-  // First rather than all of them, because the row is one row: a second
-  // errand would be offered once the first has opened its road.
-  const errand = (gated || []).find((g) => g.errand) || null;
   // Money, said the way the game says it. Read for the first time in
   // twenty-six passes: the app has asserted since the seventeenth that a
   // knockout costs half of it, and could not show the number.
   const money = `¥${(s.money || 0).toLocaleString('en')}`;
   const needsBalls = !ballId;
   const ballName = ballId && rom ? rom.itemName(ballId) : null;
+
+  // **Every scripted trip the pilot could make, in one place.** Two sources
+  // feed it: a gated road with a remedy, and the trip that fetches the first
+  // Poké Balls. They used to live apart -- the ball errand as a second button
+  // on the Catch row, put there deliberately in v165 so that the way out of
+  // "no Poké Balls yet" sat in the row that says it.
+  //
+  // What that missed is the runner, which arrived two passes later and presses
+  // a row's *own* button. So "Run the list" could never fetch the first balls:
+  // Catch is not enabled without them, its secondary button was invisible to
+  // the runner, and the sequence stopped one step before the thing that would
+  // have unstuck it. A row that only a person can press is not on the list as
+  // far as the runner is concerned.
+  //
+  // A road first, then the balls, because a road is worth more -- and in
+  // practice they never both apply: the balls come from the opening errand and
+  // the gate is four towns later.
+  const errands = [];
+  for (const g of gated || []) if (g.errand) errands.push(g);
+  if (needsBalls && canFetch !== false) {
+    errands.push({ needs: 'the first Poké Balls', errand: 'eggErrand' });
+  }
+  const errand = errands[0] || null;
   const foe = s.inBattle ? name(s.enemy.species) : null;
   const trainer = s.battleMode === trainerBattle;
   const hurt = s.party.filter((m) => m.hp < m.maxHp);
@@ -292,8 +311,13 @@ export function describeRows(s, ctx = {}) {
     errand: {
       text: s.inBattle ? 'finish the battle first'
         : !errand ? 'nothing to fetch'
+        // The same state Shop was caught offering itself in, and caught the
+        // same way -- by a mechanism with no judgement pressing the front of
+        // the list. An errand is a walk to another town, and the game will not
+        // let anybody leave the first one without a Pokémon.
+        : !s.party.length ? 'nothing to fetch without a Pokémon'
         : errand.needs,
-      enabled: afoot && !!errand,
+      enabled: afoot && !!errand && s.party.length > 0,
     },
     // Winning a badge, which is the one job whose result the game writes down
     // permanently -- so this row can say whether it has been done rather than
@@ -620,9 +644,12 @@ export function describeOffers(s, ctx = {}) {
     // way out of the very state it describes. On a cartridge with no errand
     // there is no way out, so the row goes -- an offer whose only action does
     // not exist is worse than an absence, and the hint says what is missing.
-    let usable = rows[key].enabled
-                 || (key === 'catch' && rows.catch.needsBalls && afoot
-                     && ctx.canFetch !== false);
+    // **Catch no longer earns its place from needing balls.** That rule
+    // existed because the errand that fetches them was a button on the Catch
+    // row; it is a row of its own now, ranked high, and so the way out of "no
+    // Poké Balls yet" is on the list either way -- said by the row that can
+    // actually be pressed rather than by the one that cannot.
+    let usable = rows[key].enabled;
     // A row also earns its place while it is *waiting on a choice that can be
     // made here*, and leaving that out was a dead end rather than an
     // untidiness. The picker below the list is drawn only when the row that

@@ -1743,10 +1743,10 @@ function paintJobs(s) {
   // does what the first does is a choice nobody can make well.
   $('#clear').classList.toggle('hide', !rows.duel.clearable);
   $('#clear').disabled = !rows.duel.clearable;
-  $('#errand').classList.toggle('hide', !rows.catch.needsBalls || !ctx.canFetch);
-  $('#errand').classList.toggle('primary', leadsWithCatch && rows.catch.needsBalls);
-  $('#catch').classList.toggle('hide', rows.catch.needsBalls);
-  $('#catch').classList.toggle('primary', leadsWithCatch && !rows.catch.needsBalls);
+  // Catch has one button again. The ball errand moved to the Errand row, which
+  // is ranked high and is a row the *runner* can press -- a secondary button
+  // is invisible to it, so "Run the list" could never fetch the first balls.
+  $('#catch').classList.toggle('primary', leadsWithCatch);
 
   paintRow(rows.save, '#savestate', '#savegame', '#job-save');
   paintRow(rows.export, '#exportstate');
@@ -2110,13 +2110,10 @@ $('#boot').onclick = async () => {
   }
 };
 
-// --- the errand that pays for the balls --------------------------------------
-// Nothing to catch with until this has been round: the Mart wants a Pokédex and
-// the free ball on Route 31 is behind a roadblock that only the egg lifts.
-$('#errand').onclick = async () => {
-  if (!boot) return;
-  await runTask('#errand', 'off to Mr. Pokémon\u2019s', () => boot.eggErrand());
-};
+// The errand that pays for the balls has moved to the Errand row's handler,
+// above, with the gate errands. Nothing to catch with until it has been round:
+// the Mart wants a Pokédex and the free ball on Route 31 is behind a roadblock
+// that only the egg lifts.
 
 // --- hunt -------------------------------------------------------------------
 // The list is rebuilt from where you are standing and what time the game thinks
@@ -2817,11 +2814,17 @@ $('#duel').onclick = async () => {
  * nothing here knows which cartridge it is on or what is being fetched.
  */
 $('#runerrand').onclick = async () => {
-  const job = (gated.find((g) => g.errand) || {}).errand;
-  if (!boot || !job) return;
-  const res = await runTask('#runerrand', `off to fetch ${gated[0].needs}`,
-                            () => boot[job]());
-  return res;
+  if (!boot) return;
+  // The same two sources `describeRows` picks from, in the same order, because
+  // the row and the button have to agree about which trip is on offer -- and
+  // the ball errand has to be *here* rather than on the Catch row, or the
+  // runner can never reach it.
+  const gate = gated.find((g) => g.errand);
+  const job = gate ? gate.errand
+    : (!ballId && typeof boot.eggErrand === 'function') ? 'eggErrand' : null;
+  if (!job) return;
+  const what = gate ? gate.needs : 'the first Poké Balls';
+  return runTask('#runerrand', `off to fetch ${what}`, () => boot[job]());
 };
 
 $('#gym').onclick = async () => {
