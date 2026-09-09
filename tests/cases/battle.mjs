@@ -458,12 +458,16 @@ const TYPED_MOVES = {
   45: { power: 0, effect: 18, type: NORMAL, pp: 40 }, // GROWL
   52: { power: 40, type: FIRE, pp: 25 },          // EMBER
   75: { power: 55, type: GRASS, pp: 25 },         // RAZOR LEAF
+  // Stores power 1 and ends battles, which is why "does damage" is asked as
+  // above zero rather than above one everywhere in this file.
+  32: { power: 1, type: NORMAL, effect: 38, pp: 5 },  // HORN DRILL
 };
 // Packed, terminated, and in the same numbering as the moves above, because
 // the log line names the move it picked and a name off by one entry names the
 // wrong one. Ids 33, 45, 52 and 75, so the table is mostly filler.
 const MOVE_NAMES = (() => {
-  const named = { 33: 'TACKLE', 45: 'GROWL', 52: 'EMBER', 75: 'RAZOR LEAF' };
+  const named = { 32: 'HORN DRILL', 33: 'TACKLE', 45: 'GROWL',
+                  52: 'EMBER', 75: 'RAZOR LEAF' };
   const out = [];
   for (let id = 1; id <= 75; id++) {
     for (const c of named[id] || '-') {
@@ -1487,4 +1491,95 @@ test('fightBattle refuses it before pressing anything', async (t) => {
   t.eq(pressed, [], 'and pressed nothing finding out');
   t.true(said.some((l) => l.includes('Bug-Catching Contest')),
          `and names it: ${said.join(' | ')}`);
+});
+
+// --- boundaries the mutation run found nothing behind ----------------------
+
+test('a box matching one of the battle menu’s numbers is not the battle menu',
+     async (t) => {
+  // Both numbers, not either: the shape is `items` *and* the border row, and a
+  // box that shares one of them is a different box. The pack shares neither,
+  // which is why it was the easy case; the hard case is a two-item box at row
+  // 12 or a thirty-four-item box at row 7.
+  const box = (items, top) => ({ inBattle: true, menuItems: items,
+                                 menuTop: top, menuLeft: 2, windowOpen: true });
+  t.eq(otherBattleMenu(box(34, 7), gen2), null, 'the right count, the wrong row');
+  t.eq(otherBattleMenu(box(2, 12), gen2), null, 'the right row, the wrong count');
+  t.eq(otherBattleMenu(box(34, 12), gen2), 'the Bug-Catching Contest', 'and both');
+});
+
+test('a Pokémon holding only a move that computes its damage can still be sent',
+     async (t) => {
+  // HORN DRILL stores power 1, and it ends battles. `switchFor` asks whether
+  // the power is above zero rather than above one for the same reason
+  // `canStillWin` does — read it as above one and the pilot declares the only
+  // Pokémon that could win this fight unable to touch anything.
+  const { tasks } = pilot({ rom: typedRom() });
+  const party = [
+    { slot: 0, species: 19, hp: 20, maxHp: 20, moves: [33, 0, 0, 0], pp: [35, 0, 0, 0] },
+    { slot: 1, species: 31, hp: 20, maxHp: 20, moves: [32, 0, 0, 0], pp: [5, 0, 0, 0] },
+  ];
+  t.eq(tasks.switchFor(party, [NORMAL, NORMAL], 0), 1,
+       'the Horn Drill counts, and it is the only thing on the bench');
+});
+
+test('each of the four things switchFor needs is asked for on its own',
+     async (t) => {
+  // A guard chain read as `&&` needs all four missing before it refuses, so
+  // each one has to be able to refuse alone.
+  const { tasks } = pilot({ rom: typedRom() });
+  t.eq(tasks.switchFor(null, [GHOST, GHOST], 0), null, 'no party');
+  t.eq(tasks.switchFor([], [GHOST, GHOST], 0), null, 'an empty one');
+  t.eq(tasks.switchFor(bench(), null, 0), null, 'no types to price against');
+  const { tasks: blind } = pilot({ rom: null });
+  t.eq(blind.switchFor(bench(), [GHOST, GHOST], 0), null, 'and no cartridge');
+});
+
+test('each of the three things nothingLands needs, likewise', async (t) => {
+  const { tasks } = pilot({ rom: typedRom() });
+  t.false(tasks.nothingLands(null, [GHOST, GHOST]), 'no Pokémon');
+  t.false(tasks.nothingLands({ pp: [10] }, [GHOST, GHOST]), 'no move list');
+  const { tasks: blind } = pilot({ rom: null });
+  t.false(blind.nothingLands({ moves: [33], pp: [10] }, [GHOST, GHOST]),
+          'and no cartridge');
+});
+
+test('the switch budget is what stops a battle becoming a switching loop',
+     async (t) => {
+  // A switch *is* the turn, so an unbounded version hands over every turn and
+  // takes none. Two, and the third time the honest answer is the sentence.
+  const { tasks, said } = switcher();
+  let switched = 0;
+  tasks.coverFaint = async () => null;
+  tasks.awaitBattleMenu = async () => (await tasks.snap());
+  // Always report a switch that landed but leave the same Pokémon out, which
+  // is the shape of a screen that cooperates and changes nothing.
+  tasks.switchTo = async () => { switched++; return 'ok'; };
+  tasks.chooseMove = async () => 0;
+  t.eq(await tasks.fightBattle(9), 'notouch', 'it stops rather than looping');
+  t.eq(switched, 2, 'having spent exactly the budget');
+});
+
+test('chip reports a knockout only when the enemy is actually down', async (t) => {
+  // The other direction is what matters: reporting `fainted` while the enemy
+  // is alive tells the catch it knocked out the thing it was catching, which
+  // ends the encounter and teaches the damage guard a number that is not true.
+  const { tasks } = pilot({ rom: typedRom() });
+  const party = [{ slot: 0, species: 155, hp: 20, maxHp: 20,
+                   moves: [52, 0, 0, 0], pp: [25, 0, 0, 0] }];
+  const at = (hp) => ({ party, inBattle: true, menuItems: 34, menuTop: 12,
+                        menu: [1, 1], menuLeft: 8, windowOpen: true,
+                        enemy: { species: 16, level: 3, hp, maxHp: 20,
+                                 types: [NORMAL, NORMAL] },
+                        active: { hp: 20, maxHp: 20, types: [FIRE, FIRE] } });
+  tasks.awaitBattleMenu = async () => at(12);
+  tasks.chooseAction = async () => {};
+  tasks.step = async () => {};
+  tasks.pump = async () => {};
+  tasks.push = async () => {};
+  tasks.chooseMove = async () => 0;
+  tasks.snap = async () => at(12);
+  t.eq(await tasks.chip(), 'ok', 'twelve of twenty is not a knockout');
+  tasks.snap = async () => at(0);
+  t.eq(await tasks.chip(), 'fainted', 'and nothing left is');
 });

@@ -417,3 +417,74 @@ test('a catch in the Bug Contest stops before it opens a pack that is not there'
   t.contains(captureOutcome(r.outcome).say(r), 'Bug-Catching Contest',
              'and the sentence names where it is');
 });
+
+// --- the catch that goes to the box, which was read by nothing -------------
+//
+// `watchThrow`'s boxed branch had no test: `tools/mutate` dropped the `!`
+// from its own guard and nothing failed, which means the whole path — the
+// screen read, the phrase, the nickname answer — had never run. It is the one
+// place where a *successful* catch is reported as an escape if it is wrong,
+// because with a full party the party count never moves.
+
+/** A pilot mid-throw with six carried and a screen that can be painted. */
+function thrown({ says = '', boxed = null, party = 6 } = {}) {
+  const sym = symbols();
+  const state = new GameState(sym);
+  const mons = [];
+  for (let i = 0; i < party; i++) {
+    mons.push({ species: 155, level: 14, hp: 40, maxHp: 44,
+                moves: [33, 0, 0, 0], pp: [35, 0, 0, 0] });
+  }
+  const wram = worldRam(sym, {
+    battleMode: 1, party: mons, balls: [[POKE_BALL, 4]],
+    enemy: { species: 16, level: 3, hp: 15, maxHp: 15 },
+    active: { hp: 40, maxHp: 44 }, menuItems: 34, menuTop: 12, menu: [1, 1],
+    screen: ['', '', says],
+  });
+  const gb = new FakeGameBoy({ wram });
+  const tasks = new Tasks(gb, state, () => {}, fakeRom({}, {}));
+  const log = [];
+  tasks.snap = async () => state.read(wram);
+  tasks.step = async () => {};
+  tasks.pump = async () => {};
+  tasks.push = async (b) => { log.push(b); };
+  tasks.keepDefaultName = async () => { log.push('keepName'); };
+  tasks.settleText = async () => {};
+  return { tasks, log, state, wram, boxed };
+}
+
+test('a catch the game sent to the box is a catch', async (t) => {
+  // Measured with six carried: "Gotcha! PIDGEY was caught!", the nickname
+  // question, then "was sent to BILL's PC." — and the party never moved off
+  // six. So the party count cannot be the evidence, and the screen is.
+  const { tasks, log } = thrown({ says: 'WAS SENT TO BILL' });
+  t.eq(await tasks.watchThrow(6, 'WAS SENT TO BILL'), 'caught',
+       'the phrase is on the screen');
+  t.true(log.includes('keepName'), 'and the nickname question was answered');
+});
+
+test('a screen saying something else is not a catch', async (t) => {
+  const { tasks } = thrown({ says: 'PIDGEY BROKE FREE' });
+  t.ne(await tasks.watchThrow(6, 'WAS SENT TO BILL'), 'caught',
+       'a different sentence is a different outcome');
+});
+
+test('and with no phrase to look for, the screen is not consulted at all',
+     async (t) => {
+  // Honest rather than brave: a cartridge nobody has described has no phrase,
+  // so a boxed catch and a getaway are the same thing from here — which is
+  // exactly why `catch_` refuses to throw with a full party in that case.
+  const { tasks } = thrown({ says: 'WAS SENT TO BILL' });
+  t.ne(await tasks.watchThrow(6, null), 'caught', 'no phrase, no reading');
+});
+
+test('a cartridge whose symbol file has no tilemap does not crash on it',
+     async (t) => {
+  // `state.screen` answers null there — "cannot read" rather than "says
+  // nothing" — and the guard has to be an `&&` for that reason. Mutated to
+  // `||` it would dereference the null.
+  const { tasks, state } = thrown({ says: 'WAS SENT TO BILL' });
+  state.a.tilemap = null;
+  t.ne(await tasks.watchThrow(6, 'WAS SENT TO BILL'), 'caught',
+       'no tilemap, no evidence — and no throw either');
+});

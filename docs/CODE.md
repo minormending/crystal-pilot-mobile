@@ -2121,6 +2121,15 @@ message it printed, *weakening is getting nowhere*, was a guess about a fact
 the cartridge states outright. The odds at a full bar are the odds, so the
 honest move is to throw at them.
 
+**And a catch that goes to the box had never been read by anything.** The
+branch is the one place where a *successful* catch is reported as an escape if
+it is wrong — with a full party the party count never moves, so the screen is
+the only evidence there is. `tools/mutate` dropped the `!` from its own guard
+and nothing failed, which means the whole path had never run: not the screen
+read, not the phrase, not the nickname answer. Four tests now, including the
+cartridge with no tilemap, where `state.screen` answers null and the guard has
+to be an `&&` or it dereferences it.
+
 **Nor off the power byte and the type chart alone, though both are read now.**
 "Gentlest" is the *softest landing*, so it is ranked by the same
 `hitPower` the winning half ranks by, downwards — against a Grass target EMBER
