@@ -257,7 +257,20 @@ export const crystal = {
   // the road's own refusal into an instruction instead of a mystery.
   gates: [
     { from: VIOLET_CITY, to: ROUTE_32, event: 0x2d,
-      needs: 'the Egg from Elm\u2019s aide', at: VIOLET_POKECENTER },
+      needs: 'the Egg from Elm\u2019s aide', at: VIOLET_POKECENTER,
+      // Who to talk to, and where they stand: object 5 of
+      // `VioletPokecenter1F_MapEvents` at (4,3), a script object whose own
+      // script is the only thing in the ROM that sets this event.
+      //
+      // In the gate rather than in `places`, because then the whole claim is
+      // one entry and `check-app gates` can check it as one: *the thing that
+      // sets this event stands on this tile on this map*. Split across two
+      // tables it could only be checked in halves.
+      tile: [4, 3],
+      // `errand` names a method on the driver, the way `reach` does on a
+      // healer, so the row that offers it needs to know nothing about which
+      // cartridge it is on.
+      errand: 'talkToOpen' },
   ],
   grassyMaps: [ROUTE_29, ROUTE_30, ROUTE_31],
   // Where things can be bought, and how to get to the counter.

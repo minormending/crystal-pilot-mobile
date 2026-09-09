@@ -1649,6 +1649,7 @@ const JOB_ROWS = {
   shop: ['#shopstate', '#shop', '#job-shop'],
   take: ['#takestate', '#take', '#job-take'],
   duel: ['#duelstate', '#duel', '#job-duel'],
+  errand: ['#errandstate', '#runerrand', '#job-errand'],
   gym: ['#gymstate', '#gym', '#job-gym'],
   travel: ['#travelstate', '#travel', '#job-travel'],
 };
@@ -2808,6 +2809,21 @@ $('#duel').onclick = async () => {
  * progress line says the badge rather than the battles: *fought four, won four*
  * is true of a run that never reached the leader.
  */
+/**
+ * Go and do whatever a gated road is waiting on.
+ *
+ * The row is generic and so is this: the title names a method on the driver
+ * and `gatesFrom` only offers the name where the driver actually has it, so
+ * nothing here knows which cartridge it is on or what is being fetched.
+ */
+$('#runerrand').onclick = async () => {
+  const job = (gated.find((g) => g.errand) || {}).errand;
+  if (!boot || !job) return;
+  const res = await runTask('#runerrand', `off to fetch ${gated[0].needs}`,
+                            () => boot[job]());
+  return res;
+};
+
 $('#gym').onclick = async () => {
   if (!boot || !gymNext) return;
   const res = await runTask('#gym', 'off to the Gym', () => boot.beatGym(gymNext));

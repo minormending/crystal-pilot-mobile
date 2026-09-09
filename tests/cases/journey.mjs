@@ -2545,3 +2545,120 @@ test('each gym carries its own town as the leg to walk', async (t) => {
   t.eq(list.map((g) => g.from), [2565, 2055], 'each its own town');
   t.eq(new Set(list.map((g) => g.from)).size, 2, 'and they differ');
 });
+
+// --- the errand that opens a road -------------------------------------------
+//
+// **The fake below is the aide's own script**, read out of the ROM rather than
+// imagined -- which is the point, because a fake laid out more conveniently
+// than the thing it stands for cannot fail, and this repository has been caught
+// by that twice:
+//
+//     checkevent $2c   iftrue .SecondTimeAsking     -- asked once, refused
+//     writetext ...Favour
+//     yesorno          iffalse .RefusedEgg          -- which sets $2c
+//     readvar VAR_PARTYCOUNT
+//     ifequal 6 .PartyFull
+//     giveegg TOGEPI, 5
+//     setevent $2d                                  -- the road opens
+//
+// So: refusing is recoverable, a full party is a refusal with a remedy the
+// person has to apply, and the evidence is the event rather than the words.
+
+const EGG_EVENT = 0x2d;
+
+function aide({ party = 1, answers = true, full = false } = {}) {
+  const sym = symbols();
+  const state = new GameState(sym);
+  const gb = new FakeGameBoy({ wram: worldRam(sym, {}) });
+  const title = {
+    legCost: 25,
+    names: { 2565: 'Violet City', 2570: "Violet's Pokémon Center",
+              2561: 'ROUTE 32' },
+    healers: [{ map: 2565, inside: 2570, door: [31, 25], nurse: [3, 1],
+                reach: 'healAtCenter' }],
+    gates: [{ from: 2565, to: 2561, event: EGG_EVENT, at: 2570,
+              needs: 'the Egg', tile: [4, 3], errand: 'talkToOpen' }],
+  };
+  const events = new Set();
+  let here = 2570;                       // already inside, so the walk is not
+                                         // what these tests are about
+  const j = new Journey(gb, state, null,
+                        { off: 0, calibrate: () => true, playerPos: () => [4, 4],
+                          walkable: () => true, mapSize: () => [10, 16],
+                          placedObjects: () => [] },
+                        { mapKey: async () => here,
+                          walkTo: async () => ({ stopped: null }),
+                          step: async () => {} },
+                        () => {}, {}, title);
+  j.said = [];
+  j.say = (m) => j.said.push(m);
+  j.settled = async () => gb.wram;
+  j.runScripts = async () => true;
+  j.leaveVia = async () => { here = 2565; return true; };
+  j.state.hasEvent = (_w, bit) => events.has(bit);
+  const asked = [];
+  j.tasks = {
+    answerYes: async () => {
+      asked.push('yes');
+      // The script's own branches, in the script's own order.
+      if (!answers) { events.add(0x2c); return true; }   // .RefusedEgg
+      if (full) return true;                             // .PartyFull
+      events.add(EGG_EVENT);                             // giveegg, setevent
+      return true;
+    },
+  };
+  j.snap = async () => ({
+    inBattle: false, wram: gb.wram, money: 0, balls: [], items: [],
+    party: Array.from({ length: party }, () => ({ hp: 20, maxHp: 20, level: 5 })),
+  });
+  return { j, events, asked };
+}
+
+test('the errand takes the Egg, and the evidence is the event', async (t) => {
+  const { j, events } = aide();
+  const r = await j.talkToOpen();
+  t.true(r.ok, `taken: ${r.message}`);
+  t.true(events.has(EGG_EVENT), 'the game wrote it down');
+  t.contains(r.message, 'ROUTE 32 is open', 'and it says what that bought');
+});
+
+test('a full party is a refusal that names itself', async (t) => {
+  // The aide keeps the Egg, and there is nothing the pilot can do about it:
+  // shuffling somebody into a box is not this errand's business.
+  const { j, events } = aide({ party: 6, full: true });
+  const r = await j.talkToOpen();
+  t.false(r.ok, 'not taken');
+  t.contains(r.message, 'party is full', 'and says which');
+  t.false(events.has(EGG_EVENT), 'with the road still shut');
+});
+
+test('the event is what is believed, not having asked', async (t) => {
+  // `answerYes` returning true means a box was answered, not that anything was
+  // handed over -- so an aide who says yes and gives nothing must not read as
+  // success. This is the badge rule, one errand along.
+  const { j, asked } = aide({ answers: false });
+  const r = await j.talkToOpen();
+  t.false(r.ok, 'not believed');
+  t.contains(r.message, 'not handed over', 'said as a refusal');
+  t.true(asked.length > 1, 'having tried more than once, since refusing is recoverable');
+});
+
+test('a build whose driver lacks the errand does not offer it', async (t) => {
+  // `gatesFrom` names an errand only where the method exists, so an older app
+  // meeting a newer title gets a hint with no button rather than a button that
+  // calls nothing.
+  const { j } = aide();
+  const shown = j.gatesFrom(2565, worldRam(sym, {}));
+  t.eq(shown[0].errand, 'talkToOpen', 'offered where it exists');
+  j.title = { ...j.title,
+              gates: [{ ...j.title.gates[0], errand: 'noSuchErrand' }] };
+  t.eq(j.gatesFrom(2565, worldRam(sym, {}))[0].errand, null, 'and not where it does not');
+});
+
+test('the errand refuses a cartridge that declares none', async (t) => {
+  const { j } = aide();
+  j.title = { ...j.title, gates: [] };
+  const r = await j.talkToOpen();
+  t.false(r.ok, 'nothing to do');
+  t.contains(r.message, 'no such errand', 'said rather than crashed');
+});

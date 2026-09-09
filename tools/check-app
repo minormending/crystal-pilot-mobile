@@ -1467,9 +1467,44 @@ def check_gates():
     So `tools/rom-events --gates` names every hit and a person reads the list,
     which is also how this gate was found in the first place. A check that
     silently dropped a real setter would be worse than the noise.
+
+    **The stronger claim is about the remedy**, and that one is exact: the
+    object standing on the gate's declared tile has to be the thing that sets
+    the event. A gate saying "talk to somebody in the Pokémon Center" with a
+    tile nobody stands on sends the pilot to press A at the floor and report
+    that whoever it is would not hand the thing over -- which reads like the
+    game refusing. The setter's symbol is a label inside the object's script,
+    so the object's own name is a prefix of it, and comparing them is the whole
+    test.
     """
+    # The half that needs no cartridge, and therefore runs on CI: an errand a
+    # title names has to be a method the driver has. `gatesFrom` guards this at
+    # run time by only offering the name where the function exists -- which is
+    # right, and means a typo produces a *missing offer* rather than an error.
+    # A missing offer is exactly the kind of nothing nobody notices.
+    # A driver is a title's class *extending* the engine's Journey, so an
+    # errand may legitimately be defined in either -- and the good answer is
+    # usually the engine: this check first failed for real, not under mutation,
+    # the moment `takeTheEgg` was read back, found to mention no cartridge, and
+    # moved into `journey.js` as `talkToOpen`.
+    engine = module("journey.js").read_text()
+    problems = []
+    for path in sorted((ROOT / "titles").glob("*.js")):
+        src = path.read_text()
+        for errand in set(re.findall(r"\berrand:\s*'(\w+)'", src)):
+            here = re.search(rf"^\s*async {errand}\s*\(", src, re.M)
+            there = re.search(rf"^\s*async {errand}\s*\(", engine, re.M)
+            if not here and not there:
+                problems.append(f"{path.name}  declares errand {errand!r}, and "
+                                f"neither it nor the engine defines one")
+    for p in problems:
+        print(f"        {p}")
+    if problems:
+        return fail(f"{len(problems)} errand(s) that name nothing")
+
     if not (ROOT / "dev" / "pokecrystal.gbc").exists():
-        return ok("no cartridge here, so the declared gates are not checked")
+        return ok("every declared errand exists; no cartridge here, so the "
+                  "events and tiles are not checked")
     out = subprocess.run([sys.executable, str(HERE / "rom-events"), "--gates"],
                          capture_output=True, text=True)
     lines = [l for l in out.stdout.splitlines() if "!!" in l]
@@ -1478,8 +1513,10 @@ def check_gates():
     if out.returncode or lines:
         return fail(f"{len(lines) or 1} gate(s) the ROM does not agree with")
     named = [l for l in out.stdout.splitlines() if l.startswith("  set by:")]
+    tiles = [l for l in out.stdout.splitlines() if "and it is the setter" in l]
     return ok(f"every declared gate names an event the ROM sets, in "
-              f"{len(named)} place(s)")
+              f"{len(named)} place(s), and {len(tiles)} remedy tile(s) hold "
+              f"whoever sets it")
 
 
 # Every constant both readers of the cartridge's map tables have to agree

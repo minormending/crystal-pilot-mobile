@@ -1369,3 +1369,32 @@ test('a road the game is keeping shut says what opens it', async (t) => {
   const quiet = offers(world, { gated: [] });
   t.false(quiet.hint.includes('wants'), 'and nothing where no gate is in the way');
 });
+
+test('an errand is offered where a gated road has something to do about it',
+     async (t) => {
+  // The hint says what a road wants; this row goes and gets it. Ranked above
+  // Gym, because a gate is worth more than levelling up -- everything else on
+  // the list is reachable afterwards and the road is not reachable without it.
+  const world = { party: [{ species: CYNDAQUIL, level: 5, hp: 20, maxHp: 20 }] };
+  const gated = [{ where: 'ROUTE 32', needs: 'the Egg from Elm’s aide',
+                   errand: 'talkToOpen' }];
+  const rows = look(world, { gated });
+  t.true(rows.errand.enabled, 'on offer');
+  t.contains(rows.errand.text, 'Egg', 'saying what it would fetch');
+  const list = offers(world, { gated });
+  t.true(list.offered.includes('errand'), 'and on the list');
+  t.true(list.rank.errand < (list.rank.gym ?? 99), 'above Gym');
+});
+
+test('a gate with no errand is a hint and not a row', async (t) => {
+  // A road the pilot cannot open is worth saying and not worth a button. This
+  // is the same rule the whole list runs on: nothing is drawn that cannot be
+  // done.
+  const world = { party: [{ species: CYNDAQUIL, level: 5, hp: 20, maxHp: 20 }] };
+  const gated = [{ where: 'ROUTE 32', needs: 'a badge', errand: null }];
+  const rows = look(world, { gated });
+  t.false(rows.errand.enabled, 'no offer');
+  t.contains(rows.errand.text, 'nothing to fetch', 'and it says why');
+  t.false(offers(world, { gated }).offered.includes('errand'), 'not on the list');
+  t.contains(offers(world, { gated }).hint, 'ROUTE 32', 'but still hinted');
+});

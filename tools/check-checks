@@ -129,11 +129,11 @@ def mutations(root):
         "romlayout": lambda: edit("tools/rom-events", sub(
             "WARP_BYTES, COORD_BYTES, BG_BYTES, OBJECT_BYTES = 5, 8, 5, 13",
             "WARP_BYTES, COORD_BYTES, BG_BYTES, OBJECT_BYTES = 5, 5, 5, 13")),
-        # The event number changed to one no script sets, which is the whole
-        # content of a gate's claim -- and a wrong bit reads exactly like a bit
-        # that is not set yet.
+        # An errand that names nothing, which `gatesFrom` turns into a
+        # missing offer rather than an error -- the kind of nothing nobody
+        # notices.
         "gates": lambda: edit("titles/crystal.js", sub(
-            "event: 0x2d", "event: 0x7f0")),
+            "errand: 'talkToOpen' },", "errand: 'talkToOpened' },")),
         # A row renamed out from under the runner, which builds the word it
         # prints from the key rather than from a table.
         "labels": lambda: edit("index.html", sub(

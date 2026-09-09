@@ -547,8 +547,28 @@ def load():
     return Cart(rom.read_bytes(), sym.read_text())
 
 
-GATE = re.compile(r'\{\s*from:\s*(\w+),\s*to:\s*(\w+),\s*event:\s*(0x[0-9a-f]+)'
-                  r'[^}]*?needs:\s*[\'"]([^\'"]*)', re.S)
+# The whole gate object, brace to brace. A non-greedy `.*?needs:` was the
+# first draft and it stopped the match at the first field it wanted -- so
+# `tile:` and `errand:`, which come after, were invisible and the tile check
+# silently did nothing. These objects nest no braces, so `[^{}]*` is exact and
+# cannot run past the end of one.
+GATE = re.compile(r'\{[^{}]*?\bevent:\s*(0x[0-9a-f]+)[^{}]*\}', re.S)
+GATE_FROM = re.compile(r'\bfrom:\s*(\w+)')
+GATE_TO = re.compile(r'\bto:\s*(\w+)')
+GATE_NEEDS = re.compile(r'\bneeds:\s*[\'"]([^\'"]*)[\'"]')
+GATE_AT = re.compile(r'\bat:\s*(\w+)')
+
+
+class _Blank:
+    """Stands in for a field a gate does not carry, so unpacking stays flat."""
+
+    def group(self, _):
+        return '?'
+
+
+_blank = _Blank()
+GATE_TILE = re.compile(r'\btile:\s*\[(\d+),\s*(\d+)\]')
+GATE_ERRAND = re.compile(r'\berrand:\s*[\'"](\w+)[\'"]')
 
 
 # A hit *may* be a coincidence: a byte search over 2MB finds them, and
@@ -568,12 +588,29 @@ GATE = re.compile(r'\{\s*from:\s*(\w+),\s*to:\s*(\w+),\s*event:\s*(0x[0-9a-f]+)'
 DATA_ISH = re.compile(r'Frames|Gfx|Palette|Tiles|Anim')
 
 
-def gates(cart):
-    """Every declared gate, against what the ROM says sets its event."""
+def gates(cart, name_of=None):
+    """Every declared gate, against what the ROM says sets its event.
+
+    Two claims now, and the second is the one worth having: *the thing that
+    sets this event stands on this tile on this map.* A gate that says "talk to
+    somebody in the Pokémon Center" and names a tile with nobody on it sends
+    the pilot to press A at the floor -- and reports that whoever it is would
+    not hand the thing over, which reads like the game refusing.
+    """
     bad = 0
     for path in sorted((ROOT / 'titles').glob('*.js')):
-        for m in GATE.finditer(path.read_text()):
-            frm, to, event, needs = m.groups()
+        src = path.read_text()
+        keys = {k.group(1): (int(k.group(2)), int(k.group(3)))
+                for k in KEY.finditer(src)}
+        for m in GATE.finditer(src):
+            body = m.group(0)
+            event = m.group(1)
+            frm = (GATE_FROM.search(body) or _blank).group(1)
+            to = (GATE_TO.search(body) or _blank).group(1)
+            needs = (GATE_NEEDS.search(body) or _blank).group(1)
+            where = GATE_AT.search(body)
+            tile = GATE_TILE.search(body)
+            errand = GATE_ERRAND.search(body)
             # The declaration is read out of JavaScript source, so an escaped
             # apostrophe arrives as six characters. Decoded for the eye only.
             needs = re.sub(r'\\u([0-9a-fA-F]{4})',
@@ -584,9 +621,42 @@ def gates(cart):
             if not hits:
                 print('  !! nothing in the ROM sets it')
                 bad += 1
+            setters = []
             for off, name in hits:
                 kind = 'probably data' if DATA_ISH.search(name) else 'set by'
+                if kind == 'set by':
+                    setters.append(name)
                 print(f'  {kind}: {name}   (${off:06x})')
+            if errand:
+                print(f'  errand: {errand.group(1)}')
+            # The remedy's own tile, where one is declared: somebody has to be
+            # standing on it, and their script has to be the thing that sets
+            # the event.
+            if not (tile and where and name_of):
+                continue
+            room = keys.get(where.group(1))
+            room_name = name_of(room) if room else None
+            if not room_name:
+                print(f'  ?? no symbol for the map named by `at`')
+                bad += 1
+                continue
+            want = (int(tile.group(1)), int(tile.group(2)))
+            standing = [sym for sym, xy in gym_objects(cart, room_name).items()
+                        if (xy[0], xy[1]) == want]
+            if not standing:
+                print(f'  !! nothing stands at {want} in {room_name}')
+                bad += 1
+                continue
+            for sym in standing:
+                # The setter's symbol is a label *inside* the object's script,
+                # so the object's own name is a prefix of it. That is the whole
+                # check: the person on that tile is the person who sets the bit.
+                theirs = any(setter.startswith(sym) for setter in setters)
+                print(f'  at {want} in {room_name}: {sym}'
+                      + ('  — and it is the setter' if theirs else ''))
+                if not theirs:
+                    print(f'  !! whoever stands there does not set ${int(event, 16):04x}')
+                    bad += 1
     return bad
 
 
@@ -625,7 +695,7 @@ def main(argv):
         print(cart.text(*cart.by_name[name]))
         return 0
     if '--gates' in argv or not argv:
-        return 1 if gates(cart) else 0
+        return 1 if gates(cart, map_symbol(cart)) else 0
     print(__doc__)
     return 2
 

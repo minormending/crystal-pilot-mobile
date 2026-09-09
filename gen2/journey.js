@@ -92,6 +92,10 @@ const GYM_POTIONS = 4;
 
 // How many goes at reaching the leader. More than a doorway gets, because the
 // room between the pilot and them is the whole point of a Gym's layout.
+// How many times to ask whoever is standing in the way. Three, for the reason
+// every other approach loop here has a budget: the walk can be interrupted by
+// the room's own scripts, and asking again from where it stopped converges.
+const ERRAND_TRIES = 3;
 const LEADER_TRIES = 6;
 
 // Reaching the nickname question: how many presses to spend getting there, and
@@ -257,8 +261,14 @@ export class Journey {
   gatesFrom(from, wram) {
     return (this.title.gates || [])
       .filter((g) => g.from === from)
-      .map((g) => ({ to: g.to, where: this.where(g.to),
-                     needs: g.needs, why: this.gateSaid(g.from, g.to, wram) }))
+      .map((g) => ({ to: g.to, where: this.where(g.to), needs: g.needs,
+                     // Named only where the driver actually has it. A title
+                     // may declare an errand this build's driver does not
+                     // implement -- a half-written profile, or an older app
+                     // meeting a newer title -- and offering a button that
+                     // calls nothing is worse than not offering one.
+                     errand: typeof this[g.errand] === 'function' ? g.errand : null,
+                     why: this.gateSaid(g.from, g.to, wram) }))
       .filter((g) => g.why !== null);
   }
 
@@ -2147,6 +2157,95 @@ export class Journey {
       // and the alternative is never offering one at all.
       return has !== true;
     }).map((g) => ({ ...g, from: g.map }));
+  }
+
+  /**
+   * Talk to whoever a gated road is waiting on, and say yes.
+   *
+   * **Generic, and it was not on the first draft.** This was written as
+   * `takeTheEgg` on the Crystal driver, and then read back: every line of it
+   * came out of the gate -- the map, the tile, the event -- and the healer that
+   * already declares the door. Nothing in it knew which cartridge it was on.
+   * A title-owned method that mentions no title is engine behaviour wearing a
+   * title's coat, and this repository's whole architecture is that a title
+   * holds *content* while the engine holds *mechanism*.
+   *
+   * **The pilot answers a yes-or-no here, and the pass before this said it
+   * would not.** That line was drawn in the wrong place: it read "a yes-or-no
+   * prompt" as "a decision that is yours", and those are different things. This
+   * app has driven yes-or-no boxes since it could shop -- `buyFromClerk`
+   * confirms a purchase, `saveGame` confirms a save. What it declines to decide
+   * is *which starter you want*, because that is a choice with no right answer.
+   * "Do me a favour?" has one.
+   *
+   * The shape is the script's own, read out of the ROM (see
+   * `tools/rom-events`):
+   *
+   *     checkevent $2c   iftrue .SecondTimeAsking     -- asked once, refused
+   *     writetext ...Favour
+   *     yesorno          iffalse .RefusedEgg          -- which sets $2c
+   *     readvar VAR_PARTYCOUNT
+   *     ifequal 6 .PartyFull
+   *     giveegg TOGEPI, 5
+   *     setevent $2d                                  -- the road opens
+   *
+   * Three things follow. Saying no is recoverable, because `.SecondTimeAsking`
+   * asks again, which is why this may retry at all. A full party is a refusal
+   * with a remedy the person has to apply, so it is reported rather than worked
+   * around -- shuffling somebody into a box is not this errand's business.
+   * And **the evidence is the event**, not the words on screen or the box
+   * having been answered: the same discipline as the badge, for the same
+   * reason. An aide who says yes and hands over nothing must not read as
+   * success.
+   */
+  async talkToOpen(gate = null) {
+    const found = gate
+      || (this.title.gates || []).find((g) => g.tile && g.errand);
+    if (!found || !found.tile || !found.at) {
+      return { ok: false, message: 'this build has no such errand' };
+    }
+    const inside = found.at;
+    // The town and the door come from the healer that already declares them.
+    // Two copies of a door is the shape of a bug this repository has paid for.
+    const town = (this.title.healers || []).find((h) => h.inside === inside);
+    if (!town) return { ok: false, message: 'nowhere to walk to' };
+    if (await this.mapKey() !== inside) {
+      if (await this.mapKey() !== town.map) {
+        const walk = await this.travelTo(town.map);
+        if (!walk.ok) return walk;
+      }
+      if (!await this.through(town.door, inside)) {
+        return { ok: false, message: `could not get into ${this.where(inside)}` };
+      }
+    }
+    await this.runScripts();
+    for (let go = 0; go < ERRAND_TRIES; go++) {
+      if (this.stopped) return { ok: false, message: 'stopped' };
+      const from = await this._approach(found.tile);
+      if (!from) {
+        await this.runScripts();
+        continue;
+      }
+      this.say(`asking about ${found.needs || 'the way through'}`);
+      await this.nav.step(from.face);
+      await this.gb.press('A', 6, 12);
+      // YES. Driven against the live cursor rather than pressed blind: the box
+      // is not interactive the instant it appears.
+      await this.tasks.answerYes();
+      await this.runScripts();
+      const s = await this.snap();
+      if (this.state.hasEvent(s.wram, found.event) === true) {
+        await this.leaveVia(town.map);
+        return { ok: true,
+                 message: `${found.needs || 'it'} is yours — `
+                          + `${this.where(found.to)} is open` };
+      }
+      if (s.party.length >= (this.state.e.maxParty || 6)) {
+        return { ok: false,
+                 message: 'the party is full, so it was not handed over' };
+      }
+    }
+    return { ok: false, message: 'it was not handed over' };
   }
 
   /**

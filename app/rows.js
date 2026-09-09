@@ -22,7 +22,9 @@
  *   healShut          what the game said last time it turned the pilot back
  *                     from that place, or null -- see `Journey.shut`
  *   gated             roads out of here the game is keeping shut, and what
- *                     opens each: [{ where, needs }] -- see `Journey.gatesFrom`
+ *                     opens each: [{ where, needs, errand }] -- see
+ *                     `Journey.gatesFrom`. An entry with an `errand` is one the
+ *                     pilot can go and do.
  *   places            named maps reachable from here, [{ key, name, legs }]
  *   travelTo          the map key chosen to walk to, or null
  *   huntable          how many species appear here at this hour
@@ -56,6 +58,10 @@ export function describeRows(s, ctx = {}) {
 
   const lead = s.party[0];
   const leadName = lead ? name(lead.species) : null;
+  // The first gated road with something the pilot can go and do about it.
+  // First rather than all of them, because the row is one row: a second
+  // errand would be offered once the first has opened its road.
+  const errand = (gated || []).find((g) => g.errand) || null;
   // Money, said the way the game says it. Read for the first time in
   // twenty-six passes: the app has asserted since the seventeenth that a
   // knockout costs half of it, and could not show the number.
@@ -274,6 +280,17 @@ export function describeRows(s, ctx = {}) {
         // each. What this row is *for* is the thing it will buy.
         : shopFor || 'nothing named to buy',
       enabled: afoot && !!marts && !!shopFor && s.party.length > 0,
+    },
+    // A scripted trip that unlocks something, where the cartridge has one to
+    // offer. The gate above says *what* the road wants; this is the row that
+    // goes and gets it -- and it is generic on purpose, because the ball
+    // errand is the same shape of thing and the next cartridge will have its
+    // own. What it fetches is in the line rather than the name.
+    errand: {
+      text: s.inBattle ? 'finish the battle first'
+        : !errand ? 'nothing to fetch'
+        : errand.needs,
+      enabled: afoot && !!errand,
     },
     // Winning a badge, which is the one job whose result the game writes down
     // permanently -- so this row can say whether it has been done rather than
@@ -573,8 +590,13 @@ export function describeOffers(s, ctx = {}) {
   // Grind first, therefore, and Duel immediately after it.
   // Gym sits between Duel and Heal: it is the job that opens roads, so it is
   // worth more than tidying up and less than being able to fight at all.
-  order.push('catch', 'hunt', 'grind', 'duel', 'gym', 'heal', 'take', 'travel',
-             'shop');
+  // An errand sits with Gym, above it, and for the same reason Gym sits where
+  // it does: **it is the job that opens roads.** A gate is worth more than
+  // levelling up, because everything else on this list is reachable afterwards
+  // and the road is not reachable without it -- and it is worth less than
+  // being able to fight at all, which is why Heal is still below both.
+  order.push('catch', 'hunt', 'grind', 'duel', 'errand', 'gym', 'heal', 'take',
+             'travel', 'shop');
 
   const offered = [];
   for (const key of order) {
