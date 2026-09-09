@@ -169,3 +169,54 @@ test('an empty screen adds nothing either', async (t) => {
   t.eq(await tasks.saying('could not reach BUY'), 'could not reach BUY',
        'an overworld says nothing, so nothing is added');
 });
+
+// --- the cartridge that has no screen to read -----------------------------
+//
+// A symbol file that does not name `wTilemap` has no words in it, and neither
+// has a Journey driving nothing but a graph. Every reader here answers the
+// same way for that, and every one of those guards is a chain of three or
+// four `||`s — so each has to be able to refuse on its own.
+
+test('no tilemap and no memory both read as nothing to say', async (t) => {
+  const wram = showing(['HELLO']);
+  t.eq(screenLines(wram, null), [], 'a cartridge that will not say where');
+  t.eq(screenLines(wram, undefined), [], 'nor at all');
+  t.eq(screenLines(null, AT), [], 'and a snapshot that is not there');
+  t.eq(screenText(wram, null), [], 'so there is no text either');
+  t.false(screenSays(wram, null, 'HELLO'), 'and nothing is on it');
+  t.eq(selectedLine(wram, null), '', 'nor selected');
+});
+
+test('the arrow refuses on each of the four things it needs', async (t) => {
+  // `tile === undefined` is the cartridge whose engine profile has no cursor
+  // tile, which is a different absence from having no tilemap — and a reader
+  // that needed all four missing before it refused would dereference the
+  // first one present.
+  const wram = showing(['>ONE']);
+  t.eq(arrowAt(wram, AT, { ...gen2, charmap: { ...gen2.charmap, cursor: undefined } }),
+       null, 'no cursor tile declared');
+  t.eq(arrowAt(wram, null), null, 'no tilemap');
+  t.eq(arrowAt(null, AT), null, 'no snapshot');
+  t.ne(arrowAt(wram, AT), null, 'and with all of them, it finds the arrow');
+});
+
+test('an empty phrase is not on the screen', async (t) => {
+  // `fold` strips everything that is not a letter or a digit, so a phrase of
+  // nothing but punctuation folds to nothing — and *nothing* is a substring
+  // of every line. Answered false, because "the screen says ''" is not a
+  // thing anybody wants to be told yes about.
+  const wram = showing(['HELLO']);
+  t.false(screenSays(wram, AT, ''), 'the empty phrase');
+  t.false(screenSays(wram, AT, '!!!'), 'and one that folds away to it');
+  t.false(screenSays(wram, AT, null), 'and no phrase at all');
+  t.true(screenSays(wram, AT, 'hello'), 'while a real one still matches');
+});
+
+test('a phrase is matched inside one line, not across two', async (t) => {
+  // Two unrelated lines that happen to abut are not a sentence. The pilot
+  // acts on what a box says, and a match spanning the gap between boxes is a
+  // sentence the game never wrote.
+  const wram = showing(['THE PARTY IS', 'FULL OF POKéMON']);
+  t.true(screenSays(wram, AT, 'party is'), 'within a line');
+  t.false(screenSays(wram, AT, 'is full'), 'and not across the break');
+});

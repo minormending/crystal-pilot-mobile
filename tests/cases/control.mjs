@@ -384,3 +384,116 @@ test('with no screen reader at all, an open window is taken as the question',
   t.true(await tasks.keepDefaultName(), 'the open window is the question');
   t.eq(pressed, ['B'], 'and it declines');
 });
+
+// --- getting out of a conversation, and out of its text -------------------
+//
+// `closeConversation` and `settleText` are the two primitives every job leans
+// on to clear the screen, and neither had a behavioural test — only that they
+// could be cancelled. Both of their exit conditions could be inverted with
+// the suite green.
+
+/** A pilot whose screen state is a script the test writes. */
+function talking(states) {
+  const sym = symbols();
+  const state = new GameState(sym);
+  const gb = new FakeGameBoy({ wram: worldRam(sym, {}) });
+  const tasks = new Tasks(gb, state, () => {}, fakeRom());
+  const pressed = [];
+  let i = 0;
+  tasks.step = async () => {};
+  tasks.pump = async () => {};
+  tasks.push = async (b) => { pressed.push(b); };
+  tasks.snap = async () => {
+    const at = states[Math.min(i++, states.length - 1)];
+    return { ...state.read(worldRam(sym, {})), inBattle: false, ...at };
+  };
+  return { tasks, pressed };
+}
+
+test('a conversation already over is not pressed at', async (t) => {
+  const { tasks, pressed } = talking([{ windowOpen: false, scriptRunning: false }]);
+  t.true(await tasks.closeConversation(), 'it was already clear');
+  t.eq(pressed, [], 'and nothing was pressed');
+});
+
+test('a box the game is holding up is closed with B', async (t) => {
+  // B rather than A, and that is the whole rule: A answers a question and B
+  // declines it, and a job has no business answering anything. The same rule
+  // that cost a wallet ¥2900.
+  const { tasks, pressed } = talking([
+    { windowOpen: true, scriptRunning: true },
+    { windowOpen: true, scriptRunning: true },
+    { windowOpen: false, scriptRunning: false },
+  ]);
+  t.true(await tasks.closeConversation(), 'it got clear');
+  t.eq(pressed, ['B', 'B'], 'twice, and with B');
+});
+
+test('a closed box with the script still running is not the end of it',
+     async (t) => {
+  // Measured at a mart counter: the boxes closed, `wScriptMode` stayed
+  // non-zero, and the clerk's confirmation was back a moment later. Which is
+  // why this asks about the *script* as well as the window — and why
+  // `closeMenus`, which only asks about the window, is the wrong answer here.
+  const { tasks, pressed } = talking([
+    { windowOpen: false, scriptRunning: true },
+    { windowOpen: false, scriptRunning: true },
+    { windowOpen: false, scriptRunning: false },
+  ]);
+  t.true(await tasks.closeConversation(), 'it waited the script out');
+  t.eq(pressed.length, 2, 'pressing while it ran');
+});
+
+test('a conversation that will not end is reported, not pressed for ever',
+     async (t) => {
+  const { tasks, pressed } = talking([{ windowOpen: true, scriptRunning: true }]);
+  t.false(await tasks.closeConversation(4), 'it says so');
+  t.eq(pressed.length, 4, 'having pressed its bound and stopped');
+});
+
+test('settling text presses A, and stops when the world is quiet', async (t) => {
+  // A rather than B here, and deliberately: this is for text the pilot has
+  // *already* decided to get through, where B in some boxes means "back out"
+  // and leaves the script where it was.
+  const { tasks, pressed } = talking([
+    { windowOpen: true, scriptRunning: false },
+    { windowOpen: true, scriptRunning: false },
+    { windowOpen: false, scriptRunning: false },
+  ]);
+  await tasks.settleText(40);
+  t.eq(pressed, ['A', 'A'], 'two taps, then quiet');
+});
+
+test('and it does not mistake a battle for a quiet world', async (t) => {
+  // The third clause. A battle has no window and no script running, so a
+  // reader that asked only those two would return at once — and the text this
+  // is called to clear is the text a battle is showing.
+  const { tasks, pressed } = talking([
+    { windowOpen: false, scriptRunning: false, inBattle: true },
+  ]);
+  await tasks.settleText(3);
+  t.eq(pressed, ['A', 'A', 'A'], 'it kept pressing through the battle');
+});
+
+test('a script with no box up is still something to press through', async (t) => {
+  const { tasks, pressed } = talking([
+    { windowOpen: false, scriptRunning: true },
+  ]);
+  await tasks.settleText(2);
+  t.eq(pressed, ['A', 'A'], 'the script is the thing running');
+});
+
+test('a box that clears on the last press is not reported as stuck', async (t) => {
+  // The loop looks *before* it presses, so the press that finally worked has
+  // no iteration left to notice it. The answer is a fresh read afterwards —
+  // without it, a conversation that ended on the last allowed press is
+  // reported as one that would not close, and the caller goes looking for a
+  // screen that is no longer there.
+  const { tasks, pressed } = talking([
+    { windowOpen: true, scriptRunning: true },
+    { windowOpen: true, scriptRunning: true },
+    { windowOpen: false, scriptRunning: false },
+  ]);
+  t.true(await tasks.closeConversation(2), 'the last press did it');
+  t.eq(pressed.length, 2, 'having spent exactly its bound');
+});

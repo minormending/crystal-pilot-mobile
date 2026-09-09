@@ -15,7 +15,7 @@ what CI checks and what the pre-commit hook blocks on.
 ```mermaid
 flowchart LR
     E[an edit] --> H{{".githooks/pre-commit"}}
-    H --> T["./run-tests<br/>799 behaviour tests"]
+    H --> T["./run-tests<br/>811 behaviour tests"]
     H --> C["tools/check-app<br/>29 groups"]
     H --> D["tools/docs-check<br/>42 tracked sections"]
     T --> OK[commit]
@@ -39,7 +39,7 @@ git config core.hooksPath .githooks
 ./run-tests -v         # notes and stack lines
 ```
 
-799 tests in 26 files, and what each file is about says more than the count:
+811 tests in 26 files, and what each file is about says more than the count:
 
 | file | tests | what it pins down |
 | --- | --- | --- |
@@ -51,14 +51,14 @@ git config core.hooksPath .githooks
 | `capture.mjs` | 41 | weakening, ball choice, the party prompt, and the refusals before a throw |
 | `grind.mjs` | 22 | what a grind says while it works, and the bounds that make it stop |
 | `world.mjs` | 22 | reading a cartridge's own maps: sizes, warps, objects and triggers |
-| `control.mjs` | 22 | the task lifecycle: stopping, failing, undo points, and loops that must end |
+| `control.mjs` | 30 | the task lifecycle: stopping, failing, undo points, and loops that must end |
 | `state.mjs` | 21 | reading the party, the map, the badges and the battery out of work RAM |
 | `titles.mjs` | 19 | choosing a profile for a cartridge, and falling back to generic |
 | `romdata.mjs` | 58 | the cartridge's own character encoding and tables, byte by byte |
 | `remember.mjs` | 14 | which remembered choices are believed, and which dropped |
 | `worker.mjs` | 14 | the idle loop: one step outstanding, and a lost step recovered |
 | `nav.mjs` | 14 | the walk loop: what it decides between two steps, and every reason it stops |
-| `screen.mjs` | 13 | the frames that go between two devices, and who may press what |
+| `screen.mjs` | 17 | the frames that go between two devices, and who may press what |
 | `runner.mjs` | 13 | running the list: the budget, the evidence something moved, and the save at the end |
 | `saves.mjs` | 11 | which battery record belongs to the cartridge in the machine |
 | `room.mjs` | 15 | the merge rules and the handshake, so two devices settle rather than fight |
@@ -126,7 +126,7 @@ section gives. Everything by hand runs against a local build.
 
 ```mermaid
 flowchart BT
-    C["the app"] --> T["./run-tests<br/>799 behaviour tests"]
+    C["the app"] --> T["./run-tests<br/>811 behaviour tests"]
     C --> A["tools/check-app<br/>29 groups"]
     C --> D["tools/docs-check<br/>42 tracked sections"]
     C --> V["tools/coverage<br/>what the suite never runs"]

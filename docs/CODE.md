@@ -4692,6 +4692,33 @@ of those: after SWITCH the cursor is left on the Pokémon that was picked, and
 the answer to *move to where?* is the row above it. Down-only reaches that by
 wrapping, if the list wraps, and by running out of presses if it does not.
 
+**And the two primitives it leans on had no behavioural test at all.**
+`closeConversation` and `settleText` are what every job uses to clear the
+screen, and both of their exit conditions could be inverted with the suite
+green. Three things about them are worth pinning, because each is a decision
+somebody could reasonably have made the other way:
+
+| | presses | stops when |
+| --- | --- | --- |
+| `closeMenus` | B | no window is open |
+| `closeConversation` | B | no window **and** no script running |
+| `settleText` | A | no window, no script, **and not in a battle** |
+
+`closeConversation` asks about the script because of a measurement: at a mart
+counter the boxes closed, `wScriptMode` stayed non-zero, and the clerk's
+confirmation was back a moment later. `settleText` presses **A** where the
+other two press B, because it is for text the pilot has already decided to get
+through and B in some boxes means *back out*. And its battle clause is not
+redundant: a battle has no window and no script running, so a reader asking
+only the other two would return at once — from the one screen it was called to
+clear.
+
+**And a box that clears on the last allowed press is not stuck.**
+`closeConversation` looks before it presses, so the press that finally worked
+has no iteration left to notice it. A fresh read afterwards is what tells that
+from a box that would not close, and without it the caller goes looking for a
+screen that is no longer there.
+
 **The evidence is the party order.** Species, level and HP of the front slot
 all matching what was in the chosen slot before — not the presses landing, not
 the screens closing. Two identical Pokémon at identical HP cannot be told
