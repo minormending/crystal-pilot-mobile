@@ -525,9 +525,9 @@ nothing else to do here, which is exactly the situation being last describes.
 What Wait says while it runs is the other half. Whether this emulator's clock
 can be hurried along is a property of the core rather than of the cartridge, so
 the job reports which world it turned out to be in rather than promising one:
-*it is night — 3.4h of game time*, or *still day after 26h of game time — this
-cartridge's clock does not follow the pilot*, which is the sentence that sends
-you to the other button.
+*it is night — 3.4h of game time in 2m*, or *still day after 10h of game time
+in 16m — this cartridge's clock does not follow the pilot*, which is the
+sentence that sends you to the other button.
 
 ## What the pilot is doing, and how you stop it
 

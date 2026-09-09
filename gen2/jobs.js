@@ -17,12 +17,19 @@ const MAX_HEALS = 12;
 // the thing being watched changes at most three times a day, so looking oftener
 // buys nothing and costs a snapshot each time.
 const WAIT_CHUNK = 3600;
-// How much *game* time a wait will spend before handing back, in hours. Any
-// boundary in Gen 2 is within twenty-four -- the longest block is the ten hours
-// of night -- so twenty-six is that with room, and it is chosen so that
-// reaching it means something: a clock the pilot can hurry along would have
-// moved by now, and one that has not is telling you it is the real one.
+// How much *game* time a wait spends before handing back, in hours, on a
+// cartridge that will not say when its blocks begin. Any boundary in Gen 2 is
+// within twenty-four -- the longest block is the ten hours of night -- so
+// twenty-six is that with room.
 const MAX_WAIT_HOURS = 26;
+// And the margin over the *known* worst case, where the cartridge does say.
+// Two hours, because the point of the bound is that reaching it means
+// something -- a clock the pilot can hurry along would have arrived by the
+// longest wait the table allows, and one that has not is telling you it is the
+// real one. Anything tighter would start reporting slow clocks as stopped
+// ones; twenty-six for every wait spends three quarters of an hour of a
+// phone's battery to learn the same thing.
+const WAIT_MARGIN_HOURS = 2;
 // Frames per second the game counts its own playtime at. Not the emulator's
 // speed -- the *game's*, which advances one frame per frame however fast those
 // frames are produced, and that is the whole reason waiting can be quick.
@@ -142,8 +149,7 @@ export function withJobs(Base) {
    * game hours rather than in wall time or in iterations: reaching it means
    * something, and reaching it is not a failure of this code.
    */
-  async waitForHour(want, { maxGameHours = MAX_WAIT_HOURS,
-                            chunk = WAIT_CHUNK } = {}) {
+  async waitForHour(want, { maxGameHours = null, chunk = WAIT_CHUNK } = {}) {
     // The engine profile's words, not this file's. A second list of the three
     // thirds of a day would be the same fact twice, and the one on screen --
     // "after dark" -- is the interface's phrasing rather than a job's.
@@ -164,7 +170,13 @@ export function withJobs(Base) {
     }
 
     const clock0 = this.state.playtime(s.wram);
-    const bound = maxGameHours * 3600 * GAME_FPS;
+    // The bound is the longest wait the cartridge's own table allows from
+    // where the clock is now, plus a margin -- not a blanket twenty-six. From
+    // the day the next night is at most eight hours off, so spending
+    // twenty-six to find out the clock is not moving costs three times what
+    // the question is worth, and most of that on a phone's battery.
+    const bound = (maxGameHours || this._waitBound(first, want))
+      * 3600 * GAME_FPS;
     const stats = { frames: 0, from: first };
     // Wall time, measured rather than divided out of a frame count. The button
     // that started this carried an *estimate*; what the job reports at the end
@@ -231,6 +243,27 @@ export function withJobs(Base) {
                       + `time in ${stats.spent} — this cartridge's clock does `
                       + 'not follow the pilot, so use Skip or let the hour '
                       + 'come round on its own' };
+  }
+
+  /**
+   * The most game time a wait from `from` to `want` could possibly need.
+   *
+   * The same reading `waitCost` makes for the button, made again here rather
+   * than passed in -- the job has to be right about its own bound whoever
+   * called it, and a caller that got this wrong would produce a wait that
+   * gives up before the hour it was asked for.
+   *
+   * Falls back to the blanket bound on a cartridge whose symbol file does not
+   * name the time-of-day table, which is the same cartridge whose row has no
+   * Skip button and no estimate on its Wait.
+   */
+  _waitBound(from, want) {
+    const table = this.rom && typeof this.rom.hoursOf === 'function'
+      ? [this.rom.hoursOf(from), this.rom.hoursOf(want)] : null;
+    if (!table || !table[0] || !table[1]) return MAX_WAIT_HOURS;
+    const day = this.state.e.hoursInDay;
+    const away = (hour) => (((table[1].from - hour) % day) + day) % day;
+    return Math.max(away(table[0].from), away(table[0].to)) + WAIT_MARGIN_HOURS;
   }
 
   /**

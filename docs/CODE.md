@@ -1490,7 +1490,7 @@ and a Pokémon Center restores PP, so the grind treats it as a trip it already
 knew how to make. See [the tiles that run a
 script](#8g-the-tiles-that-run-a-script-and-saying-hello) for the walk half.
 
-<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 2391c7b65149 -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ d95d0e12f98b -->
 
 ### Which move, and which question
 
@@ -2185,7 +2185,7 @@ fainted.
 
 ## 7. Catching something
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ 90b2efca9647 -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ baefa19c771e -->
 
 Catching is the most involved loop, because a Poké Ball's odds turn on how much
 HP is left. Throwing at a full-health target is mostly throwing balls away.
@@ -2348,7 +2348,7 @@ flowchart TD
 
 ## 7a. Five that act on where you already are
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ f263f8915ccd -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ 21684f3dd208 -->
 
 Grind, hunt and catch all go *looking* for something. These five do the obvious
 thing with the situation you are already in, and take no parameters:
@@ -2728,7 +2728,7 @@ counter and came away with **five potions and ¥1800**, in 49 seconds.
 
 ## 7b. Saving, and getting the save out
 
-<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 2391c7b65149 -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ d95d0e12f98b -->
 
 ```mermaid
 flowchart TD
@@ -4059,7 +4059,7 @@ file says they do.
 
 ## 8i. Reaching an hour
 
-<!-- covers: gen2/jobs.js gen2/engine.js gen2/romdata.js gen2/state.js gbcore/saves.js app/rows.js @ 1f205b276472 -->
+<!-- covers: gen2/jobs.js gen2/engine.js gen2/romdata.js gen2/state.js gbcore/saves.js app/rows.js @ b89c124fbf16 -->
 
 A third of Johto's grass is behind the clock. HOOTHOOT is on Route 29 after
 dark and nowhere on it at noon, and for four versions the usage guide said the
@@ -4134,9 +4134,18 @@ Whether the *hour* moves at all depends on the emulator core rather than the
 cartridge, and the job reports which world it turned out to be in rather than
 promising one — the hour arrived; or the
 playtime ran for a day and the hour did not; or the playtime did not move
-either, which is not about the clock at all. The bound is twenty-six *game*
-hours so that reaching it means something: every boundary is within
-twenty-four.
+either, which is not about the clock at all.
+
+**The bound is the longest wait this cartridge's own table allows from where
+the clock is now, plus two hours** — from the day the next night is at most
+eight away, so ten. It used to be a blanket twenty-six, which covers any
+boundary in the game and costs three times what the question is worth: forty
+minutes of a laptop and an hour and three quarters of a phone, to learn the
+same thing. The margin is what keeps reaching it meaningful — a clock the pilot
+can hurry along would have arrived by the longest wait the table allows, and
+one that has not is telling you it is the real one. Twenty-six is still the
+fallback on a cartridge that does not name the table, which is the same
+cartridge whose row has no Skip and no estimate.
 
 **Skip** does not care what the core's clock does. It saves the game, reads the
 battery, moves the offset, re-seals the checksum, installs and drives CONTINUE

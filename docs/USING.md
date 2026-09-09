@@ -572,12 +572,14 @@ the job tells you which it turned out to be:
 | it says | what happened |
 | --- | --- |
 | *it is night — 3.4h of game time in 2m* | the clock followed along; you are done |
-| *still day after 26h of game time in 14m — this cartridge's clock does not follow the pilot* | press **Skip** instead |
+| *still day after 10h of game time in 16m — this cartridge's clock does not follow the pilot* | press **Skip** instead |
 | *the game did not advance at all* | nothing was running — paused, or stuck |
 
-It gives up after **26 hours of game time**, and that number is chosen so that
-reaching it means something rather than being a timeout: every boundary in the
-game is within twenty-four hours.
+It gives up after **the longest wait your cartridge's own table allows, plus
+two hours** — ten, if you are waiting for night from the daytime. That number
+is chosen so that reaching it means something rather than being a timeout: a
+clock the pilot could hurry along would have got there by the longest wait
+there is.
 
 Neither button takes an undo point — a clock change moves the time and nothing
 else, and a slot taken before it would restore you to a moment whose only
@@ -1582,7 +1584,7 @@ deployed, which is not the question you are asking when a bug you saw fixed is
 still in front of you. `tools/check-app` asserts that number matches the service
 worker's cache name, because a version display that lies is worse than none.
 
-<!-- covers: sw.js @ 0d89e391ca57 -->
+<!-- covers: sw.js @ becb5c3d0d81 -->
 
 The worker fetches **network first, falling back to the cache**. That is the
 opposite of the usual offline-first advice, on purpose.
