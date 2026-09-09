@@ -346,7 +346,7 @@ count comes back in `stats.knockouts`, since each one costs half your money.
 
 ### `gb.js` — the emulator
 
-<!-- covers: gbcore/gb.js @ 1e81443546a7 -->
+<!-- covers: gbcore/gb.js @ 26ab5d81e9ea -->
 
 Wraps WasmBoy. Runs frames, reads work RAM, holds and releases buttons.
 
@@ -1490,7 +1490,7 @@ and a Pokémon Center restores PP, so the grind treats it as a trip it already
 knew how to make. See [the tiles that run a
 script](#8g-the-tiles-that-run-a-script-and-saying-hello) for the walk half.
 
-<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 2d5ee794dc0e -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 2391c7b65149 -->
 
 ### Which move, and which question
 
@@ -1688,7 +1688,7 @@ mechanism's evidence spans two runs rather than one.
 
 ### The bigger number is not the harder hit
 
-<!-- covers: gen2/romdata.js gen2/engine.js gen2/battle.js @ 895ac6dd1258 -->
+<!-- covers: gen2/romdata.js gen2/engine.js gen2/battle.js @ 780028d76b6f -->
 
 For twenty-three passes the pilot ranked its moves by one number: the `power`
 byte out of the cartridge's move table. `romdata.move()` had been returning the
@@ -1830,7 +1830,7 @@ pilot uses, not a second one beside it. See section 10.
 
 ### Sending out somebody who can touch it
 
-<!-- covers: gen2/battle.js gen2/engine.js @ a5b435af02f0 -->
+<!-- covers: gen2/battle.js gen2/engine.js @ 17f10f558960 -->
 
 The pass before could tell that the Pokémon on the field takes nothing off a
 Ghost, and said so. The remedy it named — *a different Pokémon* — was one the
@@ -2185,7 +2185,7 @@ fainted.
 
 ## 7. Catching something
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ 35101cc605ff -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ 90b2efca9647 -->
 
 Catching is the most involved loop, because a Poké Ball's odds turn on how much
 HP is left. Throwing at a full-health target is mostly throwing balls away.
@@ -2348,7 +2348,7 @@ flowchart TD
 
 ## 7a. Five that act on where you already are
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ 6da5413ab8cd -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ f263f8915ccd -->
 
 Grind, hunt and catch all go *looking* for something. These five do the obvious
 thing with the situation you are already in, and take no parameters:
@@ -2728,7 +2728,7 @@ counter and came away with **five potions and ¥1800**, in 49 seconds.
 
 ## 7b. Saving, and getting the save out
 
-<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 2d5ee794dc0e -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 2391c7b65149 -->
 
 ```mermaid
 flowchart TD
@@ -3967,7 +3967,7 @@ sent the reader at it.
 
 ## 8h. What a species becomes, and when
 
-<!-- covers: gen2/romdata.js gen2/engine.js @ 0837c73c2acd -->
+<!-- covers: gen2/romdata.js gen2/engine.js @ fa430fd675c6 -->
 
 Two questions a party entry cannot answer: *what will this turn into*, and
 *what is it about to learn*. Both are in one table, because in Gen 2 they are
@@ -4059,7 +4059,7 @@ file says they do.
 
 ## 8i. Reaching an hour
 
-<!-- covers: gen2/jobs.js gen2/engine.js gen2/romdata.js gen2/state.js gbcore/saves.js app/rows.js @ 3098b23d2577 -->
+<!-- covers: gen2/jobs.js gen2/engine.js gen2/romdata.js gen2/state.js gbcore/saves.js app/rows.js @ 1f205b276472 -->
 
 A third of Johto's grass is behind the clock. HOOTHOOT is on Route 29 after
 dark and nowhere on it at noon, and for four versions the usage guide said the
@@ -4116,9 +4116,23 @@ flowchart LR
     SC --> V["read wTimeOfDay back<br/>and report what the game says"]
 ```
 
-**Wait** runs the game and watches. Whether that is quick depends on the
-emulator core rather than the cartridge, and the job reports which world it
-turned out to be in rather than promising one — the hour arrived; or the
+**Wait** runs the game and watches, and the button says what that will cost:
+`Wait 13m`. Two halves, and neither is a guess. The hours are arithmetic —
+`hoursOf` says which hours are night, `wTimeOfDay` says which block it is now,
+so the wait is *between* one and eight hours and the button shows the eight.
+The minutes are measured: the game counts its own time one frame at a time
+whatever speed those frames arrive at, so an hour is `3600 × 60` frames on any
+machine, and the only unknown is this device's throughput. `gb.rate()` times
+that, sampling **only calls of 240 frames or more** — on a visible page the
+library's `_runNumberOfFrames` opens by awaiting an animation frame, so timing
+a sixteen-frame call measures the idle loop's tick rate rather than the core's
+throughput. The overhead still in the samples that do count makes the rate a
+slight underestimate and the time a slight overestimate, which is the right
+direction for a number somebody uses to decide whether to walk away.
+
+Whether the *hour* moves at all depends on the emulator core rather than the
+cartridge, and the job reports which world it turned out to be in rather than
+promising one — the hour arrived; or the
 playtime ran for a day and the hour did not; or the playtime did not move
 either, which is not about the clock at all. The bound is twenty-six *game*
 hours so that reaching it means something: every boundary is within
@@ -4207,7 +4221,7 @@ This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ ab55b0b8f5e4 -->
+<!-- covers: app/main.js index.html @ 144e83b74d71 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -4756,7 +4770,7 @@ seconds by a page whose loop was supposedly running.
 
 ### One thing at a time
 
-<!-- covers: app/main.js @ be61e1cdac04 -->
+<!-- covers: app/main.js @ 42bada9bf556 -->
 
 One Game Boy, one joypad, one canvas — so a great deal of this app is about
 making sure two things are never driving them at once. There are three claims,
@@ -4898,7 +4912,7 @@ before a step is taken, so a stopped walk does not move at all.
 
 ### What is behind the Gym door, before you open it
 
-<!-- covers: gen2/romdata.js gen2/engine.js app/rows.js @ f25613abbd36 -->
+<!-- covers: gen2/romdata.js gen2/engine.js app/rows.js @ a4ae279df2ce -->
 
 The Gym row could say where the Gym is and who is in it. **Whether it is worth
 going** is two facts the cartridge has had all along, and neither of them
@@ -5262,7 +5276,7 @@ a conversation.
 
 ### The card behind a party row
 
-<!-- covers: app/rows.js app/main.js index.html @ 4e475e817187 -->
+<!-- covers: app/rows.js app/main.js index.html @ 7e03e8048638 -->
 
 Two questions the game itself will not answer about a Pokémon you are
 carrying — *what is this made of* and *what is it about to become* — and both
@@ -5334,7 +5348,7 @@ at body size.
 
 ### Running the list
 
-<!-- covers: app/rows.js app/main.js @ 23b5766d1649 -->
+<!-- covers: app/rows.js app/main.js @ c33667669a8f -->
 
 The app has spent forty passes learning to answer one question — *what can the
 pilot do here, and which of those is worth most?* — and twenty showing the
@@ -5458,7 +5472,7 @@ to deposit your last Pokémon.
 
 ### The settings and the save card
 
-<!-- covers: index.html app/main.js @ ab55b0b8f5e4 -->
+<!-- covers: index.html app/main.js @ 144e83b74d71 -->
 
 The pilot's own list got a glyph column, shorter names and a slot to fill in
 v165. These two cards did not, and reading them found that they had a different
@@ -6086,7 +6100,7 @@ they have been installed.
 
 ### Watching the other device's screen
 
-<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ f0bcada5343f -->
+<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ 75135d88d4e3 -->
 
 One device shows its screen; the other watches it, and plays it if the first
 one says so. The picture goes straight between them over WebRTC and never

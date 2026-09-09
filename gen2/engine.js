@@ -292,6 +292,11 @@ export const gen2 = {
   // Hours in a day. Here because the clock arithmetic below wraps on it and a
   // bare 24 in three places is the shape that drifts.
   hoursInDay: 24,
+  // Frames the game counts its own time at. Not the emulator's speed -- the
+  // *game's*, which advances one frame per frame however fast those frames are
+  // produced, and that is the whole reason an hour of game time can go by in
+  // seconds of yours. 216,000 frames an hour, on any machine.
+  gameFps: 60,
   // --- the in-game clock, which is not the hardware clock --------------------
   // Read out of the cartridge rather than assumed, because it decides whether
   // the time of day can be moved at all -- and the app had it backwards in

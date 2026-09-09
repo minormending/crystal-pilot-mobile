@@ -166,6 +166,15 @@ export function withJobs(Base) {
     const clock0 = this.state.playtime(s.wram);
     const bound = maxGameHours * 3600 * GAME_FPS;
     const stats = { frames: 0, from: first };
+    // Wall time, measured rather than divided out of a frame count. The button
+    // that started this carried an *estimate*; what the job reports at the end
+    // is what it actually cost, which is the only way the estimate ever gets
+    // checked.
+    const began = Date.now();
+    const spent = () => {
+      const secs = (Date.now() - began) / 1000;
+      return secs < 90 ? `${Math.round(secs)}s` : `${Math.round(secs / 60)}m`;
+    };
     let saidAt = 0, block = first;
     this.say(`waiting for ${naming(want)} — it is ${naming(first)}`);
 
@@ -184,8 +193,10 @@ export function withJobs(Base) {
       const at = this.state.timeOfDay(s.wram);
       if (at === want) {
         stats.hours = +(stats.frames / GAME_FPS / 3600).toFixed(1);
+        stats.spent = spent();
         return { ok: true, stats,
-                 message: `it is ${naming(want)} — ${stats.hours}h of game time` };
+                 message: `it is ${naming(want)} — ${stats.hours}h of game time`
+                          + ` in ${stats.spent}` };
       }
       // Not the hour asked for, but not the one we started in either. Worth
       // saying: it means the clock is moving, which is the thing in doubt.
@@ -195,11 +206,13 @@ export function withJobs(Base) {
       } else if (stats.frames - saidAt >= bound / 8) {
         saidAt = stats.frames;
         this.say(`still ${naming(block)} — `
-                 + `${(stats.frames / GAME_FPS / 3600).toFixed(1)}h of game time`);
+                 + `${(stats.frames / GAME_FPS / 3600).toFixed(1)}h of game time`
+                 + ` in ${spent()}`);
       }
     }
 
     stats.hours = +(stats.frames / GAME_FPS / 3600).toFixed(1);
+    stats.spent = spent();
     if (this.cancelled) {
       return { ok: false, stats, message: `stopped — still ${naming(block)}` };
     }
@@ -215,8 +228,9 @@ export function withJobs(Base) {
     }
     return { ok: false, stats,
              message: `still ${naming(block)} after ${stats.hours}h of game `
-                      + 'time — this cartridge\'s clock does not follow the '
-                      + 'pilot, so the hour has to come round on its own' };
+                      + `time in ${stats.spent} — this cartridge's clock does `
+                      + 'not follow the pilot, so use Skip or let the hour '
+                      + 'come round on its own' };
   }
 
   /**

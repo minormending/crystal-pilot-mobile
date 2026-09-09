@@ -1682,6 +1682,11 @@ function offersNow(s) {
                 // cleared the moment the hour takes the species away, which is
                 // the moment the Wait row wants to know about it.
                 quarry: wanted.hunt || huntWanted,
+                // How fast this device actually steps frames, measured rather
+                // than assumed -- it is the difference between a quarter of an
+                // hour and most of one, and it is not the same on a phone as
+                // on a laptop.
+                rate: gb.rate(),
                 canBox: !!boxedPhrase(),
                 bagHeal, bagCure,
                 // Whether there is a counter *within reach*, not whether the
@@ -1758,6 +1763,13 @@ function paintJobs(s) {
   // second button that cannot answer is a choice nobody can make.
   $('#skip').classList.toggle('hide', !rows.wait.skip);
   $('#skip').disabled = !rows.wait.skip || !rows.wait.enabled;
+  // The cost goes on the button that charges it. `Wait` on its own until this
+  // device has run frames long enough to be timed -- a number before then
+  // would be a guess, and a number on a screen is believed.
+  $('#wait').textContent = rows.wait.cost ? `Wait ${rows.wait.cost}` : 'Wait';
+  $('#wait').title = rows.wait.hours === null ? ''
+    : `at most ${rows.wait.hours} hour(s) of game time`
+      + (rows.wait.cost ? `, about ${rows.wait.cost} of yours` : '');
   // Catch has one button again. The ball errand moved to the Errand row, which
   // is ranked high and is a row the *runner* can press -- a secondary button
   // is invisible to it, so "Run the list" could never fetch the first balls.

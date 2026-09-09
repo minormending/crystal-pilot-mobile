@@ -23,12 +23,23 @@ const GB_WRAM_START = 0xc000;   // where work RAM begins in the Game Boy's map
 // address past the end reads `undefined` rather than failing.
 const GB_WRAM_BYTES = 0x2000;
 
+// The smallest call worth timing. Below this the per-call overhead on a
+// visible page is most of what is measured; at this size it is a few per cent.
+const RATE_SAMPLE = 240;
+// And how many frames have to have gone by before the average means anything.
+const RATE_MIN = 1200;
+
 export class GameBoy {
   constructor() {
     this.core = null;
     this.workRam = 0;
     this.ready = false;
     this.held = new Set();
+    // Frames stepped, and the wall time spent stepping them. Not reset: the
+    // longer a session runs the better the answer, and nothing about this
+    // machine's throughput goes stale.
+    this.stepped = 0;
+    this.steppingMs = 0;
   }
 
   async start(canvas) {
@@ -71,13 +82,47 @@ export class GameBoy {
    * -- and there is nothing to draw for a screen nobody is looking at.
    */
   async run(n = 1) {
+    const began = performance.now();
     if (!document.hidden) {
       await this.core._runNumberOfFrames(n);
-      return;
+    } else {
+      for (let i = 0; i < n; i++) {
+        await this.core._runWasmExport('executeFrame', []);
+      }
     }
-    for (let i = 0; i < n; i++) {
-      await this.core._runWasmExport('executeFrame', []);
+    // Only big calls are sampled -- see `rate` for why.
+    if (n >= RATE_SAMPLE) {
+      this.stepped += n;
+      this.steppingMs += performance.now() - began;
     }
+  }
+
+  /**
+   * How many frames a second this device actually steps, or null.
+   *
+   * The one number a person deciding whether to wait needs, and it is not a
+   * constant: this app has been measured at about 2,200 frames a second on an
+   * M-series Mac and perhaps a third of that on a phone, which is the
+   * difference between a quarter of an hour and most of one.
+   *
+   * **Only calls of `RATE_SAMPLE` frames or more are counted**, and that is
+   * not tidiness. On a visible page the library's `_runNumberOfFrames` begins
+   * by awaiting an animation frame, so a call of sixteen frames is sixteen
+   * milliseconds of waiting around a quarter-millisecond of work -- averaging
+   * those in would answer *how often does the idle loop tick* when the
+   * question is *how fast does this core step frames*.
+   *
+   * That overhead is still in the samples that do count, which makes the rate
+   * a slight underestimate and therefore any time computed from it a slight
+   * overestimate. That is the right direction for the only thing anyone does
+   * with it: deciding whether to press a button and go and do something else.
+   *
+   * Null until there is enough to say. A guess here would be a number on a
+   * screen, and a number on a screen is believed.
+   */
+  rate() {
+    if (this.stepped < RATE_MIN || this.steppingMs <= 0) return null;
+    return (this.stepped * 1000) / this.steppingMs;
   }
 
   /**

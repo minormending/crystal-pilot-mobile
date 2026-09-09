@@ -541,14 +541,38 @@ will not guess.
 The patient one, and it keeps everything — nothing restarts, nothing is saved,
 you can Stop at any point.
 
+**The button says what it will cost you**, once the app has seen this device
+run frames long enough to time it:
+
+```
+⏱  Wait     HOOTHOOT · night          [Skip] [Wait 13m]
+```
+
+That is a worst case rather than a guess, and it is made of two things the app
+actually knows. The hours are exact: it reads which hours are night out of your
+cartridge, and it knows which third of the day it is in, so *somewhere between
+one and eight hours* is arithmetic rather than estimation — the number on the
+button is the eight. The minutes are measured: the game counts its own time one
+frame at a time whatever speed those frames arrive at, so an hour of game time
+is 216,000 frames on any machine, and the only unknown is how fast **your**
+device steps them. The app times that while it works.
+
+Which is why the same wait is about a quarter of an hour on a laptop and closer
+to three quarters on a phone, and why the button says nothing at all until
+something has run — a number before then would be a guess, and a number on a
+screen is believed.
+
+Afterwards the job reports what it *actually* took, in game hours and in
+minutes of yours, which is the only way that estimate ever gets checked.
+
 It runs the game as fast as your device manages and watches the clock. Whether
 *that* moves the hour depends on your emulator rather than on the cartridge, so
 the job tells you which it turned out to be:
 
 | it says | what happened |
 | --- | --- |
-| *it is night — 3.4h of game time* | the clock followed along; you are done |
-| *still day after 26h of game time — this cartridge's clock does not follow the pilot* | press **Skip** instead |
+| *it is night — 3.4h of game time in 2m* | the clock followed along; you are done |
+| *still day after 26h of game time in 14m — this cartridge's clock does not follow the pilot* | press **Skip** instead |
 | *the game did not advance at all* | nothing was running — paused, or stuck |
 
 It gives up after **26 hours of game time**, and that number is chosen so that
@@ -1558,7 +1582,7 @@ deployed, which is not the question you are asking when a bug you saw fixed is
 still in front of you. `tools/check-app` asserts that number matches the service
 worker's cache name, because a version display that lies is worse than none.
 
-<!-- covers: sw.js @ d34269983c13 -->
+<!-- covers: sw.js @ 0d89e391ca57 -->
 
 The worker fetches **network first, falling back to the cache**. That is the
 opposite of the usual offline-first advice, on purpose.

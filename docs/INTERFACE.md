@@ -499,7 +499,15 @@ outcome at different prices:
 
 **Skip** moves the game's own clock — Gen 2 keeps the hour as an offset in the
 save, so it can be edited — and costs a restart of the emulator. **Wait** runs
-the game to the hour and costs minutes but nothing else. Two buttons rather
+the game to the hour and costs minutes but nothing else, **and it says how
+many**: `Wait 13m`.
+
+That number is on the button rather than in the line beside it for two
+reasons. The line is already the widest thing on a row that now has two buttons
+— "HOOTHOOT after dark" reached a 375px phone as "HOOTHOOT after da…", which is
+why the hour is a label there now and not a phrase. And the cost belongs to the
+button that charges it: Skip is instant and says nothing, which is itself the
+comparison. Two buttons rather
 than one with a fallback, because that is a choice somebody should make rather
 than a decision the app makes quietly on their behalf. Skip is hidden, not
 greyed, on a cartridge whose symbol file will not say when night begins: a
@@ -1183,4 +1191,4 @@ So this page carries a marker naming the files it describes and the hash they
 had when it was last read against them. `tools/docs-check` reports it when they
 move, and the pre-commit hook blocks on that report.
 
-<!-- covers: index.html app/main.js app/rows.js @ 4e475e817187 -->
+<!-- covers: index.html app/main.js app/rows.js @ 7e03e8048638 -->

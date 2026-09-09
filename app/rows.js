@@ -133,6 +133,11 @@ export function describeRows(s, ctx = {}) {
   // moment the clock takes it away, which is exactly the moment this row wants
   // to know about it.
   const waiting = waitOffer(ctx.hours, ctx.hourNow, ctx.quarry, rom);
+  // What the patient button would cost, on this device. Null before anything
+  // has run long enough to time one, which is why the button can say plain
+  // "Wait" and gain a number later rather than starting with a guess.
+  const cost = waiting
+    ? waitCost(rom, ctx.hourNow, waiting.block, ctx.rate) : null;
   // Indexed once, because the row asks about the chosen place twice and the
   // list is the journey's answer rather than something to search repeatedly.
   const byKey = new Map(places.map((pl) => [pl.key, pl]));
@@ -188,6 +193,14 @@ export function describeRows(s, ctx = {}) {
       // because that is a choice and not a fallback.
       skip: waiting && waiting.shift !== null && waiting.shift > 0
         ? waiting.shift : null,
+      // On the button rather than in the line beside it, because the line is
+      // already the widest thing on a row with two buttons on it -- and
+      // because the cost belongs to the button that charges it. `Skip` is
+      // instant and says nothing.
+      cost: cost && cost.seconds ? saySpan(cost.seconds) : '',
+      // Kept apart from the phrase so a caller can say it another way: the
+      // most it can be, in game hours, which is what the phrase is made of.
+      hours: cost ? cost.most : null,
     },
     // Catch owns its own prerequisite. The errand is a one-time thing -- run it
     // twice and it reports "already carrying 5 ball(s)" without moving -- so it
@@ -526,6 +539,51 @@ export function waitOffer(hours, now, quarry = null, rom = null) {
   return found(best.block, best.extra.length === 1
     ? `${best.extra[0]} · ${when}`
     : `${best.extra.length} more · ${when}`);
+}
+
+/**
+ * What a wait would cost, in game hours and in yours, or null.
+ *
+ * **Two numbers, because the app knows the block and not the hour.** From
+ * anywhere in the day, 10:00 to 17:59, the next night is between one hour and
+ * eight away — so the honest answer is a range, and the useful half of it is
+ * the top: *at most this long* is what decides whether you press the button
+ * and go and do something else.
+ *
+ * `rate` is frames a second, measured on this device rather than assumed. The
+ * game counts its own time one frame at a time whatever speed those frames
+ * arrive at, so an hour of game time is 216,000 of them however fast the
+ * machine is — which is the whole reason waiting can be quick, and the whole
+ * reason the answer is different on a phone and a laptop.
+ *
+ * Null where the cartridge will not say when the blocks begin, or where
+ * nothing has run long enough to time. A made-up number here would be a
+ * number on a screen, and a number on a screen is believed.
+ */
+export function waitCost(rom, now, want, rate = null) {
+  if (!rom || typeof rom.hoursOf !== 'function') return null;
+  const from = rom.hoursOf(now), to = rom.hoursOf(want);
+  if (!from || !to) return null;
+  const day = (rom.e && rom.e.hoursInDay) || 24;
+  const away = (hour) => (((to.from - hour) % day) + day) % day;
+  // The *latest* hour this block could be is the shortest wait, and the
+  // earliest is the longest -- which is the opposite way round to how it
+  // reads, so both are computed rather than one and a guess.
+  const ends = [away(from.from), away(from.to)];
+  const out = { least: Math.min(...ends), most: Math.max(...ends) };
+  if (!rate || !(rate > 0)) return out;
+  const fps = (rom.e && rom.e.gameFps) || 60;
+  out.seconds = (out.most * 3600 * fps) / rate;
+  return out;
+}
+
+/** `9s`, `4m`, `1h 20m` — a duration at the precision it deserves. */
+export function saySpan(seconds) {
+  if (!(seconds > 0)) return '';
+  if (seconds < 90) return `${Math.round(seconds)}s`;
+  const mins = Math.round(seconds / 60);
+  if (mins < 90) return `${mins}m`;
+  return `${Math.floor(mins / 60)}h ${String(mins % 60).padStart(2, '0')}m`;
 }
 
 /**
