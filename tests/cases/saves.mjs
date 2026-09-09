@@ -3,8 +3,9 @@
 // The rest of saves.js needs IndexedDB and a running emulator, so it is not
 // reachable from here. This part is, and it is the part that was wrong: the
 // arithmetic of deciding whether a record in the library's store is *ours*.
-import { test } from '../harness.mjs';
+import { blindTo, markSaved, symbols, test } from '../harness.mjs';
 import { pickKey, sameKey, Saves } from '../../gbcore/saves.js';
+import { GameState } from '../../gen2/state.js';
 
 // The real thing, measured: ROM bytes 0x134-0x14E of pokecrystal, which is the
 // title, the cartridge flags, the header checksum, and the top byte of the
@@ -203,4 +204,66 @@ test('a key compares the same in either direction', async (t) => {
   // reason the function exists rather than an accident of the call sites.
   t.true(sameKey(CRYSTAL, stored(CRYSTAL)), 'Uint8Array against ArrayBuffer');
   t.false(sameKey(CRYSTAL, stored(hack())), 'and a byte apart is still not equal');
+});
+
+// --- moving the game's clock through its battery ----------------------------
+// The refusals, which are the part reachable from here: `install` needs
+// IndexedDB and a running emulator, so it is stubbed and what is asserted is
+// what reaches it — and, more to the point, what does not.
+
+/** A pilot over a real `GameState`, so the arithmetic is the app's own. */
+function clockSaver({ hours = 8, present = true, seal = true } = {}) {
+  const sym = symbols();
+  const state = new GameState(sym);
+  const bytes = new Uint8Array(32768);
+  markSaved(bytes, sym, present);
+  bytes[state.savedAt(sym.addr('wStartHour'))] = 21;
+  bytes[state.savedAt(sym.addr('wStartDay'))] = 2;
+  if (seal) state.sealSave(bytes);
+  const installed = [];
+  const s = new Saves({ rom: {}, batterySave: async () => bytes }, state, null);
+  s.install = async (b) => { installed.push(b); };
+  return { s, state, sym, bytes, installed, hours };
+}
+
+test('the clock is moved through a copy, and the copy is what is installed',
+     async (t) => {
+  const { s, state, sym, bytes, installed } = clockSaver();
+  const r = await s.shiftClock(8);
+  t.true(r.ok, 'it moved');
+  t.eq(installed.length, 1, 'and installed exactly once');
+  const at = state.savedAt(sym.addr('wStartHour'));
+  t.eq(installed[0][at], 5, '21 and eight is 5 the next day');
+  t.eq(bytes[at], 21, 'and the battery it read is untouched');
+});
+
+test('a battery with no save in it is not edited into one', async (t) => {
+  const { s, installed } = clockSaver({ present: false });
+  const r = await s.shiftClock(8);
+  t.false(r.ok, 'refused');
+  t.contains(r.message, 'save the game first', 'and says what to do');
+  t.eq(installed.length, 0, 'nothing written');
+});
+
+test('a battery somebody else has already damaged is left alone', async (t) => {
+  // Re-sealing it here would turn a save the game refuses into a save the game
+  // accepts and is wrong about, which is the worse of the two.
+  const { s, installed } = clockSaver({ seal: false });
+  const r = await s.shiftClock(8);
+  t.false(r.ok, 'refused');
+  t.contains(r.message, 'checksum already disagrees', 'and says why');
+  t.eq(installed.length, 0, 'nothing written');
+});
+
+test('a cartridge that will not say where its checksum is is not guessed at',
+     async (t) => {
+  const sym = symbols();
+  const blind = new GameState(blindTo(sym, 'sChecksum'));
+  const bytes = markSaved(new Uint8Array(32768), sym);
+  const s = new Saves({ rom: {}, batterySave: async () => bytes }, blind, null);
+  let installed = 0;
+  s.install = async () => { installed++; };
+  const r = await s.shiftClock(8);
+  t.false(r.ok, 'refused');
+  t.eq(installed, 0, 'and wrote nothing');
 });

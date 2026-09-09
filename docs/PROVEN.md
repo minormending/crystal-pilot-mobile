@@ -3843,9 +3843,8 @@ direction nobody looks.
 
 The usage guide said the clock in the game *"is the real one, so this is advice
 about your evening rather than something the pilot can hurry along."* Nobody
-had measured it. It reads like a fact about the cartridge and it is a fact
-about the **emulator**, and the difference decides whether waiting for night is
-thirteen minutes or eight hours.
+had measured it, it reads like a fact about the cartridge, and **it is wrong**
+— though not in the way the first half of this pass went looking for.
 
 **Two ways of settling it failed, and both are worth recording.**
 
@@ -3864,7 +3863,50 @@ finds **four references in two routines**: `StageRTCTimeForSave` and
 this app goes through, and the core exposes `WORK_RAM_LOCATION` and no constant
 that would locate it.
 
-### So the job measures the thing instead of assuming it
+### And then the cartridge answered it, from the other side
+
+The two dead ends above are about the *hardware* clock. The question they could
+not settle turned out to have an answer nobody had looked for, and it was three
+byte searches away.
+
+**Gen 2 does not read the hour off the cartridge's clock. It adds an offset it
+keeps in the save.** `FixTime` at 00:061d takes the RTC's seconds, minutes,
+hours and day-low and *adds* `wStartSecond`/`Minute`/`Hour`/`Day` with the carry
+chained upward. So the in-game hour is `(wStartHour + rtcHours) mod 24` — which
+is how a Game Boy game lets you set a time on hardware whose clock it cannot
+write — and **all four bytes are inside the saved block.**
+
+The game does exactly this to itself. `DSTChecks.SetClockForward` at 05:64b9
+moves the clock an hour by incrementing `wStartHour`, wrapping at 24 and
+carrying one into `wStartDay`. That is the arithmetic `advanceClock` copies
+rather than invents, and the label names are the trap in it: *forward*
+increments the offset, and only reads as forward because the offset is added.
+Getting that backwards sends the clock the wrong way, which is the whole reason
+it was read out of the ROM instead of reasoned about.
+
+`TimesOfDay` at 05:4044 is the other half and had also never been read: a table
+of **upper bounds**, walked until one is greater than the hour. Read as starts
+it shifts every boundary by a block and still produces a table. On this
+cartridge it comes out morning 4–9, day 10–17, night 18–3 — what everybody
+believed and nothing here had checked.
+
+So there is a **Skip** beside the Wait now: save, read the battery, move the
+offset, re-seal the checksum, install, drive CONTINUE, and read `wTimeOfDay`
+back — because the whole point of going through the game's own clock is that
+the game decides what the hour means. `tools/clock` does the same edit outside
+the app against a `.sav`, and its `--verify` holds the boundary decode to the
+eight hours everybody already knew.
+
+**What is still not verified** is the same gap the save editor was parked on
+two passes ago: an *edited* save has never been watched installing and reading
+back changed, because `install` refuses on a hidden page. The machinery under
+it is not new — writing a battery and driving CONTINUE is how loading a slot
+has always worked — and what is new is that the bytes changed on the way, with
+the checksum deciding whether the game accepts them. That checksum was measured
+on a real cartridge: over flat [8201, 11139) the sum came to 58439 and the
+stored bytes held 58439.
+
+### And the job that measures rather than assuming is still worth having
 
 Which is the shape this repository keeps arriving at, and it is better here
 than a correct guess would have been. `waitForHour` watches **two** clocks: the

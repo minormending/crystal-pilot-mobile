@@ -236,6 +236,13 @@ const WRAM_NAMES = [
   // bit, so a reader that rounded up to 256 bits reports the first five of
   // *seen* as caught.
   ['wPokedexCaught', 32], ['wPokedexSeen', 32],
+  // The saved block's own start, and the four bytes of clock offset just
+  // inside it. Adjacent and in the cartridge's order, because `savedAt` turns
+  // a work-RAM address into a battery offset by subtracting one from the
+  // other -- a fake that scattered them would still be self-consistent and
+  // would stop resembling the thing it stands for.
+  ['wPlayerData', 4],
+  ['wStartDay', 1], ['wStartHour', 1], ['wStartMinute', 1], ['wStartSecond', 1],
   // The clock, and the only counter in the machine that is known to move when
   // the emulator runs. `wTimeOfDay` was absent from this table until a job
   // needed to watch it change -- `main.js` had been reading it through its own
@@ -294,6 +301,14 @@ function buildSymText() {
   lines.push('0b:41ef TrainerClassNames');
   lines.push('01:a008 sCheckValue1');
   lines.push('01:ad0f sCheckValue2');
+  // The saved block and its checksum, at the addresses the real cartridge
+  // uses -- so the offsets these tests compute are the offsets a real battery
+  // has, and 8201 / 11139 / 11533 mean the same here as in the measurement
+  // they came from.
+  lines.push('01:a009 sGameData');
+  lines.push('01:ab83 sGameDataEnd');
+  lines.push('01:ad0d sChecksum');
+  lines.push('05:4044 TimesOfDay');
   return lines.join('\n') + '\n';
 }
 
@@ -620,7 +635,8 @@ export const TYPE = {
 
 export function fakeRom({ moves = {}, species = {}, items = {}, chart = [],
                           landmarks = {}, trainers = {}, types = {},
-                          base = {}, evos = {}, typeNames = {} } = {}) {
+                          base = {}, evos = {}, typeNames = {},
+                          hours = null } = {}) {
   const MOVES = {
     33: { id: 33, name: 'TACKLE', power: 35, effect: 0, pp: 35, type: TYPE.NORMAL },
     43: { id: 43, name: 'LEER', power: 0, effect: 19, pp: 30, type: TYPE.NORMAL },
@@ -681,6 +697,12 @@ export function fakeRom({ moves = {}, species = {}, items = {}, chart = [],
     baseStats: (id) => base[id] || null,
     evosAttacks: (id) => evos[id] || null,
     typeName: (id) => typeNames[id] || '',
+    // Which hours are which. A table, like the rest here -- the *reading* of
+    // it is held to real bytes in romdata.mjs, where the trap is that the
+    // cartridge writes upper bounds and not starts. `null` stands for a
+    // cartridge whose symbol file has no such table, which is the state that
+    // costs the skip and keeps the wait.
+    hoursOf: (block) => (hours ? hours[block] || null : null),
     outlook: RomData.prototype.outlook,
     bestLead: RomData.prototype.bestLead,
     matchups() { return CHART; },
@@ -747,7 +769,8 @@ export function collisionRom(perms = {}) {
 export function romReading(moveTable, { chart = null, names = null,
                                        species = null, trainers = null,
                                        classes = null, evos = null,
-                                       typeNames = null, base = null } = {}) {
+                                       typeNames = null, base = null,
+                                       times = null } = {}) {
   const sym = symbols();
   const { bank, addr } = { bank: sym.bank('Moves'), addr: sym.addr('Moves') };
   const chartAt = { bank: sym.bank('TypeMatchups'), addr: sym.addr('TypeMatchups') };
@@ -759,6 +782,7 @@ export function romReading(moveTable, { chart = null, names = null,
   const evoAt = { bank: sym.bank('EvosAttacksPointers'),
                   addr: sym.addr('EvosAttacksPointers') };
   const tnAt = { bank: sym.bank('TypeNames'), addr: sym.addr('TypeNames') };
+  const todAt = { bank: sym.bank('TimesOfDay'), addr: sym.addr('TimesOfDay') };
   const MOVE_BYTES = 7, BASE_BYTES = 32;
   const gb = {
     romByte(b, at) {
@@ -795,6 +819,12 @@ export function romReading(moveTable, { chart = null, names = null,
       if (typeNames && b === tnAt.bank && at >= tnAt.addr
           && at < tnAt.addr + typeNames.length) {
         return typeNames[at - tnAt.addr];
+      }
+      // Bytes, because the table is *upper bounds* and reading it as starts
+      // shifts every boundary by a block while still producing a table.
+      if (times && b === todAt.bank && at >= todAt.addr
+          && at < todAt.addr + times.length) {
+        return times[at - todAt.addr];
       }
       // A whole base-stats window, for the fields `species` does not lay out.
       // `species` stays because forty-odd tests use it and only want types;

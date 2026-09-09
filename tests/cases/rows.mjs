@@ -11,7 +11,8 @@ import { describeHandoff, describeOffers, describeParty, describeReplaced,
          describeRoom, describeScreen, joinFailure, describeRows, describeSlot,
          betterGrind, betterHour, hoursLine, otherHour,
          describeUndo, describeSaying, describeAuto, describeDex,
-         describeDexTotals, describeTitle, waitOffer } from '../../app/rows.js';
+         describeDexTotals, describeTitle, shiftTo,
+         waitOffer } from '../../app/rows.js';
 import { gen2 } from '../../gen2/engine.js';
 
 const sym = symbols();
@@ -1856,7 +1857,8 @@ test('the hour worth waiting for is the one holding what you asked for',
   const got = waitOffer(HOURS, 1, 'HOOTHOOT');
   t.eq(got.block, 2, 'the block that has it');
   t.contains(got.text, 'HOOTHOOT', 'named, because it is the reason to wait');
-  t.contains(got.text, 'after dark', 'and when');
+  t.contains(got.text, 'night', 'and when, as a label rather than a phrase — '
+             + '"after dark" clipped on a row with two buttons on it');
 });
 
 test('a quarry that is here now does not make the row about it', async (t) => {
@@ -1937,4 +1939,47 @@ test('and the runner will take it, once there is nothing else', async (t) => {
   const never = describeAuto({ offered: ['travel'], rank: { travel: 1 } },
                              { travel: { enabled: true, text: 'somewhere' } });
   t.false(never.enabled, 'which is the comparison that makes that mean anything');
+});
+
+// The cartridge's day, as `hoursOf` answers it: morning 4-9, day 10-17, and a
+// night that wraps midnight, which is the one that makes the arithmetic
+// interesting.
+const DAYPARTS = {
+  0: { from: 4, to: 9, hours: 6 },
+  1: { from: 10, to: 17, hours: 8 },
+  2: { from: 18, to: 3, hours: 10 },
+};
+const CLOCKROM = fakeRom({ hours: DAYPARTS });
+
+test('the shift lines the earliest hour of this block onto the target',
+     async (t) => {
+  // The app knows which block it is in and not which hour, so this is the only
+  // shift it can compute — and it is exactly right whenever the target is at
+  // least as wide as where you are standing.
+  t.eq(shiftTo(CLOCKROM, 1, 2), 8, 'day starts at 10, night at 18');
+  t.eq(shiftTo(CLOCKROM, 0, 1), 6, 'morning at 4 to day at 10');
+  t.eq(shiftTo(CLOCKROM, 2, 0), 10, 'and night at 18 round to morning at 4');
+});
+
+test('the same block is no shift at all', async (t) => {
+  t.eq(shiftTo(CLOCKROM, 2, 2), 0, 'zero, which the row reads as nothing to skip');
+});
+
+test('a cartridge that will not say which hours are which loses the skip only',
+     async (t) => {
+  t.eq(shiftTo(fakeRom({}), 1, 2), null, 'no table, no shift');
+  t.eq(shiftTo(null, 1, 2), null, 'and no rom either');
+  const r = describeRows(state.read(worldRam(sym, {
+    party: [{ species: CYNDAQUIL, level: 8, hp: 20, maxHp: 20 }],
+  })), { rom: fakeRom({}), hours: HOURS, hourNow: 1, quarry: 'HOOTHOOT' });
+  t.true(r.wait.enabled, 'the wait is still offered');
+  t.eq(r.wait.skip, null, 'and only the second button goes');
+});
+
+test('the row carries the hours to move, not a name', async (t) => {
+  const r = describeRows(state.read(worldRam(sym, {
+    party: [{ species: CYNDAQUIL, level: 8, hp: 20, maxHp: 20 }],
+  })), { rom: CLOCKROM, hours: HOURS, hourNow: 1, quarry: 'HOOTHOOT' });
+  t.eq(r.wait.waitFor, 2, 'the block to wait for');
+  t.eq(r.wait.skip, 8, 'and the hours that would get there in one edit');
 });

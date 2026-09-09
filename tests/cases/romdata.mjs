@@ -1133,3 +1133,44 @@ test('a type nobody asked about is not type zero', async (t) => {
   t.eq(rom.typeName(null), '', 'null is not');
   t.eq(rom.typeName(undefined), '', 'nor is nothing at all');
 });
+
+// --- which hours are which --------------------------------------------------
+
+test('the day is read as upper bounds, not as starts', async (t) => {
+  // `GetTimeOfDay` walks pairs and takes the first whose hour is *greater*
+  // than the clock's. Read as starts the same bytes still decode -- into a day
+  // shifted by a whole block, which looks exactly as plausible.
+  const rom = romReading({}, {
+    times: [4, 2, 10, 0, 18, 1, 24, 2, 0xff, 0],
+  });
+  const map = rom.hourBlocks();
+  t.eq(map.length, 24, 'one entry per hour');
+  t.eq(map[3], 2, '03:00 is still night');
+  t.eq(map[4], 0, 'and morning starts at four, not at five');
+  t.eq(map[9], 0, 'through nine');
+  t.eq(map[10], 1, 'day at ten');
+  t.eq(map[17], 1, 'through seventeen');
+  t.eq(map[18], 2, 'and night at eighteen');
+});
+
+test('the block that wraps midnight is answered as one that wraps', async (t) => {
+  // Night runs 18 to 3, so its range is not an interval -- and a reader that
+  // sorted the hours and took the ends would report it as 0 to 23.
+  const rom = romReading({}, { times: [4, 2, 10, 0, 18, 1, 24, 2, 0xff, 0] });
+  const night = rom.hoursOf(2);
+  t.eq(night.from, 18, 'it begins in the evening');
+  t.eq(night.to, 3, 'and ends before dawn');
+  t.eq(night.hours, 10, 'ten hours of it');
+  const morning = rom.hoursOf(0);
+  t.eq(morning, { from: 4, to: 9, hours: 6 }, 'and a block that does not wrap');
+});
+
+test('a table with no terminator is not a table', async (t) => {
+  // A bank of zeroes decodes into one pair -- "everything up to hour zero is
+  // morning" -- which would call the whole day morning rather than failing.
+  const rom = romReading({}, { times: [4, 2, 10, 0, 18, 1] });
+  t.eq(rom.hourBlocks(), null, 'refused');
+  t.eq(rom.hoursOf(0), null, 'and nothing built on it answers either');
+  t.eq(romReading({}, {}).hourBlocks(), null,
+       'as with a cartridge that does not name the table');
+});
