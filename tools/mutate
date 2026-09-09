@@ -176,13 +176,35 @@ def _tok(pattern, new, label):
     return op
 
 
-def _num(src, mask):
-    """A numeric literal, to zero and to one more.
+# Above this, `n + 1` is not a question anybody can answer. See `_num`.
+OFF_BY_ONE_MAX = 3
 
-    Skips 0 and 1 in the `0`/`1` direction where the edit would be a no-op, and
-    skips array-ish `[0]` to `[1]` only when the file has no such index -- which
-    it cannot know, so it does not skip it. An index mutation that survives is
-    worth reading either way.
+
+def _num(src, mask):
+    """A numeric literal, to zero and -- for a small one -- to one more.
+
+    Two directions, asking two different things. **To zero** asks *is this
+    bound needed at all?*, which is worth asking of every number in the file:
+    delete a retry budget and a loop runs for ever, delete a delay and a press
+    lands mid-animation. **To one more** asks *is this exact value right?*,
+    which is the classic off-by-one and is worth asking of an index, a bit
+    position or a count of two.
+
+    It is not worth asking of a frame count. `GATHER_MS = 2500` to 2501,
+    `SETTLE_FRAMES = 20` to 21, `closeMenus(times = 8)` to 9: no honest test
+    can tell those apart, because the value was tuned against an emulator with
+    tolerance on both sides *by construction*. A mutation that can only ever
+    survive is not a measurement -- it is a constant subtracted from every
+    score, and 27% of this repository's survivors were exactly that, crowding
+    the real findings out of a list somebody has to read.
+
+    So `n + 1` stops at three. Zero, one, two and three are indices, bit
+    numbers and small counts, where off-by-one is the whole bug; four and above
+    are budgets and durations, where it is noise. A blunt line, drawn where it
+    is cheap to be wrong: the `to 0` mutation still asks the useful half of the
+    question about every one of them.
+
+    Skips 0 in the `to 0` direction, where the edit would be a no-op.
     """
     for m in masked_finditer(r"\b(?<![\w.$])(0x[0-9a-fA-F]+|\d+)\b", src, mask):
         text = m.group(1)
@@ -192,7 +214,8 @@ def _num(src, mask):
             continue
         if value != 0:
             yield m.start(), m.end(), "0", f"{text} to 0"
-        yield m.start(), m.end(), str(value + 1), f"{text} to {value + 1}"
+        if value <= OFF_BY_ONE_MAX:
+            yield m.start(), m.end(), str(value + 1), f"{text} to {value + 1}"
 
 
 def _null_not_default(src, mask):

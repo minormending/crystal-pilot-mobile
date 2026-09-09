@@ -340,13 +340,13 @@ second, which is there so the core's own waits finish, not to run a game.
 
 Everything above was watched happening. This section was the exception, and the
 exception was the point of it: after the ROM-hack work shipped, **forty-two**
-passes went looking for defects in code that already worked, and found **177** —
+passes went looking for defects in code that already worked, and found **180** —
 a handful of them created by a fix on the way, which are in the table in italics
 because they are a different kind of thing. None of them announced itself.
 
 **Reading found twenty-three**, more than any other single method, which is why
 it comes first in the table and why it is worth doing before touching the game.
-But the interesting number is the tail: the remaining hundred and fifty-four were
+But the interesting number is the tail: the remaining hundred and fifty-seven were
 found almost as many different ways, and almost every entry in that column is a sentence rather than
 a category — *measuring the fix*, *asking a second tile*, *feeding it the wrong
 thing*, *writing a cartridge Crystal is not*, *a test, before the cartridge*,
@@ -555,6 +555,9 @@ exactly why nothing failed.
 | 42 | the symbol digest was drawn as 47 entries while it carried 53 | — | adding the fifty-third |
 | 42 | a write-off marked by a gate would have outlived its remedy: `reopen` only ever watched badges, and taking the Egg changes no badge | take the Egg after being turned back once | writing the second cause and asking what expires it |
 | 42 | *the first gate sentence was a clause, not a noun phrase, so the hint read "ROUTE 32 wants Elm's aide has an Egg for you"* | *the hint under the offers* | *composing the two sentences it has to fit* |
+| 42 | **`cancel()` — the one line the Stop button is wired to — had nothing asserting it.** Eighteen tests about stopping all set the flag by hand, so writing `this.cancelled = false` in there passed the whole suite | press Stop, in a build where that line was wrong | mutation, on the module the per-file report ranked third-weakest |
+| 42 | both halves of the condition that tells a *question* on screen from a text box could be flipped with the suite green — the rule whose absence once cost ¥2900 in Poké Balls | any yes-or-no during a job | the same |
+| 42 | *`tools/mutate` was subtracting a constant from every score: 27% of its survivors were `n → n+1` on frame counts and try budgets, which no honest test can distinguish* | *reading the survivor list* | *counting the survivor list* |
 
 Five things in that table are worth more than the individual rows.
 
@@ -2923,6 +2926,33 @@ anywhere; a walk that is refused reports the remedy instead of the quote; and
 second cause because taking the Egg changes no badge. The pilot does **not**
 take the Egg: the aide asks a yes-or-no question, and answering questions is
 not walking — the same line this app draws around choosing your starter.
+
+**The audit half went where the tool pointed rather than where memory did**,
+which is what last pass's per-file report was for. It ranked `gbcore/` weakest
+first and the third entry was `taskbase.js` at 28% — where the mutation that
+survived was `cancel()` setting `this.cancelled = false`. Eighteen tests in
+`control.mjs` are about stopping a job and every one of them sets the flag by
+hand, so the single line the Stop button is wired to had nothing asserting it.
+Stop would have been a button that did nothing, with eighteen tests about
+stopping.
+
+The report's first entry, `gbcore/stream.js` at **0%**, is the opposite kind of
+answer and worth recording as one: it is `RTCPeerConnection` and
+`canvas.captureStream` from top to bottom, and none of that exists in node.
+Writing fakes for it would produce a suite that cannot fail — the lesson this
+repository has already paid for twice. A score of zero there is a fact about
+where the module runs, not a gap in the testing.
+
+**And the tool itself was subtracting a constant from every score.** 27% of its
+survivors were `n → n + 1`: `GATHER_MS = 2500` to 2501, `SETTLE_FRAMES = 20` to
+21. Those cannot be distinguished by any honest test, because the values were
+tuned against an emulator with tolerance on both sides by construction — so
+they could only ever survive, and they crowded the real findings out of a list
+somebody has to read. `n + 1` stops at three now. The scores moved without the
+tests changing, which is written up with a table in
+[DEVELOPING.md](DEVELOPING.md) rather than quietly enjoyed, and the spread is
+the reassuring part: `taskbase.js` is frame counts and gained ten points,
+`rows.js` is logic and gained none.
 
 The one thing it will never do is guess. `hasEvent` answers null where the
 symbol file cannot say, and `gateSaid` turns null into silence rather than into

@@ -183,6 +183,38 @@ A **survivor** is one of three things and all three are worth reading:
   than tested, which is the better outcome.
 * a mutation that is not really a change — `x > 0` to `x >= 0` where x is never 0
 
+**And one class of mutation was removed, because it could only ever survive.**
+`n → n + 1` asks *is this exact value right?*, which is the classic off-by-one
+and is worth asking of an index, a bit position or a count of two. It is not
+worth asking of a frame count: `GATHER_MS = 2500` to 2501, `SETTLE_FRAMES = 20`
+to 21, `closeMenus(times = 8)` to 9. No honest test can tell those apart,
+because the value was tuned against an emulator with tolerance on both sides
+*by construction*. A mutation that can only survive is not a measurement — it
+is a constant subtracted from every score, and **27% of this repository's
+survivors were exactly that**, crowding the real findings out of a list
+somebody has to read.
+
+So `n + 1` stops at three, and `n → 0` still asks the useful half of the
+question about every number: *is this bound needed at all?* Delete a retry
+budget and a loop runs for ever; delete a delay and a press lands
+mid-animation.
+
+**That changed the denominator, so the scores moved without the tests
+changing** — worth stating plainly, because a number that goes up for a reason
+other than better testing is exactly the kind of number this document is
+supposed to be careful about:
+
+| module | before | after | same tests |
+| --- | --- | --- | --- |
+| `gbcore/taskbase.js` | 31% | **41%** | 28 caught either way, 20 fewer asked |
+| `gen2/jobs.js` | 46% | **49%** | — |
+| `gbcore/saves.js` | 56% | **57%** | — |
+| `app/rows.js` | 82% | **82%** | — |
+
+The spread is the point: `taskbase.js` is a module of frame counts and gained
+ten points; `rows.js` is a module of logic and gained nothing. A rule that
+inflated every score equally would be measuring nothing.
+
 It exits 0 with survivors on purpose. Some guards here are deliberately
 redundant, and a tool that failed the build for those would be turned off.
 
