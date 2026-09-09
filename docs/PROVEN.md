@@ -339,14 +339,14 @@ second, which is there so the core's own waits finish, not to run a game.
 ## The audits, and how each defect was actually found
 
 Everything above was watched happening. This section was the exception, and the
-exception was the point of it: after the ROM-hack work shipped, **forty-nine**
-passes went looking for defects in code that already worked, and found **252** —
+exception was the point of it: after the ROM-hack work shipped, **fifty**
+passes went looking for defects in code that already worked, and found **263** —
 a handful of them created by a fix on the way, which are in the table in italics
 because they are a different kind of thing. None of them announced itself.
 
 **Reading found twenty-three**, more than any other single method, which is why
 it comes first in the table and why it is worth doing before touching the game.
-But the interesting number is the tail: the remaining two hundred and twenty-nine were
+But the interesting number is the tail: the remaining two hundred and forty were
 found almost as many different ways, and almost every entry in that column is a sentence rather than
 a category — *measuring the fix*, *asking a second tile*, *feeding it the wrong
 thing*, *writing a cartridge Crystal is not*, *a test, before the cartridge*,
@@ -630,6 +630,17 @@ exactly why nothing failed.
 | 49 | seven boundaries in the new trainer reader — the one-byte `$ff` between parties, the class bound in both directions, the name bound in both directions, and `outlook` on a spent move, a power-1 move and a Pokémon at one hit point | any of the seven | the same |
 | 49 | *and two survivors that were spare decisions rather than gaps: a class bound asking "is g+1 below the count" where "is there a next pointer" is the same question with no off-by-one, and a pointer list counted up to instead of built from its length* | *—* | *the same, and reading the line rather than testing it* |
 | 49 | the Pokédex's last entry: the species bound is *above* the count rather than at it, and read the other way CELEBI has no types | ask about 251 | the same |
+| 50 | **Gen 2 sends out slot one and asks nobody**, so the party's order decided the first battle of a Gym — and the pilot had known what was in the room since the pass before and could only *say* so | walk into a Gym with the wrong one in front | reading the sentence the pass before had written |
+| 50 | **`_driveMenuCursor` only ever pressed DOWN.** Every screen it was used on opens at row one, so the target was always below — but the party menu's second visit leaves the cursor on the Pokémon that was picked, and the answer to *move to where?* is the row above it. Reachable down-only by wrapping, if the list wraps, and by running out of presses if it does not | reorder a party | writing the one caller whose target is above the cursor |
+| 50 | **`closeConversation` and `settleText` had no behavioural test at all** — the two primitives every job clears the screen with. Both exit conditions could be inverted, and so could the button each presses | any job that clears a box | `tools/mutate` on the module it rated 41% |
+| 50 | and a box that clears on the *last allowed press* was reported as stuck: the loop looks before it presses, so the press that worked has no iteration left to notice it | a conversation that ends on the bound | the same |
+| 50 | four "cannot read" guards in the screen reader are chains of three and four `||`s, and each has to refuse alone — a reader needing all four missing would dereference the first one present | a cartridge with no tilemap | the same, on the module two features now rest on |
+| 50 | **an empty phrase was on every screen.** `fold` strips everything that is not a letter or a digit, so a phrase of punctuation folds to nothing — and nothing is a substring of every line | ask whether the screen says `''` | the same |
+| 50 | *a `bestLead` score that kept only the newest number instead of adding them up survived its first test, because with the Grass one first the two rules agree; the fixture's order is what makes the test able to fail* | *—* | *`tools/mutate --try`, on a test that had just been written* |
+| 50 | *and a third clause in the same return that could never be taken: `best === 0` already covers "nothing scored", so asking about the top as well was a branch with no path to it* | *—* | *the same* |
+| 50 | *`--find` reported "POKéMON is not in this ROM" while it sat in it: the ligature is one byte in the ROM and seven characters on screen, so a phrase the app matches against the tilemap is written in the cartridge with a byte that is not in it* | *check that phrase* | *adding a phrase the app now looks for* |
+| 50 | *the phrase scan found three of the five phrases the app looks for, because two are passed as named constants rather than literals — a scan that finds a subset of what it describes* | *count them* | *the count being lower than the number of `_driveToSaying` calls* |
+| 50 | *`tools/mutate --try` reported "1 of 1 noticed" for an edit it had refused to make, and would have mutated the first of two identical anchors and said nothing about the second* | *give it an ambiguous anchor* | *giving it one, on its second run* |
 
 Five things in that table are worth more than the individual rows.
 
@@ -3614,6 +3625,91 @@ evidence there is, so one look is enough. Both versions return the same
 snapshot; only one of them stops. That is a shape worth remembering — **when a
 guard only changes how long something takes, the test has to be about the
 count.**
+
+### A fiftieth pass: the Pokémon that was in the wrong place
+
+**Gen 2 sends out slot one and asks nobody.** So the party's order decides the
+first battle of a Gym — and since the pass before, the pilot had known exactly
+what was waiting in the room and could only *say* so. Walking into Bugsy with
+a Chikorita in front while a Cyndaquil sits in slot three is a fight lost
+before the door closes. Four presses fix it.
+
+`bestLead` scores the **room**, not its worst member: for each of theirs it
+takes the hardest hit this Pokémon has, and adds them up, because a Gym is
+several battles in a row. Ranked the other way — best against their hardest —
+a specialist that flattens one and cannot touch the other two would lead.
+
+**And the test for that survived its first mutation.** A score that kept only
+the newest number instead of adding them up gives the same answer as summing,
+*if the Pokémon the specialist is good against happens to be first in the
+list*. Moving it last is what made the test able to fail. Which is the same
+lesson as the pass before, arriving one layer up: the fixture's shape decides
+whether the assertion means anything.
+
+The walk itself is unlike every other menu walk in this app, in two ways that
+both came out of the ROM rather than a screen:
+
+- `MonSubmenu`'s header has its data pointer filled in by `PopulateMonMenu`
+  and its top coordinate computed by `MonSubmenu.GetTopCoord`, because which
+  options it holds depends on the Pokémon — one that knows CUT gets a CUT row.
+  **There is no signature to match**, so reading the word is the only way.
+- And the word is somewhere else than in a battle. The field menu's options
+  begin STATS, SWITCH; the battle one begins SWITCH, STATS. A press count
+  carried over from the battle version opens a stats screen.
+
+**`_driveMenuCursor` only ever pressed DOWN**, and nothing had noticed because
+every screen it was used on opens at row one with the target below. The party
+menu's *second* visit is the first caller whose target is above the cursor:
+after SWITCH the cursor sits on the Pokémon that was picked, and the answer to
+*move to where?* is row one. Down-only reaches that by wrapping, if the list
+wraps, and by running out of presses if it does not.
+
+### The two primitives every job clears the screen with
+
+`closeConversation` and `settleText` had **no behavioural test at all** — only
+that they could be cancelled. Both exit conditions could be inverted with the
+suite green, and so could the button each presses.
+
+| | presses | stops when |
+| --- | --- | --- |
+| `closeMenus` | B | no window is open |
+| `closeConversation` | B | no window **and** no script running |
+| `settleText` | A | no window, no script, **and not in a battle** |
+
+Each of those differences is a decision somebody could reasonably have made
+the other way, and each has a measurement behind it. `closeConversation` asks
+about the script because at a mart counter the boxes closed, `wScriptMode`
+stayed non-zero, and the clerk's confirmation was back a moment later.
+`settleText` presses **A** where the other two press B, because it is for text
+the pilot has already decided to get through and B in some boxes means *back
+out*. And its battle clause is not redundant: a battle has no window and no
+script running, so a reader asking only the other two returns at once — from
+the one screen it was called to clear.
+
+**And a box that clears on the last allowed press was reported as stuck.** The
+loop looks before it presses, so the press that finally worked has no
+iteration left to notice it. The fresh read afterwards is the whole difference,
+and without it the caller goes looking for a screen that is no longer there.
+
+### And the tool that got the same thing wrong
+
+`--try` was added this pass because the same Python heredoc had been written by
+hand in three passes running — thirty-odd times, the same six lines. It got two
+things wrong on its first two runs, and both are worth recording because they
+are the failures the tool exists to prevent, committed by the tool:
+
+- It would have mutated **the first of two identical anchors** and said
+  nothing about the second. `i >= 0 && i < wram.length` appears twice in
+  `screen.js`. An ambiguous anchor is refused now.
+- And it reported **"1 of 1 noticed" for an edit it had declined to make** — a
+  summary that counts a refusal as a success is the kind that makes a tool's
+  own output untrustworthy.
+
+It also does one thing better than the heredocs it replaces, which is the real
+argument for it: a hand-written one edits the **working tree** and restores it
+at the end, so an interrupted run leaves the repository mutated. A mutated
+repository that still compiles is exactly the state this tool exists to create
+on purpose and nowhere else.
 
 ## The part that had to be redesigned
 
