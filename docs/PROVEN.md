@@ -4011,6 +4011,26 @@ a screen, which is the failure this document keeps recording. `started` is a
 separate state from *this cartridge cannot say*: one is *not yet* and the other
 is *never*, and they have different sentences.
 
+### And a filter, because 251 chips is a scroll and not a lookup
+
+One box, and the query decides which of two questions it is: **all digits is a
+Pokédex number, anything else is a name.** A number matches by *prefix* rather
+than exactly — matching exactly would jump to one entry and back on the next
+keystroke, which reads as the box losing what was typed.
+
+Folded through `normalise` rather than through a second copy of that folding,
+which is what makes the one interesting case fall out for free: `nidoran` finds
+**both**. That function deliberately does not fold `♀` and `♂`, because folding
+them is precisely what made the two NIDORAN the same name for the species
+picker years of passes ago — so the filter inherits a fix rather than
+re-introducing the bug it fixed.
+
+It shares its line with the two segments, and it is **labelled as well as
+prompted**. An unlabelled box whose placeholder could pass for real content
+reads as a value somebody already entered, which is what the room-code field
+did for four versions with `K7M2P` sitting in it. *name or number* cannot be
+mistaken for a Pokémon.
+
 ### Two segments, and a table that said nothing
 
 The control is two segments rather than one button that cycles, which is the

@@ -11,8 +11,8 @@ import { describeHandoff, describeOffers, describeParty, describeReplaced,
          describeRoom, describeScreen, joinFailure, describeRows, describeSlot,
          betterGrind, betterHour, hoursLine, otherHour,
          describeUndo, describeSaying, describeAuto, describeDex,
-         describeDexTotals, describeTitle, saySpan, shiftTo,
-         waitCost, waitOffer } from '../../app/rows.js';
+         describeDexTotals, describeTitle, findSpecies, saySpan,
+         shiftTo, waitCost, waitOffer } from '../../app/rows.js';
 import { gen2 } from '../../gen2/engine.js';
 
 const sym = symbols();
@@ -2089,4 +2089,57 @@ test('the list is sorted, because one cartridge entry is not', async (t) => {
   const d = describeDex({ species: 89, level: 0, moves: [], pp: [] },
                         { rom, engine: gen2 });
   t.eq(d.learns.map((m) => m.level), [23, 45], 'climbing, whatever the ROM says');
+});
+
+// --- finding a species by typing --------------------------------------------
+
+const DEXNAMES = { 1: 'BULBASAUR', 16: 'PIDGEY', 17: 'PIDGEOTTO', 18: 'PIDGEOT',
+                   29: 'NIDORAN♀', 32: 'NIDORAN♂', 155: 'CYNDAQUIL',
+                   160: 'FERALIGATR', 161: 'SENTRET' };
+const IDS = Object.keys(DEXNAMES).map(Number).sort((a, b) => a - b);
+const named = (id) => DEXNAMES[id];
+
+test('an empty query is not a filter', async (t) => {
+  t.eq(findSpecies(IDS, '', named), IDS, 'everything, unchanged');
+  t.eq(findSpecies(IDS, null, named), IDS, 'and nothing typed at all');
+});
+
+test('letters are a name and digits are a number', async (t) => {
+  // One box, and the query itself decides which question it is — which is how
+  // a person uses a Pokédex either way round.
+  t.eq(findSpecies(IDS, 'pid', named), [16, 17, 18], 'three of them by name');
+  t.eq(findSpecies(IDS, '16', named), [16, 160, 161],
+       'and by number, matching on the prefix');
+});
+
+test('a number matches by prefix so the list narrows as you type', async (t) => {
+  // Exact matching would jump to one entry and back on the next keystroke,
+  // which reads as the box losing what you typed.
+  t.eq(findSpecies(IDS, '1', named), [1, 16, 17, 18, 155, 160, 161],
+       'everything beginning with a one');
+  t.eq(findSpecies(IDS, '15', named), [155], 'and it closes in');
+});
+
+test('case and the accent cost nothing, and the two NIDORAN still cost one',
+     async (t) => {
+  // `normalise` folds case and é and deliberately does not fold ♀ and ♂ —
+  // folding those makes the two NIDORAN the same name again, which is the bug
+  // the charmap work existed to fix. So `nidoran` finding both is the right
+  // answer to an ambiguous question rather than a failure to tell them apart.
+  t.eq(findSpecies(IDS, 'CYNDAQUIL', named), [155], 'shouted');
+  t.eq(findSpecies(IDS, 'cyndaquil', named), [155], 'and muttered');
+  t.eq(findSpecies(IDS, 'nidoran', named), [29, 32], 'both of them');
+  t.eq(findSpecies(IDS, 'nidoran♀', named), [29], 'and one of them, asked for');
+});
+
+test('a species with no name is skipped rather than throwing', async (t) => {
+  // Every table in this app answers "" for a name it cannot read, and the
+  // filter is downstream of all of them.
+  t.eq(findSpecies([1, 2], 'bulba', (id) => (id === 1 ? 'BULBASAUR' : null)),
+       [1], 'the one that has a name');
+});
+
+test('a query that matches nothing matches nothing', async (t) => {
+  t.eq(findSpecies(IDS, 'mewtwo', named), [], 'not in this list');
+  t.eq(findSpecies(IDS, '999', named), [], 'nor is that number');
 });
