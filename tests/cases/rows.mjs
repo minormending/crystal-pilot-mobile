@@ -1356,3 +1356,16 @@ test('a line exactly as long as the limit is not truncated', async (t) => {
   t.ne(describeSaying([over], { max }).text, over, 'one more is cut');
   t.contains(describeSaying([over], { max }).text, '…', 'and says so');
 });
+
+test('a road the game is keeping shut says what opens it', async (t) => {
+  // Otherwise a gated destination is written off after one failed walk and then
+  // simply stops being offered: Travel loses a place, says nothing, and the
+  // person is left to work out that the app is not broken.
+  const world = { party: [{ species: CYNDAQUIL, level: 5, hp: 20, maxHp: 20 }] };
+  const list = offers(world,
+    { gated: [{ where: 'ROUTE 32', needs: 'the Egg from Elm’s aide' }] });
+  t.contains(list.hint, 'ROUTE 32', 'which road');
+  t.contains(list.hint, 'Egg', 'and what it wants');
+  const quiet = offers(world, { gated: [] });
+  t.false(quiet.hint.includes('wants'), 'and nothing where no gate is in the way');
+});

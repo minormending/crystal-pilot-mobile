@@ -2401,3 +2401,98 @@ test('what the title declared comes first, and is not found twice', async (t) =>
   t.true(list[1].inside === 5 && !list[1].found, 'the declared Center, not the found one');
   t.true(list[2].inside === 8 && list[2].found, 'and the one nobody described');
 });
+
+// --- declared gates ---------------------------------------------------------
+//
+// A *declared* gate, as against the write-off map, which is observed: one is
+// knowledge a title carries and the other is a walk that failed. The difference
+// is that a declared gate comes with a remedy, and the game's own words rarely
+// do -- the man on Route 32 says "Wait up! What's the hurry?", which is no help
+// to anybody.
+//
+// The one in `titles/crystal.js` was read out of the cartridge: his script
+// checks event $2d, and the only thing in the ROM that sets $2d is Elm's aide
+// in Violet's Pokémon Center, asking you to take the Egg.
+
+const gated = (events = []) => {
+  const gb = new FakeGameBoy({ wram: worldRam(sym, { events }) });
+  const title = {
+    names: { 1: 'Violet City', 10: 'ROUTE 32', 13: "Violet's Pokémon Center" },
+    gates: [{ from: 1, to: 10, event: 0x2d,
+              needs: 'Elm’s aide has an Egg for you', at: 13 }],
+  };
+  const j = new Journey(gb, new GameState(sym), null, null,
+                        { mapKey: async () => 1 }, () => {}, {}, title);
+  return j;
+};
+
+test('a gate is found by its leg, and only in the direction it faces',
+     async (t) => {
+  const j = gated();
+  t.ne(j.gateFor(1, 10), null, 'south out of Violet is gated');
+  t.eq(j.gateFor(10, 1), null, 'and walking north is not');
+  t.eq(j.gateFor(1, 99), null, 'nor is any other leg');
+});
+
+test('a gate whose event is unset says what to do about it', async (t) => {
+  const j = gated();
+  const wram = worldRam(sym, {});
+  t.contains(j.gateSaid(1, 10, wram), 'Egg', 'what is wanted');
+  t.contains(j.gateSaid(1, 10, wram), 'Pok', 'and where it is');
+});
+
+test('a gate whose event is set is not in the way any more', async (t) => {
+  const j = gated();
+  t.eq(j.gateSaid(1, 10, worldRam(sym, { events: [0x2d] })), null,
+       'the Egg has been taken, so there is nothing to say');
+});
+
+test('a cartridge that cannot read events says nothing rather than "shut"',
+     async (t) => {
+  // The distinction the feature rests on. `hasEvent` answers null where the
+  // symbol file has no `wEventFlags`, and null must not become a sentence
+  // claiming the road is closed -- an app that cannot tell has to stay quiet.
+  const gb = new FakeGameBoy({ wram: worldRam(sym, {}) });
+  const blind = new GameState({ ...sym, has: (n) => n !== 'wEventFlags',
+                                addr: sym.addr, bank: sym.bank });
+  const j = new Journey(gb, blind, null, null, { mapKey: async () => 1 },
+                        () => {}, {},
+                        { gates: [{ from: 1, to: 10, event: 0x2d,
+                                    needs: 'an Egg' }] });
+  t.eq(j.gateSaid(1, 10, worldRam(sym, {})), null, 'quiet, not confident');
+});
+
+test('a written-off leg reports the remedy in preference to the words',
+     async (t) => {
+  const j = gated();
+  j.shutLeg(1, 10, "Wait up! / What's the hurry?", 0,
+            j.gateSaid(1, 10, worldRam(sym, {})));
+  t.contains(j.shutSaid(1, 10), 'Egg', 'the thing to do about it');
+  t.false(j.shutSaid(1, 10).includes('hurry'),
+          'rather than the sentence that explains nothing');
+});
+
+test('taking the Egg reopens the road, with no badge having changed',
+     async (t) => {
+  // The other half of a declared gate, and the half a badge cannot do: the
+  // write-off would otherwise outlive the remedy and the road would stay shut
+  // for the rest of the session.
+  const j = gated();
+  const before = worldRam(sym, {});
+  j.shutLeg(1, 10, 'Wait up!', 0, j.gateSaid(1, 10, before));
+  t.eq(j.reopen(0, before), 0, 'nothing expires while the Egg is unclaimed');
+  t.true(j.isShut(1, 10), 'so the leg stays written off');
+  t.eq(j.reopen(0, worldRam(sym, { events: [0x2d] })), 1, 'and expires once it is');
+  t.false(j.isShut(1, 10), 'the road is offered again');
+});
+
+test('a leg written off for some other reason is not reopened by a gate',
+     async (t) => {
+  // `why` is what marks a write-off as a gate's. One without it is an ordinary
+  // refusal and only a badge expires it, which is the behaviour that was there
+  // before gates existed and has to stay.
+  const j = gated();
+  j.shutLeg(1, 10, 'a locked door', 0);
+  t.eq(j.reopen(0, worldRam(sym, { events: [0x2d] })), 0, 'not a gate, not swept');
+  t.true(j.isShut(1, 10), 'still written off');
+});

@@ -46,6 +46,7 @@ and the code disagree, the code is right and the section is a bug — see
 8. [The errands](#8-the-errands)
 9. [The interface](#9-the-interface)
    · [One thing at a time](#one-thing-at-a-time)
+   · [Gates: asking the cartridge what it wants](#gates-asking-the-cartridge-what-it-wants)
    · [Running the list](#running-the-list)
    · [The settings and the save card](#the-settings-and-the-save-card)
    · [Colour](#colour) · [What it remembers](#what-it-remembers)
@@ -429,7 +430,7 @@ watching.
 
 ### `symbols.js` — where things live
 
-<!-- covers: gen2/symbols.js @ 5f840d77cfc0 -->
+<!-- covers: gen2/symbols.js @ d64cb67b7911 -->
 
 Parses the `.sym` file into `name → { bank, addr }`. First definition wins;
 later duplicates are aliases and locals.
@@ -457,11 +458,13 @@ enforces it, so it is a fact about the build rather than a habit.
 
 ### `state.js` — what the game is doing right now
 
-<!-- covers: gen2/state.js @ 02d9f7a89910 -->
+<!-- covers: gen2/state.js @ 16cab56e48dc -->
 
 One snapshot, many answers: `inBattle`, `party`, `pos`, `onGrass`,
 `worldLoaded`, `menu`, `balls`, `items`, each party member's `status`, the
-enemy's HP, and `badges`.
+enemy's HP, and `badges`. Events are read on demand rather than in `read()`,
+because a snapshot is taken several times a second and nothing wants the whole
+flag table that often — a gate asks about one bit when it is asked about.
 
 **`badges` is a count, not a set**, and that is the whole of what it is for:
 the only question this app asks of a badge is *has anything changed since a
@@ -472,6 +475,15 @@ thing no cartridge writes down. Counted in *bits* across both bytes, because
 eight Johto badges live in one byte and anything counting bytes reads a full
 case as one. Optional, like the tilemap: `null` and `0` are kept apart, since a
 cartridge that cannot say is not a cartridge with a new game.
+
+**`hasEvent` is the same idea about anything else the game remembers.** Gen 2
+keeps one bit per scripted event in `wEventFlags`, which makes it the address
+that turns *something turned me back* into a question with an answer — every
+gate in the game is a script reading one of those bits. It reads and nothing
+more: which bit means what is a fact about a cartridge's story, so a title
+declares it. Null where the symbol file will not say, kept apart from false for
+the reason above and a sharper one — see [gates](#gates-asking-the-cartridge-what-it-wants),
+where the whole feature rests on it.
 
 **`status` is the field that was declared and never read**, for ten passes. The
 engine profile has carried `mon.status: 0x20` since it was written; `party()`
@@ -1100,7 +1112,7 @@ point those coordinates mean somewhere else entirely.
 
 ## 5. Crossing to the next map
 
-<!-- covers: gen2/journey.js gen2/world.js @ 9162522abf79 -->
+<!-- covers: gen2/journey.js gen2/world.js @ 4bd9a3383e6f -->
 
 A connection spans only part of a shared edge, so "walk west until something
 happens" does not work. `crossEdge()` closes the distance in stages, then tries
@@ -1317,7 +1329,7 @@ and a Pokémon Center restores PP, so the grind treats it as a trip it already
 knew how to make. See [the tiles that run a
 script](#8g-the-tiles-that-run-a-script-and-saying-hello) for the walk half.
 
-<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ a4697043092b -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ d508d11efd79 -->
 
 ### Which move, and which question
 
@@ -1918,7 +1930,7 @@ flowchart TD
 
 ## 7a. Five that act on where you already are
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ 4e3111716cf9 -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ 1a3f9ab868e7 -->
 
 Grind, hunt and catch all go *looking* for something. These five do the obvious
 thing with the situation you are already in, and take no parameters:
@@ -2189,7 +2201,7 @@ said *trainer battle: lost* **seven times**. One loss, reported seven ways.
 
 ## 7d. The counter, and the money it takes
 
-<!-- covers: gen2/menus.js gen2/state.js titles/crystal.js @ 3d5ac882ff81 -->
+<!-- covers: gen2/menus.js gen2/state.js titles/crystal.js @ ff48c2db2c35 -->
 
 Everything the pilot could do until now used what it found. **Shop** walks to a
 mart and buys, which is the first thing it does that spends rather than
@@ -2298,7 +2310,7 @@ counter and came away with **five potions and ¥1800**, in 49 seconds.
 
 ## 7b. Saving, and getting the save out
 
-<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ a4697043092b -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ d508d11efd79 -->
 
 ```mermaid
 flowchart TD
@@ -2540,7 +2552,7 @@ because that failure is only otherwise discovered by reaching for the undo.
 
 ## 8. The errands
 
-<!-- covers: titles/crystal.js gen2/journey.js @ db95069beed6 -->
+<!-- covers: titles/crystal.js gen2/journey.js @ ebb88ee0d621 -->
 
 Everything in this section is `crystal.js` — the only file in the app that names
 a Crystal map, a Crystal door or a Crystal NPC. What it stands on is
@@ -2872,7 +2884,7 @@ the bag" rather than "did we gain any".
 
 ## 8a. Finding the Centers and the Marts in the cartridge
 
-<!-- covers: gen2/world.js gen2/journey.js @ 9162522abf79 -->
+<!-- covers: gen2/world.js gen2/journey.js @ 4bd9a3383e6f -->
 
 The last thing in this app that had to be written out by hand. A title said
 where the Centers and the Marts were, so the pilot healed in the two towns
@@ -3024,7 +3036,7 @@ go](#8c-naming-a-city-is-a-feature).
 
 ## 8c. Naming a city is a feature
 
-<!-- covers: titles/crystal.js gen2/world.js @ d16cc7d51aa8 -->
+<!-- covers: titles/crystal.js gen2/world.js @ de6318813b32 -->
 
 The map graph has always reached most of Johto. A flood over its exits from
 Route 31 finds sixty-odd maps in five legs — and every feature in this app was
@@ -3108,7 +3120,7 @@ by, which is the only leg it can measure.
 
 ## 8d. A route the game itself refuses
 
-<!-- covers: gen2/journey.js gen2/state.js @ fa8c153f594d -->
+<!-- covers: gen2/journey.js gen2/state.js @ e6a03cbd0a17 -->
 
 The pass before this one taught the walk to *quote* the man who turns it back.
 This is the pilot doing something about it.
@@ -3215,7 +3227,7 @@ counting bytes reads a full case as one.
 
 ## 8e. Fighting everybody here
 
-<!-- covers: gen2/journey.js @ 04911f3d6ac9 -->
+<!-- covers: gen2/journey.js @ af3c335f728f -->
 
 The primitive a Gym needs. The pilot has been stopped on Route 32 for three
 passes by a man who wants Falkner beaten first, and beating Falkner means
@@ -3316,7 +3328,7 @@ costs however long it takes somebody to notice their money is gone.
 
 ## 8f. Going and winning a badge
 
-<!-- covers: gen2/journey.js gen2/state.js titles/crystal.js @ 617c9ea7e74c -->
+<!-- covers: gen2/journey.js gen2/state.js titles/crystal.js @ 0087e71866d8 -->
 
 The pilot has been turned back from Route 32 since the pass it learned to find
 Pokémon Centers. `reopen` throws away every written-off road the moment a badge
@@ -3399,7 +3411,7 @@ everybody is a heal whatever it says about itself.
 
 ## 8g. The tiles that run a script, and saying hello
 
-<!-- covers: gen2/world.js gen2/journey.js @ 9162522abf79 -->
+<!-- covers: gen2/world.js gen2/journey.js @ 4bd9a3383e6f -->
 
 Four passes of machinery pointed at one sentence a man says, and the reader that
 made it diagnosable is twelve lines.
@@ -3476,7 +3488,7 @@ This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ d251cdb6be25 -->
+<!-- covers: app/main.js index.html @ 7244923e8198 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -4025,7 +4037,7 @@ seconds by a page whose loop was supposedly running.
 
 ### One thing at a time
 
-<!-- covers: app/main.js @ eb13b6bf86f9 -->
+<!-- covers: app/main.js @ db122426d416 -->
 
 One Game Boy, one joypad, one canvas — so a great deal of this app is about
 making sure two things are never driving them at once. There are three claims,
@@ -4165,9 +4177,118 @@ before a step is taken, so a stopped walk does not move at all.
 
 </details>
 
+### Gates: asking the cartridge what it wants
+
+<!-- covers: gen2/state.js gen2/journey.js titles/crystal.js @ 0087e71866d8 -->
+
+Two kinds of closed road, and the difference is everything:
+
+| | **Observed** — `shut` | **Declared** — `gates` |
+| --- | --- | --- |
+| where it comes from | a walk that failed | a title that knows |
+| what it carries | the game's own words | a remedy |
+| when it is known | after two minutes of walking | before setting off |
+| what expires it | a badge since | the gate's own event |
+
+The observed half has been here since v137 and earns its keep. What it cannot
+do is tell you what to *do*: the man on Route 32 says *"Wait up! What's the
+hurry?"*, which is a sentence with no instruction in it, and the
+[thirty-sixth pass](PROVEN.md#a-thirty-sixth-pass-the-badge-and-the-claim-that-came-with-it)
+guessed the badge, measured it five times with the badge in hand, watched him
+put the player back every time, and honourably deleted the guess.
+
+**`state.hasEvent` is the primitive that closes it.** Gen 2 keeps one bit per
+scripted event in `wEventFlags`, and every gate in the game is a script reading
+one of them — so a route that turns the pilot back is not mysterious, it is a
+bit that is zero.
+
+```mermaid
+flowchart LR
+    W["a walk is refused"] --> G{"does the title<br/>declare a gate<br/>for this leg?"}
+    G -->|"no"| S["write it off with<br/>the game's own words"]
+    G -->|"yes"| E{"hasEvent"}
+    E -->|"false"| R["write it off with<br/><b>the remedy</b>"]
+    E -->|"true"| S
+    E -->|"null — cannot read"| S
+    R --> H["the hint says it before<br/>the next walk is offered"]
+    R --> X["reopen sweeps it the<br/>moment the event is set"]
+```
+
+**Null is not false, and the whole feature rests on it.** `hasEvent` answers
+null where the symbol file has no `wEventFlags`, and `gateSaid` turns that into
+*say nothing* rather than into *the road is shut*. A gate the app cannot read
+must never be reported as one that is closed: that converts "I do not know"
+into a confident wrong answer, which is this repository's most expensive class
+of bug and the one the badge guess above was an instance of.
+
+**`reopen` had to learn a second cause.** It expires a write-off when a badge
+has been won since, which is the only thing that could ever open a road before
+gates existed. A gate's event is a different cause with no badge attached —
+take the Egg and the man stops turning you back — so a write-off marked with a
+remedy is swept the moment its event is set. Without that the write-off
+outlives the remedy and the road stays shut for the rest of the session, which
+is the exact failure `reopen` exists to prevent, one cause along.
+
+<details>
+<summary><b>Advanced detail:</b> how the gate was found, byte by byte</summary>
+
+No emulator was involved. The Browser pane was hidden for this pass, which
+makes a running cartridge unavailable — and the ROM and the symbol file are
+enough, which is worth knowing for next time.
+
+**One.** The symbol file names every script in the game, and label names are
+written by the people who wrote the game:
+
+```
+64:446f Route32CooltrainerMScript
+64:4470 Route32CooltrainerMContinueScene
+64:4489 Route32CooltrainerMContinueScene.GoToSproutTower
+64:448f Route32CooltrainerMContinueScene.GiveMiracleSeed
+64:449f Route32CooltrainerMContinueScene.DontHaveZephyrBadge
+64:44a5 Route32CooltrainerMContinueScene.GotMiracleSeed
+```
+
+**Two.** The bytes at that address, with `bank * 0x4000 + (addr - 0x4000)` for
+the file offset. The command set is worked out from the labels rather than
+looked up: `Route32Noop1Scene` is one byte, `91`, so `end` is `$91`; a
+three-byte gap before a `dw` that lands on a `.Text` symbol makes `4c`
+`writetext`; a branch whose target is `.DontHaveZephyrBadge` makes the `08`
+before it `iffalse`. What comes out is:
+
+```
+checkevent $5d   iftrue .GotMiracleSeed
+checkflag  $1b   iffalse .DontHaveZephyrBadge
+checkevent $2d   iftrue .GiveMiracleSeed
+writetext Route32CooltrainerMText_AideIsWaiting
+```
+
+**Three.** The text, decoded with the same character table `romdata.js` uses
+for species and item names — the app already had to know Gen 2's encoding:
+
+> “Some guy wearing glasses was looking for you. See for yourself. He's
+> waiting for you at the POKéMON CENTER.”
+
+**Four**, and this is the step that turns a reading into a fact: **search the
+whole ROM for `33 2d 00`** — `setevent $2d` — and ask the symbol file whose
+script each hit lands in. There is exactly one:
+`VioletPokecenter1F_ElmsAideScript.AskTakeEgg`. Elm's aide, in Violet's
+Pokémon Center, asking you to take the Egg.
+
+One other hit came back, inside `DunsparceFrames.frame3` — three bytes of
+animation data that happen to read as that instruction. Worth saying because it
+is what the method looks like when it is working: a byte search over 2MB finds
+coincidences, and the symbol file is what tells them from scripts.
+
+**And the aide's own script says what taking it involves**, which is why the
+pilot does not do it: `faceplayer`, `opentext`, a `yesorno`, a check that the
+party is not six, `giveegg TOGEPI, 5`, and then `setevent $2d`. A yes-or-no is
+a conversation.
+
+</details>
+
 ### Running the list
 
-<!-- covers: app/rows.js app/main.js @ f7599d3ace01 -->
+<!-- covers: app/rows.js app/main.js @ 45e7ff811e3b -->
 
 The app has spent forty passes learning to answer one question — *what can the
 pilot do here, and which of those is worth most?* — and twenty showing the
@@ -4264,7 +4385,7 @@ to deposit your last Pokémon.
 
 ### The settings and the save card
 
-<!-- covers: index.html app/main.js @ d251cdb6be25 -->
+<!-- covers: index.html app/main.js @ 7244923e8198 -->
 
 The pilot's own list got a glyph column, shorter names and a slot to fill in
 v165. These two cards did not, and reading them found that they had a different
@@ -4892,7 +5013,7 @@ they have been installed.
 
 ### Watching the other device's screen
 
-<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ b063c34f8760 -->
+<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ f23eb7ce5ac5 -->
 
 One device shows its screen; the other watches it, and plays it if the first
 one says so. The picture goes straight between them over WebRTC and never
@@ -5177,7 +5298,7 @@ and it reports 45 because that is how many symbols it has.
 ```mermaid
 flowchart LR
     F["the .sym file<br/>1.8MB, 58,456 symbols"] --> S["Symbols<br/>the parsed table"]
-    S -->|"digest(SHARED_SYMBOLS)"| D["{name: [bank, addr]}<br/>47 entries, ~1KB"]
+    S -->|"digest(SHARED_SYMBOLS)"| D["{name: [bank, addr]}<br/>53 entries, ~1KB"]
     D --> R[["the room"]]
     R --> D2["the same 47 entries"]
     D2 -->|"Symbols.fromDigest"| T["a table that behaves<br/>like the parsed file"]
@@ -5505,7 +5626,7 @@ about that code did not.
 
 ### The other checks
 
-<!-- covers: tools/check-app @ 83ed7b6a7400 -->
+<!-- covers: tools/check-app @ 20c5d178de99 -->
 
 `tools/check-app` runs everything that can be verified without a ROM:
 
@@ -5537,7 +5658,7 @@ tools/check-app contrast     # or one group
 | `markers` | nothing here draws an affordance the vendor stylesheet already draws |
 | `deadcss` | no single-class rule is overridden on every element that could carry it |
 | `labels` | every job row is named after its own key, which is the word the runner prints |
-| `testtable` | `DEVELOPING.md`'s table of test files says what is actually in `tests/cases` |
+| `counts` | every number in the prose the repository can compute is right — `tools/renumber` writes them in |
 
 Half of that table was missing until the marker above was added: six groups had
 been written and never listed, so the document described five checks while
@@ -5556,13 +5677,18 @@ card](#the-settings-and-the-save-card).
 
 The two after them are about *claims* rather than about code that runs. `labels`
 keeps a word the runner builds from a key in step with the word on the row;
-`testtable` keeps a count in prose honest, and it exists because
-`DEVELOPING.md` said **143 tests in seventeen files** while 576 ran in
-twenty-three, with two diagrams in the same document disagreeing with the prose
-and with each other. `docs-check` could not see it: that tool watches sections
-whose marker names the *source* files they describe, and no section claims to
-cover `tests/`. A table about the tests went out of date in silence one
-directory away from the machinery built to prevent exactly that.
+`counts` keeps every number in the prose that the repository can compute
+honest, and it exists because two of them have shipped wrong. `DEVELOPING.md`
+said **143 tests in seventeen files** while 576 ran in twenty-three, with two
+diagrams in the same document disagreeing with the prose and with each other;
+and the symbol digest was drawn as **47 entries** while it carried 53.
+
+`docs-check` could not see either. That tool watches sections whose marker
+names the *source* files they describe and hashes them, so it catches prose
+that was not re-read when code moved — and cannot catch a number that was
+re-read and left alone. `tools/renumber` is the writing half, sharing one table
+of claims with the check in `tools/counts.py`, because a writer and a checker
+that disagree about what a number means is worse than having neither.
 
 CI (`.github/workflows/checks.yml`) runs `check-app`, the behaviour tests and
 `docs-check` on every push. There is deliberately no emulator in CI: driving

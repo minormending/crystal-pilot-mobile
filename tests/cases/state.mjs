@@ -217,3 +217,54 @@ test('an engine profile with fewer money bytes reads fewer', async (t) => {
   const s = two.read(worldRam(sym, { money: 0x0bb8 }));
   t.eq(s.money, 0x000b, 'the top two of the three');
 });
+
+// --- the game's own record of what has happened -----------------------------
+//
+// Every scripted gate in Gen 2 is a script reading one bit of `wEventFlags`,
+// which makes this the address that turns "something turned me back" into a
+// question with an answer. Read out of the cartridge: the man on Route 32
+// checks event $2d before letting anyone south out of Violet, and the only
+// script in the ROM that sets $2d is Elm's aide in Violet's Pokémon Center,
+// asking you to take the Egg.
+
+test('an event that has happened reads as true, and its neighbours do not',
+     async (t) => {
+  const sym = symbols();
+  const state = new GameState(sym);
+  const s = worldRam(sym, { events: [0x2d] });
+  t.true(state.hasEvent(s, 0x2d), 'the bit that was set');
+  t.false(state.hasEvent(s, 0x2c), 'the one below it');
+  t.false(state.hasEvent(s, 0x2e), 'the one above it');
+  t.false(state.hasEvent(s, 0x5d), 'and one in another byte');
+});
+
+test('events are numbered across the bytes, low bit of the first byte first',
+     async (t) => {
+  // The same numbering `hasBadge` uses, and the same numbering the game's own
+  // EventFlagAction walks. Bit 8 is the low bit of the *second* byte, which is
+  // the arithmetic worth pinning: an off-by-one here reads a neighbouring
+  // event and answers confidently about the wrong gate.
+  const sym = symbols();
+  const state = new GameState(sym);
+  const s = worldRam(sym, { events: [0, 8, 15] });
+  t.true(state.hasEvent(s, 0), 'the first bit of the first byte');
+  t.true(state.hasEvent(s, 8), 'the first bit of the second');
+  t.true(state.hasEvent(s, 15), 'the last bit of the second');
+  t.false(state.hasEvent(s, 7), 'the last bit of the first is not set');
+  t.false(state.hasEvent(s, 16), 'nor the first of the third');
+});
+
+test('a cartridge that will not say answers null, not false', async (t) => {
+  // The distinction the whole feature rests on. A gate the app cannot read must
+  // never be reported as a gate that is closed: that turns "I do not know" into
+  // a confident wrong answer, which is this repository's most expensive class
+  // of bug.
+  const sym = symbols();
+  const blind = new GameState({ ...sym, has: (n) => n !== 'wEventFlags',
+                                addr: sym.addr, bank: sym.bank });
+  const s = worldRam(sym, { events: [0x2d] });
+  t.eq(blind.hasEvent(s, 0x2d), null, 'no wEventFlags, no answer');
+  const state = new GameState(sym);
+  t.eq(state.hasEvent(s, null), null, 'and no bit asked about is no answer');
+  t.eq(state.hasEvent(s, undefined), null, 'either way of not asking');
+});

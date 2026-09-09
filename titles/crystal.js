@@ -33,6 +33,10 @@ const CHERRYGROVE_CITY = key(26, 3);
 const CHERRYGROVE_POKECENTER = key(26, 5);
 const ROUTE_30 = key(26, 1);
 const ROUTE_31 = key(26, 2);
+// Group 10 is the Violet area, and Route 32 is the road south out of it. Its
+// number was read off the write-off this repository spent a pass chasing:
+// `2561>2573` is Route 32 to its own Pokémon Center, so Route 32 is 2561.
+const ROUTE_32 = key(10, 1);
 const MR_POKEMONS_HOUSE = key(26, 10);
 // CherrygroveCity warp_events again: the Mart is the door west of the Center.
 // Measured by reading Cherrygrove's own warp list off the cartridge -- five
@@ -184,6 +188,42 @@ export const crystal = {
     // is not this badge. See docs/PROVEN.md.
     { map: VIOLET_CITY, inside: VIOLET_GYM, door: [18, 17],
       leader: 'FALKNER', leaderAt: [5, 1], badge: 0 },
+  ],
+  // --- roads the game keeps shut, and what opens them ----------------------
+  //
+  // **Read out of the cartridge rather than guessed at, and the difference is
+  // the whole entry.** The thirty-sixth pass wrote `opens: 'the road south out
+  // of Violet'` against the Zephyr Badge, measured it five times with the badge
+  // in hand, watched the man put the player back every time, and deleted the
+  // claim with an honest "whatever he wants, it is not this badge".
+  //
+  // This is what he wants, from his own script. `Route32CooltrainerMScript` is
+  // `faceplayer` falling straight into `Route32CooltrainerMContinueScene`,
+  // which reads:
+  //
+  //     checkevent $5d   iftrue .GotMiracleSeed      -- already been given it
+  //     checkflag $1b    iffalse .DontHaveZephyrBadge -- "have you gone to the GYM?"
+  //     checkevent $2d   iftrue  .GiveMiracleSeed     -- hands it over, sets $5d
+  //     writetext Route32CooltrainerMText_AideIsWaiting
+  //
+  // and that last text, decoded from the ROM, is: *"Some guy wearing glasses
+  // was looking for you. See for yourself. He's waiting for you at the POKéMON
+  // CENTER."*
+  //
+  // The only script in the whole ROM that sets `$2d` is
+  // `VioletPokecenter1F_ElmsAideScript.AskTakeEgg` -- so the road south wants
+  // **the Egg, from Elm's aide, in Violet's Pokémon Center**, with the badge
+  // already in the case. Found by searching the ROM for `setevent $2d` and
+  // asking the symbol file whose script that byte sits in, which is a method
+  // rather than a lucky guess and is written up in docs/PROVEN.md.
+  //
+  // `event` is the bit `hasEvent` reads; `needs` is what to do about it; `at`
+  // is where. The pilot cannot yet take the Egg for you -- the aide asks a
+  // yes-or-no question and that is a conversation, not a walk -- so this makes
+  // the road's own refusal into an instruction instead of a mystery.
+  gates: [
+    { from: VIOLET_CITY, to: ROUTE_32, event: 0x2d,
+      needs: 'the Egg from Elm\u2019s aide', at: VIOLET_POKECENTER },
   ],
   grassyMaps: [ROUTE_29, ROUTE_30, ROUTE_31],
   // Where things can be bought, and how to get to the counter.

@@ -197,6 +197,11 @@ const WRAM_NAMES = [
   // that opens one, so a cartridge that will not say has entries that never
   // expire, and that is a different behaviour worth being able to reach.
   ['wJohtoBadges', 1], ['wKantoBadges', 1],
+  // The game's own record of what has happened, one bit per event. Sixteen
+  // bytes is enough for every event this app reads and far short of the
+  // cartridge's own table, which is the right trade for a fake: the addresses
+  // are relative and only the ones a test sets are ever looked at.
+  ['wEventFlags', 16],
   // The map, so a CollisionMap can be built at all. wOverworldMapBlocks is the
   // real size -- a stride of mapWidth+6 over a tall map indexes a long way in.
   ['wOverworldMapBlocks', 0x510], ['wMapWidth', 1], ['wMapHeight', 1],
@@ -341,6 +346,10 @@ export function worldRam(sym, {
   // How many badges are in the case, as a count -- the bits are set from the
   // bottom up, because which bit is which badge is not something this app reads.
   badges = 0,
+  // Which scripted events have happened, as a list of bit numbers. A list
+  // rather than a count, because *which* event is the whole question here: a
+  // gate names one bit and nothing else about the table matters.
+  events = [],
   // The map's size in *blocks*; a block is two tiles each way. `objects` are
   // MAPOBJECT entries, whose coordinates the cartridge stores four higher than
   // the map's own -- given here the way the game gives them, so a test that
@@ -388,6 +397,10 @@ export function worldRam(sym, {
   for (let i = 0; i < badges; i++) {
     const at = sym.addr('wJohtoBadges') + (i >> 3);
     wram[at - 0xc000] |= 1 << (i & 7);
+  }
+  for (const bit of events) {
+    const at = sym.addr('wEventFlags') + (bit >> 3);
+    wram[at - 0xc000] |= 1 << (bit & 7);
   }
   w8(wram, sym.addr('wMenuDataItems'), menuItems);
   w8(wram, sym.addr('wMenuBorderTopCoord'), menuTop);

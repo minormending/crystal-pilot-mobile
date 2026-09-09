@@ -21,6 +21,8 @@
  *   gym               the nearest unbeaten Gym as {at, leader, legs}, or null
  *   healShut          what the game said last time it turned the pilot back
  *                     from that place, or null -- see `Journey.shut`
+ *   gated             roads out of here the game is keeping shut, and what
+ *                     opens each: [{ where, needs }] -- see `Journey.gatesFrom`
  *   places            named maps reachable from here, [{ key, name, legs }]
  *   travelTo          the map key chosen to walk to, or null
  *   huntable          how many species appear here at this hour
@@ -37,6 +39,7 @@ const SAYING_MAX = 46;
 export function describeRows(s, ctx = {}) {
   const { rom = null, target = 5, huntWanted = null, ballId = null,
           savedThisSession = false, healPlace = null, healShut = null,
+          gated = [],
           gym = null,
           places = [], travelTo = null, wilds = null, takeables = [],
           bagHeal = null, bagCure = null, marts = false, shopFor = null,
@@ -648,6 +651,16 @@ export function describeOffers(s, ctx = {}) {
   // are what point at which one.
   if (afoot && ctx.healShut && s.party.some((m) => m.hp < m.maxHp)) {
     hint.push(`every way to heal is shut — ${ctx.healShut}`);
+  }
+  // **A road the game is keeping shut, and the thing that opens it.** Without
+  // this a gated destination is written off after one failed walk and then
+  // simply stops being offered: Travel loses a place, says nothing, and the
+  // person is left to work out that the app is not broken. Only where the app
+  // can actually read the gate -- `gatesFrom` returns nothing on a cartridge
+  // whose symbol file cannot say, because "I do not know" must not be dressed
+  // up as "it is shut".
+  for (const g of ctx.gated || []) {
+    hint.push(`${g.where} wants ${g.needs}`);
   }
   // Nobody near, and somebody further on. This is the one hint that is purely
   // about distance, and it is here rather than in the row because the row is

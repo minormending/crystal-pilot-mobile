@@ -118,6 +118,10 @@ export class GameState {
       // without it a route the pilot was turned back from stays written off for
       // the rest of the session instead of being re-tried once a badge is won.
       badges: symbols.has('wJohtoBadges') ? symbols.addr('wJohtoBadges') : null,
+      // The game's own record of what has happened. Every scripted gate in Gen
+      // 2 is a bit in here, so this is the address that turns "something turned
+      // me back" into a question with an answer.
+      events: symbols.has('wEventFlags') ? symbols.addr('wEventFlags') : null,
       curPocket: symbols.addr('wCurPocket'),
       curItem: symbols.addr('wCurItem'),
       windowStack: symbols.addr('wWindowStackSize'),
@@ -240,6 +244,38 @@ export class GameState {
   hasBadge(wram, bit) {
     if (this.a.badges === null || bit === null || bit === undefined) return null;
     const byte = b(wram, this.a.badges + (bit >> 3));
+    return (byte & (1 << (bit & 7))) !== 0;
+  }
+
+  /**
+   * Has a particular scripted thing happened yet?
+   *
+   * **This is the address that turns a locked road into a question.** Gen 2
+   * keeps one bit per event in `wEventFlags`, and every gate in the game is a
+   * script reading one of them -- so a route that turns the pilot back is not
+   * mysterious, it is a bit that is zero. Read out of the cartridge:
+   *
+   *   * the man on Route 32 checks event `$2d` before he will let anyone south
+   *     out of Violet, and gives a MIRACLE SEED when it is set;
+   *   * the only script in the ROM that sets `$2d` is
+   *     `VioletPokecenter1F_ElmsAideScript.AskTakeEgg` -- Elm's aide, in the
+   *     Violet City Pokémon Center, asking you to take the Egg.
+   *
+   * Which *bit* means *what* is a fact about a cartridge's story, so a title
+   * declares it and this only reads. The numbering is the same as
+   * `hasBadge`: an index across the bytes, low bit of the first byte first,
+   * which is how the game's own `EventFlagAction` walks them.
+   *
+   * Null where the cartridge will not say, kept apart from false for the reason
+   * `badgeCount` keeps null apart from nought: one means *cannot tell*, the
+   * other means *not yet*. A gate the app cannot read must not be reported as a
+   * gate that is closed -- that would turn "I do not know" into a confident
+   * wrong answer, which is this repository's most expensive class of bug.
+   */
+  hasEvent(wram, bit) {
+    if (this.a.events === null || bit === null || bit === undefined) return null;
+    const byte = b(wram, this.a.events + (bit >> 3));
+    if (byte === undefined) return null;
     return (byte & (1 << (bit & 7))) !== 0;
   }
 

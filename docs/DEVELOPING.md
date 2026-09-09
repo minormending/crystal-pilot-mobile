@@ -15,7 +15,7 @@ what CI checks and what the pre-commit hook blocks on.
 ```mermaid
 flowchart LR
     E[an edit] --> H{{".githooks/pre-commit"}}
-    H --> T["./run-tests<br/>581 behaviour tests"]
+    H --> T["./run-tests<br/>592 behaviour tests"]
     H --> C["tools/check-app<br/>22 groups"]
     H --> D["tools/docs-check<br/>25 tracked sections"]
     T --> OK[commit]
@@ -39,12 +39,12 @@ git config core.hooksPath .githooks
 ./run-tests -v         # notes and stack lines
 ```
 
-581 tests in 23 files, and what each file is about says more than the count:
+592 tests in 23 files, and what each file is about says more than the count:
 
 | file | tests | what it pins down |
 | --- | --- | --- |
-| `journey.mjs` | 130 | the walking: routes, doors, shut legs, healers, gyms, and the map graph |
-| `rows.mjs` | 94 | what every row and offer says, when its button works, and what the runner picks |
+| `journey.mjs` | 137 | the walking: routes, doors, shut legs, healers, gyms, and the map graph |
+| `rows.mjs` | 95 | what every row and offer says, when its button works, and what the runner picks |
 | `menus.mjs` | 53 | the order the START menu is driven in, and what is closed between tries |
 | `battle.mjs` | 44 | whose turn it is, which Pokémon is out, and a win from a whiteout |
 | `collision.mjs` | 34 | which tiles can be walked, and which have somebody standing on them |
@@ -52,7 +52,7 @@ git config core.hooksPath .githooks
 | `grind.mjs` | 22 | what a grind says while it works, and the bounds that make it stop |
 | `world.mjs` | 22 | reading a cartridge's own maps: sizes, warps, objects and triggers |
 | `control.mjs` | 18 | the task lifecycle: stopping, failing, undo points, and loops that must end |
-| `state.mjs` | 16 | reading the party, the map, the badges and the battery out of work RAM |
+| `state.mjs` | 19 | reading the party, the map, the badges and the battery out of work RAM |
 | `romdata.mjs` | 15 | the cartridge's own character encoding and tables, byte by byte |
 | `titles.mjs` | 15 | choosing a profile for a cartridge, and falling back to generic |
 | `remember.mjs` | 14 | which remembered choices are believed, and which dropped |
@@ -123,7 +123,7 @@ section gives. Everything by hand runs against a local build.
 
 ```mermaid
 flowchart BT
-    C["the app"] --> T["./run-tests<br/>581 behaviour tests"]
+    C["the app"] --> T["./run-tests<br/>592 behaviour tests"]
     C --> A["tools/check-app<br/>22 groups"]
     C --> D["tools/docs-check<br/>31 tracked sections"]
     C --> V["tools/coverage<br/>what the suite never runs"]
@@ -327,10 +327,27 @@ fine and is wrong at run time:
 | `markers` | nothing here draws an affordance the vendor stylesheet already draws — replacing Pico's chevron is fine, having two is not |
 | `deadcss` | no single-class rule is overridden on every element that could carry it, which is how `.slots{display:block}` lost to `.param{display:flex}` |
 | `labels` | every job row is named after its own key, capitalised — which is the word the runner prints, built from the key rather than from a second table |
-| `testtable` | the table above says what is actually in `tests/cases` — it claimed 143 tests in seventeen files while 576 ran in twenty-three |
+| `counts` | every number in the prose that the repository can compute is right — the test table, the group count, the digest's size, the audit's rows. Two have shipped wrong: *143 tests in seventeen files* while 576 ran, and a digest drawn as 47 entries carrying 53 |
 
-`tools/docs-check` is the other half, and it checks the prose rather than the
-code: a documentation section opts in with a marker naming the files it covers
+`tools/renumber` is the writing half of `counts`, and the reason there is one:
+a check that can only say no is a check somebody edits around at the end of a
+long pass.
+
+```
+tools/renumber           # write the current numbers into the prose
+tools/renumber --check   # say what has drifted, change nothing
+```
+
+The table of what counts as a computable number lives in `tools/counts.py` and
+is shared by both, because a writer and a checker that disagree about what a
+number means is worse than having neither: the writer would keep "fixing" the
+docs into a shape the checker rejects.
+
+`tools/docs-check` is the third of these and watches something different again
+— prose that was not *re-read* when the code under it moved. It cannot catch a
+number that was re-read and left alone, which is what `counts` is for:
+
+ a documentation section opts in with a marker naming the files it covers
 and the hash those files had when it was last read against them.
 
 ```

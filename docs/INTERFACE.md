@@ -856,6 +856,36 @@ the collapsed paragraph was counted as visible and the improvement looked like
 then re-measured against the pre-pass build on the same origin rather than
 trusted from memory.
 
+## A road that is shut, and the thing that opens it
+
+The hint under the offers has one more thing it can say:
+
+> ROUTE 32 wants the Egg from Elm's aide
+
+which exists because of what happens without it. A gated road is written off
+after one failed walk, and a written-off place simply *stops being offered* —
+so Travel quietly loses a destination and says nothing, and the person is left
+working out whether the app is broken.
+
+The sentence is not a guess. It comes from the cartridge's own script, read out
+of the ROM: the man on Route 32 checks an event bit, and the only thing in the
+game that sets that bit is Elm's aide in Violet's Pokémon Center. The reasoning
+is in [docs/CODE.md](CODE.md#gates-asking-the-cartridge-what-it-wants).
+
+**Two rules keep it honest**, and they are the same two rules this page keeps
+arriving at:
+
+* **It is drawn only where there is something to do about it.** A road that is
+  open says nothing; a road that is shut says the remedy. There is no row, no
+  greyed control and no badge — a hint is the right size for a fact you act on
+  somewhere else.
+* **Silence where the app cannot tell.** These gates are bits in the game's own
+  memory, reached through the symbol file, so a cartridge whose `.sym` does not
+  name `wEventFlags` gets no hint at all. *I do not know* dressed up as *it is
+  shut* is worse than saying nothing, and this page has the receipts: the same
+  road was documented for two passes as opening with a badge, which had been
+  measured false on the cartridge and was still in the usage guide.
+
 ## One more row, and it runs the other nine
 
 The ranking has been the app's central claim since v89: *what can the pilot do
@@ -995,4 +1025,4 @@ So this page carries a marker naming the files it describes and the hash they
 had when it was last read against them. `tools/docs-check` reports it when they
 move, and the pre-commit hook blocks on that report.
 
-<!-- covers: index.html app/main.js app/rows.js @ 2ba430f4c73e -->
+<!-- covers: index.html app/main.js app/rows.js @ 5e4582050318 -->

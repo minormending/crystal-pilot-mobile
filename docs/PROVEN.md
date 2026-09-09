@@ -339,14 +339,14 @@ second, which is there so the core's own waits finish, not to run a game.
 ## The audits, and how each defect was actually found
 
 Everything above was watched happening. This section was the exception, and the
-exception was the point of it: after the ROM-hack work shipped, **forty-one**
-passes went looking for defects in code that already worked, and found **173** —
+exception was the point of it: after the ROM-hack work shipped, **forty-two**
+passes went looking for defects in code that already worked, and found **177** —
 a handful of them created by a fix on the way, which are in the table in italics
 because they are a different kind of thing. None of them announced itself.
 
 **Reading found twenty-three**, more than any other single method, which is why
 it comes first in the table and why it is worth doing before touching the game.
-But the interesting number is the tail: the remaining hundred and fifty were
+But the interesting number is the tail: the remaining hundred and fifty-four were
 found almost as many different ways, and almost every entry in that column is a sentence rather than
 a category — *measuring the fix*, *asking a second tile*, *feeding it the wrong
 thing*, *writing a cartridge Crystal is not*, *a test, before the cartridge*,
@@ -551,6 +551,10 @@ exactly why nothing failed.
 | 41 | *a handler that declines before reaching `runTask` answers `undefined`, and the runner would have stopped dead with a blank bar* | *—* | *reading the three outcomes* |
 | 41 | nothing asserted any of `install`'s three refusals — the size, the save marker, and whether a ROM is loaded — which are what stand between a `.sav` file and somebody's live game | loading a file of the wrong size | mutation, on the module holding the saves |
 | 41 | `sameKey` normalises both sides and only one side was ever tested, because every caller today happens to pass the ArrayBuffer first | — | the same |
+| 42 | **`docs/USING.md` said "Route 32 is shut until you beat Falkner"** — a claim the thirty-sixth pass had already disproved on the cartridge, still sitting in the usage guide two passes later | reading the page | reading the ROM, and then re-reading the page |
+| 42 | the symbol digest was drawn as 47 entries while it carried 53 | — | adding the fifty-third |
+| 42 | a write-off marked by a gate would have outlived its remedy: `reopen` only ever watched badges, and taking the Egg changes no badge | take the Egg after being turned back once | writing the second cause and asking what expires it |
+| 42 | *the first gate sentence was a clause, not a noun phrase, so the hint read "ROUTE 32 wants Elm's aide has an Egg for you"* | *the hint under the offers* | *composing the two sentences it has to fit* |
 
 Five things in that table are worth more than the individual rows.
 
@@ -2860,6 +2864,70 @@ Nothing came from the cartridge this pass, and that is worth saying plainly: the
 Browser pane was hidden, and a fresh ROM load on a hidden pane boots nothing at
 all. The half of the feature that a live game would have exercised — eight real
 jobs in a row — is tested against fakes and has not yet been watched.
+
+### A forty-second pass: reading the cartridge instead of running it
+
+The Browser pane was hidden again, so no game could be booted — and the pass
+that could not run the cartridge is the one that finally answered a question
+two earlier passes had left open. **The ROM and the symbol file were enough.**
+
+The [thirty-sixth pass](#a-thirty-sixth-pass-the-badge-and-the-claim-that-came-with-it)
+had claimed the road south out of Violet opens with the Zephyr Badge, measured
+it five times with the badge in hand, watched the man put the player back every
+time, and deleted the claim with an honest *whatever he wants, it is not this
+badge*. That was the right call and it left a hole: the app knew a road was
+shut and had nothing to say about it.
+
+Four steps, no emulator:
+
+1. **The symbol file names every script**, and the names were written by the
+   people who wrote the game: `Route32CooltrainerMContinueScene` has branches
+   called `.DontHaveZephyrBadge`, `.GiveMiracleSeed` and `.GotMiracleSeed`.
+2. **The bytes decode from the labels rather than from a manual.**
+   `Route32Noop1Scene` is one byte, `91`, so `end` is `$91`; a `dw` that lands
+   on a `.Text` symbol makes the byte before it `writetext`; a branch onto
+   `.DontHaveZephyrBadge` makes the byte before *that* `iffalse`.
+3. **The text decodes with the app's own character table** — `romdata.js` had
+   to learn Gen 2's encoding for species and item names years of passes ago.
+   The man's fourth branch says: *"Some guy wearing glasses was looking for
+   you… he's waiting for you at the POKéMON CENTER."*
+4. **Then search the whole ROM for `setevent $2d`** and ask the symbol file
+   whose script each hit lands in. Exactly one: Elm's aide, in Violet's Pokémon
+   Center, asking you to take the Egg.
+
+So the road wants **both** the badge and the Egg, and the Egg is the half
+nobody guesses because the man never quite says it. The thirty-sixth pass's
+measurement was correct in every particular and its conclusion was
+under-determined: it proved the badge was not *sufficient*, and read that as
+the badge not being *involved*.
+
+**One other hit came back from the byte search**, three bytes inside
+`DunsparceFrames.frame3` that happen to read as that instruction. Worth
+recording because it is what the method looks like when it is working: a byte
+search over 2MB finds coincidences, and the symbol file is what tells them from
+scripts.
+
+**And the usage guide had been carrying the disproved claim for two passes.**
+*"Route 32 is shut until you beat Falkner in Violet City"* was still in
+`docs/USING.md`, in a section about how the pilot tells you what the game said.
+`docs-check` cannot catch that: it watches whether prose was re-read when the
+*code* moved, and this was prose that went wrong when a *measurement* moved.
+Nothing in the repository connects a deleted claim in one document to the same
+claim in another, which is worth knowing about the machinery here rather than
+worth building a tool for.
+
+**What the app does with it, and what it deliberately does not.** The hint
+under the offers reads *ROUTE 32 wants the Egg from Elm's aide* before you go
+anywhere; a walk that is refused reports the remedy instead of the quote; and
+`reopen` sweeps the write-off the moment the event is set, which needed a
+second cause because taking the Egg changes no badge. The pilot does **not**
+take the Egg: the aide asks a yes-or-no question, and answering questions is
+not walking — the same line this app draws around choosing your starter.
+
+The one thing it will never do is guess. `hasEvent` answers null where the
+symbol file cannot say, and `gateSaid` turns null into silence rather than into
+*the road is shut* — because *I do not know* dressed up as a fact is exactly
+the shape of the claim this pass spent its time deleting.
 
 ## The part that had to be redesigned
 

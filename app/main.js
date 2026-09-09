@@ -210,6 +210,11 @@ let autoOn = false, autoStop = false;
 let bootStage = 'start';
 // Where healing would go from here, worked out once per refresh.
 let healPlace = null, healShut = null;
+// Roads out of here the game is keeping shut, and what opens each. Read from
+// the same snapshot the rest of the refresh uses, because a gate is a bit in
+// work RAM and asking for it separately would be a second read of the same
+// memory a frame later.
+let gated = [];
 // The nearest Gym the pilot has not won a badge from, worked out once a refresh
 // the same way the nearest Center is. Null on a cartridge with no Gyms declared,
 // and null once they are all beaten -- the badge says which.
@@ -1662,7 +1667,7 @@ function offersNow(s) {
   // first Poké Balls is a scripted walk to particular places, and a cartridge
   // nobody has described has no such walk.
   const ctx = { rom: romdata, target, huntWanted, ballId, savedThisSession,
-                healPlace, healShut, gym: gymNext,
+                healPlace, healShut, gated, gym: gymNext,
                 canFetch: typeof boot.eggErrand === 'function',
                 places: travelPlaces, travelTo, huntable, wilds,
                 hours, hourNow, takeables, trainers, trainersOnMap,
@@ -1869,7 +1874,11 @@ async function refresh() {
       healPlace = pick ? boot.where(pick.map) : null;
       // Not just where, but whether the pilot has already been told no there.
       healShut = pick ? pick.shut || null : null;
-    } catch (e) { healPlace = null; healShut = null; }
+      // Off the same snapshot, because a gate is a bit in the work RAM already
+      // in hand and asking for it separately would be a second read of the
+      // same memory a frame later.
+      gated = boot.gatesFrom(s.map[0] * 256 + s.map[1], s.wram);
+    } catch (e) { healPlace = null; healShut = null; gated = []; }
   }
   if (s.party.length && target <= s.party[0].level) {
     target = Math.min(100, s.party[0].level + 1);

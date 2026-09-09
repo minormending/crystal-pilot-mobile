@@ -879,19 +879,55 @@ let you go yet, and no amount of map data says so. Standing on Route 32 with a
 Center forty-eight tiles down the same route, Heal used to try eight times and
 report *could not heal (stopped in ROUTE 32)* — which reads like the pilot's
 walking is broken. It is not: two tiles into the walk a man says **"Wait up!
-What's the hurry? Have you gone to the POKéMON GYM?"** and puts you back where
-you started. Route 32 is shut until you beat Falkner in Violet City.
+What's the hurry?"** and puts you back where you started.
 
-So a walk that is turned back twice now stops and quotes him:
+So a walk that is turned back twice stops and quotes him:
 
 > turned back on the way to ROUTE 32 — Wait up! / What's the hurry?
 
-Which is a message you can act on. Two attempts instead of eight, and under a
-second instead of thirty. The same thing covers anything else that stops you
-with words — a guard, a closed gate, an NPC who wants a conversation first.
+Two attempts instead of eight, and under a second instead of thirty. The same
+thing covers anything else that stops you with words — a guard, a closed gate,
+an NPC who wants a conversation first.
 
-If you see it, the answer is usually a badge: go and win the one for the town
-you came from, and the route opens.
+### And for the ones the pilot knows about, it says what to do
+
+Quoting him is better than nothing and it is not much better, because *what's
+the hurry* tells you nothing. This page used to answer the question for you —
+"Route 32 is shut until you beat Falkner" — and that was **wrong**, measured
+five times with the badge in hand and the man putting the player back every
+time.
+
+Here is what he actually wants, read out of the cartridge's own script rather
+than guessed at:
+
+| He checks | And if so |
+| --- | --- |
+| have you already been given the MIRACLE SEED? | he lets you by |
+| do you have the **ZEPHYR BADGE**? | if not: *"Have you gone to the POKéMON GYM?"* |
+| have you **taken the Egg** from Elm's aide? | if so: he hands over the SEED and lets you by |
+| otherwise | *"Some guy wearing glasses was looking for you… he's waiting for you at the POKéMON CENTER."* |
+
+So the road south out of Violet wants **both** the badge *and* the Egg — and
+the Egg is the half nobody guesses, because the man never quite says it. Elm's
+aide is standing in the Violet City Pokémon Center; talk to him and say yes.
+
+Where a road is gated like this and the pilot knows it, the hint under the
+offers says so before you go anywhere:
+
+> ROUTE 32 wants the Egg from Elm's aide
+
+and a walk that gets turned back reports the remedy instead of the quote:
+
+> turned back — the Egg from Elm's aide — Violet's Pokémon Center
+
+**The pilot will not take the Egg for you.** The aide asks a yes-or-no
+question, and answering questions is not walking — the same line the app draws
+around choosing your starter. What it does is stop you hunting for the reason.
+
+**And it says nothing at all if it cannot read the answer.** These gates are
+bits in the game's own memory, found through the symbol file, so a cartridge
+whose `.sym` does not name `wEventFlags` gets no hint rather than a guess. *I
+do not know* dressed up as *it is shut* is the worst answer available.
 
 **And it tries saying hello first.** A tile that stops you usually belongs to
 somebody standing beside it, and the rest of what they have to say — the half
@@ -1229,7 +1265,7 @@ deployed, which is not the question you are asking when a bug you saw fixed is
 still in front of you. `tools/check-app` asserts that number matches the service
 worker's cache name, because a version display that lies is worse than none.
 
-<!-- covers: sw.js @ 475f0f158166 -->
+<!-- covers: sw.js @ a60e64d40b29 -->
 
 The worker fetches **network first, falling back to the cache**. That is the
 opposite of the usual offline-first advice, on purpose.

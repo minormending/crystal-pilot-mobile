@@ -205,8 +205,61 @@ export class Journey {
   }
 
   /** Write off a leg, with the words that closed it and the badges then held. */
-  shutLeg(from, to, said, badges) {
-    this.shut.set(World.leg(from, to), { said, badges });
+  shutLeg(from, to, said, badges, why = null) {
+    this.shut.set(World.leg(from, to), { said, badges, why });
+  }
+
+  /**
+   * What the title says stands in the way of this leg, if anything.
+   *
+   * A *declared* gate, as against the `shut` map above, which is observed: one
+   * is knowledge a title carries and the other is a walk that failed. The
+   * difference matters because a declared gate can be read **before** the walk,
+   * and because it comes with a remedy — the game's own words rarely do.
+   *
+   * Directional, because `World.leg` is: the man on Route 32 stops you going
+   * south out of Violet and has nothing to say to anyone walking north.
+   */
+  gateFor(from, to) {
+    const leg = World.leg(from, to);
+    return (this.title.gates || []).find(
+      (g) => World.leg(g.from, g.to) === leg) || null;
+  }
+
+  /**
+   * The remedy for a gated leg, as a sentence, or null.
+   *
+   * **Null in two very different cases, on purpose.** The gate's event is set,
+   * so nothing is in the way; or the cartridge will not say, because its symbol
+   * file has no `wEventFlags` and `hasEvent` answers null. Both mean *do not
+   * put this sentence on the screen*, and neither means *the road is open* --
+   * which is why this returns a sentence rather than a boolean. A gate the app
+   * cannot read must never be reported as a gate that is closed: that turns "I
+   * do not know" into a confident wrong answer.
+   */
+  gateSaid(from, to, wram) {
+    const gate = this.gateFor(from, to);
+    if (!gate || !this.state) return null;
+    if (this.state.hasEvent(wram, gate.event) !== false) return null;
+    return gate.needs + (gate.at ? ` \u2014 ${this.where(gate.at)}` : '');
+  }
+
+  /**
+   * Every declared gate out of this map that is in the way right now.
+   *
+   * For the hint under the offers, which is the only place a person would
+   * otherwise learn nothing: a gated road is written off after the walk fails
+   * and then simply *stops being offered*, so Travel quietly loses a
+   * destination and says nothing about it. `needs` is a noun phrase so this
+   * can read "ROUTE 32 wants the Egg from Elm's aide" while the run log reads
+   * "turned back — the Egg from Elm's aide — Violet's Pokémon Center".
+   */
+  gatesFrom(from, wram) {
+    return (this.title.gates || [])
+      .filter((g) => g.from === from)
+      .map((g) => ({ to: g.to, where: this.where(g.to),
+                     needs: g.needs, why: this.gateSaid(g.from, g.to, wram) }))
+      .filter((g) => g.why !== null);
   }
 
   /**
@@ -223,7 +276,7 @@ export class Journey {
    * costs one walk that would have worked; forgetting a real one costs the same
    * walk over and over.
    */
-  reopen(badges) {
+  reopen(badges, wram = null) {
     // No early return for a null count, and that is deliberate rather than an
     // omission. `null > 0` and `undefined > 0` are both false, so the
     // comparison below already refuses to expire anything when the cartridge
@@ -235,6 +288,20 @@ export class Journey {
       if (at.badges !== null && at.badges !== undefined && badges > at.badges) {
         this.shut.delete(leg);
         gone++;
+        continue;
+      }
+      // A badge is not the only thing that opens a road. Where a *declared*
+      // gate closed this leg, the thing to watch is the gate's own event: take
+      // the Egg and the man on Route 32 stops turning you back, with no badge
+      // having changed. Without this the write-off outlived the remedy and the
+      // road stayed shut for the rest of the session -- the exact failure
+      // `reopen` exists to prevent, one cause along.
+      if (at.why && wram) {
+        const [from, to] = leg.split('>').map(Number);
+        if (this.gateSaid(from, to, wram) === null) {
+          this.shut.delete(leg);
+          gone++;
+        }
       }
     }
     return gone;
@@ -391,7 +458,12 @@ export class Journey {
   /** What closed this leg, for a row that has to explain itself. */
   shutSaid(from, to) {
     const at = this.shut.get(World.leg(from, to));
-    return at ? at.said : null;
+    if (!at) return null;
+    // The remedy in preference to the game's own words, where a gate explains
+    // the leg. "Wait up! What's the hurry?" is what the man on Route 32 says
+    // and it is no help at all; the Egg waiting in Violet's Pokémon Center is
+    // the same fact with something to do about it.
+    return at.why || at.said;
   }
 
   /** The option bag every walk in here takes, so Stop reaches inside them. */
@@ -704,8 +776,10 @@ export class Journey {
           if (++turned >= THROUGH_TURNS) {
             // Written off, so the *next* question gets a usable answer rather
             // than this same wall. See `shut`.
-            this.shutLeg(from, expect, said, (await this.snap()).badges);
-            this.say(`turned back: ${said}`);
+            const now = await this.snap();
+            const why = this.gateSaid(from, expect, now.wram);
+            this.shutLeg(from, expect, said, now.badges, why);
+            this.say(why ? `turned back — ${why}` : `turned back: ${said}`);
             return false;
           }
         }
@@ -896,7 +970,8 @@ export class Journey {
     // Swept once, up front, rather than asked leg by leg -- which also means
     // the keys can be copied straight across instead of being parsed back into
     // a pair of map numbers and rebuilt.
-    this.reopen((await this.snap()).badges);
+    const seen = await this.snap();
+    this.reopen(seen.badges, seen.wram);
     for (const leg of this.shut.keys()) avoid.add(leg);
     // **A refused leg is not a leg walked**, and counting it as one is how the
     // first walk to a landmark-only place failed: DARK CAVE is two legs from
@@ -999,8 +1074,10 @@ export class Journey {
         // the words are the reason. Written off so the next press asks for a
         // route without this leg in it rather than walking here again.
         if (said) {
-          this.shutLeg(here, next.key, said, (await this.snap()).badges);
-          this.say(`turned back: ${said}`);
+          const now = await this.snap();
+          const why = this.gateSaid(here, next.key, now.wram);
+          this.shutLeg(here, next.key, said, now.badges, why);
+          this.say(why ? `turned back — ${why}` : `turned back: ${said}`);
         } else {
           this.say(`${next.dir.toLowerCase()} will not go — trying another way`);
         }
@@ -2396,7 +2473,7 @@ export class Journey {
     // in.** Standing on Route 32, the Center on Route 32 costs nothing and is
     // shut; Violet City is one leg north and open. Asked before the distance,
     // because a zero-cost answer used to short-circuit the whole search.
-    if (wram && this.state) this.reopen(this.state.badgeCount(wram));
+    if (wram && this.state) this.reopen(this.state.badgeCount(wram), wram);
     const shutLegs = this.shut.size ? new Set(this.shut.keys()) : null;
     const open = places.filter((p) => !this.shutBetween(from, p, mapOf));
     // Everything is shut, so there is nothing better to say than the last one

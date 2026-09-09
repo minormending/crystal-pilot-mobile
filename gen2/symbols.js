@@ -153,6 +153,7 @@ export const SHARED_SYMBOLS = [
   'Moves', 'PokemonNames', 'sCheckValue1', 'sCheckValue2', 'wBalls', 'wBattleMenuCursorPosition',
   'wBattleMode', 'wBattleMonHP', 'wBattleMonMaxHP', 'wCurItem', 'wCurPocket',
   'wEnemyMonHP', 'wEnemyMonLevel', 'wEnemyMonMaxHP', 'wEnemyMonSpecies',
+  'wEventFlags',
   'wMapGroup', 'wMapHeight', 'wMapNumber', 'wMapObjects', 'wMapStatus',
   'wMapWidth', 'wMenuBorderRightCoord', 'wMenuBorderTopCoord',
   'wItems', 'wJohtoBadges',
