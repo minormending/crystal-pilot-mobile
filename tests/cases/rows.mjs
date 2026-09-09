@@ -11,7 +11,7 @@ import { describeHandoff, describeOffers, describeParty, describeReplaced,
          describeRoom, describeScreen, joinFailure, describeRows, describeSlot,
          betterGrind, betterHour, hoursLine, otherHour,
          describeUndo, describeSaying, describeAuto, describeDex,
-         describeDexTotals, describeTitle } from '../../app/rows.js';
+         describeDexTotals, describeTitle, waitOffer } from '../../app/rows.js';
 import { gen2 } from '../../gen2/engine.js';
 
 const sym = symbols();
@@ -1837,4 +1837,104 @@ test('the dex total is three numbers because two of them mean nothing alone',
   t.eq(describeDexTotals(null, { engine: gen2 }),
        'this cartridge does not keep a Pokédex',
        'and a cartridge that keeps none is not a cartridge with none caught');
+});
+
+// --- the hour worth waiting for ---------------------------------------------
+
+const HOURS = [
+  { species: ['PIDGEY', 'SENTRET'], levels: { low: 2, high: 4 } },
+  { species: ['PIDGEY', 'SENTRET'], levels: { low: 2, high: 4 } },
+  { species: ['HOOTHOOT', 'RATTATA', 'ZUBAT'], levels: { low: 2, high: 4 } },
+];
+
+test('the hour worth waiting for is the one holding what you asked for',
+     async (t) => {
+  // The strong case, and the one the app has been able to *describe* since it
+  // learned the clock takes chips away: pick HOOTHOOT at night, come back at
+  // noon, and the chip goes with a line saying where it went. This is that
+  // line turned into something pressable.
+  const got = waitOffer(HOURS, 1, 'HOOTHOOT');
+  t.eq(got.block, 2, 'the block that has it');
+  t.contains(got.text, 'HOOTHOOT', 'named, because it is the reason to wait');
+  t.contains(got.text, 'after dark', 'and when');
+});
+
+test('a quarry that is here now does not make the row about it', async (t) => {
+  // Waiting for a species that is in the grass in front of you would be an
+  // offer to do nothing. The *general* reason to wait survives -- the night
+  // still brings three this hour does not -- so the row stays and stops
+  // claiming to be about PIDGEY.
+  const got = waitOffer(HOURS, 1, 'PIDGEY');
+  t.eq(got.block, 2, 'still the hour that brings more');
+  t.false(got.text.includes('PIDGEY'), 'and not a wait for something already here');
+});
+
+test('with nothing chosen it offers the hour that pays best', async (t) => {
+  // Three species after dark against none in the morning, so the wait is worth
+  // making and worth making *for the night*.
+  const got = waitOffer(HOURS, 0);
+  t.eq(got.block, 2, 'the block with the most this one does not have');
+  t.contains(got.text, '3 more', 'counted rather than listed');
+});
+
+test('one extra species is named and two are counted', async (t) => {
+  const one = [{ species: ['PIDGEY'] }, { species: ['PIDGEY'] },
+               { species: ['PIDGEY', 'HOOTHOOT'] }];
+  t.contains(waitOffer(one, 0).text, 'HOOTHOOT',
+             'a single name is more use than the number one');
+});
+
+test('grass that is the same all day is nothing to wait for', async (t) => {
+  const same = [{ species: ['PIDGEY'] }, { species: ['PIDGEY'] },
+                { species: ['PIDGEY'] }];
+  t.eq(waitOffer(same, 0), null, 'no offer, so no row');
+  t.eq(waitOffer(null, 0), null, 'and a cartridge with no table says nothing');
+});
+
+test('a quarry the cartridge has nowhere falls back to the general offer',
+     async (t) => {
+  // Asked for something this map does not have at any hour. The remembered
+  // choice is from another route; the offer here is still a real one.
+  const got = waitOffer(HOURS, 1, 'MAGIKARP');
+  t.eq(got.block, 2, 'the hour that brings the most');
+  t.contains(got.text, 'more', 'and it does not claim MAGIKARP is coming');
+});
+
+test('the Wait row is offered only where the hour is hiding something',
+     async (t) => {
+  const party = { party: [{ species: CYNDAQUIL, level: 8, hp: 20, maxHp: 20 }] };
+  const same = [{ species: ['PIDGEY'] }, { species: ['PIDGEY'] },
+                { species: ['PIDGEY'] }];
+  t.false(look(party, { hours: same, hourNow: 1 }).wait.enabled,
+          'grass that is the same all day has nothing to wait for');
+  const r = look(party, { hours: HOURS, hourNow: 1, quarry: 'HOOTHOOT' });
+  t.true(r.wait.enabled, 'and here it has');
+  t.eq(r.wait.waitFor, 2, 'the block, not the word — the job takes a number');
+  t.contains(r.wait.text, 'HOOTHOOT', 'named after the reason to press it');
+});
+
+test('Wait ranks last, because every other job passes the time too', async (t) => {
+  // The fact that makes the row make sense: a grind runs the same frames
+  // standing still would and comes back with levels. So waiting is only ever
+  // worth pressing when there is nothing else to do here.
+  const o = offers({ party: [{ species: CYNDAQUIL, level: 8, hp: 20, maxHp: 20 }],
+                     tile: 0x14 },
+                   { hours: HOURS, hourNow: 1, quarry: 'HOOTHOOT', target: 10 });
+  t.true(o.offered.includes('wait'), 'it is on the list');
+  t.eq(o.offered[o.offered.length - 1], 'wait', 'and it is the end of it');
+  t.gte(o.rank.wait, o.rank.grind, 'below anything that gets something done');
+});
+
+test('and the runner will take it, once there is nothing else', async (t) => {
+  // Not excluded the way Travel and Hunt are: it needs no choice and it ends
+  // in the overworld, which is the whole of that rule. Asked of a list with
+  // only Wait on it, because the claim under test is membership of the
+  // exclusion list rather than the ranking, which the test above holds.
+  const only = describeAuto({ offered: ['wait'], rank: { wait: 1 } },
+                            { wait: { enabled: true, text: 'HOOTHOOT after dark' } });
+  t.true(only.enabled, 'it will start it');
+  t.eq(only.key, 'wait', 'rather than declining the way it declines Travel');
+  const never = describeAuto({ offered: ['travel'], rank: { travel: 1 } },
+                             { travel: { enabled: true, text: 'somewhere' } });
+  t.false(never.enabled, 'which is the comparison that makes that mean anything');
 });

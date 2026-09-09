@@ -521,3 +521,46 @@ test('a cartridge with no Pokedex flags says nothing rather than "none caught"',
   t.eq(blind.dex(worldRam(sym, { caught: [1] })), null,
        'null, which is a different answer from an empty dex');
 });
+
+test('the playtime is the one clock here that moves when the pilot runs',
+     async (t) => {
+  // `wTimeOfDay` comes from the cartridge's real-time clock and changes at a
+  // boundary hours apart; this ticks every frame. Which is why the wait job
+  // reads it: it is what tells "the clock will not move" from "nothing is
+  // moving", and those have opposite remedies.
+  const sym = symbols();
+  const state = new GameState(sym);
+  const wram = worldRam(sym, { playSeconds: 3 * 3600 + 25 * 60 + 9 });
+  t.eq(state.playtime(wram), 3 * 3600 + 25 * 60 + 9,
+       'hours, minutes and seconds as one number of seconds');
+});
+
+test('the hours of a playtime are two bytes, and the high one counts',
+     async (t) => {
+  // 999 hours is the cap, so the high byte is only ever non-zero on a save
+  // nobody here has had — which is exactly why it goes untested otherwise.
+  const sym = symbols();
+  const state = new GameState(sym);
+  t.eq(state.playtime(worldRam(sym, { playSeconds: 400 * 3600 })), 400 * 3600,
+       'four hundred hours, which needs both bytes');
+});
+
+test('a cartridge with no playtime counter says nothing rather than zero',
+     async (t) => {
+  const sym = symbols();
+  const blind = new GameState(blindTo(sym, 'wGameTimeHours'));
+  t.eq(blind.playtime(worldRam(sym, { playSeconds: 60 })), null,
+       'null, which a caller can tell from a game that has just started');
+});
+
+test('the time of day is in the snapshot, not fetched on the side', async (t) => {
+  // It was the one work-RAM byte in the app that did not come through this
+  // class: `main.js` held the address and made its own read, twice a refresh,
+  // for a byte the snapshot in its hand already had.
+  const sym = symbols();
+  const state = new GameState(sym);
+  t.eq(state.read(worldRam(sym, { timeOfDay: 2 })).timeOfDay, 2, 'in read()');
+  const blind = new GameState(blindTo(sym, 'wTimeOfDay'));
+  t.eq(blind.read(worldRam(sym, { timeOfDay: 2 })).timeOfDay, null,
+       'and null where the cartridge will not say');
+});

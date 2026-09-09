@@ -15,9 +15,9 @@ what CI checks and what the pre-commit hook blocks on.
 ```mermaid
 flowchart LR
     E[an edit] --> H{{".githooks/pre-commit"}}
-    H --> T["./run-tests<br/>855 behaviour tests"]
+    H --> T["./run-tests<br/>878 behaviour tests"]
     H --> C["tools/check-app<br/>30 groups"]
-    H --> D["tools/docs-check<br/>44 tracked sections"]
+    H --> D["tools/docs-check<br/>45 tracked sections"]
     T --> OK[commit]
     C --> OK
     D --> OK
@@ -39,20 +39,21 @@ git config core.hooksPath .githooks
 ./run-tests -v         # notes and stack lines
 ```
 
-855 tests in 26 files, and what each file is about says more than the count:
+878 tests in 27 files, and what each file is about says more than the count:
 
 | file | tests | what it pins down |
 | --- | --- | --- |
 | `journey.mjs` | 163 | the walking: routes, doors, shut legs, healers, gyms, and the map graph |
-| `rows.mjs` | 120 | what every row and offer says, when its button works, and what the runner picks |
+| `rows.mjs` | 129 | what every row and offer says, when its button works, and what the runner picks |
 | `menus.mjs` | 73 | the order the START menu is driven in, and what is closed between tries |
 | `battle.mjs` | 84 | whose turn it is, which Pokémon is out, and a win from a whiteout |
 | `collision.mjs` | 34 | which tiles can be walked, and which have somebody standing on them |
 | `capture.mjs` | 41 | weakening, ball choice, the party prompt, and the refusals before a throw |
 | `grind.mjs` | 22 | what a grind says while it works, and the bounds that make it stop |
+| `clock.mjs` | 10 | waiting for an hour, and telling a clock that will not move from a game that is not running |
 | `world.mjs` | 22 | reading a cartridge's own maps: sizes, warps, objects and triggers |
 | `control.mjs` | 30 | the task lifecycle: stopping, failing, undo points, and loops that must end |
-| `state.mjs` | 35 | reading the party, the map, the badges and the battery out of work RAM |
+| `state.mjs` | 39 | reading the party, the map, the badges and the battery out of work RAM |
 | `titles.mjs` | 19 | choosing a profile for a cartridge, and falling back to generic |
 | `romdata.mjs` | 75 | the cartridge's own character encoding and tables, byte by byte |
 | `remember.mjs` | 14 | which remembered choices are believed, and which dropped |
@@ -126,16 +127,16 @@ section gives. Everything by hand runs against a local build.
 
 ```mermaid
 flowchart BT
-    C["the app"] --> T["./run-tests<br/>855 behaviour tests"]
+    C["the app"] --> T["./run-tests<br/>878 behaviour tests"]
     C --> A["tools/check-app<br/>30 groups"]
-    C --> D["tools/docs-check<br/>44 tracked sections"]
+    C --> D["tools/docs-check<br/>45 tracked sections"]
     C --> V["tools/coverage<br/>what the suite never runs"]
     T --> M["tools/mutate<br/>break a line, see who notices"]
     A --> K["tools/check-checks<br/>break each group's own subject"]
     T -.-> V
     M -.->|"survivors, by file"| R(["the suite is load-bearing"])
     K -.->|"30 of 30 bite"| R2(["the groups are awake"])
-    V -.->|"59%, and where"| R3(["the gaps are known"])
+    V -.->|"60%, and where"| R3(["the gaps are known"])
 ```
 
 The two on the right are the same idea pointed at different subjects, and the

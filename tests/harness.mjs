@@ -236,6 +236,13 @@ const WRAM_NAMES = [
   // bit, so a reader that rounded up to 256 bits reports the first five of
   // *seen* as caught.
   ['wPokedexCaught', 32], ['wPokedexSeen', 32],
+  // The clock, and the only counter in the machine that is known to move when
+  // the emulator runs. `wTimeOfDay` was absent from this table until a job
+  // needed to watch it change -- `main.js` had been reading it through its own
+  // `readBytes` call, so `GameState` never asked for it and no fake had to
+  // have it.
+  ['wTimeOfDay', 1],
+  ['wGameTimeHours', 2], ['wGameTimeMinutes', 1], ['wGameTimeSeconds', 1],
   // The map, so a CollisionMap can be built at all. wOverworldMapBlocks is the
   // real size -- a stride of mapWidth+6 over a tall map indexes a long way in.
   ['wOverworldMapBlocks', 0x510], ['wMapWidth', 1], ['wMapHeight', 1],
@@ -427,6 +434,12 @@ export function worldRam(sym, {
   events = [],
   // Species the Pokedex has flagged, as ids.
   caught = [], seen = [],
+  // Which third of the day the game says it is, and how long this save has
+  // been played, in seconds. The second is given as a number of seconds rather
+  // than as its four fields for the reason `money` is given as a number: the
+  // packing is the reader's problem and a fake that restated it would agree
+  // with a reader that got it wrong the same way.
+  timeOfDay = 0, playSeconds = 0,
   // The map's size in *blocks*; a block is two tiles each way. `objects` are
   // MAPOBJECT entries, whose coordinates the cartridge stores four higher than
   // the map's own -- given here the way the game gives them, so a test that
@@ -509,6 +522,10 @@ export function worldRam(sym, {
       wram[at - 0xc000] |= 1 << ((id - 1) & 7);
     }
   }
+  w8(wram, sym.addr('wTimeOfDay'), timeOfDay);
+  w16(wram, sym.addr('wGameTimeHours'), Math.floor(playSeconds / 3600));
+  w8(wram, sym.addr('wGameTimeMinutes'), Math.floor(playSeconds / 60) % 60);
+  w8(wram, sym.addr('wGameTimeSeconds'), playSeconds % 60);
   w8(wram, sym.addr('wMenuDataItems'), menuItems);
   w8(wram, sym.addr('wMenuBorderTopCoord'), menuTop);
   w8(wram, sym.addr('wMenuBorderRightCoord'), menuRight);

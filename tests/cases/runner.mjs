@@ -194,6 +194,11 @@ test('the signature moves for everything a job could move', async (t) => {
     ['a heal', { party: [{ species: 155, level: 5, hp: 8, maxHp: 20 }] }],
     ['a pick-up', { items: [[18, 1]] }],
     ['a ball thrown', { balls: [[5, 4]] }],
+    // The one a *wait* moves, and the only thing it moves. Without it a wait
+    // that worked perfectly -- morning to night, the species back in the grass
+    // -- reads as "Wait ran and changed nothing" and the sequence stops one
+    // step before the thing it was waiting for.
+    ['an hour passing', { timeOfDay: 2 }],
   ]) {
     t.ne(stateSignature(world(over)), before, `${what} shows`);
   }
