@@ -4059,7 +4059,7 @@ file says they do.
 
 ## 8i. Reaching an hour
 
-<!-- covers: gen2/jobs.js gen2/engine.js gen2/romdata.js gen2/state.js gbcore/saves.js app/rows.js @ b89c124fbf16 -->
+<!-- covers: gen2/jobs.js gen2/engine.js gen2/romdata.js gen2/state.js gbcore/saves.js app/rows.js @ e0872d285d74 -->
 
 A third of Johto's grass is behind the clock. HOOTHOOT is on Route 29 after
 dark and nowhere on it at noon, and for four versions the usage guide said the
@@ -4230,7 +4230,7 @@ This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ 144e83b74d71 -->
+<!-- covers: app/main.js index.html @ 611a098941a5 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -4779,7 +4779,7 @@ seconds by a page whose loop was supposedly running.
 
 ### One thing at a time
 
-<!-- covers: app/main.js @ 42bada9bf556 -->
+<!-- covers: app/main.js @ 2b9317927c6f -->
 
 One Game Boy, one joypad, one canvas — so a great deal of this app is about
 making sure two things are never driving them at once. There are three claims,
@@ -4921,7 +4921,7 @@ before a step is taken, so a stopped walk does not move at all.
 
 ### What is behind the Gym door, before you open it
 
-<!-- covers: gen2/romdata.js gen2/engine.js app/rows.js @ a4ae279df2ce -->
+<!-- covers: gen2/romdata.js gen2/engine.js app/rows.js @ 5e7da3052537 -->
 
 The Gym row could say where the Gym is and who is in it. **Whether it is worth
 going** is two facts the cartridge has had all along, and neither of them
@@ -5285,7 +5285,7 @@ a conversation.
 
 ### The card behind a party row
 
-<!-- covers: app/rows.js app/main.js index.html @ 7e03e8048638 -->
+<!-- covers: app/rows.js app/main.js index.html @ 477032ddb487 -->
 
 Two questions the game itself will not answer about a Pokémon you are
 carrying — *what is this made of* and *what is it about to become* — and both
@@ -5325,6 +5325,23 @@ Only the open one is built. Six cards a second, five of them behind a closed
 triangle, is work nobody asked for — and the ROM reads behind the one that is
 open are cached in `RomData`, so rebuilding it costs a string.
 
+**And the card has two shapes, because there are two questions.** A Pokémon you
+are carrying has six stats and the two things that made each of them. A
+*species* — reached from the dex box's **All** list, where there is no party
+entry behind the name — has none of that, and what it does have is the base
+stats every one of them is built from and the whole level-up list. Drawing the
+first shape for a species gave six rows of em-dashes beside two empty bars,
+which is a table saying nothing in the space where the answer goes. `dexCard`
+picks on `d.stats.some((st) => st.value !== null)`, which is the only thing
+that actually distinguishes them.
+
+The base bars are drawn against 255 rather than against the species' own best,
+so they compare between species — the point of a base-stat row is the shape of
+the thing, and a bar scaled to itself has no shape. And the learnset is sorted
+before it is printed, because MUK's entry is genuinely written out of level
+order on this cartridge and a list that jumped backwards would read as a
+decoding bug rather than as the cartridge being odd.
+
 <details>
 <summary><b>Advanced detail:</b> three things that would read as bugs, and the
 one that was</summary>
@@ -5357,7 +5374,7 @@ at body size.
 
 ### Running the list
 
-<!-- covers: app/rows.js app/main.js @ c33667669a8f -->
+<!-- covers: app/rows.js app/main.js @ ea4a0fb3cae7 -->
 
 The app has spent forty passes learning to answer one question — *what can the
 pilot do here, and which of those is worth most?* — and twenty showing the
@@ -5481,7 +5498,7 @@ to deposit your last Pokémon.
 
 ### The settings and the save card
 
-<!-- covers: index.html app/main.js @ 144e83b74d71 -->
+<!-- covers: index.html app/main.js @ 611a098941a5 -->
 
 The pilot's own list got a glyph column, shorter names and a slot to fill in
 v165. These two cards did not, and reading them found that they had a different
@@ -6109,7 +6126,7 @@ they have been installed.
 
 ### Watching the other device's screen
 
-<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ 75135d88d4e3 -->
+<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ 3166637072c7 -->
 
 One device shows its screen; the other watches it, and plays it if the first
 one says so. The picture goes straight between them over WebRTC and never

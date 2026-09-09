@@ -1464,6 +1464,18 @@ export function describeDex(mon, ctx = {}) {
     : null;
   const becomes = ea && ea.evolves.length
     ? ea.evolves.map((rec) => evolutionPhrase(rec, mon, rom)) : [];
+  // The whole level-up list, for a card with no Pokemon behind it. A party
+  // member gets `knows` and `next` because those are the two facts somebody
+  // grinding acts on; a *species* has neither, and what is left -- the moves
+  // it gets and when -- is most of what a Pokedex is for.
+  //
+  // Sorted, because MUK's entry is genuinely written out of level order on
+  // this cartridge and a list that jumped back would read as a decoding bug.
+  const learns = ea
+    ? [...ea.learns].sort((a, b) => a.level - b.level)
+      .map((m) => ({ level: m.level,
+                     name: rom.moveName(m.move) || `move ${m.move}` }))
+    : [];
 
   const bits = [];
   if (mon.happiness !== undefined) bits.push(`friendship ${mon.happiness}`);
@@ -1476,6 +1488,7 @@ export function describeDex(mon, ctx = {}) {
     types,
     stats,
     knows,
+    learns,
     next,
     becomes,
     origin: describeOrigin(mon.caught, ctx),
@@ -1502,16 +1515,30 @@ function describeOrigin(caught, ctx = {}) {
 }
 
 /**
- * The one line above the caught list.
+ * The one line above the list, for whichever list is being shown.
  *
- * Three numbers, and the third is the one that makes the other two mean
- * anything: "24 caught" says nothing without how many there are to catch, and
- * the count is the cartridge's rather than 251 written down here.
+ * In `caught` mode it is three numbers, and the third is the one that makes
+ * the other two mean anything: "24 caught" says nothing without how many there
+ * are to catch, and the count is the cartridge's rather than 251 written down
+ * here.
+ *
+ * In `all` mode there is nothing to count against — every species is every
+ * species — so it says what the list *is*, which is the only thing that
+ * distinguishes it from the other one at a glance.
+ *
+ * **`started` is separate from `dex` being null and has to stay that way.**
+ * A cartridge with no Pokédex flags in its symbol file can never say what you
+ * have caught; a game that has not been loaded yet cannot say *yet*. The bits
+ * are there in work RAM either way and they are whatever the boot left behind,
+ * so reading them before a game is loaded would put a confident number on a
+ * screen — which is the failure this repository keeps writing down.
  */
 export function describeDexTotals(dex, ctx = {}) {
-  const { engine = {} } = ctx;
-  if (!dex) return 'this cartridge does not keep a Pokédex';
+  const { engine = {}, mode = 'caught', started = true } = ctx;
   const total = engine.speciesCount || 0;
+  if (mode === 'all') return `every species · ${total} in this cartridge`;
+  if (!dex) return 'this cartridge does not keep a Pokédex';
+  if (!started) return 'start a game to see what you have caught';
   const caught = (dex.caught || []).length;
   const seen = (dex.seen || []).length;
   // Seen is the wider list and includes everything caught, so saying both

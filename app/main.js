@@ -1799,8 +1799,13 @@ function esc(text) {
 // instead, which also means the numbers in it stay live while it is being
 // looked at.
 let dexSlot = null;
-// Which caught species the dex list is showing, or null.
+// Which species the dex list is showing, or null.
 let dexSpecies = null;
+// Which list the dex box is showing: what this game has caught, or every
+// species the cartridge has. `all` is how you look something up without
+// carrying it -- and without having caught it, or having a game loaded at all,
+// since that half of a Pokedex is the ROM's and not the save's.
+let dexMode = 'caught';
 // How many chips the caught list shows before it folds. The species picker
 // folds at the same point and for the same reason: past two rows of chips the
 // list stops being scannable and starts being a wall.
@@ -1849,17 +1854,37 @@ function dexCard(mon) {
   if (!d) return '<div class="dexcard">nothing to say about this one</div>';
   const head = d.types.length
     ? `<div class="dextypes">${d.types.map(esc).join(' / ')}</div>` : '';
-  const rows = [
-    '<div class="statrow head"><span>stat</span><span>now</span>'
-    + '<span>DV</span><span>rolled</span><span>trained</span></div>',
-  ];
-  for (const st of d.stats) {
-    rows.push(`<div class="statrow"><span>${esc(st.label)}</span>`
-      + `<b>${st.value ?? '—'}</b>`
-      + `<span>${st.dv ?? '—'}</span>`
-      + meter('dv', st.dv === null ? 0 : st.dv / dvMax)
-      + meter('ev', st.effortPart)
-      + '</div>');
+  // **Two tables, because there are two questions.** A Pokemon you are
+  // carrying has six stats and the two things that made each of them; a
+  // *species* has none of that -- there is no individual to have rolled a DV
+  // or earned anything -- and what it does have is the base stats every one of
+  // them is built from. Drawing the first table for a species gave six rows of
+  // em-dashes beside two empty bars, which is a table saying nothing in the
+  // space where the answer goes.
+  const mine = d.stats.some((st) => st.value !== null);
+  const rows = [];
+  if (mine) {
+    rows.push('<div class="statrow head"><span>stat</span><span>now</span>'
+      + '<span>DV</span><span>rolled</span><span>trained</span></div>');
+    for (const st of d.stats) {
+      rows.push(`<div class="statrow"><span>${esc(st.label)}</span>`
+        + `<b>${st.value ?? '—'}</b>`
+        + `<span>${st.dv ?? '—'}</span>`
+        + meter('dv', st.dv === null ? 0 : st.dv / dvMax)
+        + meter('ev', st.effortPart)
+        + '</div>');
+    }
+  } else if (d.stats.some((st) => st.base !== null)) {
+    rows.push('<div class="statrow base head"><span>stat</span>'
+      + '<span>base</span><span></span></div>');
+    for (const st of d.stats) {
+      rows.push(`<div class="statrow base"><span>${esc(st.label)}</span>`
+        + `<b>${st.base ?? '—'}</b>`
+        // Against 255, which is the highest a base stat goes, so the bars are
+        // comparable between species rather than each scaled to its own best.
+        + meter('dv', st.base === null ? 0 : st.base / 255)
+        + '</div>');
+    }
   }
   const lines = [];
   if (d.knows.length) {
@@ -1868,6 +1893,14 @@ function dexCard(mon) {
       .join(' · ')}</div>`);
   }
   if (d.next) lines.push(`<div class="dexline"><b>next</b> ${esc(d.next)}</div>`);
+  // The whole list, and only where there is no Pokemon to have four moves of
+  // its own. For one you are carrying `knows` and `next` are the two facts
+  // that decide anything; for a species they do not exist, and this is what a
+  // person opened the entry to read.
+  if (!mine && d.learns.length) {
+    lines.push(`<div class="dexline"><b>learns</b> ${d.learns
+      .map((m) => `Lv${m.level} ${esc(m.name)}`).join(' · ')}</div>`);
+  }
   for (const phrase of d.becomes) {
     lines.push(`<div class="dexline"><b>becomes</b> ${esc(phrase)}</div>`);
   }
@@ -1891,30 +1924,46 @@ function dexCard(mon) {
  */
 function paintDex(s) {
   const box = $('#dexpanel');
-  const dex = state && s.wram ? state.dex(s.wram) : null;
-  const caught = dex ? (dex.caught || []) : [];
-  box.classList.toggle('hide', !dex || !s.worldLoaded);
-  if (!dex) return;
-  $('#dexline').textContent = describeDexTotals(dex, { engine: state.e });
-  // A species that is no longer in the record cannot still be the heading of
-  // what is under it. Both of these outlive a cartridge: loading another
-  // save -- which this app is built to do -- replaces the whole Pokedex and
-  // the whole party, and neither `dexSpecies` nor `dexSlot` is reset by that
-  // on its own. Left alone, the card under the chips goes on showing a
-  // species this game has never caught, with no chip lit to say where it came
-  // from.
-  if (dexSpecies !== null && !caught.includes(dexSpecies)) dexSpecies = null;
+  // **Shown whenever a cartridge is in, not only when a game is.** Half of a
+  // Pokedex is the ROM's -- what a species is, what it becomes, what it learns
+  // -- and none of that needs a save, a party or a world. The other half is
+  // the save's, and the line says so rather than the box disappearing.
+  box.classList.toggle('hide', !romdata);
+  if (!romdata) return;
+  const every = dexMode === 'all';
+  // Not read at all in `all` mode, and that is the point rather than a saving:
+  // the flags are bits in work RAM and before a game is loaded they are
+  // whatever the boot left there, so asking for them would produce a number.
+  const dex = !every && state && s.wram && s.worldLoaded
+    ? state.dex(s.wram) : null;
+  const species = every
+    ? Array.from({ length: state.e.speciesCount }, (_, i) => i + 1)
+    : (dex ? (dex.caught || []) : []);
+  $('#dexline').textContent = describeDexTotals(dex, {
+    engine: state.e, mode: dexMode, started: s.worldLoaded,
+  });
+  for (const b of $('#dexmode').querySelectorAll('button')) {
+    b.setAttribute('aria-pressed', String(b.dataset.mode === dexMode));
+  }
+  // A species that is not in the list cannot still be the heading of what is
+  // under it. Three things put it out of one: switching lists, loading another
+  // save -- which this app is built to do, and which replaces the whole
+  // Pokedex -- and releasing something. Left alone, the card under the chips
+  // goes on showing a species with no chip lit to say where it came from.
+  if (dexSpecies !== null && !species.includes(dexSpecies)) dexSpecies = null;
   const list = $('#dexchips');
   list.innerHTML = '';
-  if (!caught.length) {
+  if (!species.length) {
     const none = document.createElement('span');
     none.className = 'seen';
-    none.textContent = 'nothing caught yet';
+    none.textContent = dex ? 'nothing caught yet'
+      : s.worldLoaded ? 'this cartridge does not keep a Pokédex'
+        : 'no game loaded — try All';
     list.appendChild(none);
     $('#dexentry').classList.add('hide');
     return;
   }
-  const show = dexFolded ? caught.slice(0, DEX_CHIPS) : caught;
+  const show = dexFolded ? species.slice(0, DEX_CHIPS) : species;
   for (const id of show) {
     const b = document.createElement('button');
     b.type = 'button';
@@ -1929,20 +1978,20 @@ function paintDex(s) {
     };
     list.appendChild(b);
   }
-  if (caught.length > show.length) {
+  if (species.length > show.length) {
     const more = document.createElement('button');
     more.type = 'button';
     more.className = 'morechip';
-    more.textContent = `+${caught.length - show.length} more`;
+    more.textContent = `+${species.length - show.length} more`;
     more.onclick = () => { dexFolded = false; refresh(); };
     list.appendChild(more);
   }
   const entry = $('#dexentry');
   entry.classList.toggle('hide', dexSpecies === null);
   if (dexSpecies !== null) {
-    // A species out of the record rather than out of the party: there is no
-    // party entry behind it, so the stats, the DVs and the counters have
-    // nothing to say. `describeDex` is given what there is -- the species and
+    // A species out of a list rather than out of the party: there is no party
+    // entry behind it, so the stats, the DVs and the counters have nothing to
+    // say. `describeDex` is given what there is -- the species and
     // a level of zero -- and answers with the half it can, which is what a
     // Pokédex entry is: what this *is*, not what yours happens to be.
     entry.innerHTML = dexCard({ species: dexSpecies, level: 0, moves: [], pp: [] });
@@ -2105,6 +2154,18 @@ const NEEDED_SYMBOLS = [
 // `toggle` rather than `click`, because a <details> can also be opened by the
 // keyboard and by find-in-page, and the state has to follow the element rather
 // than the gesture.
+// Two segments, one listener. Folding is reset on the way across because the
+// lists are different sizes by two orders of magnitude: an expanded list of
+// four caught species should not open as 251 chips the moment somebody looks
+// something up.
+$('#dexmode').addEventListener('click', (e) => {
+  const mode = e.target && e.target.dataset && e.target.dataset.mode;
+  if (!mode || mode === dexMode) return;
+  dexMode = mode;
+  dexFolded = true;
+  refresh();
+});
+
 $('#party').addEventListener('toggle', (e) => {
   const box = e.target;
   if (!box.classList || !box.classList.contains('monbox')) return;

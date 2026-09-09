@@ -663,25 +663,52 @@ find out that six more levels buys a new move and one more buys an evolution.
 A species that evolves by a stone, a trade or friendship says what it needs
 instead of counting down, because there is nothing to count.
 
-### Everything you have ever caught
+### The Pokédex, with or without a party
 
-Under the party sits a second line:
+Under the party sits a second box, and it has two lists:
 
 ```
 24 caught of 251 · 61 seen                        ▾
+  [ Caught ]  [ All ]
 ```
 
-That is the game's own Pokédex, read out of the same memory the game writes it
-to — so it counts what you caught on a different device and brought over in a
-save, and it does not count anything the pilot merely walked past. Tap a name
-to see what that species is, what it becomes, and every move it learns by
-levelling. There are no stats there, because those belong to a Pokémon and not
-to a species.
+**Caught** is the game's own Pokédex, read out of the same memory the game
+writes it to — so it counts what you caught on a different device and brought
+over in a save, and it does not count anything the pilot merely walked past.
 
-If your cartridge's symbol file does not name the Pokédex flags, this box is
-not there at all — see [what the two pickers
-refuse](#what-the-two-pickers-refuse). That is the same rule the rest of the
-app follows: a thing it cannot read is a thing it does not claim.
+**All** is every species the cartridge has, and it needs nothing from your
+game: no party, no catches, not even a game loaded. It is there for the
+question a Pokédex is actually for — *what does this become, and when?* — asked
+about something you are not carrying. Tap a name and you get what the cartridge
+says about that species:
+
+```
+PIDGEY                              NORMAL / FLYING
+ stat    base
+ HP       40   ▬▬▬▭▭▭▭▭▭▭
+ Atk      45   ▬▬▬▭▭▭▭▭▭▭
+ …
+ becomes  PIDGEOTTO at Lv18
+ learns   Lv1 TACKLE · Lv5 SAND-ATTACK · Lv9 GUST · Lv15 QUICK ATTACK · …
+```
+
+Two things differ from the card you get by tapping a Pokémon in your party, and
+both are the same reason: **there is no individual here.** The stats are the
+species' *base* stats rather than one Pokémon's, drawn against 255 so the bars
+compare between species — and there are no DV or training columns, because
+nothing has rolled or earned anything. And you get the *whole* learnset instead
+of "knows" and "next", because those two are facts about a Pokémon you are
+levelling and this is not one.
+
+The list starts folded at twenty-four with a `+227 more` under it, the same way
+the Travel picker does. Two hundred and fifty-one names is a lot to scroll, and
+it is behind a deliberate tap rather than in your way.
+
+If your cartridge's symbol file does not name the Pokédex flags, **Caught**
+says so and **All** still works — that half is the ROM's rather than the save's.
+See [what the two pickers refuse](#what-the-two-pickers-refuse): a thing the
+app cannot read is a thing it does not claim, and the two halves cannot be read
+by the same means.
 
 ## What the game is saying, while the pilot works
 
@@ -1584,7 +1611,7 @@ deployed, which is not the question you are asking when a bug you saw fixed is
 still in front of you. `tools/check-app` asserts that number matches the service
 worker's cache name, because a version display that lies is worse than none.
 
-<!-- covers: sw.js @ becb5c3d0d81 -->
+<!-- covers: sw.js @ 7566040ca9eb -->
 
 The worker fetches **network first, falling back to the cache**. That is the
 opposite of the usual offline-first advice, on purpose.

@@ -664,6 +664,10 @@
                     grid-template-columns:4.6em 2.4em 1.6em 1fr 1fr;
                     gap:5px;align-items:center;padding:1px 0;
                     font-variant-numeric:tabular-nums;white-space:nowrap}
+  /* Three columns, not five: a species has base stats and no individual to
+     have rolled or trained anything, so the two bars that would sit empty are
+     not drawn at all. */
+  .dexcard .statrow.base{grid-template-columns:4.6em 2.6em 1fr}
   .dexcard .statrow.head{color:var(--dim);opacity:.7;padding-bottom:3px}
   .dexcard .statrow b{font-weight:600;color:var(--ink)}
   .dexcard .meter{height:4px;border-radius:2px;background:var(--track);
@@ -673,6 +677,10 @@
   .dexcard .meter.ev i{background:var(--ok)}
   .dexcard .dexline{padding-top:6px;line-height:1.6}
   .dexcard .dexline b{color:var(--ink);font-weight:600}
+  /* Above the chips rather than in the summary row: a button placed inside a
+     disclosure summary opens and closes the box it sits in as well as doing
+     its own job, and those are not the same gesture. */
+  .dexseg{margin:0 0 8px}
   .dexbox .chips{padding-bottom:8px}
   .dexbox .chips button{min-height:32px;padding:5px 10px;font-size:12px}
   /* Open, it needs an edge: the first offer below it wears no top rule, being
@@ -1292,6 +1300,16 @@
          flying, and this is the record. Hidden until the game keeps one. -->
     <details class="partybox dexbox hide" id="dexpanel">
       <summary id="dexline">no Pokédex yet</summary>
+      <!-- Two segments rather than one button that cycles, which is the lesson
+           the Colour row already paid for: a control that prints its own state
+           and changes on press tells you neither how many states there are nor
+           which way round. These say both at rest, and the second one is the
+           whole answer to "let me look something up without carrying it". -->
+      <div class="seg dexseg" id="dexmode" role="group"
+           aria-label="Which Pokémon to list">
+        <button type="button" data-mode="caught" aria-pressed="true">Caught</button>
+        <button type="button" data-mode="all" aria-pressed="false">All</button>
+      </div>
       <div class="chips" id="dexchips"></div>
       <div class="dexcard hide" id="dexentry"></div>
     </details>

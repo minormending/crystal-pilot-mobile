@@ -471,21 +471,38 @@ cards is a scroll and the line above them is already the summary of all six.
 
 ### The record, which is not the party
 
-Underneath sits a second box for everything the cartridge has ever caught —
-a different list from the six being carried, and worth its own heading for
-exactly that reason. Its summary is three numbers and the third is what makes
-the other two mean anything:
+Underneath sits a second box, and it holds two lists behind a two-segment
+control:
 
 ```
 24 caught of 251 · 61 seen                        ▾
+  [ Caught ]  [ All ]
 ```
 
-Tapping a name shows what that species *is* — its types, what it becomes and
-what it learns — rather than what yours happens to be, because there is no
-party entry behind it to have stats. On a cartridge whose symbol file does not
-name the Pokédex flags the box is not there at all: a Pokédex nobody can read
-and a Pokédex with nothing in it are different, and only one of them deserves a
-heading.
+Two segments rather than one button that cycles, which is the lesson the Colour
+row already paid for: a control that prints its own state and changes on press
+says neither how many states there are nor which way round. These say both at
+rest.
+
+**Caught** is what this game remembers — a different list from the six being
+carried, and worth its own heading for exactly that reason. **All** is every
+species the cartridge has, and it is the answer to *let me look something up
+without carrying it*. It needs no party, no catches and no game: that half of a
+Pokédex is the ROM's rather than the save's, which is also why the box now
+appears as soon as a cartridge is in rather than waiting for a world.
+
+The card under the chips changes shape with the list, and both shapes are
+honest about the same thing — **there is no individual here.** A species gets
+its *base* stats, drawn against 255 so the bars compare between species, and no
+DV or training columns, because nothing has rolled or earned anything. It gets
+the whole learnset instead of "knows" and "next", because those two are facts
+about a Pokémon being levelled. Drawing the party card for a species gave six
+rows of em-dashes beside two empty bars — a table saying nothing in the space
+where the answer goes.
+
+On a cartridge whose symbol file does not name the Pokédex flags, **Caught**
+says so and **All** still works. The box no longer disappears, because the two
+halves are read by different means and only one of them was ever missing.
 
 ### The row that is about the hour rather than the map
 
@@ -1191,4 +1208,4 @@ So this page carries a marker naming the files it describes and the hash they
 had when it was last read against them. `tools/docs-check` reports it when they
 move, and the pre-commit hook blocks on that report.
 
-<!-- covers: index.html app/main.js app/rows.js @ 7e03e8048638 -->
+<!-- covers: index.html app/main.js app/rows.js @ 477032ddb487 -->
