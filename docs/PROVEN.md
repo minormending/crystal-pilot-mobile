@@ -340,13 +340,13 @@ second, which is there so the core's own waits finish, not to run a game.
 
 Everything above was watched happening. This section was the exception, and the
 exception was the point of it: after the ROM-hack work shipped, **forty-three**
-passes went looking for defects in code that already worked, and found **184** —
+passes went looking for defects in code that already worked, and found **189** —
 a handful of them created by a fix on the way, which are in the table in italics
 because they are a different kind of thing. None of them announced itself.
 
 **Reading found twenty-three**, more than any other single method, which is why
 it comes first in the table and why it is worth doing before touching the game.
-But the interesting number is the tail: the remaining hundred and sixty-one were
+But the interesting number is the tail: the remaining hundred and sixty-six were
 found almost as many different ways, and almost every entry in that column is a sentence rather than
 a category — *measuring the fix*, *asking a second tile*, *feeding it the wrong
 thing*, *writing a cartridge Crystal is not*, *a test, before the cartridge*,
@@ -562,6 +562,11 @@ exactly why nothing failed.
 | 43 | *`COORD_BYTES` was hand-copied into the new tool as 5 where the app says 8, so every map with a coord event parsed into drift: 233 disagreements over 3879 phantom objects, and Cianwood City produced objects of "type 9"* | *any map with a trigger tile on it* | *`--verify`, over all 388 maps* |
 | 43 | *`MAP_ATTRIBUTES` was hand-copied as 1 where the app says 3, so no map could be named at all* | *the gym check, on its first run* | *the gym check, on its first run* |
 | 43 | three constants copied by hand into a second reader of the same cartridge tables, three of them wrong — the duplication was the defect rather than the carelessness | — | writing the third one |
+| 43 | **the one condition that decides whether your game was saved had nothing asserting either half** — `!==` to `===` reports success exactly when the battery did not move, and `&&` to `||` accepts a battery that changed but holds no save | press Save in a build where that line was wrong | `tools/mutate`, on the module its per-file report ranked weakest in gen2 |
+| 43 | all three states a save refuses in could report `ok: true`, including from inside a battle | save mid-battle | the same |
+| 43 | the shop's stock-list guard could be inverted, which walks the cursor past CANCEL and presses A at whatever is under it | ask a mart for something it does not stock | the same |
+| 43 | the first-save announcement's flag inverted with the suite green | the first save on a blank cartridge | the same |
+| 43 | nothing exercised choosing between two gyms, because there had only ever been one | win a badge, ask for the next gym | declaring the second one |
 
 Five things in that table are worth more than the individual rows.
 
@@ -3021,6 +3026,23 @@ Gym at (18,17), its Mart at (9,17), its Centre at (31,25) — all fall out of th
 town's warp table. Falkner's tile and his badge bit fall out of the object
 table and the cartridge's own `EngineFlags`. Five agreements with numbers got
 the slow way, and only then the same reading applied to Azalea.
+
+**The audit half went where the per-file report pointed, again, and found the
+worst survivor this tool has produced.** `gen2/menus.js` ranked weakest in the
+directory at 39%, and the mutation that lived there was one condition:
+
+```js
+if (digest(after) !== hashBefore && this.state.saveIsPresent(after))
+```
+
+Both halves could be broken with the whole suite green. `!==` to `===` makes
+the app report success *precisely when the battery did not move*; `&&` to `||`
+makes it accept a battery that changed but holds no save. Either way somebody
+closes the tab believing their game is safe. `docs/USING.md` has explained that
+rule for twenty passes — *success is the battery changing, not the presses
+landing* — and nothing was watching it. Six tests now do, along with the three
+states a save refuses in, all three of which could report success, one of them
+from inside a battle.
 
 **The honest limit is written into the app's own documentation.** Bugsy has not
 been fought. The road to Azalea wants the Egg, taking the Egg is a
