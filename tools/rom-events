@@ -500,6 +500,167 @@ def badge_bits(cart):
     return out
 
 
+# A menu header in pokecrystal: a flags byte, the box as `y1, x1, y2, x2`,
+# a pointer to the menu data, and a default. The data begins with its own
+# flags byte and then the item count, and the strings follow it.
+#
+# **The layout is derived, and it is derived against a measurement.** Read
+# this way, `BattleMenuHeader` comes out as 34 items with its border at row
+# 12 -- which is exactly what `gen2/engine.js` says after somebody measured it
+# on a real cartridge, before any of this existed. A derivation that
+# reproduces a measurement is worth more than either on its own, and it is the
+# reason the *other* headers here can be trusted without a screen to look at.
+MENU_HEADER_BYTES = 7
+MENU_DATA_ITEMS = 1
+
+# The boxes the app tells apart by shape, and what it calls each one. A box
+# this app drives by a signature has to have that signature checked, because
+# the failure is silent in both directions: a box mistaken for another is
+# pressed with the wrong answer, and a box nothing matches is pressed on
+# through.
+APP_BOXES = [
+    ('BattleMenuHeader', 'battleMenu', None),
+    ('BattleMonMenu.MenuHeader', 'switchBox', 'SWITCH'),
+]
+
+
+def menu_header(cart, name):
+    """`{items, top, first}` for a named menu header, or None."""
+    if name not in cart.by_name:
+        return None
+    bank, addr = cart.by_name[name]
+    off = offset(bank, addr)
+    head = cart.rom[off:off + MENU_HEADER_BYTES]
+    if len(head) < MENU_HEADER_BYTES:
+        return None
+    top, ptr = head[1], head[5] | head[6] << 8
+    data = offset(bank, ptr)
+    items = cart.rom[data + MENU_DATA_ITEMS]
+    # The strings run one after another behind the count, each ended by "@",
+    # and `Cart.text` already knows the cartridge's alphabet -- so the first
+    # option's name is read with the same decoder every other string in this
+    # tool goes through rather than a second one written here.
+    first = cart.text(bank, ptr + MENU_DATA_ITEMS + 1, limit=12)
+    return {'items': items, 'top': top, 'first': first}
+
+
+def menus(cart):
+    """Every box the app drives by shape, against the cartridge's own header.
+
+    The one that could not be guessed is the switch box. The *field* party
+    menu's options begin STATS, SWITCH; the *battle* one begins SWITCH,
+    STATS -- so the press that switches a Pokemon in during a fight opens its
+    stats out in the world, and assuming the order seen more often costs a
+    turn to a stats screen while a trainer takes its own.
+    """
+    want = app_numbers()
+    bad = 0
+    for name, field, first in APP_BOXES:
+        got = menu_header(cart, name)
+        if not got:
+            print(f'  ??  {name} is not in this symbol file')
+            bad += 1
+            continue
+        mine = want.get(field, {})
+        # The first option's name is only printed where it is also checked.
+        # `BattleMenuHeader`'s data points at a separate `.Text` table rather
+        # than carrying its strings inline, so reading them at the same
+        # offset gives bytes that are not text -- and printing those as
+        # though they were is how a tool teaches somebody something false.
+        line = (f'  {field}: {got["items"]} item(s), border row {got["top"]}'
+                + (f', first "{got["first"]}"' if first else ''))
+        for key in ('items', 'top'):
+            if key in mine and mine[key] != got[key]:
+                print(f'  !!  {field}.{key} says {mine[key]}, '
+                      f'{name} has {got[key]}')
+                bad += 1
+        if first and got['first'] != first:
+            print(f'  !!  {field} expects "{first}" first, '
+                  f'{name} begins "{got["first"]}"')
+            bad += 1
+        print(line + ('' if bad else '  — and the app agrees'))
+    return bad
+
+
+def collisions(cart):
+    """Named menu headers that share a signature with one the app declares.
+
+    **The hazard the app cannot see for itself.** Every box here is told apart
+    by `items` and the border row, so two boxes with the same pair are two
+    boxes a snapshot cannot distinguish -- and `engine.js` already documents
+    three of those, found the hard way: `learnMove` and the battle pack's
+    USE/QUIT are both two items at row 7, and the pack mid-throw is two at
+    row 0. Which of them is on screen can only come from *when* it was asked,
+    which is a claim the callers have to keep.
+
+    So this lists them rather than failing on them. A collision is not a bug;
+    an *unknown* collision is, and the list is the difference.
+    """
+    want = app_numbers()
+    mine = {(v.get('items'), v.get('top')): k for k, v in want.items()
+            if 'items' in v and 'top' in v}
+    named = [n for n in cart.by_name
+             if n.endswith('MenuHeader') or n.endswith('.MenuHeader')]
+    out = {}
+    for name in sorted(named):
+        got = menu_header(cart, name)
+        if not got:
+            continue
+        key = (got['items'], got['top'])
+        if key in mine:
+            out.setdefault(mine[key], []).append(name)
+    return out
+
+
+def unique_left(cart, want=2):
+    """Which named menu headers put their box's left edge at `want`.
+
+    The Bug Contest's battle menu shares `battleMenu`'s two numbers exactly,
+    so the app tells it apart by this third one -- and acting on a third
+    number is only safe while that number is *unique*. It is: one header out
+    of 73 on this cartridge. If a future build adds a second, this says so
+    before the pilot starts refusing battles it could have fought.
+    """
+    out = []
+    for name in sorted(cart.by_name):
+        if not (name.endswith('MenuHeader') or name.endswith('.MenuHeader')):
+            continue
+        bank, addr = cart.by_name[name]
+        head = cart.rom[offset(bank, addr):offset(bank, addr) + MENU_HEADER_BYTES]
+        if len(head) == MENU_HEADER_BYTES and head[2] == want:
+            out.append(name)
+    return out
+
+
+def app_others():
+    """The battle menus the app says are *not* its own, out of the source."""
+    src = (ROOT / 'gen2' / 'engine.js').read_text()
+    m = re.search(r'otherBattles:\s*\[(.*?)\]', src, re.S)
+    if not m:
+        return []
+    return [{'left': int(left), 'what': what}
+            for left, what in re.findall(r"left:\s*(\d+),\s*what:\s*'([^']+)'",
+                                         m.group(1))]
+
+
+def app_numbers():
+    """The box signatures `gen2/engine.js` declares, read out of the source.
+
+    Read rather than restated, for the reason three hand-copied strides
+    already taught this file: a number written down twice is a number that
+    will disagree with itself, and the disagreement will be silent.
+    """
+    src = (ROOT / 'gen2' / 'engine.js').read_text()
+    out = {}
+    for field in ('battleMenu', 'switchBox', 'learnMove'):
+        m = re.search(field + r':\s*\{([^}]*)\}', src)
+        if not m:
+            continue
+        out[field] = {k: int(v) for k, v in
+                      re.findall(r'(\w+):\s*(\d+)', m.group(1))}
+    return out
+
+
 def gyms(cart, name_of=None):
     """Every declared gym, against what the cartridge says."""
     bad = 0
@@ -688,6 +849,29 @@ def main(argv):
         return 1 if gyms(cart, map_symbol(cart)) else 0
     if '--verify' in argv:
         return 1 if verify(cart) else 0
+    if '--menus' in argv:
+        bad = menus(cart)
+        # The third number, and whether it is still worth trusting.
+        for other in app_others():
+            names = unique_left(cart, other['left'])
+            if len(names) == 1:
+                print(f'  left column {other["left"]} is unique to '
+                      f'{names[0]} — so "{other["what"]}" is safe to act on')
+            else:
+                print(f'  !!  left column {other["left"]} is claimed by '
+                      f'{len(names)} header(s), so it does not identify '
+                      f'"{other["what"]}"')
+                for n in names:
+                    print(f'      {n}')
+                bad += 1
+        shared = collisions(cart)
+        for field, names in sorted(shared.items()):
+            if len(names) > 1:
+                print(f'  shared: {field} ({len(names)} boxes with its '
+                      f'signature) — only the moment tells them apart')
+                for n in names:
+                    print(f'      {n}')
+        return 1 if bad else 0
     if '--objects' in argv:
         for line in map_objects(cart, argv[argv.index('--objects') + 1]):
             print(line)

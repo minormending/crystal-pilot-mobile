@@ -1680,6 +1680,68 @@ def check_types():
     return ok(out.stdout.strip().splitlines()[-1])
 
 
+def check_menus():
+    """The boxes the app drives by shape are the shapes the cartridge draws.
+
+    Every menu in this app is told apart by two numbers -- how many items its
+    data declares and which row its border sits on -- so a wrong pair is a box
+    driven with the wrong answer, and a pair nothing matches is a box pressed
+    on through. Both fail quietly.
+
+    **Static:** the profile has to declare the pair, and the code has to read
+    it off the instance rather than off a module constant -- a title that
+    moved a box is the whole reason these are profile fields.
+
+    **With a cartridge:** `tools/rom-events --menus` reads the cartridge's own
+    menu headers. That derivation is checkable rather than trusted, because
+    read the same way `BattleMenuHeader` comes out as 34 items at row 12,
+    which is what `battleMenu` has said since somebody measured it on a real
+    cartridge. It also lists the boxes that *share* a declared signature,
+    which is the hazard the app cannot see for itself.
+    """
+    engine = (ROOT / "gen2" / "engine.js").read_text()
+    battle = (ROOT / "gen2" / "battle.js").read_text()
+    problems = []
+    for field in ("battleMenu", "learnMove", "switchBox"):
+        m = re.search(field + r":\s*\{([^}]*)\}", engine)
+        if not m:
+            problems.append(f"gen2/engine.js  declares no {field}")
+            continue
+        have = dict(re.findall(r"(\w+):\s*(\d+)", m.group(1)))
+        for key in ("items", "top"):
+            if key not in have:
+                problems.append(f"gen2/engine.js  {field} has no {key}, "
+                                f"which is half of what tells a box apart")
+    # And the predicate has to ask the instance. `learnMoveBox` takes an
+    # engine argument for exactly this reason, and the two beside it should
+    # not quietly go back to a constant.
+    for fn in ("learnMoveBox", "switchBoxUp"):
+        m = re.search(r"export function " + fn + r"\(s, engine\)", battle)
+        if not m:
+            problems.append(f"gen2/battle.js  {fn} does not take an engine, so "
+                            f"a title that moved the box is matched where it "
+                            f"was")
+    for p in problems:
+        print(f"        {p}")
+    if problems:
+        return fail(f"{len(problems)} box signature(s) not declared or not asked")
+
+    if not (ROOT / "dev" / "pokecrystal.gbc").exists():
+        return ok("every box the app drives declares its shape; no cartridge "
+                  "here, so the shapes are not checked")
+    out = subprocess.run([sys.executable, str(HERE / "rom-events"), "--menus"],
+                         capture_output=True, text=True)
+    bad = [l for l in out.stdout.splitlines() if "!!" in l or "??" in l]
+    for l in bad:
+        print(f"        {l.strip()}")
+    if out.returncode or bad:
+        return fail(f"{len(bad) or 1} box(es) the cartridge does not agree with")
+    agreed = [l for l in out.stdout.splitlines() if "the app agrees" in l]
+    shared = [l for l in out.stdout.splitlines() if l.strip().startswith("shared:")]
+    return ok(f"{len(agreed)} box(es) match the cartridge's own menu header, "
+              f"and {len(shared)} signature(s) are shared by more than one box")
+
+
 CHECKS = {
     "syntax": check_syntax,
     "layers": check_layers,
@@ -1707,6 +1769,7 @@ CHECKS = {
     "romlayout": check_rom_layout,
     "gyms": check_gyms,
     "types": check_types,
+    "menus": check_menus,
 }
 
 

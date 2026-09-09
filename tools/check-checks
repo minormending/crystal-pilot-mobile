@@ -119,6 +119,12 @@ def mutations(root):
         # table came to claim 143 while 576 ran.
         "counts": lambda: edit("tests/cases/input.mjs", append(
             "\ntest('probe', async (t) => { t.true(true); });\n")),
+        # The switch box moved one row, which is what a signature copied off
+        # the wrong screen looks like -- and it would make the pilot press A
+        # into a party list it thought was a confirmation box.
+        "menus": lambda: edit("gen2/engine.js", sub(
+            "switchBox: { items: 3, top: 11, choose: 1 }",
+            "switchBox: { items: 3, top: 12, choose: 1 }")),
         # The separator read as a row, which is the mistake the whole reader
         # is shaped around: three bytes instead of one swallows NORMAL on
         # GHOST and shifts every row behind it by two, and what comes out is

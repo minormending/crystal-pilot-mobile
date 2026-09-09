@@ -189,19 +189,24 @@ const species = (text) => {
   return Number.isInteger(n) ? n : null;
 };
 
-/** A species' own types and its level-1 moveset, out of BaseData. */
+/**
+ * A species' own types, asked of the app's reader.
+ *
+ * This was a second BaseData reader living here, with the stride and the
+ * field offset written out again -- and it went in miscounting the stats,
+ * reading CHIKORITA as "type 65/GRASS", which is its special defence
+ * followed by half its real answer. A plausible type number, so it printed
+ * rather than failed.
+ *
+ * That is the fifth time copying this app's ROM reading into a second place
+ * produced a confident wrong answer, so the reader moved *into* the app --
+ * where the pilot needs it anyway, because a decision about which Pokemon to
+ * send out cannot come from a party entry: Gen 2 does not keep a Pokemon's
+ * types there.
+ */
 function base(id) {
-  if (!symbols.has('BaseData')) return null;
-  const bank = symbols.bank('BaseData'), addr = symbols.addr('BaseData');
-  // data/pokemon/base_stats: the species id, then **six** stats -- hp, attack,
-  // defence, speed, special attack, special defence -- then the two types.
-  // Counted five the first time and read CHIKORITA as "type 65/GRASS", which
-  // is its special defence and half its real answer: 65 is a plausible type
-  // number, so the mistake printed rather than crashed, and a Grass move on a
-  // Grass/Grass CATERPIE came out at a quarter. Measured back to +7 by
-  // checking three species whose types nobody needs a table to know.
-  const at = addr + (id - 1) * 32;
-  return { types: [gb.romByte(bank, at + 7), gb.romByte(bank, at + 8)] };
+  const types = data.speciesTypes(id);
+  return types ? { types } : null;
 }
 
 function rank(mineText, themText, moveIds) {
