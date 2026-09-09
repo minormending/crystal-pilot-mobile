@@ -59,20 +59,18 @@ const data = new RomData(symbols, gb, ['JohtoGrassWildMons', 'KantoGrassWildMons
 // and the special ones, and 0x06 is the unused BIRD type. Both come back as
 // names nothing uses, so they are skipped by asking the chart and the moves
 // which numbers actually turn up.
+//
+// **The decoding is `RomData.typeName`'s, not this file's.** It used to be a
+// loop right here with a charmap of its own -- upper case, lower case, and
+// everything else dropped -- which is the second-reader problem this tool's
+// own header warns about, sitting inside the tool that warns about it. A type
+// name with a hyphen or a full stop in it would have come out short here and
+// right in the app, and nothing would have said so.
 const TYPE_NAMES = (() => {
   const out = new Map();
   if (!symbols.has('TypeNames')) return out;
-  const bank = symbols.bank('TypeNames'), addr = symbols.addr('TypeNames');
   for (let id = 0; id <= 0x1b; id++) {
-    const ptr = gb.romByte(bank, addr + id * 2) | (gb.romByte(bank, addr + id * 2 + 1) << 8);
-    const bytes = [];
-    for (let i = 0; i < 12; i++) {
-      const b = gb.romByte(bank, ptr + i);
-      if (b === 0x50 || b === 0x7f) break;
-      bytes.push(b);
-    }
-    const name = bytes.map((b) => (b >= 0x80 && b <= 0x99 ? String.fromCharCode(65 + b - 0x80)
-      : b >= 0xa0 && b <= 0xb9 ? String.fromCharCode(97 + b - 0xa0) : '')).join('');
+    const name = data.typeName(id);
     if (name) out.set(id, name.toUpperCase());
   }
   return out;

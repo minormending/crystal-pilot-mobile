@@ -1,0 +1,320 @@
+#!/usr/bin/env node
+// What the cartridge knows about a species, asked of the app's own reader.
+//
+//     tools/dex cyndaquil             one species: stats, types, evolutions,
+//                                     and every move it learns by levelling
+//     tools/dex 155                   the same, by Pokedex number
+//     tools/dex --at 14 cyndaquil     what changes at that level, and what is
+//                                     next after it
+//     tools/dex --evolves 20          every species that evolves at Lv20
+//     tools/dex --verify              the whole table against things that were
+//                                     true about Pokemon before this app was
+//
+// **This runs `gen2/romdata.js`.** Same rule as `tools/types` and `tools/route`
+// before it: a second reader written in the tool agrees with the app's reader
+// until it does not, and then the tool is a confident wrong answer that hides
+// the bug it was written to find. So the entry printed here is byte for byte
+// the entry the dex card draws, and `--verify` is a check *on* the app rather
+// than beside it.
+//
+// What `--verify` is actually for. `EvosAttacks` is a pointer table into a run
+// of variable-width records followed by a run of pairs, with a zero between
+// them and no other structure -- and every way of misreading it produces
+// *something*. Reading EVOLVE_STAT at three bytes instead of four shifts
+// everything behind it and still decodes: TYROGUE comes back evolving into
+// move ids at impossible levels, which is only obviously wrong if somebody
+// looks at TYROGUE. So the checks below ask the decoded table whether it
+// agrees with facts that predate this repository.
+//
+// Needs a ROM and a symbol file in `dev/`, which are not in this repository and
+// never will be. Without them it says so and exits 0.
+import { readFileSync, existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+
+import { Symbols } from '../gen2/symbols.js';
+import { RomData } from '../gen2/romdata.js';
+import { gen2 } from '../gen2/engine.js';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const DEV = join(HERE, '..', 'dev');
+const ROM = join(DEV, 'pokecrystal.gbc');
+const SYM = join(DEV, 'pokecrystal.sym');
+
+if (!existsSync(ROM) || !existsSync(SYM)) {
+  console.log('no cartridge in dev/ — nothing to read');
+  console.log('(a ROM is not in this repository and never will be)');
+  process.exit(0);
+}
+
+const rom = readFileSync(ROM);
+const symbols = new Symbols(readFileSync(SYM, 'utf8'));
+const gb = { romByte: (bank, addr) => rom[bank * 0x4000 + (addr & 0x3fff)] };
+const data = new RomData(symbols, gb, ['JohtoGrassWildMons', 'KantoGrassWildMons']);
+
+const COUNT = gen2.speciesCount;
+
+/** A species id from a name or a number, or null. */
+function speciesId(text) {
+  const n = Number(text);
+  if (Number.isInteger(n) && n >= 1 && n <= COUNT) return n;
+  const want = String(text).toUpperCase().replace(/[^A-Z0-9]/g, '');
+  for (let id = 1; id <= COUNT; id++) {
+    if (data.speciesName(id).toUpperCase().replace(/[^A-Z0-9]/g, '') === want) {
+      return id;
+    }
+  }
+  return null;
+}
+
+const typed = (pair) => [...new Set(pair)].map((t) => data.typeName(t) || `type ${t}`).join('/');
+
+/** One evolution record as a sentence. The tool's own wording, not the app's. */
+function evoLine(rec) {
+  const into = data.speciesName(rec.into);
+  if (rec.kind === 'level') return `Lv${rec.level} → ${into}`;
+  if (rec.kind === 'item') return `${data.itemName(rec.item) || `item ${rec.item}`} → ${into}`;
+  if (rec.kind === 'trade') {
+    const held = rec.item ? ` holding ${data.itemName(rec.item) || `item ${rec.item}`}` : '';
+    return `traded${held} → ${into}`;
+  }
+  if (rec.kind === 'happiness') {
+    const when = { anytime: '', morningDay: ' (morning or day)', night: ' (night)' };
+    return `friendship${when[rec.when] ?? ` (${rec.when})`} → ${into}`;
+  }
+  if (rec.kind === 'stat') {
+    const how = { atkOverDef: 'attack > defence', atkUnderDef: 'attack < defence',
+                  atkEqualsDef: 'attack = defence' };
+    return `Lv${rec.level} with ${how[rec.compare] ?? rec.compare} → ${into}`;
+  }
+  return `${rec.kind} → ${into}`;
+}
+
+function show(id, { at = null } = {}) {
+  const base = data.baseStats(id);
+  const ea = data.evosAttacks(id);
+  const name = data.speciesName(id);
+  if (!base) {
+    console.log(`#${id} ${name} — no readable base-stats entry`);
+    return;
+  }
+  const s = base.stats;
+  console.log(`#${String(id).padStart(3)} ${name}   ${typed(base.types)}`);
+  console.log(`     HP ${s.hp}  Atk ${s.atk}  Def ${s.def}  Spd ${s.spd}`
+    + `  SpA ${s.satk}  SpD ${s.sdef}   (total ${Object.values(s).reduce((a, b) => a + b, 0)})`);
+  console.log(`     catch rate ${base.catchRate} · base exp ${base.baseExp}`
+    + ` · ${base.growth} · hatches in ${base.hatch} cycles`);
+  if (!ea) {
+    console.log('     no readable evolution/learnset entry');
+    return;
+  }
+  console.log(`     evolves: ${ea.evolves.length ? ea.evolves.map(evoLine).join('; ') : 'never'}`);
+  const moves = ea.learns.map((m) => ({ ...m, name: data.moveName(m.move) || `move ${m.move}` }));
+  if (at === null) {
+    console.log('     learns:');
+    for (const m of moves) {
+      console.log(`       Lv${String(m.level).padStart(2)}  ${m.name}`);
+    }
+    return;
+  }
+  const known = moves.filter((m) => m.level <= at);
+  const next = moves.find((m) => m.level > at);
+  console.log(`     at Lv${at} it would know: `
+    + (known.length ? known.map((m) => m.name).join(', ') : 'nothing yet'));
+  console.log(`     next: ${next ? `${next.name} at Lv${next.level} (${next.level - at} away)` : 'nothing more'}`);
+  const soon = ea.evolves.filter((e) => e.level !== undefined && e.level > at);
+  if (soon.length) {
+    console.log(`     becomes: ${soon.map((e) => `${data.speciesName(e.into)} in ${e.level - at}`).join(', ')}`);
+  }
+}
+
+/** One raw pointer out of `EvosAttacksPointers`, for the structural check. */
+function pointer(id) {
+  const bank = symbols.bank('EvosAttacksPointers');
+  const addr = symbols.addr('EvosAttacksPointers');
+  return gb.romByte(bank, addr + (id - 1) * 2)
+    | (gb.romByte(bank, addr + (id - 1) * 2 + 1) << 8);
+}
+
+/**
+ * Every species, against things that must be true.
+ *
+ * The point of each of these is that it fails on a *plausible* misreading
+ * rather than on an obviously broken one. A shifted record still decodes; what
+ * it stops doing is agreeing with the game.
+ */
+function verify() {
+  const bad = [];
+  const say = (msg) => bad.push(msg);
+  let evolveCount = 0, learnCount = 0;
+  const growths = new Set();
+  const jumbled = new Set();
+
+  for (let id = 1; id <= COUNT; id++) {
+    const name = data.speciesName(id);
+    const base = data.baseStats(id);
+    if (!base) { say(`${name}: no base-stats entry`); continue; }
+    growths.add(base.growth);
+    for (const [k, v] of Object.entries(base.stats)) {
+      // Every base stat in Gen 2 is between 1 and 255, and a zero is what a
+      // reader landing one field early on a species with a low stat gets.
+      if (!(v >= 1 && v <= 255)) say(`${name}: base ${k} is ${v}`);
+    }
+    const ea = data.evosAttacks(id);
+    if (!ea) { say(`${name}: no evolution/learnset entry`); continue; }
+    evolveCount += ea.evolves.length;
+    learnCount += ea.learns.length;
+    for (const e of ea.evolves) {
+      if (!(e.into >= 1 && e.into <= COUNT)) {
+        say(`${name}: evolves into #${e.into}, which is not a species`);
+      }
+      if (e.into === id) say(`${name}: evolves into itself`);
+      if (e.level !== undefined && !(e.level >= 2 && e.level <= 100)) {
+        say(`${name}: evolves at Lv${e.level}`);
+      }
+      if (e.kind === undefined) say(`${name}: an evolution with no kind`);
+    }
+    let last = 0;
+    for (const m of ea.learns) {
+      if (!(m.level >= 1 && m.level <= 100)) say(`${name}: learns at Lv${m.level}`);
+      if (!(m.move >= 1 && m.move <= gen2.moveCount)) {
+        say(`${name}: learns move #${m.move}, which is not a move`);
+      } else if (!data.moveName(m.move)) {
+        say(`${name}: learns move #${m.move}, which has no name`);
+      }
+      // Not a failure. A learnset *usually* climbs, and out of order looks
+      // exactly like a shifted read -- but MUK's entry is genuinely written
+      // out of order on this cartridge (Lv45 SLUDGE sits in front of Lv23
+      // MINIMIZE, verified against MukEvosAttacks byte for byte), and the game
+      // does not care because it scans the whole list. So this is counted and
+      // reported rather than failed, and the structural check below is what
+      // actually catches a shift.
+      if (m.level < last) jumbled.add(name);
+      last = m.level;
+    }
+
+    // **The one check a shifted read cannot survive.** The pointers are
+    // strictly ascending and the entries sit end to end behind them, so
+    // species N's record must be exactly as long as the gap to species N+1's
+    // pointer. Recomputed from the decoded record rather than from where the
+    // reader stopped -- widths of the evolutions it found, two bytes per move
+    // it found, and the two terminators -- so a record read at the wrong width
+    // comes out the wrong length and says so, even when every field in it
+    // looks plausible.
+    if (id < COUNT) {
+      const width = ea.evolves.reduce(
+        (n, e) => n + gen2.evo.bytes[gen2.evo.kind[e.kind]], 0);
+      const got = width + 1 + ea.learns.length * 2 + 1;
+      const want = pointer(id + 1) - pointer(id);
+      if (got !== want) {
+        say(`${name}: decoded ${got} bytes and the next entry starts ${want} on`);
+      }
+    }
+  }
+
+  // Every species reading the same growth rate is exactly what byte 0x15 gives
+  // instead of 0x16 -- a real rate, for everybody, which looks like an answer.
+  if (growths.size < 2) {
+    say(`every species has growth rate "${[...growths][0]}" — that is the`
+      + ' signature of reading the wrong byte of the base-stats entry');
+  }
+
+  // Facts that predate this repository.
+  const KNOWN = [
+    ['CYNDAQUIL', (ea) => ea.evolves.length === 1 && ea.evolves[0].kind === 'level'
+      && ea.evolves[0].level === 14 && data.speciesName(ea.evolves[0].into) === 'QUILAVA',
+      'evolves into QUILAVA at Lv14'],
+    ['TYROGUE', (ea) => ea.evolves.length === 3
+      && ea.evolves.every((e) => e.kind === 'stat' && e.level === 20)
+      && new Set(ea.evolves.map((e) => e.compare)).size === 3,
+      'has three EVOLVE_STAT branches at Lv20'],
+    ['EEVEE', (ea) => ea.evolves.length === 5
+      && ea.evolves.filter((e) => e.kind === 'item').length === 3
+      && ea.evolves.filter((e) => e.kind === 'happiness').length === 2,
+      'has three stone evolutions and two friendship ones'],
+    ['POLIWHIRL', (ea) => ea.evolves.some((e) => e.kind === 'trade' && e.item > 0),
+      'evolves by trade holding an item'],
+    ['MAGIKARP', (ea) => ea.evolves.length === 1 && ea.evolves[0].level === 20
+      && data.speciesName(ea.evolves[0].into) === 'GYARADOS',
+      'evolves into GYARADOS at Lv20'],
+    ['MEGANIUM', (ea) => ea.evolves.length === 0, 'evolves into nothing'],
+    ['SMOOCHUM', (ea) => ea.evolves.length === 1 && ea.evolves[0].kind === 'level',
+      'evolves by level'],
+  ];
+  for (const [who, holds, what] of KNOWN) {
+    const id = speciesId(who);
+    if (!id) { say(`${who}: not in this cartridge's name table`); continue; }
+    const ea = data.evosAttacks(id);
+    if (!ea) { say(`${who}: no entry`); continue; }
+    if (!holds(ea)) say(`${who} should be the one that ${what}, and is not`);
+  }
+
+  // The pointer table is the one thing the symbol file can settle on its own.
+  for (const [who, label] of [['CYNDAQUIL', 'CyndaquilEvosAttacks'],
+                              ['PIDGEY', 'PidgeyEvosAttacks']]) {
+    if (!symbols.has(label)) continue;
+    const id = speciesId(who);
+    const { bank, addr } = { bank: symbols.bank('EvosAttacksPointers'),
+                             addr: symbols.addr('EvosAttacksPointers') };
+    const ptr = gb.romByte(bank, addr + (id - 1) * 2)
+      | (gb.romByte(bank, addr + (id - 1) * 2 + 1) << 8);
+    if (ptr !== symbols.addr(label)) {
+      say(`${who}'s pointer is $${ptr.toString(16)} and ${label} is`
+        + ` $${symbols.addr(label).toString(16)}`);
+    }
+  }
+
+  for (const b of bad) console.log(`  ✗ ${b}`);
+  if (bad.length) {
+    console.log(`\n${bad.length} problem(s) over ${COUNT} species`);
+    return 1;
+  }
+  console.log(`  ok  ${COUNT} species: ${evolveCount} evolutions and`
+    + ` ${learnCount} level-up moves, all readable`);
+  console.log(`  ok  ${growths.size} growth rates in use, so the base-stats`
+    + ' entry is being read at the right offset');
+  console.log(`  ok  ${KNOWN.length} species that were famous before this repo`
+    + ' still are, and both pointers land on their own symbol');
+  console.log('  ok  every entry is exactly as long as the gap to the next one,'
+    + ' so nothing was read at the wrong width');
+  console.log(`  note ${jumbled.size} species write their learnset out of level`
+    + ` order: ${[...jumbled].join(', ') || 'none'}`);
+  return 0;
+}
+
+const args = process.argv.slice(2);
+if (args.includes('--verify')) {
+  process.exit(verify());
+}
+
+const evolvesAt = args.indexOf('--evolves');
+if (evolvesAt >= 0) {
+  const want = Number(args[evolvesAt + 1]);
+  let n = 0;
+  for (let id = 1; id <= COUNT; id++) {
+    const ea = data.evosAttacks(id);
+    for (const e of (ea ? ea.evolves : [])) {
+      if (e.level === want) {
+        console.log(`  ${data.speciesName(id).padEnd(11)} → ${data.speciesName(e.into)}`);
+        n++;
+      }
+    }
+  }
+  console.log(`\n${n} species evolve at Lv${want}`);
+  process.exit(0);
+}
+
+const atFlag = args.indexOf('--at');
+const at = atFlag >= 0 ? Number(args[atFlag + 1]) : null;
+const rest = args.filter((a, i) => !a.startsWith('--')
+  && !(atFlag >= 0 && i === atFlag + 1));
+
+if (!rest.length) {
+  console.log('name a species: tools/dex cyndaquil   (or --verify, --evolves 20)');
+  process.exit(1);
+}
+for (const word of rest) {
+  const id = speciesId(word);
+  if (!id) { console.log(`no species called "${word}"`); continue; }
+  show(id, { at });
+}
