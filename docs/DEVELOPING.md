@@ -15,9 +15,9 @@ what CI checks and what the pre-commit hook blocks on.
 ```mermaid
 flowchart LR
     E[an edit] --> H{{".githooks/pre-commit"}}
-    H --> T["./run-tests<br/>832 behaviour tests"]
+    H --> T["./run-tests<br/>840 behaviour tests"]
     H --> C["tools/check-app<br/>29 groups"]
-    H --> D["tools/docs-check<br/>43 tracked sections"]
+    H --> D["tools/docs-check<br/>44 tracked sections"]
     T --> OK[commit]
     C --> OK
     D --> OK
@@ -39,12 +39,12 @@ git config core.hooksPath .githooks
 ./run-tests -v         # notes and stack lines
 ```
 
-832 tests in 26 files, and what each file is about says more than the count:
+840 tests in 26 files, and what each file is about says more than the count:
 
 | file | tests | what it pins down |
 | --- | --- | --- |
 | `journey.mjs` | 163 | the walking: routes, doors, shut legs, healers, gyms, and the map graph |
-| `rows.mjs` | 107 | what every row and offer says, when its button works, and what the runner picks |
+| `rows.mjs` | 115 | what every row and offer says, when its button works, and what the runner picks |
 | `menus.mjs` | 73 | the order the START menu is driven in, and what is closed between tries |
 | `battle.mjs` | 84 | whose turn it is, which Pokémon is out, and a win from a whiteout |
 | `collision.mjs` | 34 | which tiles can be walked, and which have somebody standing on them |
@@ -126,16 +126,16 @@ section gives. Everything by hand runs against a local build.
 
 ```mermaid
 flowchart BT
-    C["the app"] --> T["./run-tests<br/>832 behaviour tests"]
+    C["the app"] --> T["./run-tests<br/>840 behaviour tests"]
     C --> A["tools/check-app<br/>29 groups"]
-    C --> D["tools/docs-check<br/>43 tracked sections"]
+    C --> D["tools/docs-check<br/>44 tracked sections"]
     C --> V["tools/coverage<br/>what the suite never runs"]
     T --> M["tools/mutate<br/>break a line, see who notices"]
     A --> K["tools/check-checks<br/>break each group's own subject"]
     T -.-> V
     M -.->|"survivors, by file"| R(["the suite is load-bearing"])
     K -.->|"29 of 29 bite"| R2(["the groups are awake"])
-    V -.->|"60%, and where"| R3(["the gaps are known"])
+    V -.->|"59%, and where"| R3(["the gaps are known"])
 ```
 
 The two on the right are the same idea pointed at different subjects, and the

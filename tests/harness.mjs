@@ -602,7 +602,8 @@ export const TYPE = {
 };
 
 export function fakeRom({ moves = {}, species = {}, items = {}, chart = [],
-                          landmarks = {}, trainers = {}, types = {} } = {}) {
+                          landmarks = {}, trainers = {}, types = {},
+                          base = {}, evos = {}, typeNames = {} } = {}) {
   const MOVES = {
     33: { id: 33, name: 'TACKLE', power: 35, effect: 0, pp: 35, type: TYPE.NORMAL },
     43: { id: 43, name: 'LEER', power: 0, effect: 19, pp: 30, type: TYPE.NORMAL },
@@ -656,6 +657,13 @@ export function fakeRom({ moves = {}, species = {}, items = {}, chart = [],
     trainer: (name) => trainers[name] || null,
     trainerClass: (group) => `class ${group}`,
     speciesTypes: (id) => types[id] || null,
+    // Tables, like `trainers` and `landmarks`: the *reading* of these is held
+    // to real bytes in romdata.mjs, and a caller only needs the answer. An
+    // absent entry is null, which is a cartridge whose symbol file does not
+    // name the table -- the state a dex card has to survive.
+    baseStats: (id) => base[id] || null,
+    evosAttacks: (id) => evos[id] || null,
+    typeName: (id) => typeNames[id] || '',
     outlook: RomData.prototype.outlook,
     bestLead: RomData.prototype.bestLead,
     matchups() { return CHART; },

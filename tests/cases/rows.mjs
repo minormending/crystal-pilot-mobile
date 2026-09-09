@@ -10,8 +10,9 @@ import { readCode } from '../../gbcore/room.js';
 import { describeHandoff, describeOffers, describeParty, describeReplaced,
          describeRoom, describeScreen, joinFailure, describeRows, describeSlot,
          betterGrind, betterHour, hoursLine, otherHour,
-         describeUndo, describeSaying, describeAuto,
-         describeTitle } from '../../app/rows.js';
+         describeUndo, describeSaying, describeAuto, describeDex,
+         describeDexTotals, describeTitle } from '../../app/rows.js';
+import { gen2 } from '../../gen2/engine.js';
 
 const sym = symbols();
 const state = new GameState(sym);
@@ -1637,4 +1638,130 @@ test('a cartridge that cannot say what is in there says nothing', async (t) => {
                      map: [3, 1] }, { gym: GYM });
   t.false(r.hint.includes('tops out'), `quiet: ${r.hint}`);
   t.true(r.rank.gym > 0 || r.offered.length >= 0, 'and the row is unaffected');
+});
+
+// --- the dex card -----------------------------------------------------------
+
+// One particular Cyndaquil, as `monDetail` hands it over -- the species is
+// what the ROM knows and this is what the save holds about *this* one.
+const MY_CYNDAQUIL = {
+  species: 155, level: 13, slot: 0, hp: 35, maxHp: 37,
+  moves: [33, 43, 108, 52], pp: [35, 30, 20, 25],
+  stats: { hp: 37, atk: 22, def: 18, spd: 25, satk: 23, sdef: 19 },
+  statExp: { hp: 1200, atk: 900, def: 400, spd: 1600, spc: 100 },
+  dvs: { atk: 10, def: 7, spd: 3, spc: 12, hp: 2 },
+  happiness: 70, item: 0, caught: null,
+};
+
+const DEX_ROM = () => fakeRom({
+  species: { 155: 'CYNDAQUIL', 156: 'QUILAVA', 197: 'UMBREON', 134: 'VAPOREON',
+             186: 'POLITOED', 106: 'HITMONLEE' },
+  items: { 24: 'WATER STONE', 82: "KING'S ROCK" },
+  moves: { 108: { id: 108, name: 'SMOKESCREEN', power: 0, effect: 0, pp: 20, type: 0 },
+           98: { id: 98, name: 'QUICK ATTACK', power: 40, effect: 0, pp: 30, type: 0 } },
+  typeNames: { 0x14: 'FIRE', 0x16: 'GRASS' },
+  landmarks: { 2: 'NEW BARK TOWN' },
+  base: { 155: { id: 155, types: [0x14, 0x14],
+                 stats: { hp: 39, atk: 52, def: 43, spd: 65, satk: 60, sdef: 50 },
+                 growth: 'mediumSlow' } },
+  evos: { 155: { evolves: [{ kind: 'level', into: 156, level: 14 }],
+                 learns: [{ level: 1, move: 33 }, { level: 12, move: 52 },
+                          { level: 19, move: 98 }, { level: 36, move: 43 }] } },
+});
+
+test('a dex card says what is coming, not just what is', async (t) => {
+  const d = describeDex(MY_CYNDAQUIL, { rom: DEX_ROM(), engine: gen2 });
+  t.eq(d.name, 'CYNDAQUIL', 'who it is');
+  t.contains(d.next, 'QUICK ATTACK at Lv19',
+             'the next move it learns, which is the grinding question');
+  t.contains(d.next, '6 levels away', 'and how far off that is');
+  t.eq(d.becomes, ['QUILAVA at Lv14 — 1 level away'],
+       'and the same for what it turns into');
+});
+
+test('a single-typed Pokemon is not called FIRE / FIRE', async (t) => {
+  // Gen 2 stores a single type in both slots, the same storage detail that
+  // made `effectiveness` square its multipliers. A card that showed the
+  // storage would read "FIRE / FIRE" for two thirds of the game.
+  const d = describeDex(MY_CYNDAQUIL, { rom: DEX_ROM(), engine: gen2 });
+  t.eq(d.types, ['FIRE'], 'one type, said once');
+});
+
+test('the two special stats show the same DV and the same counter', async (t) => {
+  // Not a bug being rendered. Gen 2 rolls one Special DV and grows one Special
+  // stat experience, and spends both on two stats -- so a card showing six
+  // independent pairs would be showing two numbers twice and implying they can
+  // differ.
+  const d = describeDex(MY_CYNDAQUIL, { rom: DEX_ROM(), engine: gen2 });
+  const by = Object.fromEntries(d.stats.map((s) => [s.key, s]));
+  t.eq(by.satk.dv, by.sdef.dv, 'one nibble behind both');
+  t.eq(by.satk.effort, by.sdef.effort, 'and one counter');
+  t.eq(by.satk.dv, 12, 'which is the special nibble, not the attack one');
+  t.eq(by.hp.dv, 2, 'and HP gets the derived one');
+  t.eq(d.stats.length, 6, 'six rows even so, because six is what the game has');
+});
+
+test('the effort bar is drawn from the reachable ceiling, not the counter',
+     async (t) => {
+  // The counter runs to 65535 and what reaches the stat is its square root, so
+  // a bar drawn from the raw number is nearly empty for a Pokemon that is
+  // nearly done. 65025 is 255 squared, past which the root stops moving.
+  const d = describeDex(MY_CYNDAQUIL, { rom: DEX_ROM(), engine: gen2 });
+  const spd = d.stats.find((s) => s.key === 'spd');
+  t.eq(spd.effort, 1600, 'the counter as the cartridge holds it');
+  t.true(spd.effortPart > 0 && spd.effortPart < 0.1, 'and a fraction of the ceiling');
+  const full = describeDex({ ...MY_CYNDAQUIL, statExp: { spd: 70000 } },
+                           { rom: DEX_ROM(), engine: gen2 });
+  t.eq(full.stats.find((s) => s.key === 'spd').effortPart, 1,
+       'a counter past the useful ceiling is full, not over');
+});
+
+test('the four conditions with nothing to count down say so instead',
+     async (t) => {
+  // Only a level evolution has a distance. Inventing one for a stone or a
+  // trade would be tidy and wrong.
+  const rom = fakeRom({
+    species: { 133: 'EEVEE', 134: 'VAPOREON', 197: 'UMBREON', 186: 'POLITOED' },
+    items: { 24: 'WATER STONE', 82: "KING'S ROCK" },
+    evos: { 133: { evolves: [
+      { kind: 'item', into: 134, item: 24 },
+      { kind: 'happiness', into: 197, when: 'night' },
+      { kind: 'trade', into: 186, item: 82 },
+    ], learns: [] } },
+  });
+  const d = describeDex({ ...MY_CYNDAQUIL, species: 133 }, { rom, engine: gen2 });
+  t.eq(d.becomes, ['VAPOREON with a WATER STONE',
+                   'UMBREON with friendship, at night',
+                   "POLITOED if traded holding a KING'S ROCK"],
+       'each says what it needs and stops');
+});
+
+test('a cartridge that cannot say what it becomes says that once, not six times',
+     async (t) => {
+  const rom = fakeRom({ species: { 155: 'CYNDAQUIL' } });
+  const d = describeDex(MY_CYNDAQUIL, { rom, engine: gen2 });
+  t.eq(d.next, null, 'nothing claimed about the next move');
+  t.eq(d.becomes, [], 'nor about evolutions');
+  t.contains(d.shy, 'does not say', 'one line at the bottom, and the stats stay');
+  t.eq(d.stats.length, 6, 'because the party entry still knows those');
+});
+
+test('where it was caught is left out rather than guessed at', async (t) => {
+  const rom = DEX_ROM();
+  t.eq(describeDex(MY_CYNDAQUIL, { rom, engine: gen2 }).origin, null,
+       'a starter was never caught, and that is not a gap to fill');
+  const d = describeDex(
+    { ...MY_CYNDAQUIL, caught: { level: 5, when: 'night', place: 2 } },
+    { rom, engine: gen2 });
+  t.eq(d.origin, 'caught at Lv5 in NEW BARK TOWN at night',
+       'and where the save does say, the landmark is named');
+});
+
+test('the dex total is three numbers because two of them mean nothing alone',
+     async (t) => {
+  t.eq(describeDexTotals({ caught: [1, 2], seen: [1, 2, 3] }, { engine: gen2 }),
+       '2 caught of 251 · 3 seen', 'the cartridge says how many there are');
+  t.eq(describeDexTotals(null, { engine: gen2 }),
+       'this cartridge does not keep a Pokédex',
+       'and a cartridge that keeps none is not a cartridge with none caught');
 });
