@@ -339,14 +339,14 @@ second, which is there so the core's own waits finish, not to run a game.
 ## The audits, and how each defect was actually found
 
 Everything above was watched happening. This section was the exception, and the
-exception was the point of it: after the ROM-hack work shipped, **forty-six**
-passes went looking for defects in code that already worked, and found **211** —
+exception was the point of it: after the ROM-hack work shipped, **forty-seven**
+passes went looking for defects in code that already worked, and found **224** —
 a handful of them created by a fix on the way, which are in the table in italics
 because they are a different kind of thing. None of them announced itself.
 
 **Reading found twenty-three**, more than any other single method, which is why
 it comes first in the table and why it is worth doing before touching the game.
-But the interesting number is the tail: the remaining hundred and eighty-eight were
+But the interesting number is the tail: the remaining two hundred and one were
 found almost as many different ways, and almost every entry in that column is a sentence rather than
 a category — *measuring the fix*, *asking a second tile*, *feeding it the wrong
 thing*, *writing a cartridge Crystal is not*, *a test, before the cartridge*,
@@ -589,6 +589,19 @@ exactly why nothing failed.
 | 46 | `romByte`'s banking, and both guards around a library that has been seen answering with 10 MB instead of the slice asked for, were unasserted | a section read from the wrong base | the same |
 | 46 | a tie in the option merge could be broken differently on each device, so each keeps its own answer for ever with nothing on either screen saying so | two devices, one stamp | the same, on the sharing layer |
 | 46 | *six tests that looked like they covered `needsOffer` killed nothing: `made = null` returns at the identity check one line above the default they meant to exercise* | *—* | *checking the tests against the tool rather than trusting them* |
+| 47 | **the pilot ranked its moves by the power byte and ignored their type entirely** — `romdata.move()` has returned the type since it was written and nothing read it. A Chikorita in Sprout Tower swung a 55 that does 20.6 over a 35 that does 35 | grind anywhere with a Grass lead | reading the move reader and finding a field twenty-three passes old that nothing consumed |
+| 47 | **a battle nothing carried could touch ran forty turns and reported `stuck`** — the move has power, so the question that asks about PP says yes, and Normal on Ghost takes nothing off. `stuck` is true and says nothing anybody can act on | a Normal-only moveset against a GASTLY | the same reading, from the other side |
+| 47 | **`chip` picked the smallest number rather than the softest hit**, so against a Grass target it swung the 55 that lands halved over the 40 that lands doubled — and knocked out the thing being caught | catch something the lead resists | the mirror of the ranking above |
+| 47 | **and `chip` would weaken with a move the target is immune to**, which is the gentlest hit imaginable and weakens it forever | catch a GASTLY with a Normal lead | the same |
+| 47 | `captureHere` spent eight turns per encounter finding that out, and the message it printed — *weakening is getting nowhere* — was a guess about a fact the cartridge states outright | the same | asking what the new reader could answer sooner |
+| 47 | **`talkPast` had no test at all** — the whole of the fourth pass's lesson about scripted tiles, and six of the seven mutations of its decisions survived the suite: both reaches, the player's own index, the object type, every early return | — | `tools/mutate` on the module, then checking each new test killed something |
+| 47 | **`saveIsPresent` accepted either save marker alone** — the whole reason there are two is that a battery in the middle of being written has one, and downstream of that answer is whether the pilot overwrites somebody's game | a half-written battery | the same, widening its `&&` to `||` |
+| 47 | `saveIsPresent`'s length test never decided anything: an offset past the end of the array is caught by the very next comparison, the one that also catches an offset before the start | — | widening its `<` to `<=` and watching nothing fail either way |
+| 47 | the intro's NAME menu is told apart by three numbers and was checked by none of them — it is asked after every press during the intro, so any one of them satisfying would start typing a name into some other box | a box mid-intro with five items | the same |
+| 47 | `onField` at exactly 1 HP, `canStillWin` on a power-1 move, the move menu's cursor row and the party growing after a throw were four real guards with nothing behind them — read one wrongly and the pilot reasons about the Pokémon behind the one on the field, or reports a catch before the ball lands | any of the four boundaries | the same |
+| 47 | a Pokémon topped up by the potion before it could be handed another, and a fainted one was cured of the poison that is not its problem | a party of two, one nearly full | the same, on the bag heal |
+| 47 | *`itemName` answered a table with no terminator in it with twenty-four question marks, which reads like a name* | *a symbol file pointing at the wrong place* | *writing its twin for the move names* |
+| 47 | *the new chart reader carried a `known` flag that could never be false: with a non-empty type list the loop either returns or sets it* | *—* | *`tools/mutate` flipping the initialiser and nothing failing* |
 
 Five things in that table are worth more than the individual rows.
 
@@ -3246,6 +3259,92 @@ it costs the same to write, it passes, and it buys nothing. Checking the tests
 against the tool rather than trusting them is the only way to tell — which is
 the same argument `tools/check-checks` makes about the checks, one directory
 over.
+
+### A forty-seventh pass: a field read for twenty-three passes and never used
+
+**`romdata.move()` has returned a move's type since the day it was written, and
+no line in the app had ever read it.** So the pilot ranked its moves by the
+power byte alone — which is confidently wrong wherever the type chart
+disagrees, and on this cartridge it disagrees in the first building a Johto
+starter walks into.
+
+| Situation | Ranked by power | What the chart says |
+| --- | --- | --- |
+| CHIKORITA against a BELLSPROUT in Sprout Tower | RAZOR LEAF, 55 | Grass on Grass/Poison is a **quarter** — 20.6 against TACKLE's 35 |
+| CHIKORITA against a ZUBAT on Route 32 | RAZOR LEAF, 55 | Poison/Flying, also a quarter, also 20.6 |
+| TOTODILE against a GASTLY in Sprout Tower | SCRATCH, 40 — a tie, and ties keep the first | Normal on Ghost is **nothing at all** |
+
+The last row is not a slower battle. A Normal move on a Ghost takes no HP off,
+so the enemy's bar never moves and the fight cannot end — the same dead end
+`canStillWin` was written for, reached from the one direction it cannot see,
+because the move *does* have power. Forty turns later `fightBattle` says
+`stuck`, which is true and says nothing anybody can act on. There is a third
+word now, and the words matter because the remedies differ: `nopp` is a Center,
+`notouch` is a different move or a different Pokémon, `stuck` is *look at the
+screen*. So a grind **stops** on `notouch` — a Center does not teach a move,
+and healing to come back at the same wall with a fuller bar is the sort of loop
+this app exists to notice.
+
+**The chart is 110 rows in the cartridge and every wrong way of reading it
+produces a chart.** Three of them, all closed:
+
+1. `$fe` is **one byte** where every row is three. It marks the rows Foresight
+   cancels. Read as a row it swallows the row directly behind it — `NORMAL` on
+   `GHOST` — and shifts everything after by two. Silent, and the matchup it
+   loses first is the one that stops a battle dead.
+2. A single-typed Pokémon is stored as **both** of its types. RATTATA is
+   NORMAL/NORMAL, so multiplying once per slot squares every multiplier: a
+   Grass move on a Water/Water POLIWAG came out at four rather than two.
+3. A bank of zeroes decodes into exactly one row — NORMAL on NORMAL, immune —
+   and a pilot believing that prices every move it owns at nothing. A scan that
+   never finds its `$ff` answers **null**, and null falls back to raw power.
+
+Which is the whole argument for `tools/types --verify`, and for what it
+asserts: twenty-two matchups that were true about Pokémon **before this app
+existed**. Electric cannot touch Ground. Water doubles on Fire. Psychic cannot
+touch Dark. Normal cannot touch Ghost — the row directly behind the separator,
+so a decode that eats one byte fails that one first. Plus the row count, and
+the fact that no multiplier outside {0, 5, 20} appears, because a table read
+wrongly usually comes out the right size divided by something. It runs
+`gen2/romdata.js` rather than a second reader, for the reason
+[`tools/route`](DEVELOPING.md#where-the-pilot-can-get-to) exists: four
+confident wrong answers have come out of copying this app's ROM reading into
+another language.
+
+**The chart reorders the candidates and never empties them.** `strongest` still
+chooses the pool by raw power and only orders it by the chart, deliberately:
+filter on the scaled number and a Normal-only moveset facing a Ghost prices
+every attack at zero, empties the pool, and falls back to slot order — which is
+[how a grind came to choose GROWL](#a-thirty-fifth-pass-a-tool-for-the-step-that-kept-getting-skipped)
+in the first place. A move that does nothing is still a better answer than a
+move that cannot.
+
+### Two branches pretending to be two, and one method nothing could see
+
+`talkPast` is the whole of the [thirty-seventh
+pass](#a-thirty-seventh-pass-the-man-wanted-a-word) — a tile that pushes you
+back belongs to somebody standing beside it, and talking to them is how you get
+past — and it **had no test at all**. Six of the seven mutations of its
+decisions survived the suite. They are tests now, at the boundary rather than
+near it: three tiles back is the tile that pushed you and four is somebody
+else's; two tiles aside is beside it and three is somebody else.
+
+`saveIsPresent` had nothing standing behind the reason there are two markers.
+Either alone is a battery in the middle of being written, and downstream of
+that answer is whether the pilot overwrites somebody's game. **And the length
+test in front of it was doing nothing at all** — an offset past the end of the
+array is caught by the very next comparison, the one that also catches an
+offset before the start. Found by widening the `<` to `<=` and watching nothing
+fail either way, which is the same thing that found a flag in the *new* chart
+reader that could never be false. Two branches pretending to be two, in one
+pass, in code written passes apart.
+
+That is a habit worth naming, because it is the second pass running that the
+tool has been more useful for what it *deletes* than for what it covers: **a
+mutation that survives is either a test worth writing or a branch worth
+removing**, and which one it is takes reading the line to say. The pass before,
+six tests killed nothing. This pass, two survivors turned out to be code that
+could not run.
 
 ## The part that had to be redesigned
 

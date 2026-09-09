@@ -45,6 +45,24 @@ def word(n):
     return str(n)
 
 
+def words(n):
+    """A number the way the running prose writes a big one.
+
+    `word()` gives up above ninety-nine and hands back digits, which is right
+    for a table cell and wrong in the middle of a sentence -- "the remaining
+    188 were found" is not how the rest of that paragraph reads. The bare
+    "hundred" with no "one" in front of it is the prose's own idiom, kept
+    because the check exists to hold a sentence to a count and not to rewrite
+    the sentence.
+    """
+    n = int(n)
+    if n < 100:
+        return word(n)
+    hundreds, rest = divmod(n, 100)
+    lead = 'hundred' if hundreds == 1 else f'{WORDS[hundreds]} hundred'
+    return lead + (f' and {word(rest)}' if rest else '')
+
+
 # --- what the repository can count about itself ------------------------------
 
 def test_counts():
@@ -68,6 +86,10 @@ def shared_symbols():
 
 
 AUDIT_ROW = re.compile(r'^\| (\d+) \| .* \| .* \| .*\|$', re.M)
+# The same row, with its columns kept apart, so the "Found by" column can be
+# counted. One pattern would do for both and would have to be read twice to
+# see which; two named patterns cost a line and read as what they are.
+AUDIT_ROW_FULL = re.compile(r'^\| (\d+) \| (.*) \| (.*) \| (.*)\|$', re.M)
 
 
 def audit_rows():
@@ -79,6 +101,26 @@ def audit_passes():
     """How many passes those defects came from."""
     rows = AUDIT_ROW.findall((ROOT / 'docs' / 'PROVEN.md').read_text())
     return len({int(n) for n in rows})
+
+
+def audit_by_reading():
+    """How many of those defects the "Found by" column credits to reading.
+
+    Two numbers in the prose rest on this column and neither was watched: the
+    method that found the most, and the tail that everything else found. Both
+    are a count of a table three hundred rows below them, which is exactly the
+    distance at which a number stops being re-checked -- and `word()` writes
+    the tail in hundreds, so it drifts in words rather than digits and reads
+    like prose either way.
+    """
+    text = (ROOT / 'docs' / 'PROVEN.md').read_text()
+    return len([m for m in AUDIT_ROW_FULL.finditer(text)
+                if m.group(4).strip() == 'reading'])
+
+
+def audit_other_ways():
+    """And the tail: every defect the other methods found."""
+    return audit_rows() - audit_by_reading()
 
 
 def _tests_total():
@@ -102,6 +144,10 @@ CLAIMS = [
     ('docs/PROVEN.md', r'and found \*\*(\d+)\*\*', audit_rows),
     ('docs/PROVEN.md', r'\*\*([a-z-]+)\*\*\npasses went looking',
      lambda: word(audit_passes())),
+    ('docs/PROVEN.md', r'\*\*Reading found ([a-z-]+)\*\*',
+     lambda: word(audit_by_reading())),
+    ('docs/PROVEN.md', r'the remaining ([a-z- ]+) were\nfound almost',
+     lambda: words(audit_other_ways())),
 ]
 
 
