@@ -794,8 +794,21 @@ It stops for one of five reasons, and says which:
 | `nothing it can start on its own` | the list is empty, or everything left needs a choice from you |
 | `Heal ran and changed nothing` | the job reported success and nothing moved — see below |
 | `8 jobs is one press's worth` | the budget, not a problem |
+| `4 jobs done, saved` | it finished, and the game is written down |
+| `2 jobs done, but not saved` | it finished, and the save was refused — the bar above says why |
 | *the job's own message* | something failed, and it already said why |
 | `stopped` | you pressed Stop |
+
+**It saves the game when it is done.** Up to eight jobs of progress live only
+in the emulator until the game's own save writes them down, and a phone will
+discard a background tab whenever it likes — so a sequence that got something
+done ends with `START → SAVE → YES`, and says `4 jobs done, saved`. A sequence
+that achieved nothing does not write anything, and a save that gets refused
+says `but not saved` rather than pretending.
+
+This does not take anything away from you. *Undo the last job* restores from a
+slot the app takes **before** each job, which the game's own save does not
+touch — so undoing still works exactly as it did.
 
 **"Changed nothing" is the one worth understanding**, because it is what keeps
 this from running for ever. After each job the app compares where you are, the
@@ -1318,7 +1331,7 @@ deployed, which is not the question you are asking when a bug you saw fixed is
 still in front of you. `tools/check-app` asserts that number matches the service
 worker's cache name, because a version display that lies is worse than none.
 
-<!-- covers: sw.js @ 16c0aaffa601 -->
+<!-- covers: sw.js @ 1397d40e6294 -->
 
 The worker fetches **network first, falling back to the cache**. That is the
 opposite of the usual offline-first advice, on purpose.

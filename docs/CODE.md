@@ -111,7 +111,7 @@ of the subtleties in sections 6 and 7.
 
 ## 2. The shape of it
 
-<!-- covers-api: app/main.js gen2/journey.js titles/crystal.js gen2/tasks.js gen2/nav.js gen2/world.js gen2/collision.js gen2/state.js gen2/romdata.js gen2/symbols.js gbcore/gb.js @ ee70003738fb -->
+<!-- covers-api: app/main.js gen2/journey.js titles/crystal.js gen2/tasks.js gen2/nav.js gen2/world.js gen2/collision.js gen2/state.js gen2/romdata.js gen2/symbols.js gbcore/gb.js @ ba2dfbf87d95 -->
 
 Twenty-nine modules, in four directories, and the directories are the design:
 **an import may point down this list and never up.**
@@ -3531,7 +3531,7 @@ This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ 43a421ef7131 -->
+<!-- covers: app/main.js index.html @ e9b62c0bf1a7 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -4080,7 +4080,7 @@ seconds by a page whose loop was supposedly running.
 
 ### One thing at a time
 
-<!-- covers: app/main.js @ dfed2a1e95b3 -->
+<!-- covers: app/main.js @ 78bfb2452e6d -->
 
 One Game Boy, one joypad, one canvas — so a great deal of this app is about
 making sure two things are never driving them at once. There are three claims,
@@ -4412,7 +4412,7 @@ a conversation.
 
 ### Running the list
 
-<!-- covers: app/rows.js app/main.js @ 4076441eb6c5 -->
+<!-- covers: app/rows.js app/main.js @ 48d769000734 -->
 
 The app has spent forty passes learning to answer one question — *what can the
 pilot do here, and which of those is worth most?* — and twenty showing the
@@ -4480,6 +4480,26 @@ nothing" as *nothing happened*. Four balls happened.
 The bound on top of that is eight jobs — one press's worth — because a signature
 that keeps moving is not by itself a reason to keep going for ever.
 
+**The sequencing lives in `app/runner.js`, and moving it there was the point.**
+`describeAuto` -- the choosing -- has been in `rows.js` since the runner was
+written, with tests. The loop was in `main.js`, which no test can import, so
+half of this feature was held by thirty tests and half by none. It takes two
+functions now, one that reads a situation and one that runs a job, and touches
+no document; `main.js` keeps the adapter that knows which button a job is.
+
+Which is worth stating as a rule, because it is the second time it has come up:
+**a decision in the DOM layer is a decision nothing can check.** The first was
+the offers ordering, whose comment and list disagreed for a version.
+
+**And a finished sequence saves the game.** Up to eight jobs of progress live
+only in the emulator until the game's own save writes them to the battery, and
+a phone discards a background tab whenever it likes. Only where a job reported
+success -- saving after a sequence that did nothing is a write nobody asked for
+-- and a refused save is reported rather than assumed, since a sequence that
+says *saved* when it was not is the worst answer available. It cannot undo
+anything either: `Undo the last job` restores from a slot taken *before* each
+job, which the game's own save does not touch.
+
 **Two flags, because they say different things.** `running` is *a job has the
 joypad*, claimed and released by `runTask` around every single job — the runner
 is not itself a `runTask`, and nesting would have its first step refused by the
@@ -4516,7 +4536,7 @@ to deposit your last Pokémon.
 
 ### The settings and the save card
 
-<!-- covers: index.html app/main.js @ 43a421ef7131 -->
+<!-- covers: index.html app/main.js @ e9b62c0bf1a7 -->
 
 The pilot's own list got a glyph column, shorter names and a slot to fill in
 v165. These two cards did not, and reading them found that they had a different
@@ -5144,7 +5164,7 @@ they have been installed.
 
 ### Watching the other device's screen
 
-<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ 17843d17ecfb -->
+<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ 7d6e6e35d61e -->
 
 One device shows its screen; the other watches it, and plays it if the first
 one says so. The picture goes straight between them over WebRTC and never
