@@ -5925,7 +5925,7 @@ about that code did not.
 
 ### The other checks
 
-<!-- covers: tools/check-app @ bed1b9d04d99 -->
+<!-- covers: tools/check-app @ 66a2636eb80e -->
 
 `tools/check-app` runs everything that can be verified without a ROM:
 
@@ -5961,6 +5961,7 @@ tools/check-app contrast     # or one group
 | `gates` | a declared errand names a real method; and, with a cartridge, its event is one the ROM sets and its tile holds whoever sets it |
 | `gyms` | a declared gym's leader, tile, kind and badge bit are what the cartridge says — skipped without a cartridge |
 | `romlayout` | `tools/rom-events` and `gen2/world.js` agree about the map-events strides |
+| `types` | the optional symbols the app reads travel to another device, and — with a cartridge — the decoded type chart agrees with twenty-two matchups nobody had to look up |
 
 Half of that table was missing until the marker above was added: six groups had
 been written and never listed, so the document described five checks while

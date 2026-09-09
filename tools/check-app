@@ -1624,6 +1624,62 @@ def check_gyms():
               f"leader and badge bit")
 
 
+def check_types():
+    """The decoded type chart agrees with things about Pokemon nobody looked up.
+
+    Two halves, and the static one is the point of having it here rather than
+    only in the tool.
+
+    **Static:** every type the pilot can reason about has to be reachable. The
+    chart is read through `TypeMatchups` and both sides' types through
+    `wEnemyMonType1/2` and `wBattleMonType1/2` -- and a symbol the app looks up
+    but does not *share* is a device that works with a `.sym` file and breaks
+    without one, which is the second-phone failure the shared list exists to
+    prevent. `symbols` catches that one-directionally for anything reached
+    through `symbols.addr(...)`; the chart is reached through `symbols.has`
+    and `at()`, which that scan does not see.
+
+    **With a cartridge:** `tools/types --verify` runs twenty-two matchups that
+    were true before this app existed, plus the row count and the set of
+    multipliers. That is not decoration: the table is 110 rows of three bytes
+    with a *one-byte* separator in the middle, so every wrong reading of it
+    produces a chart -- just not this cartridge's -- and the only thing that
+    catches a shift is asking the decoded table about Pokemon.
+    """
+    shared = (ROOT / "gen2" / "symbols.js").read_text()
+    romdata = (ROOT / "gen2" / "romdata.js").read_text()
+    state = (ROOT / "gen2" / "state.js").read_text()
+    problems = []
+    # Names reached with symbols.has(...) rather than symbols.addr(...), which
+    # is the form the one-directional `symbols` scan cannot see.
+    optional = set(re.findall(r"symbols\.has\('(\w+)'\)", romdata + state))
+    for name in sorted(optional):
+        if f"'{name}'" not in shared:
+            problems.append(f"gen2/symbols.js  does not share {name}, which "
+                            f"the app reads when a cartridge has it")
+    for name in ("wEnemyMonType1", "wEnemyMonType2",
+                 "wBattleMonType1", "wBattleMonType2"):
+        if f"'{name}'" not in state:
+            problems.append(f"gen2/state.js  never reads {name}, so half a "
+                            f"matchup is missing")
+    for p in problems:
+        print(f"        {p}")
+    if problems:
+        return fail(f"{len(problems)} type-chart symbol(s) not shared or not read")
+
+    if not (ROOT / "dev" / "pokecrystal.gbc").exists():
+        return ok(f"all {len(optional)} optional symbol(s) shared; no cartridge "
+                  f"here, so the chart itself is not checked")
+    out = subprocess.run(["node", str(HERE / "types"), "--verify"],
+                         capture_output=True, text=True)
+    bad = [l for l in out.stdout.splitlines() if "WRONG" in l]
+    for l in bad:
+        print(f"        {l.strip()}")
+    if out.returncode or bad:
+        return fail(f"{len(bad) or 1} row(s) the cartridge does not agree with")
+    return ok(out.stdout.strip().splitlines()[-1])
+
+
 CHECKS = {
     "syntax": check_syntax,
     "layers": check_layers,
@@ -1650,6 +1706,7 @@ CHECKS = {
     "gates": check_gates,
     "romlayout": check_rom_layout,
     "gyms": check_gyms,
+    "types": check_types,
 }
 
 

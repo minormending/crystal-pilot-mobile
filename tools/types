@@ -1,0 +1,259 @@
+#!/usr/bin/env node
+// The cartridge's type chart, and what the pilot will do with it.
+//
+//     tools/types                     the whole chart, as a grid
+//     tools/types --verify            every row against the game's own rules
+//     tools/types fire grass          one matchup
+//     tools/types --rank cyndaquil caterpie
+//                                     which move a pilot would swing, and why
+//     tools/types --move 75           one move's numbers and name
+//
+// **This runs `gen2/romdata.js`.** The lesson is the one `tools/route` was
+// written for and learned the hard way four times: a second reader in another
+// language agrees with the first until it does not, and then it is a confident
+// wrong answer. So the chart printed here is the chart the pilot ranks with,
+// byte for byte, and `--verify` is a check on the app rather than beside it.
+//
+// What `--verify` is actually for: the chart is 110 rows of three bytes with a
+// one-byte separator in the middle of it, and every way of getting that wrong
+// produces a chart -- just not this cartridge's. Reading the separator as a
+// row eats the row behind it and shifts the rest by two, which is silent, and
+// the only thing that catches it is asking the decoded table whether it agrees
+// with things about Pokemon that were true before this app existed.
+//
+// Needs a ROM and a symbol file in `dev/`, which are not in this repository and
+// never will be. Without them it says so and exits 0.
+import { readFileSync, existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+
+import { Symbols } from '../gen2/symbols.js';
+import { RomData } from '../gen2/romdata.js';
+import { gen2 } from '../gen2/engine.js';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const DEV = join(HERE, '..', 'dev');
+const ROM = join(DEV, 'pokecrystal.gbc');
+const SYM = join(DEV, 'pokecrystal.sym');
+
+if (!existsSync(ROM) || !existsSync(SYM)) {
+  console.log('no cartridge in dev/ — nothing to read');
+  console.log('(a ROM is not in this repository and never will be)');
+  process.exit(0);
+}
+
+const rom = readFileSync(ROM);
+const symbols = new Symbols(readFileSync(SYM, 'utf8'));
+const gb = { romByte: (bank, addr) => rom[bank * 0x4000 + (addr & 0x3fff)] };
+const data = new RomData(symbols, gb, ['JohtoGrassWildMons', 'KantoGrassWildMons']);
+
+// The type numbers, read off the cartridge's own name table rather than
+// written down: `TypeNames` is a pointer table in the same order as the type
+// constants, so the id *is* the index, and a hack that renumbered its types
+// renames them here instead of mislabelling this output.
+//
+// Two gaps are real: Gen 2 leaves 0x0a-0x13 unused between the physical types
+// and the special ones, and 0x06 is the unused BIRD type. Both come back as
+// names nothing uses, so they are skipped by asking the chart and the moves
+// which numbers actually turn up.
+const TYPE_NAMES = (() => {
+  const out = new Map();
+  if (!symbols.has('TypeNames')) return out;
+  const bank = symbols.bank('TypeNames'), addr = symbols.addr('TypeNames');
+  for (let id = 0; id <= 0x1b; id++) {
+    const ptr = gb.romByte(bank, addr + id * 2) | (gb.romByte(bank, addr + id * 2 + 1) << 8);
+    const bytes = [];
+    for (let i = 0; i < 12; i++) {
+      const b = gb.romByte(bank, ptr + i);
+      if (b === 0x50 || b === 0x7f) break;
+      bytes.push(b);
+    }
+    const name = bytes.map((b) => (b >= 0x80 && b <= 0x99 ? String.fromCharCode(65 + b - 0x80)
+      : b >= 0xa0 && b <= 0xb9 ? String.fromCharCode(97 + b - 0xa0) : '')).join('');
+    if (name) out.set(id, name.toUpperCase());
+  }
+  return out;
+})();
+const typeName = (id) => TYPE_NAMES.get(id) || `type ${id}`;
+const typeId = (text) => {
+  const want = text.toUpperCase();
+  for (const [id, name] of TYPE_NAMES) if (name === want) return id;
+  const n = Number(text);
+  return Number.isInteger(n) ? n : null;
+};
+
+const chart = data.matchups();
+if (chart === null) {
+  console.log('this cartridge has no readable type chart');
+  console.log('(no TypeMatchups in the symbol file, or no $ff where a table ends)');
+  process.exit(1);
+}
+
+/** Every type that appears anywhere in the chart, in cartridge order. */
+const used = () => {
+  const seen = new Set();
+  for (const key of chart.keys()) { seen.add(key >> 8); seen.add(key & 0xff); }
+  return [...seen].sort((a, b) => a - b);
+};
+
+const SHOW = { 0: '0', 0.5: '½', 1: '·', 2: '2', 4: '4' };
+const cell = (m) => SHOW[m] || String(m);
+
+function grid() {
+  const types = used();
+  const wide = Math.max(...types.map((t) => typeName(t).length));
+  const head = types.map((t) => typeName(t)[0]).join(' ');
+  console.log(`${'attacking'.padEnd(wide)}  ${head}   (columns: defending, in the same order)`);
+  for (const a of types) {
+    const row = types.map((d) => cell(data.matchup(a, d))).join(' ');
+    console.log(`${typeName(a).padEnd(wide)}  ${row}`);
+  }
+  console.log('');
+  console.log(`· neutral   ½ half   0 immune   ${chart.size} rows written down, `
+              + `the rest of the grid is neutral by omission`);
+}
+
+// --- what the chart has to agree with ---------------------------------------
+//
+// Facts about Pokemon, not about this code: every one of them was true before
+// this app existed, and a decode that shifted by a row or ate the separator
+// gets them wrong. Deliberately a mix -- immunities, the special-type block,
+// the physical block, and the two rows behind the separator, which is the one
+// place a shift shows up first.
+const RULES = [
+  ['ELECTRIC', 'GROUND', 0, 'the one immunity everybody knows'],
+  ['NORMAL', 'GHOST', 0, 'behind the separator: a shift eats this row'],
+  ['FIGHTING', 'GHOST', 0, 'and this one'],
+  ['GHOST', 'NORMAL', 0, 'and it is mutual'],
+  ['POISON', 'STEEL', 0, 'steel does not corrode'],
+  ['GROUND', 'FLYING', 0, 'nothing on the ground reaches it'],
+  ['WATER', 'FIRE', 2, 'the first thing anyone learns'],
+  ['FIRE', 'GRASS', 2, 'the second'],
+  ['GRASS', 'WATER', 2, 'the third'],
+  ['FIRE', 'WATER', 0.5, 'and the way back is halved, not neutral'],
+  ['WATER', 'GRASS', 0.5, 'likewise'],
+  ['GRASS', 'FIRE', 0.5, 'likewise'],
+  ['FIRE', 'STEEL', 2, 'steel melts'],
+  ['NORMAL', 'ROCK', 0.5, 'the first row in the table'],
+  ['NORMAL', 'STEEL', 0.5, 'the second'],
+  ['DARK', 'PSYCHIC', 2, 'the generation this cartridge added'],
+  ['PSYCHIC', 'DARK', 0, 'and the immunity that came with it'],
+  ['BUG', 'DARK', 2, 'which bugs got to exploit'],
+  ['DRAGON', 'DRAGON', 2, 'a type that is only strong against itself'],
+  ['ICE', 'DRAGON', 2, 'and the one that answers it'],
+  ['NORMAL', 'NORMAL', 1, 'neutral by omission, not by a row'],
+  ['WATER', 'ELECTRIC', 1, 'the chart is not symmetric and this proves it'],
+];
+
+function verify() {
+  let bad = 0;
+  for (const [a, d, want, why] of RULES) {
+    const from = typeId(a), to = typeId(d);
+    const got = from === null || to === null ? null : data.matchup(from, to);
+    if (got !== want) {
+      bad++;
+      console.log(`  WRONG  ${a} on ${d}: reads ${got}, should be ${want} — ${why}`);
+    }
+  }
+  // The shape as well as the contents: a table read wrongly is usually the
+  // right size divided or multiplied by something.
+  const rows = chart.size;
+  if (rows !== 110) {
+    bad++;
+    console.log(`  WRONG  ${rows} rows, and this cartridge's table has 110`);
+  }
+  const mults = new Set(chart.values());
+  const expected = new Set([0, 5, 20]);
+  for (const m of mults) {
+    if (!expected.has(m)) {
+      bad++;
+      console.log(`  WRONG  a multiplier of ${m} tenths, and Gen 2 has only 0, 5 and 20`);
+    }
+  }
+  console.log(`${RULES.length} rules over ${rows} rows: `
+              + (bad ? `${bad} disagreement(s)` : 'the chart agrees with all of them'));
+  return bad;
+}
+
+// --- what a pilot would swing -----------------------------------------------
+//
+// The interesting output, and the one that shows the feature earning its keep:
+// it prints what ranking by raw power would have picked beside what the chart
+// picks, so a matchup where they differ is visible rather than argued about.
+const species = (text) => {
+  const want = text.toUpperCase();
+  for (let id = 1; id <= gen2.speciesCount; id++) {
+    if (data.speciesName(id).toUpperCase() === want) return id;
+  }
+  const n = Number(text);
+  return Number.isInteger(n) ? n : null;
+};
+
+/** A species' own types and its level-1 moveset, out of BaseData. */
+function base(id) {
+  if (!symbols.has('BaseData')) return null;
+  const bank = symbols.bank('BaseData'), addr = symbols.addr('BaseData');
+  // data/pokemon/base_stats: the species id, then **six** stats -- hp, attack,
+  // defence, speed, special attack, special defence -- then the two types.
+  // Counted five the first time and read CHIKORITA as "type 65/GRASS", which
+  // is its special defence and half its real answer: 65 is a plausible type
+  // number, so the mistake printed rather than crashed, and a Grass move on a
+  // Grass/Grass CATERPIE came out at a quarter. Measured back to +7 by
+  // checking three species whose types nobody needs a table to know.
+  const at = addr + (id - 1) * 32;
+  return { types: [gb.romByte(bank, at + 7), gb.romByte(bank, at + 8)] };
+}
+
+function rank(mineText, themText, moveIds) {
+  const mine = species(mineText), them = species(themText);
+  const a = mine === null ? null : base(mine), b = them === null ? null : base(them);
+  if (!a || !b) {
+    console.log('need two species this cartridge knows, and a BaseData symbol');
+    return 1;
+  }
+  console.log(`${data.speciesName(mine)} (${a.types.map(typeName).join('/')})`
+              + ` against ${data.speciesName(them)} (${b.types.map(typeName).join('/')})`);
+  const rows = moveIds.map((id) => {
+    const m = data.move(id);
+    return {
+      id, name: data.moveName(id) || `move ${id}`,
+      power: m ? m.power : 0,
+      type: m ? typeName(m.type) : '?',
+      eff: data.effectiveness(id, b.types),
+      hit: data.hitPower(id, b.types, a.types),
+    };
+  });
+  const wide = Math.max(...rows.map((r) => r.name.length));
+  for (const r of rows) {
+    console.log(`  ${r.name.padEnd(wide)}  ${String(r.power).padStart(3)} `
+                + `${r.type.padEnd(8)} x${r.eff === null ? '?' : r.eff}`
+                + `${r.hit !== r.power * (r.eff ?? 1) ? ' +bonus' : ''}`
+                + `  -> ${r.hit}`);
+  }
+  const byPower = rows.reduce((x, y) => (y.power > x.power ? y : x));
+  const byHit = rows.reduce((x, y) => (y.hit > x.hit ? y : x));
+  console.log(`  power alone would swing ${byPower.name}; the chart swings ${byHit.name}`
+              + (byPower.name === byHit.name ? ' — the same' : ' — and they differ'));
+  return 0;
+}
+
+const args = process.argv.slice(2);
+if (args[0] === '--verify') {
+  process.exit(verify() ? 1 : 0);
+} else if (args[0] === '--move') {
+  const id = Number(args[1]);
+  const m = data.move(id);
+  if (!m) { console.log(`no move ${args[1]}`); process.exit(1); }
+  console.log(`${data.moveName(id) || `move ${id}`}: power ${m.power}, `
+              + `${typeName(m.type)}, ${m.pp} PP, effect ${m.effect}`);
+} else if (args[0] === '--rank') {
+  process.exit(rank(args[1], args[2],
+                    args.slice(3).map(Number).filter(Number.isInteger)));
+} else if (args.length === 2) {
+  const from = typeId(args[0]), to = typeId(args[1]);
+  const m = from === null || to === null ? null : data.matchup(from, to);
+  if (m === null) { console.log('no such pair'); process.exit(1); }
+  console.log(`${typeName(from)} on ${typeName(to)}: x${m}`);
+} else {
+  grid();
+}

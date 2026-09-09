@@ -119,6 +119,13 @@ def mutations(root):
         # table came to claim 143 while 576 ran.
         "counts": lambda: edit("tests/cases/input.mjs", append(
             "\ntest('probe', async (t) => { t.true(true); });\n")),
+        # The separator read as a row, which is the mistake the whole reader
+        # is shaped around: three bytes instead of one swallows NORMAL on
+        # GHOST and shifts every row behind it by two, and what comes out is
+        # still a chart.
+        "types": lambda: edit("gen2/engine.js", sub(
+            "chartEnd: 0xff, chartForesight: 0xfe",
+            "chartEnd: 0xff, chartForesight: 0xff0")),
         # The leader moved one tile, which is what a hand-measured
         # coordinate off by one looks like -- and it would send the pilot to
         # press A at an empty floor.

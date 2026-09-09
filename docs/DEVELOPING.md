@@ -16,7 +16,7 @@ what CI checks and what the pre-commit hook blocks on.
 flowchart LR
     E[an edit] --> H{{".githooks/pre-commit"}}
     H --> T["./run-tests<br/>686 behaviour tests"]
-    H --> C["tools/check-app<br/>25 groups"]
+    H --> C["tools/check-app<br/>26 groups"]
     H --> D["tools/docs-check<br/>25 tracked sections"]
     T --> OK[commit]
     C --> OK
@@ -127,7 +127,7 @@ section gives. Everything by hand runs against a local build.
 ```mermaid
 flowchart BT
     C["the app"] --> T["./run-tests<br/>686 behaviour tests"]
-    C --> A["tools/check-app<br/>25 groups"]
+    C --> A["tools/check-app<br/>26 groups"]
     C --> D["tools/docs-check<br/>31 tracked sections"]
     C --> V["tools/coverage<br/>what the suite never runs"]
     T --> M["tools/mutate<br/>break a line, see who notices"]
@@ -381,7 +381,7 @@ is wrong, not the check. It is not in the pre-commit hook: it runs `check-app`
 about fifty times, which is the wrong price for every commit and the right
 one for the commit that changes a check.
 
-`tools/check-app` is twenty-five groups, each one a class of mistake that parses
+`tools/check-app` is twenty-six groups, each one a class of mistake that parses
 fine and is wrong at run time:
 
 | group | asserts |
@@ -408,6 +408,7 @@ fine and is wrong at run time:
 | `gates` | every road a title declares shut names an event the ROM actually sets — skipped without a cartridge |
 | `gyms` | every gym a title declares has the right leader on the right tile, as a script object, with a badge bit that is a badge — skipped without a cartridge |
 | `romlayout` | `tools/rom-events` and `gen2/world.js` agree about all seven map-table strides. Three were hand-copied into the tool and three were wrong |
+| `types` | every optional symbol the app reads travels in the shared digest, both sides' type addresses are read, and — with a cartridge — the decoded type chart agrees with twenty-two matchups nobody had to look up |
 | `counts` | every number in the prose that the repository can compute is right — the test table, the group count, the digest's size, the audit's rows. Two have shipped wrong: *143 tests in seventeen files* while 576 ran, and a digest drawn as 47 entries carrying 53 |
 
 ### Looking at the ranking
@@ -477,6 +478,61 @@ tries, is refused, writes the leg off and re-routes through the cave, which is
 also in the graph as a warp. Route 32 has both exits, and the graph is honest
 about both. Demanding every leg be walkable would mean asserting terrain this
 cannot read; demanding a route *exist* catches the thing worth catching.
+
+### What the type chart actually says
+
+```
+tools/types                            the whole chart, as a grid
+tools/types --verify                   every row against the game's own rules
+tools/types fire grass                 one matchup
+tools/types --rank chikorita bellsprout 33 75
+                                       which move a pilot would swing, and why
+tools/types --move 75                  one move's numbers and name
+```
+
+**This runs `gen2/romdata.js`** — the reader the pilot ranks with, not a second
+one beside it. That is the lesson `tools/route` was written for after four
+separate confident wrong answers came out of copying this app's ROM reading
+into another language, and it is why `--verify` is a check on the app rather
+than one standing next to it.
+
+`--verify` exists because the chart is 110 rows of three bytes with a
+**one-byte** separator in the middle, so every wrong reading of it produces a
+chart — just not this cartridge's. The twenty-two rules it asserts are facts
+about Pokémon rather than facts about this code: Electric cannot touch Ground,
+Water doubles on Fire, Psychic cannot touch Dark, Normal cannot touch Ghost.
+The last of those is the row directly behind the separator, so a decode that
+eats one byte loses it first. It checks the shape too — 110 rows, and no
+multiplier outside {0, 5, 20}, because a table read wrongly usually comes out
+the right size divided or multiplied by something.
+
+`--rank` is the one that shows the feature earning its keep, because it prints
+what ranking by raw power would have picked beside what the chart picks:
+
+```
+CHIKORITA (GRASS/GRASS) against BELLSPROUT (GRASS/POISON)
+  TACKLE       35 NORMAL   x1  -> 35
+  RAZOR LEAF   55 GRASS    x0.25 +bonus  -> 20.625
+  power alone would swing RAZOR LEAF; the chart swings TACKLE — and they differ
+
+TOTODILE (WATER/WATER) against GASTLY (GHOST/POISON)
+  SCRATCH     40 NORMAL   x0  -> 0
+  WATER GUN   40 WATER    x1 +bonus  -> 60
+  power alone would swing SCRATCH; the chart swings WATER GUN — and they differ
+```
+
+Sprout Tower is full of Bellsprout and holds Gastly at night, and it is the
+first building a Johto starter walks into. The second block is not a slower
+battle — a Normal move on a Ghost does nothing, so the enemy's HP never moves
+and the fight cannot end.
+
+**The species' own types come from `BaseData`, and counting its stats wrong is
+silent.** There are six — hp, attack, defence, speed, special attack, special
+defence — and counting five read CHIKORITA as "type 65/GRASS", which is its
+special defence followed by half its real answer. 65 is a plausible type
+number, so it printed instead of failing, and a Grass move on a Grass/Grass
+CATERPIE came out at a quarter. Measured back into place against three species
+whose types nobody needs a table to know.
 
 ### Asking the cartridge, without running it
 
