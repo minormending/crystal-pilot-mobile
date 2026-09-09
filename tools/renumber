@@ -1,0 +1,38 @@
+#!/usr/bin/env python3
+"""Put the numbers the repository can compute back into the prose.
+
+    tools/renumber           write them in, and say what moved
+    tools/renumber --check   say what has drifted and change nothing
+
+The table of what counts as a computable number lives in `tools/counts.py`,
+and `tools/check-app counts` refuses a commit that leaves one wrong. This is
+the other half: a check that can only say no is a check somebody edits around
+at the end of a long pass.
+
+A test file added and the table left alone is how `DEVELOPING.md` came to claim
+143 tests while 576 ran. Now it is one command.
+"""
+import sys
+
+import counts
+
+
+def main(argv):
+    if '--check' in argv:
+        bad = counts.drift()
+        for rel, want, got, ctx in bad:
+            where = f'{rel}: ' + (f'says {got}, should be {want}'
+                                  if got is not None else f'no match for {ctx!r}')
+            print(f'  {where}  ({ctx})' if got is not None else f'  {where}')
+        print(f'{len(bad)} number(s) adrift' if bad else 'every number is current')
+        return 1 if bad else 0
+    moved = counts.rewrite()
+    for rel, what in moved:
+        print(f'  {rel}  {what}')
+    print(f'{len(moved)} number(s) brought up to date' if moved
+          else 'nothing to change')
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main(sys.argv[1:]))

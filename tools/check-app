@@ -16,7 +16,8 @@ import subprocess
 import sys
 import tempfile
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
+HERE = pathlib.Path(__file__).resolve().parent
+ROOT = HERE.parent
 # The app's own source, in dependency order: each directory may import from the
 # ones before it and from none after. Stated here as a list rather than found by
 # globbing, because the order is the design and a checker that discovers it
@@ -1398,59 +1399,42 @@ def check_labels():
         if problems else ok(f"all {len(keys)} job rows are named after their key")
 
 
-TEST_ROW = re.compile(r"^\|\s*`([\w.]+\.mjs)`\s*\|\s*(\d+)\s*\|", re.M)
-TEST_TOTAL = re.compile(r"^(\d+) tests in (\d+) files", re.M)
-TEST_DEF = re.compile(r"^test\(", re.M)
+def check_counts():
+    """Every number in the prose that the repository can compute is right.
 
+    They go stale for the same reason every time: the number lives in a
+    sentence that nothing recomputes, one directory away from the thing it
+    counts. Two have shipped wrong. `DEVELOPING.md` claimed **143 tests in
+    seventeen files** while 576 ran in twenty-three, with two diagrams in it
+    disagreeing with the prose and with each other; and the symbol digest was
+    drawn as **47 entries** while it carried 53.
 
-def check_test_table():
-    """docs/DEVELOPING.md's table of test files says what is actually there.
+    `docs-check` cannot see any of this. That tool watches sections whose
+    marker names the *source* files they describe, and hashes them -- so it
+    catches prose that was not re-read when code moved, and cannot catch a
+    number that was re-read and left alone. This is the other half.
 
-    It said **143 tests in seventeen files** while 576 ran in twenty-three, and
-    the per-file counts were wrong by up to twenty times over -- `journey.mjs`
-    was listed with six and had a hundred and thirty. Two diagrams in the same
-    document disagreed with the prose and with each other (143 and 511).
+    The table of claims is in `tools/counts.py`, shared with `tools/renumber`,
+    which writes the current numbers in. One table rather than two, because a
+    writer and a checker that disagree about what a number means is worse than
+    having neither.
 
-    `docs-check` could not see any of it: that tool watches sections whose
-    marker names the *source* files they describe, and no section claims to
-    cover `tests/`. So a table about the tests went three hundred passes of
-    growth out of date in silence, which is the precise failure the marker
-    system exists to prevent, one directory away from it.
-
-    A count in prose is a claim like any other. This is the check that keeps it
-    honest -- and it is cheap, because the tests declare themselves: one
-    `test(` at the start of a line each.
+    A claim whose pattern matches *nothing* fails too: a sentence reworded out
+    from under its own check is exactly how one of these went stale.
     """
-    real = {}
-    for path in sorted((ROOT / "tests" / "cases").glob("*.mjs")):
-        real[path.name] = len(TEST_DEF.findall(path.read_text()))
-    if not real:
-        return fail("found no test files to count")
-    doc = (ROOT / "docs" / "DEVELOPING.md").read_text()
-    listed = {m.group(1): int(m.group(2)) for m in TEST_ROW.finditer(doc)}
-    problems = []
-    for name, n in sorted(real.items()):
-        if name not in listed:
-            problems.append(f"DEVELOPING.md  {name} has {n} tests and is not in the table")
-        elif listed[name] != n:
-            problems.append(f"DEVELOPING.md  {name} is listed with {listed[name]}"
-                            f" tests and has {n}")
-    for name in sorted(set(listed) - set(real)):
-        problems.append(f"DEVELOPING.md  {name} is in the table and is not a test file")
-    total = TEST_TOTAL.search(doc)
-    if not total:
-        problems.append("DEVELOPING.md  no 'N tests in M files' line to check")
-    else:
-        if int(total.group(1)) != sum(real.values()):
-            problems.append(f"DEVELOPING.md  says {total.group(1)} tests, "
-                            f"there are {sum(real.values())}")
-        if int(total.group(2)) != len(real):
-            problems.append(f"DEVELOPING.md  says {total.group(2)} files, "
-                            f"there are {len(real)}")
-    for p in problems:
-        print(f"        {p}")
-    return fail(f"{len(problems)} stale count(s) in the test table") if problems \
-        else ok(f"{sum(real.values())} tests in {len(real)} files, all tabled")
+    sys.path.insert(0, str(HERE))
+    import counts as counts_mod
+    problems = counts_mod.drift()
+    for rel, want, got, ctx in problems:
+        if got is None:
+            print(f"        {rel}  nothing matches {ctx!r} — should say {want}")
+        else:
+            print(f"        {rel}  says {got}, and it is {want}  ({ctx})")
+    if problems:
+        print("        tools/renumber writes them in")
+        return fail(f"{len(problems)} number(s) adrift in the documentation")
+    return ok(f"{len(counts_mod.CLAIMS)} counted claims and "
+              f"{len(counts_mod.test_counts())} test files all say the true number")
 
 
 CHECKS = {
@@ -1475,7 +1459,7 @@ CHECKS = {
     "deadcss": check_dead_css,
     "markers": check_markers,
     "labels": check_labels,
-    "testtable": check_test_table,
+    "counts": check_counts,
 }
 
 

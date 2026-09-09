@@ -8,3 +8,6 @@ dev/
 *.state
 node_modules/
 .DS_Store
+
+# Python bytecode from the tools in tools/, which import each other.
+__pycache__/
