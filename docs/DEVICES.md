@@ -169,7 +169,7 @@ stranger reading, which was already true and is now more true.
 The options went first on purpose: they stood the whole path up — config, rules,
 anonymous sign-in, merge, debounce — with a slider position at stake rather than
 a save. Three things travel through the room that way, because all three merge:
-the options, the 71 addresses out of the symbol file, and the offer to show a
+the options, the 80 addresses out of the symbol file, and the offer to show a
 screen. The save does **not** merge, and goes over the same room by a different
 mechanism — the next section.
 
@@ -232,7 +232,7 @@ sequenceDiagram
   by the time you noticed. *Put back what a handoff replaced* appears whenever
   there is one.
 - **The second device does not need the `.sym` at all.** The file is 1.8MB and
-  the app reads 71 symbols in it, so the room carries those 71 addresses —
+  the app reads 80 symbols in it, so the room carries those 80 addresses —
   about a kilobyte — and a device with the ROM and no symbol file boots from
   them. `check-app` asserts the shared list is every symbol the app looks up,
   because a list that falls behind works perfectly on the device that has the
@@ -318,7 +318,7 @@ not even the Firebase SDK, which is fetched only when a room is opened.
 | --- | --- | --- |
 | the ROM | **never**, by any path | — |
 | the `.sym` file | **never** | — |
-| 71 addresses out of it | yes, ~1KB | while sharing |
+| 80 addresses out of it | yes, ~1KB | while sharing |
 | your save | yes, ~1–10KB gzipped | on every in-game save, while sharing |
 | where you are, as a sentence | yes | with the save |
 | speed, grind preset, hunted species | yes | while sharing |
@@ -334,14 +334,14 @@ flowchart LR
     end
     STOP(("never<br/>leaves"))
     subgraph R["the room, one Firebase key"]
-        A["71 addresses<br/>~1KB"]
+        A["80 addresses<br/>~1KB"]
         S["the save<br/>gzipped, ~1.2KB"]
         O["the three options"]
     end
     OTHER["your other device"]
     ROM --> STOP
     SYM --> STOP
-    SYM -->|"only the 71 it reads"| A
+    SYM -->|"only the 80 it reads"| A
     SAVE -->|"on every in-game save"| S
     OPT --> O
     A --> OTHER

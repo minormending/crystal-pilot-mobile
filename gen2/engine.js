@@ -284,6 +284,39 @@ export const gen2 = {
   // blocks changes both numbers or neither, and `tools/check-app` holds them
   // to each other.
   timeNames: ['morning', 'day', 'night'],
+  // data/times.asm, reached through `TimesOfDay`: pairs of *up to this hour*
+  // and *this block*, walked until one is greater than the hour, ended by $ff.
+  // Two bytes a pair, and a bound rather than a count -- the table is five
+  // pairs on this cartridge and a hack could write more.
+  timeTable: { bytes: 2, end: 0xff, scan: 16 },
+  // Hours in a day. Here because the clock arithmetic below wraps on it and a
+  // bare 24 in three places is the shape that drifts.
+  hoursInDay: 24,
+  // --- the in-game clock, which is not the hardware clock --------------------
+  // Read out of the cartridge rather than assumed, because it decides whether
+  // the time of day can be moved at all -- and the app had it backwards in
+  // prose for four versions.
+  //
+  // `FixTime` at 00:061d **adds**: it takes the RTC's seconds, minutes, hours
+  // and day-low, adds `wStartSecond`/`Minute`/`Hour`/`Day` with the carry
+  // chained upward, and writes `hSeconds`/`hMinutes`/`hHours`/`wCurDay`. So the
+  // in-game hour is `(wStartHour + rtcHours) mod 24`, and **the four `wStart`
+  // bytes are an offset the game applies to the hardware clock** -- which is
+  // how Gen 2 lets you set the time without touching an RTC it cannot write.
+  //
+  // Getting the direction wrong sends the clock the wrong way, and the label
+  // names are what nearly did: `DSTChecks.SetClockForward` at 05:64b9
+  // *increments* `wStartHour`, which is only "forward" because the offset is
+  // added. That routine is also the arithmetic to copy rather than invent --
+  // hour up one, and the carry into `wStartDay`:
+  //
+  //     a = hour + 1; a -= 24; if no borrow keep it else a += 24   ; wrap
+  //     ld [wStartHour], a ; ccf ; a = day ; adc 0 ; ld [wStartDay], a
+  //
+  // All four bytes are inside the saved block, so the offset is editable in a
+  // `.sav` -- see `tools/clock`.
+  clock: { startDay: 'wStartDay', startHour: 'wStartHour',
+           startMinute: 'wStartMinute', startSecond: 'wStartSecond' },
 
   // --- things on the map you can take something from -----------------------
   // Map objects carry a sprite id in wMapObjects, and two of those sprites are

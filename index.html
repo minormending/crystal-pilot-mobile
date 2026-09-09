@@ -688,6 +688,19 @@
        /* Room for the lead's rail on every row, so nothing shifts sideways
           when the ranking changes under it. */
        border-left:3px solid transparent;margin-left:-3px}
+  /* A row with *two* buttons puts them side by side, and this is a repair
+     rather than a new rule: the grid has three columns, so Duel's Clear has
+     been landing on a second line under the name since the day it was added --
+     115px of row where the others are 63, with the second button under the
+     wrong column. Nobody saw it because Clear is hidden unless there is
+     somebody on the map to clear.
+
+     Placed into an *implicit* fourth column rather than declaring one, because
+     an explicit track that is usually empty still takes its gap and would inset
+     every single-button row by 10px. A track that only exists when something is
+     put in it costs the other nine rows nothing. */
+  .job>.jgo:nth-of-type(1){grid-column:3;grid-row:1}
+  .job>.jgo:nth-of-type(2){grid-column:4;grid-row:1}
   /* The slot that replaced "pick something below". Sized and coloured as a
      *hole waiting to be filled* rather than as a button competing with the
      row's own action -- dashed, quiet, and obviously not the primary thing. */
@@ -1387,6 +1400,7 @@
         <span class="jname">Wait</span>
         <span class="jstate" id="waitstate">—</span>
       </div>
+      <button class="jgo" id="skip" disabled>Skip</button>
       <button class="jgo" id="wait" disabled>Wait</button>
     </div>
     </div>

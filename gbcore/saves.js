@@ -267,6 +267,52 @@ export class Saves {
   }
 
   /**
+   * Move the game's clock by whole hours, through its battery.
+   *
+   * Gen 2 keeps the in-game clock as an offset added to the cartridge's own
+   * real-time clock, and that offset is four bytes inside the saved block --
+   * so the time of day can be changed without the hardware clock moving at
+   * all. `state.advanceClock` does the arithmetic, which is the game's own.
+   *
+   * **What this costs is the reason it is a separate call and not part of
+   * `install`.** Writing the battery re-loads the ROM, which restarts the
+   * emulator at the title screen: everything since the last *in-game* save is
+   * gone. So the caller saves first and drives CONTINUE afterwards, exactly as
+   * loading a slot does — pressing buttons is a task's job, not this module's.
+   *
+   * Refuses before it writes rather than after. A battery whose checksum
+   * already disagrees with its bytes is one somebody else has damaged, and
+   * re-sealing it here would turn a save the game refuses into a save the game
+   * accepts and is wrong about, which is worse.
+   */
+  async shiftClock(hours) {
+    const bytes = await this.gb.batterySave();
+    if (!bytes || !this.state.saveIsPresent(bytes)) {
+      return { ok: false,
+               message: 'the cartridge holds no save to edit — save the game first' };
+    }
+    const made = this.state.checksum(bytes);
+    const held = this.state.storedChecksum(bytes);
+    if (made === null || held === null) {
+      return { ok: false,
+               message: 'this cartridge does not say where its save checksum is' };
+    }
+    if (made !== held) {
+      return { ok: false,
+               message: 'the battery\'s checksum already disagrees with its bytes' };
+    }
+    const out = this.state.advanceClock(bytes, hours);
+    if (!out) {
+      return { ok: false,
+               message: 'this cartridge does not keep its clock where the profile says' };
+    }
+    await this.install(out);
+    return { ok: true,
+             message: `moved the clock ${hours >= 0 ? 'forward' : 'back'} `
+                      + `${Math.abs(hours)} hour(s)` };
+  }
+
+  /**
    * Put these bytes into the cartridge's battery, and re-load the ROM so the
    * core picks them up.
    *

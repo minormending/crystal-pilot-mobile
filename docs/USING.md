@@ -418,9 +418,10 @@ most maps they are not.
 
 For four versions this paragraph ended *"the clock is the game's own, which is
 the real one, so this is advice about your evening rather than something the
-pilot can hurry along."* That was written down as a fact and never measured.
-There is a **Wait** row now, and it is how you find out — see [waiting for the
-hour](#wait-for-the-hour-the-grass-is-hiding).
+pilot can hurry along."* That was written down as a fact, never measured, and
+**it is wrong** — the game's clock is an offset it keeps in your save, and the
+pilot can move it. See [reaching the hour the grass is
+hiding](#reaching-the-hour-the-grass-is-hiding).
 
 Measured on Route 29 in the morning: the chips read HOPPIP, PIDGEY, SENTRET,
 RATTATA with *also here: HOOTHOOT after dark* below them; after dark they read
@@ -485,58 +486,91 @@ failure raises: you are on the wrong route for what you asked for.
 Until the twenty-eighth pass only **Hunt** did this. Catch ran the same walk
 through the same grass and threw the tally away.
 
-## Wait for the hour the grass is hiding
+## Reaching the hour the grass is hiding
 
 A third of Johto's grass is behind the clock. HOOTHOOT is on Route 29 after
 dark and simply not there at noon, and until now the app could tell you that
 and nothing else.
 
-The **Wait** row appears when the hour is hiding something here:
+The **Wait** row appears when the hour is hiding something here, and it carries
+two buttons:
 
 ```
-Wait     HOOTHOOT after dark                        [Wait]
+⏱  Wait     HOOTHOOT after dark                [Skip] [Wait]
 ```
 
 It names the species you asked for if this map has it at another hour — the
 same fact the line under the chips prints when a chip disappears — and
 otherwise the hour that brings the most species this one does not, as *3 more
-after dark*. Where the grass is the same all day there is no row, because there
-is nothing to wait for.
+after dark*. Where the grass is the same all day there is no row.
 
 **It is the last row on the list, deliberately.** Every other job runs the game
 too, and running the game is the whole of what waiting does — so a grind is a
-wait that comes back with levels, and Wait is only worth pressing when there is
+wait that comes back with levels, and this is only worth pressing when there is
 nothing else to do where you are standing. *Run the list* follows the same
 order, which means it will grind, duel and tidy up first and wait last, and
 then the species it was waiting for is in the grass.
 
-### Whether that takes minutes or takes until this evening
+### Skip: move the game's clock
 
-**This is the honest part, and the app does not know the answer yet.** The time
-of day comes from the cartridge's real-time clock. Whether running the emulator
-fast runs *that* fast is a property of the emulator, and nothing in this
-repository has been able to test it — driving a real cartridge needs a browser
-window that is actually on screen, and the sessions this was built in did not
-have one.
+This is the quick one, and it works whatever your emulator does with time.
 
-So the job measures it rather than assuming, and tells you which world you are
-in. It watches two clocks: the hour, and the game's own playtime counter, which
-ticks once per frame. Three things can happen:
+Gen 2 does not read the hour straight off the cartridge's clock — it adds an
+offset that lives in **your save**, which is how the game lets you set the time
+on hardware whose clock it cannot write. Skip edits that offset, re-seals the
+save's checksum, and loads it back.
 
-| it says | what happened | what to do |
-| --- | --- | --- |
-| *it is night — 3.4h of game time* | the clock followed the pilot | nothing; the grass has changed |
-| *still day after 26h of game time — this cartridge's clock does not follow the pilot* | the hour has to come round on its own | come back this evening, or leave the app open |
-| *the game did not advance at all* | nothing was running — paused, or stuck | this is not about the clock |
+**What it costs is a restart.** Putting a save into the cartridge reloads the
+ROM, so the pilot saves the game first and everything after that last save is
+gone — which for a Skip pressed on its own is nothing, because saving is the
+first thing it does. Afterwards it reads the clock back out of the game and
+tells you what the game says, rather than what it meant to do.
+
+It moves you by whole hours, lining the earliest hour you could be at onto the
+start of the hour you want. That lands correctly most of the time and can fall
+one block short — night is ten hours long and morning is only six — in which
+case the row simply offers the rest and you press it again. Two presses at
+worst.
+
+The button is not there at all on a cartridge whose symbol file does not name
+its time-of-day table, because then the app does not know when night starts and
+will not guess.
+
+### Wait: run the game to the hour
+
+The patient one, and it keeps everything — nothing restarts, nothing is saved,
+you can Stop at any point.
+
+It runs the game as fast as your device manages and watches the clock. Whether
+*that* moves the hour depends on your emulator rather than on the cartridge, so
+the job tells you which it turned out to be:
+
+| it says | what happened |
+| --- | --- |
+| *it is night — 3.4h of game time* | the clock followed along; you are done |
+| *still day after 26h of game time — this cartridge's clock does not follow the pilot* | press **Skip** instead |
+| *the game did not advance at all* | nothing was running — paused, or stuck |
 
 It gives up after **26 hours of game time**, and that number is chosen so that
 reaching it means something rather than being a timeout: every boundary in the
-game is within twenty-four hours, so a clock that can be hurried along would
-have moved by then.
+game is within twenty-four hours.
 
-Stop works throughout, and it takes no undo point — a wait moves the clock and
-nothing else, and a slot taken before it would restore you to a moment whose
-only difference is the one thing a save cannot carry back.
+Neither button takes an undo point — a clock change moves the time and nothing
+else, and a slot taken before it would restore you to a moment whose only
+difference is the one thing a save cannot carry back.
+
+### Setting the clock from a computer
+
+`tools/clock` does the same edit outside the app, against a `.sav` in `dev/`:
+
+```bash
+tools/clock                 # which hours are morning, day and night
+tools/clock --save          # the clock offset your save is carrying
+tools/clock --shift 8       # eight hours on, written to a new file
+```
+
+It never writes over the file it read, and it refuses a save whose checksum
+already disagrees with its bytes.
 
 ## Catching with a full party
 
@@ -1524,7 +1558,7 @@ deployed, which is not the question you are asking when a bug you saw fixed is
 still in front of you. `tools/check-app` asserts that number matches the service
 worker's cache name, because a version display that lies is worse than none.
 
-<!-- covers: sw.js @ 83a7e5d39571 -->
+<!-- covers: sw.js @ d34269983c13 -->
 
 The worker fetches **network first, falling back to the cache**. That is the
 opposite of the usual offline-first advice, on purpose.

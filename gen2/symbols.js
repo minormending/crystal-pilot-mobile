@@ -137,7 +137,7 @@ export class Symbols {
  * Every symbol this app reads, by name.
  *
  * It exists so a device with a ROM and no .sym can be handed the addresses
- * instead of the file: 71 lines is about a kilobyte, against 1.8MB, and it
+ * instead of the file: 80 lines is about a kilobyte, against 1.8MB, and it
  * fits in a room with space for a save beside it.
  *
  * Written down rather than discovered, because nothing at run time can know
@@ -154,6 +154,10 @@ export const SHARED_SYMBOLS = [
   'MoveNames', 'Moves', 'PokemonNames', 'sCheckValue1', 'sCheckValue2', 'wBalls', 'wBattleMenuCursorPosition',
   'wBattleMode', 'wBattleMonHP', 'wBattleMonMaxHP', 'wCurItem', 'wCurPocket',
   'TrainerClassNames', 'TrainerGroups', 'TypeMatchups', 'TypeNames',
+  // Which hours are morning, day and night. Optional, and it is what turns
+  // "wait for the hour" into "move the clock to it" -- so a second device
+  // without it keeps the wait and loses the skip.
+  'TimesOfDay',
   // What a species turns into and what it learns doing it, and the
   // cartridge's own word for a type number. Both feed the dex card, both
   // are optional in `romdata.js`, and both have to travel: a second phone
@@ -168,6 +172,11 @@ export const SHARED_SYMBOLS = [
   // device with a digest and no .sym has to be able to tell a clock that
   // will not move from a game that is not running.
   'wGameTimeHours', 'wGameTimeMinutes', 'wGameTimeSeconds',
+  // The saved block, its checksum, and the four bytes of clock offset
+  // inside it. A device editing a battery needs every one of them, and
+  // the SRAM names travel the same way the work-RAM ones do.
+  'sGameData', 'sGameDataEnd', 'sChecksum', 'wPlayerData',
+  'wStartDay', 'wStartHour', 'wStartMinute', 'wStartSecond',
   'wMapGroup', 'wMapHeight', 'wMapNumber', 'wMapObjects', 'wMapStatus',
   'wMapWidth', 'wMenuBorderLeftCoord', 'wMenuBorderRightCoord',
   'wMenuBorderTopCoord',

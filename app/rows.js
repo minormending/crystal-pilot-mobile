@@ -132,7 +132,7 @@ export function describeRows(s, ctx = {}) {
   // choice rather than the live one on purpose: the live one is cleared the
   // moment the clock takes it away, which is exactly the moment this row wants
   // to know about it.
-  const waiting = waitOffer(ctx.hours, ctx.hourNow, ctx.quarry);
+  const waiting = waitOffer(ctx.hours, ctx.hourNow, ctx.quarry, rom);
   // Indexed once, because the row asks about the chosen place twice and the
   // list is the journey's answer rather than something to search repeatedly.
   const byKey = new Map(places.map((pl) => [pl.key, pl]));
@@ -181,6 +181,13 @@ export function describeRows(s, ctx = {}) {
       text: waiting ? waiting.text : 'the grass here is the same all day',
       enabled: !!waiting && afoot,
       waitFor: waiting ? waiting.block : null,
+      // The second button. Running the game to the hour and moving the game's
+      // clock to it are two different trades -- one spends minutes and keeps
+      // everything, the other is instant and restarts the emulator, so it
+      // costs whatever has happened since the last in-game save. Two buttons,
+      // because that is a choice and not a fallback.
+      skip: waiting && waiting.shift !== null && waiting.shift > 0
+        ? waiting.shift : null,
     },
     // Catch owns its own prerequisite. The errand is a one-time thing -- run it
     // twice and it reports "already carrying 5 ball(s)" without moving -- so it
@@ -465,6 +472,14 @@ export function betterGrind(places, level) {
  * the real one, so this is advice about their evening.
  */
 const HOURS = ['in the morning', 'during the day', 'after dark'];
+// The same three as a label rather than as a phrase. `HOURS` goes in a
+// sentence -- *PIDGEY is here in the morning* -- under a full-width line of
+// chips; this goes in a `1fr` column with two buttons beside it, where
+// "HOOTHOOT after dark" reached a 375px phone as "HOOTHOOT after da…" and lost
+// the only word in it that says which hour. Measured on the device rather
+// than counted in the editor, which is the second time that sentence has had
+// to be written on this page.
+const SHORT_HOURS = ['morning', 'day', 'night'];
 
 /** What an hour is called, or null for an hour a cartridge does not have. */
 function hourName(block) {
@@ -489,12 +504,14 @@ function hourName(block) {
  * Null where the grass here is the same all day, which on most maps it is not
  * -- and where it is, there is nothing to wait for and no row.
  */
-export function waitOffer(hours, now, quarry = null) {
+export function waitOffer(hours, now, quarry = null, rom = null) {
   if (!Array.isArray(hours) || !hours[now]) return null;
   const mine = new Set(hours[now].species);
+  const found = (block, text) => ({ block, text, shift: shiftTo(rom, now, block) });
+  const label = (block) => SHORT_HOURS[block] || hourName(block) || `hour ${block}`;
   if (quarry && !mine.has(quarry)) {
     const other = otherHour(hours, quarry, now);
-    if (other) return { block: other.block, text: `${quarry} ${other.name}` };
+    if (other) return found(other.block, `${quarry} · ${label(other.block)}`);
   }
   let best = null;
   hours.forEach((hour, block) => {
@@ -505,13 +522,37 @@ export function waitOffer(hours, now, quarry = null) {
     }
   });
   if (!best) return null;
-  const when = hourName(best.block);
-  return {
-    block: best.block,
-    text: best.extra.length === 1
-      ? `${best.extra[0]} ${when}`
-      : `${best.extra.length} more ${when}`,
-  };
+  const when = label(best.block);
+  return found(best.block, best.extra.length === 1
+    ? `${best.extra[0]} · ${when}`
+    : `${best.extra.length} more · ${when}`);
+}
+
+/**
+ * How many hours to move the clock to get from one block into another, or null.
+ *
+ * **The app knows which block it is in and not which hour**, because the live
+ * hour is in HRAM and every read here goes through the work-RAM window. What
+ * it can do is line the *earliest* hour this block could be onto the first
+ * hour of the target: from anywhere in night, 18 to 3, onto 04:00 is ten
+ * hours.
+ *
+ * Which lands correctly whenever the target is at least as wide as the block
+ * you are in, and can overshoot into the block *after* it when it is not --
+ * night is ten hours and morning is six. That is not papered over: the shift
+ * happens, the app reads the block again, and the row offers the remainder.
+ * Two presses at worst, and each one is a whole answer rather than a loop
+ * nobody can see inside.
+ *
+ * Null where the cartridge does not name its time-of-day table, which costs
+ * the skip and leaves the wait.
+ */
+export function shiftTo(rom, now, want) {
+  if (!rom || typeof rom.hoursOf !== 'function') return null;
+  const from = rom.hoursOf(now), to = rom.hoursOf(want);
+  if (!from || !to) return null;
+  const day = (rom.e && rom.e.hoursInDay) || 24;
+  return ((to.from - from.from) % day + day) % day;
 }
 
 /**

@@ -248,6 +248,120 @@ export class GameState {
     return sram[one] === one_ && sram[two] === two_;
   }
 
+  /** The flat offset of an SRAM symbol inside a battery, or -1. */
+  _sramAt(name) {
+    const { start, bankBytes } = this.e.sram;
+    if (!this.s.has(name)) return -1;
+    return this.s.bank(name) * bankBytes + (this.s.addr(name) - start);
+  }
+
+  /**
+   * Where a work-RAM address's saved copy sits in a battery, or -1.
+   *
+   * **A save is a photograph of work RAM, laid out the same way.** `sGameData`
+   * holds what `wPlayerData` onwards held at the moment of saving, byte for
+   * byte, so any saved field is at `sGameData + (wAddr - wPlayerData)` -- which
+   * was measured rather than assumed: `wMoney` at $d84e lands on flat 9180 and
+   * reads 3000 on a new game, matching live work RAM.
+   *
+   * Bounded by `sGameDataEnd`, so an address outside the saved block answers
+   * -1 rather than an offset into whatever is next in the file. Most of work
+   * RAM is *not* saved, so that bound is doing real work.
+   */
+  savedAt(wAddr) {
+    const from = this._sramAt('sGameData');
+    const to = this._sramAt('sGameDataEnd');
+    if (from < 0 || to < 0 || !this.s.has('wPlayerData')) return -1;
+    const at = from + (wAddr - this.s.addr('wPlayerData'));
+    return at >= from && at < to ? at : -1;
+  }
+
+  /**
+   * The checksum the saved block's bytes make: a 16-bit sum, little-endian.
+   *
+   * Measured against a real cartridge rather than derived: over flat
+   * [8201, 11139) the sum came to 58439 and the two bytes at 11533 held 58439.
+   * Both ends of that come out of the symbol file here -- `sGameData`,
+   * `sGameDataEnd` and `sChecksum` -- so a build that moved the block moves
+   * this with it.
+   *
+   * Null where the cartridge does not name them, which is *cannot check* and
+   * has to stay distinct from *does not match*: one of those is a reason to
+   * refuse to write and the other is a reason to refuse to trust.
+   */
+  checksum(sram) {
+    const from = this._sramAt('sGameData');
+    const to = this._sramAt('sGameDataEnd');
+    if (from < 0 || to < 0 || !sram || to > sram.length) return null;
+    let sum = 0;
+    for (let at = from; at < to; at++) sum = (sum + sram[at]) & 0xffff;
+    return sum;
+  }
+
+  /** The checksum the battery claims, or null. */
+  storedChecksum(sram) {
+    const at = this._sramAt('sChecksum');
+    if (at < 0 || !sram || at + 1 >= sram.length) return null;
+    return sram[at] | (sram[at + 1] << 8);
+  }
+
+  /**
+   * Write the checksum the bytes make, in place. Answers false where it cannot.
+   *
+   * Called after an edit and never before one: a battery whose bytes and
+   * checksum disagree is one the game refuses outright, which is the right
+   * failure and not one to leave lying around.
+   */
+  sealSave(sram) {
+    const at = this._sramAt('sChecksum');
+    const sum = this.checksum(sram);
+    if (at < 0 || sum === null || at + 1 >= sram.length) return false;
+    sram[at] = sum & 0xff;
+    sram[at + 1] = (sum >> 8) & 0xff;
+    return true;
+  }
+
+  /**
+   * Move the in-game clock forward by whole hours, in a copy of the battery.
+   *
+   * **Gen 2's clock is the hardware clock plus an offset the game keeps in the
+   * save**, and that is what makes this possible at all: `FixTime` adds
+   * `wStartHour` to the RTC's hours and carries into `wCurDay`, so the four
+   * `wStart` bytes are how the game sets a time it cannot write to the
+   * cartridge. All four are inside the saved block.
+   *
+   * The arithmetic is the game's own. `DSTChecks.SetClockForward` moves the
+   * clock an hour by incrementing `wStartHour`, wrapping at 24 and carrying one
+   * into `wStartDay` -- and doing that `n` times is exactly the division below,
+   * which is why it is written as a division and not as a loop.
+   *
+   * The day is *not* wrapped at seven going forward. The game does not wrap it
+   * either, and it is right not to: crossing midnight really is another day,
+   * and `wCurDay` is a byte the game itself lets run.
+   *
+   * Answers a new array, never the one handed in -- an in-place edit of a
+   * battery somebody still holds a reference to is the kind of thing that
+   * turns a refused write into a corrupted one. Null where the save cannot be
+   * read or the clock is not in it.
+   */
+  advanceClock(sram, hours) {
+    const { clock, hoursInDay } = this.e;
+    if (!sram || !Number.isInteger(hours)) return null;
+    const hourAt = this.s.has(clock.startHour)
+      ? this.savedAt(this.s.addr(clock.startHour)) : -1;
+    const dayAt = this.s.has(clock.startDay)
+      ? this.savedAt(this.s.addr(clock.startDay)) : -1;
+    if (hourAt < 0 || dayAt < 0) return null;
+    const out = new Uint8Array(sram);
+    const moved = out[hourAt] + hours;
+    // Floor, not truncate: a negative shift borrows a day rather than losing
+    // one, and `Math.trunc` would round -1/24 to zero and leave the day behind.
+    out[dayAt] = (out[dayAt] + Math.floor(moved / hoursInDay)) & 0xff;
+    out[hourAt] = ((moved % hoursInDay) + hoursInDay) % hoursInDay;
+    if (!this.sealSave(out)) return null;
+    return out;
+  }
+
   read(wram) {
     const a = this.a;
     return {

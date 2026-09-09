@@ -135,6 +135,12 @@ export class RomData {
     // is the number -- which is what every reader in this app used until a dex
     // entry needed to be read by a person rather than by the ranker.
     this.typeNames = symbols.has('TypeNames') ? this.at('TypeNames') : null;
+    // Which hours are morning, day and night. Optional like the rest, and the
+    // thing it replaces is an assumption: every reader of `wTimeOfDay` in this
+    // app knew there were three blocks and none of them knew where they
+    // started, so anything wanting to say *night begins at 18:00* had to write
+    // it down.
+    this.times = symbols.has('TimesOfDay') ? this.at('TimesOfDay') : null;
   }
 
   _read(bank, addr, length) {
@@ -707,6 +713,67 @@ export class RomData {
     const out = { evolves, learns };
     this._evos.set(id, out);
     return out;
+  }
+
+  /**
+   * Which hours belong to which third of the day, as one entry per hour.
+   *
+   * `GetTimeOfDay` walks pairs of *up to this hour* and *this block* and takes
+   * the first whose hour is **greater** than the clock's -- so the table is
+   * upper bounds, not starts, and reading it as starts shifts every boundary.
+   * Decoded here into the plain thing every caller wants: hour 0 to 23, and
+   * which block each one is.
+   *
+   * On this cartridge it comes out morning 4-9, day 10-17, night 18-3, which
+   * is what everybody already believed and nobody had read.
+   *
+   * Null where the symbol file does not name the table -- and the app's answer
+   * to that is to stop saying when a block begins, not to guess.
+   */
+  hourBlocks() {
+    if (this._hours !== undefined) return this._hours;
+    if (!this.times) return (this._hours = null);
+    const { bytes, end, scan } = this.e.timeTable;
+    const { bank, addr } = this.times;
+    const pairs = [];
+    for (let i = 0; i < scan; i++) {
+      const upTo = this.gb.romByte(bank, addr + i * bytes);
+      const block = this.gb.romByte(bank, addr + i * bytes + 1);
+      if (upTo === undefined) break;
+      pairs.push({ upTo, block });
+      if (upTo === end) break;
+    }
+    // A table with no terminator inside the bound is not this table, and a
+    // single pair is what a bank of zeroes decodes into -- which would call
+    // every hour of the day morning.
+    if (!pairs.length || pairs[pairs.length - 1].upTo !== end) {
+      return (this._hours = null);
+    }
+    const out = [];
+    for (let hour = 0; hour < this.e.hoursInDay; hour++) {
+      const hit = pairs.find((p) => p.upTo === end || hour < p.upTo);
+      out.push(hit.block);
+    }
+    return (this._hours = out);
+  }
+
+  /**
+   * The hours that are `block`, as `{ from, to }` inclusive, or null.
+   *
+   * `to` may be *below* `from`, and that is not a bug to normalise away: night
+   * runs 18 to 3 and wraps midnight, which is the whole reason the app cannot
+   * treat an hour range as an interval and has to ask this.
+   */
+  hoursOf(block) {
+    const map = this.hourBlocks();
+    if (!map) return null;
+    const mine = map.map((b, hour) => (b === block ? hour : -1))
+      .filter((h) => h >= 0);
+    if (!mine.length) return null;
+    // The run that wraps is the one whose predecessor is not also this block.
+    const from = mine.find((h) => map[(h + map.length - 1) % map.length] !== block);
+    const to = mine.find((h) => map[(h + 1) % map.length] !== block);
+    return { from, to, hours: mine.length };
   }
 
   /**

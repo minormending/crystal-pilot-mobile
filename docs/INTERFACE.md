@@ -490,27 +490,36 @@ heading.
 ### The row that is about the hour rather than the map
 
 Nine of the ten offers are about where you are standing. This one is about
-*when*:
+*when*, and it is the only row that carries two buttons offering the same
+outcome at different prices:
 
 ```
-⏱  Wait        HOOTHOOT after dark                  [Wait]
+⏱  Wait     HOOTHOOT after dark              [Skip] [Wait]
 ```
 
-It is drawn only where the clock is hiding something — where this map's grass
-is the same all day there is nothing to offer, and rule one says do not draw
-it. And it is **last on the list**, below Travel and Shop, which are themselves
-the two that are never urgent. The reason is worth stating because it is not
-obvious from the row: *every other job advances the clock too.* A grind runs
-the same frames standing still would and comes back with levels, so waiting is
-strictly the worst use of the same time — right up until there is nothing else
-to do here, which is exactly the situation being last describes.
+**Skip** moves the game's own clock — Gen 2 keeps the hour as an offset in the
+save, so it can be edited — and costs a restart of the emulator. **Wait** runs
+the game to the hour and costs minutes but nothing else. Two buttons rather
+than one with a fallback, because that is a choice somebody should make rather
+than a decision the app makes quietly on their behalf. Skip is hidden, not
+greyed, on a cartridge whose symbol file will not say when night begins: a
+second button that cannot answer is a choice nobody can make.
 
-What it says while it runs is the other half. The app does not know whether
-this emulator's clock can be hurried along, so the job reports which world it
-turned out to be in rather than promising one: *it is night — 3.4h of game
-time*, or *still day after 26h of game time — this cartridge's clock does not
-follow the pilot*. A row that had guessed either way would have been wrong for
-half its readers, and the guess would have looked like a feature.
+The row is drawn only where the clock is hiding something — where this map's
+grass is the same all day there is nothing to offer, and rule one says do not
+draw it. And it is **last on the list**, below Travel and Shop, which are
+themselves the two that are never urgent. The reason is worth stating because
+it is not obvious from the row: *every other job advances the clock too.* A
+grind runs the same frames standing still would and comes back with levels, so
+waiting is strictly the worst use of the same time — right up until there is
+nothing else to do here, which is exactly the situation being last describes.
+
+What Wait says while it runs is the other half. Whether this emulator's clock
+can be hurried along is a property of the core rather than of the cartridge, so
+the job reports which world it turned out to be in rather than promising one:
+*it is night — 3.4h of game time*, or *still day after 26h of game time — this
+cartridge's clock does not follow the pilot*, which is the sentence that sends
+you to the other button.
 
 ## What the pilot is doing, and how you stop it
 
@@ -1174,4 +1183,4 @@ So this page carries a marker naming the files it describes and the hash they
 had when it was last read against them. `tools/docs-check` reports it when they
 move, and the pre-commit hook blocks on that report.
 
-<!-- covers: index.html app/main.js app/rows.js @ e2169702d758 -->
+<!-- covers: index.html app/main.js app/rows.js @ 4e475e817187 -->

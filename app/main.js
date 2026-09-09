@@ -1753,6 +1753,11 @@ function paintJobs(s) {
   // does what the first does is a choice nobody can make well.
   $('#clear').classList.toggle('hide', !rows.duel.clearable);
   $('#clear').disabled = !rows.duel.clearable;
+  // Skip rides on the Wait row the way Clear rides on Duel. Hidden rather than
+  // greyed where the cartridge will not say which hours are which, because a
+  // second button that cannot answer is a choice nobody can make.
+  $('#skip').classList.toggle('hide', !rows.wait.skip);
+  $('#skip').disabled = !rows.wait.skip || !rows.wait.enabled;
   // Catch has one button again. The ball errand moved to the Errand row, which
   // is ranked high and is a row the *runner* can press -- a secondary button
   // is invisible to it, so "Run the list" could never fetch the first balls.
@@ -2549,6 +2554,52 @@ $('#hunt').onclick = async () => {
   const res = await runTask('#hunt', `looking for ${huntWanted}`,
     () => tasks.hunt(huntWanted, { regrass: () => boot.backToGrass() }));
   paintSeen(res);
+};
+
+/**
+ * Move the game's clock to the hour, instead of running the game to it.
+ *
+ * The other half of the Wait row, and a different trade rather than a
+ * shortcut. Gen 2 keeps its clock as an offset added to the cartridge's own,
+ * four bytes inside the saved block — so the hour can be changed by editing
+ * the battery. What that costs is a ROM reload, which is to say **everything
+ * since the last in-game save**, so the sequence saves first and says so.
+ *
+ * One shift per press. The app knows which block it is in and not which hour,
+ * so the shift lines the earliest hour this block could be onto the first hour
+ * of the target: right whenever the target is at least as wide as this block,
+ * and short by a block when it is not. Rather than loop over that invisibly,
+ * it reports where it landed and the row offers the remainder.
+ */
+$('#skip').onclick = async () => {
+  if (!tasks || !saves) return;
+  const { rows } = offersNow(await tasks.snap());
+  const hours = rows.wait && rows.wait.skip;
+  if (!hours) return;
+  await runTask('#skip', `moving the clock ${hours}h`, async () => {
+    const can = await tasks.canSave();
+    if (!can.ok) return { ok: false, message: `cannot save first: ${can.why}` };
+    // Saved before the battery is read, not after: the edit is applied to
+    // whatever the cartridge holds, so anything not yet written to it is
+    // simply not in the game that comes back.
+    const saved = await tasks.saveGame();
+    if (!saved.ok) return saved;
+    savedThisSession = true;
+    const moved = await saves.shiftClock(hours);
+    if (!moved.ok) return moved;
+    if (!await tasks.continueFromTitle()) {
+      return { ok: false,
+               message: 'moved the clock but could not get back into the world' };
+    }
+    await keepGame();
+    // Read back rather than assumed. The whole point of doing this through the
+    // game's own clock is that the game decides what the hour means, so what
+    // it says afterwards is the only answer worth reporting.
+    const s = await tasks.snap();
+    const names = state.e.timeNames || [];
+    return { ok: true, message: `it is ${names[s.timeOfDay] || 'a new hour'} now` };
+  }, { needsWorld: false });
+  refresh();
 };
 
 /**
