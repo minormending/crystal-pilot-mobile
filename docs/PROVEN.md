@@ -3839,6 +3839,83 @@ fast, and the two "slightly" curves unused, as Gen 2 leaves them). A check
 whose expected values come from memory is a check that can be wrong in the
 direction nobody looks.
 
+### A fifty-second pass: a sentence that had been a fact for four versions
+
+The usage guide said the clock in the game *"is the real one, so this is advice
+about your evening rather than something the pilot can hurry along."* Nobody
+had measured it. It reads like a fact about the cartridge and it is a fact
+about the **emulator**, and the difference decides whether waiting for night is
+thirteen minutes or eight hours.
+
+**Two ways of settling it failed, and both are worth recording.**
+
+*The core will not step on a hidden page.* Measured again this pass rather than
+taken from the note: the ROM loads from `dev/` through the page's own file
+inputs, `gb.ready` and `gb.rom` both come back true, and `gb.run(300)` leaves
+the map at `0.0` with `worldLoaded` false and the canvas black. Seven passes of
+this now. There was no running game to watch a clock on.
+
+*And `wRTC` is not a live clock.* It sits in work RAM at `$d4ba`, which made it
+look like the answer — the app could read it every poll and watch it tick. A
+byte search over the whole 2MB for the three-byte instructions that name it
+finds **four references in two routines**: `StageRTCTimeForSave` and
+`ClockContinue`. It is staged for saving, not refreshed. The live hour is
+`hHours` at `$ff94`, which is HRAM: outside the work-RAM window every read in
+this app goes through, and the core exposes `WORK_RAM_LOCATION` and no constant
+that would locate it.
+
+### So the job measures the thing instead of assuming it
+
+Which is the shape this repository keeps arriving at, and it is better here
+than a correct guess would have been. `waitForHour` watches **two** clocks: the
+time of day, from the cartridge's real-time clock; and the game's own playtime
+counter, which ticks once a frame while the game is not paused. Three endings,
+and they are three different pieces of news:
+
+| it says | what it means |
+| --- | --- |
+| *it is night — 3.4h of game time* | the clock follows the pilot, and waiting is an ordinary job |
+| *still day after 26h of game time — this cartridge's clock does not follow the pilot* | the answer to the question, said in those words rather than as a timeout |
+| *the game did not advance at all* | the playtime did not move either, so this is not about the clock |
+
+**The bound is in game hours rather than in wall time or in iterations, and
+that is what makes reaching it mean something.** Every boundary in Gen 2 is
+within twenty-four — the longest block is the ten hours of night — so
+twenty-six is that with room, and a clock that could be hurried along would
+have moved by then. A bound in iterations would have got shorter every time the
+chunk size changed, which is a patience that depends on an implementation
+detail.
+
+The playtime is the other half and the reason `state.js` now reads it. Both
+failures end at the bound and both report failure; their remedies are *come
+back this evening* and *something is stuck*, and a job that said the same
+sentence for both would be useless in exactly the case somebody needs it.
+
+### And the ranking is the interesting part of the row
+
+Wait is **last**, below Travel and Shop, which are themselves the two that are
+never urgent. The reason is one fact that is not obvious from the row: *every
+other job on the list advances the clock too.* A grind runs the same frames
+standing still would and comes back with levels. So waiting is strictly the
+worst use of the same time, right up until there is nothing else to do where
+you are standing — which is exactly what being last describes, and it is why
+the runner may take it without that being a way to lose an hour.
+
+**And the runner could not have seen it work.** `stateSignature` is the guard
+against a job that reports success and changes nothing — where you are, the
+money, the badges, the party, both pockets — and the time of day was not in it.
+A wait that went perfectly, morning through to night with the species back in
+the grass, would have read as *Wait ran and changed nothing* and stopped the
+sequence one step before the thing it had been waiting for. It is the only job
+that moves that byte and the only one that moves nothing else, which is what
+kept the gap invisible until there was something to fall into it.
+
+`wTimeOfDay` moved into the snapshot on the way past. `main.js` held the
+address and made its own `readBytes` call for this one byte, **twice per
+refresh** — a second trip into the core for something the snapshot already in
+its hand contained, and the only work-RAM read in the app that did not come
+through the class whose whole job is work-RAM reads.
+
 ## The part that had to be redesigned
 
 The desktop pilot hangs its whole design on CPU hooks: the game's own routines
