@@ -36,16 +36,53 @@ export const gen2 = {
   // wPartyMon1 to wPartyMon2 is 0x30 in Crystal; the offsets are box_struct's,
   // and `pp` is masked to six bits by the reader because PP Ups live in the
   // top two.
+  //
+  // Every offset here is the symbol file's own arithmetic rather than a number
+  // off a wiki: `wPartyMon1` is $dcdf on this cartridge, so `wPartyMon1DVs` at
+  // $dcf4 *is* 0x15, `wPartyMon1HPExp` at $dcea is 0x0b, `wPartyMon1Attack` at
+  // $dd05 is 0x26. A build that moved the struct moves both ends together and
+  // the subtraction still holds.
   partyStride: 0x30,
   mon: {
-    species: 0x00, moves: 0x02, pp: 0x17, level: 0x1f,
-    status: 0x20, hp: 0x22, maxHp: 0x24,
+    species: 0x00, item: 0x01, moves: 0x02, exp: 0x08, statExp: 0x0b,
+    dvs: 0x15, pp: 0x17, happiness: 0x1b, caught: 0x1d, level: 0x1f,
+    status: 0x20, hp: 0x22, maxHp: 0x24, stats: 0x26,
   },
   // The cap the game enforces, and the reason a catch refuses a full party
   // rather than sending it to a box. The game boxes the seventh quite happily;
-// what this number decides is when the party stops *growing*, which is still
-// the thing every reader of it wants.
+  // what this number decides is when the party stops *growing*, which is still
+  // the thing every reader of it wants.
   maxParty: 6,
+
+  // --- the three lists a stat is made of, and why they are three different
+  // --- lengths ---------------------------------------------------------------
+  // This asymmetry is Gen 2's, it is the thing that makes a stat screen hard to
+  // read out of memory, and getting it wrong is silent in both directions:
+  //
+  //   `stats`      six numbers, the ones the game has already worked out and
+  //                stored -- HP, attack, defence, speed, special attack,
+  //                special defence. `maxHp` above is the first of them; the
+  //                other five run from `mon.stats`.
+  //   `statExp`    **five** counters, because Gen 2 keeps one shared Special
+  //                stat experience and spends it on both special stats. A
+  //                reader expecting six walks two bytes into the DVs.
+  //   `dvNames`    **four** nibbles, because the HP DV is not stored at all --
+  //                it is assembled from the low bit of each of the other four.
+  //
+  // Names rather than a count, because a reader that only knows "five" has to
+  // decide for itself which five and in what order, and that decision is this
+  // file's to make.
+  statNames: ['hp', 'atk', 'def', 'spd', 'satk', 'sdef'],
+  statExpNames: ['hp', 'atk', 'def', 'spd', 'spc'],
+  dvNames: ['atk', 'def', 'spd', 'spc'],
+  // A DV is a nibble, so fifteen is perfect and there is no separate maximum to
+  // state. Stat experience is a sixteen-bit counter that the game caps at
+  // 65535, and what reaches the stat is its square root -- so the *useful*
+  // ceiling is 255 squared, which is 65025, and a counter above that is
+  // indistinguishable from one at it.
+  dvMax: 0x0f,
+  statExpMax: 0xffff,
+  statExpUseful: 255 * 255,
 
   // --- what is wrong with a Pokemon besides its HP ------------------------
   // The status byte at mon.status, from constants/pokemon_data_constants.asm.
@@ -95,7 +132,64 @@ export const gen2 = {
   // reads zeroes, and `[0, 0]` is NORMAL/NORMAL: a real type pair, and a
   // wrong answer that looks like an answer. Verified over all 251 entries on
   // this cartridge; every one carries its own id.
-  baseField: { id: 0, types: 7 },
+  // `stats` is the six in front of the types, `growth` is which experience
+  // curve the species is on, and the rest are read because a dex entry is the
+  // one screen that wants them.
+  //
+  // **`growth` is 0x16, not 0x15**, and that distinction was measured rather
+  // than trusted: at 0x15 every one of the 251 entries came back MEDIUM_FAST,
+  // which is a real growth rate and a plausible answer for the handful of
+  // species anybody checks first. At 0x16 BULBASAUR and CYNDAQUIL read
+  // MEDIUM_SLOW, MAGIKARP reads SLOW and PIKACHU reads MEDIUM_FAST, which is
+  // the cartridge's own answer and not the same one for everybody. The same
+  // failure as the five-stats-instead-of-six above, one field along.
+  baseField: { id: 0, stats: 1, types: 7, catchRate: 9, baseExp: 10,
+               gender: 13, hatch: 15, growth: 0x16 },
+  // data/growth_rates.asm, in the order `GrowthRates` has them. Keys rather
+  // than prose for the same reason `takeable` uses them: what to call a curve
+  // on screen is the interface's business.
+  growthRates: ['mediumFast', 'slightlyFast', 'slightlySlow', 'mediumSlow',
+                'fast', 'slow'],
+
+  // --- what a species turns into, and what it learns on the way ------------
+  // data/pokemon/evos_attacks.asm, reached through `EvosAttacksPointers`: a
+  // `dw` per species into the same bank, then for that species a run of
+  // evolution records ended by a zero, then (level, move) pairs ended by a
+  // zero.
+  //
+  // Verified against the cartridge rather than assumed: entry 155 resolves to
+  // exactly the address the symbol file gives `CyndaquilEvosAttacks`, and 16
+  // to `PidgeyEvosAttacks`. That is the one thing a pointer table can be wrong
+  // about, and the symbol file can settle it.
+  //
+  // **The five kinds of record are not all the same width.** EVOLVE_STAT is
+  // four bytes -- it carries a level *and* a comparison -- and the other four
+  // are three. This is the `trainerMonBytes` situation again, and it fails the
+  // same silent way: TYROGUE is the only species in the game with a STAT
+  // record, it has three of them, and reading them at three bytes turns its
+  // learnset into whatever the shifted bytes happen to say.
+  //
+  // The species evolved into is always the record's **last** byte, whichever
+  // kind it is, so no per-kind field table is needed -- only the width.
+  evo: {
+    end: 0,
+    bytes: { 1: 3, 2: 3, 3: 3, 4: 3, 5: 4 },
+    kind: { level: 1, item: 2, trade: 3, happiness: 4, stat: 5 },
+    // EVOLVE_HAPPINESS's parameter and EVOLVE_STAT's second one, from
+    // constants/pokemon_data_constants.asm. Named numbers, not sentences.
+    when: { anytime: 1, morningDay: 2, night: 3 },
+    compare: { atkOverDef: 1, atkUnderDef: 2, atkEqualsDef: 3 },
+    // A bound on a run, not a size: a species with a garbage pointer must stop
+    // rather than read the bank. The longest real learnset in Crystal is under
+    // twenty moves and the longest evolution run is TYROGUE's three.
+    maxEvos: 8,
+    maxLearn: 40,
+  },
+  // `TypeNames` is a `dw` per type id in the same order as the type constants,
+  // so the id *is* the index. Named here because the pointer stride is the one
+  // thing about it a hack could change, and because a dex entry that says
+  // "type 20" has not answered the question.
+  typeNameMax: 12,
 
   // --- names ---------------------------------------------------------------
   // PokemonNames is fixed-width; ItemNames is packed with a terminator between

@@ -44,6 +44,7 @@ and the code disagree, the code is right and the section is a bug — see
    · [Saving, and getting the save out](#7b-saving-and-getting-the-save-out)
    · [Slots, undo, and bringing a save in](#7c-slots-undo-and-bringing-a-save-in)
 8. [The errands](#8-the-errands)
+   · [What a species becomes, and when](#8h-what-a-species-becomes-and-when)
 9. [The interface](#9-the-interface)
    · [One thing at a time](#one-thing-at-a-time)
    · [Reading a gym out of the cartridge](#reading-a-gym-out-of-the-cartridge)
@@ -433,7 +434,7 @@ watching.
 
 ### `symbols.js` — where things live
 
-<!-- covers: gen2/symbols.js @ 5a4612d05803 -->
+<!-- covers: gen2/symbols.js @ e4554993fa19 -->
 
 Parses the `.sym` file into `name → { bank, addr }`. First definition wins;
 later duplicates are aliases and locals.
@@ -599,11 +600,11 @@ and in `bootstrap.js`, with nothing able to notice if they drifted.
 
 ### `romdata.js` — what the cartridge knows
 
-<!-- covers: gen2/romdata.js @ ed7f493f3ff9 -->
+<!-- covers: gen2/romdata.js @ 2a0c27e78bae -->
 
-Species names, item names, move names, wild-encounter tables, move power and
-the type chart. All read out of the ROM, not shipped as a copy, so they cannot
-drift from the build being driven.
+Species names, item names, move names, wild-encounter tables, move power, the
+type chart, and what a species turns into. All read out of the ROM, not shipped
+as a copy, so they cannot drift from the build being driven.
 
 <details>
 <summary><b>Advanced detail:</b> table layouts, and the one that bites</summary>
@@ -623,15 +624,35 @@ drift from the build being driven.
   are the type byte, which decides how wide a Pokémon is, and the class
   boundaries, which only the *next* class's pointer marks.
 - `BaseData` — 32 bytes an entry: the species' own id, **six** stats, then the
-  two types. It is the only place a party member's types can be read from,
-  because Gen 2 does not keep them in the party struct. Two things about it
-  are worth stating. Counting five stats instead of six is *silent* — it reads
-  the special defence as the first type, which is a plausible type number, so
-  CHIKORITA came out as "type 65/GRASS" and printed rather than failed. And
-  there is no terminator to run off the end of, so the guard is the entry's
-  own id in byte zero: a symbol file pointing elsewhere reads zeroes, and
-  `[0, 0]` is NORMAL/NORMAL — a real type pair and a wrong answer that looks
-  like an answer. Checked over all 251 entries; every one carries its own id.
+  two types, and further along the catch rate, the base experience, the hatch
+  cycles and the growth rate. It is the only place a party member's types can
+  be read from, because Gen 2 does not keep them in the party struct. Three
+  things about it are worth stating. Counting five stats instead of six is
+  *silent* — it reads the special defence as the first type, which is a
+  plausible type number, so CHIKORITA came out as "type 65/GRASS" and printed
+  rather than failed. The growth rate is at **0x16, not 0x15**, and that is the
+  same failure one field along: read at 0x15 all 251 species come back
+  `mediumFast`, which is a real curve and a believable answer for the handful
+  anybody checks; read at 0x16, BULBASAUR and CYNDAQUIL are `mediumSlow`,
+  MAGIKARP is `slow`, PIKACHU is `mediumFast`, and `tools/dex --verify` fails
+  the whole table if it ever sees fewer than two curves in use. And there is no
+  terminator to run off the end of, so the guard is the entry's own id in byte
+  zero: a symbol file pointing elsewhere reads zeroes, and `[0, 0]` is
+  NORMAL/NORMAL — a real type pair and a wrong answer that looks like an
+  answer. Checked over all 251 entries; every one carries its own id.
+
+  **One reader, not two.** `speciesTypes()` used to do this read itself and
+  keep two bytes of it, with its own copy of the id guard and its own cache.
+  That was fine while the types were all anybody wanted and stopped being fine
+  the moment a dex entry wanted the six stats immediately in front of them.
+  `baseStats()` is the reader now and `speciesTypes()` asks it.
+- `EvosAttacksPointers` — what a species becomes and what it learns doing it,
+  which is one table because it is one record. See [what a species becomes, and
+  when](#8h-what-a-species-becomes-and-when).
+- `TypeNames` — a `dw` per type id, in the order of the type constants, so the
+  id *is* the index. Read so a dex entry can say FIRE instead of `type 20`.
+  `tools/types` had a decoder of its own for this, with a partial charmap, and
+  now asks this one — a second reader agrees with the first until it does not.
 - `TypeMatchups` — 110 rows of `attacker, defender, multiplier-in-tenths`, with
   a one-byte separator in the middle and neutral left out entirely. See [the
   bigger number is not the harder
@@ -712,6 +733,15 @@ because the bag reader still uses it.
   `normalise` still folds `é`, because somebody typing *poke ball* means
   `POKé BALL` — and deliberately does **not** fold `♀` and `♂`, which would undo
   the fix by making the two names match again.
+- **A name behind a pointer needs a terminator, and two readers did not ask for
+  one.** `_packedName` has refused an unterminated run since it was written;
+  `landmarkName` and the new `typeName` both read a fixed bound and handed it
+  to `decodeText`, which turns *any* bytes into something. A cartridge whose
+  symbol file names `TypeNames` but whose pointer lands on zeroes answered
+  `????????????`, which reads like a charmap bug rather than like a table that
+  could not be found. Both go through `_terminatedName` now: a run with no `@`
+  inside its bound is not a name, and the answer is empty. Found by a test
+  asking what a cartridge with no type table says.
 
 </details>
 
@@ -1584,7 +1614,7 @@ mechanism's evidence spans two runs rather than one.
 
 ### The bigger number is not the harder hit
 
-<!-- covers: gen2/romdata.js gen2/engine.js gen2/battle.js @ 331146343c65 -->
+<!-- covers: gen2/romdata.js gen2/engine.js gen2/battle.js @ effadfffe05a -->
 
 For twenty-three passes the pilot ranked its moves by one number: the `power`
 byte out of the cartridge's move table. `romdata.move()` had been returning the
@@ -1726,7 +1756,7 @@ pilot uses, not a second one beside it. See section 10.
 
 ### Sending out somebody who can touch it
 
-<!-- covers: gen2/battle.js gen2/engine.js @ 9b3b7e04d32f -->
+<!-- covers: gen2/battle.js gen2/engine.js @ 9e7ba86f0a95 -->
 
 The pass before could tell that the Pokémon on the field takes nothing off a
 Ghost, and said so. The remedy it named — *a different Pokémon* — was one the
@@ -2081,7 +2111,7 @@ fainted.
 
 ## 7. Catching something
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ 48a2c4d8e3c7 -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ 1c5b0c9c0c00 -->
 
 Catching is the most involved loop, because a Poké Ball's odds turn on how much
 HP is left. Throwing at a full-health target is mostly throwing balls away.
@@ -3329,7 +3359,7 @@ after](#8d-a-route-the-game-itself-refuses).
 
 ## 8b. Asking the cartridge what its places are called
 
-<!-- covers: gen2/romdata.js gen2/world.js @ e307b99042c9 -->
+<!-- covers: gen2/romdata.js gen2/world.js @ 40d3b5498ece -->
 
 The one table that **retires** hand-written data rather than adding to it. A map
 used to be called whatever the title profile said, and everything else was
@@ -3858,6 +3888,98 @@ knockout, because nothing advances while walking to a Center.
 on screen made the warp branch say *could not get through to DARK CAVE —
 something is still on screen*. The door was never the problem, and the sentence
 sent the reader at it.
+
+</details>
+
+## 8h. What a species becomes, and when
+
+<!-- covers: gen2/romdata.js gen2/engine.js @ 7998be676057 -->
+
+Two questions a party entry cannot answer: *what will this turn into*, and
+*what is it about to learn*. Both are in one table, because in Gen 2 they are
+one record.
+
+`EvosAttacksPointers` is a `dw` per species into its own bank. Behind that
+pointer the evolutions run first, ended by a zero, and the level-up moves
+follow immediately, also ended by a zero. There is no way to reach the second
+without walking the first — which is why `evosAttacks()` is one method and not
+two, and why a `learnset()` that pretended otherwise would be walking the
+evolutions anyway and throwing them away.
+
+```mermaid
+flowchart TD
+    P["pointer for species N<br/>EvosAttacksPointers + (N-1)*2"] --> G{"is it past<br/>the first pointer?"}
+    G -- no --> NULL["null — not a table,<br/>or not this species' entry"]
+    G -- yes --> E{"byte here"}
+    E -- "0" --> L{"byte here"}
+    E -- "1..5" --> W["record: width by kind<br/><b>5 is four bytes, the rest three</b>"]
+    W --> K["last byte is always<br/>the species it becomes"]
+    K --> E
+    E -- "anything else" --> NULL
+    L -- "0" --> DONE["done"]
+    L -- "1..100" --> M["(level, move) pair"]
+    M --> L
+```
+
+**The one thing this table invites you to get wrong.** The five kinds of
+evolution record are not the same width: `EVOLVE_STAT` is four bytes because it
+carries a level *and* a comparison, and the other four are three. Reading the
+wide one narrow does not fail — it shifts everything behind it and still
+decodes, into an evolution at an impossible level followed by a learnset made
+of the wrong bytes. This is the `trainerMonBytes` situation exactly, one table
+along, and Gen 2 gives you precisely one species to notice it on: TYROGUE is
+the only Pokémon in the game with a `EVOLVE_STAT` record, and it has three.
+
+The species evolved into is always the record's **last** byte, whichever kind
+it is, so the profile needs the widths and no per-kind field table.
+
+A record comes back naming its own kind rather than as a sentence, because five
+conditions in English is the interface's problem and the numbers are the
+cartridge's:
+
+| kind | what it carries | example |
+| --- | --- | --- |
+| `level` | `level`, `into` | `Lv14 → QUILAVA` |
+| `item` | `item`, `into` | `WATER STONE → VAPOREON` |
+| `trade` | `item`, `into` | `traded holding KING'S ROCK → POLITOED` |
+| `happiness` | `when`, `into` | friendship, `night` → UMBREON |
+| `stat` | `level`, `compare`, `into` | Lv20, attack &lt; defence → HITMONCHAN |
+
+`item` of zero on a `trade` means a plain trade, which is a real answer and not
+"no item".
+
+<details>
+<summary><b>Advanced detail:</b> how this was held to the cartridge, and the two
+things it caught</summary>
+
+`tools/dex --verify` reads all 251 species through `gen2/romdata.js` — the
+app's reader, not a second one — and asks the result whether it agrees with
+things that were true about Pokémon before this repository existed. It found
+two defects on its first run and one non-defect.
+
+**The guard was backwards.** It was written the way `trainerIndex` wants it —
+"a pointer below the table is not a pointer" — because that is where the
+trainer parties sit. This table keeps its entries *above* its pointers, so
+every one of the 251 species refused. Reading would not have caught it; one run
+of the verifier named it in a line.
+
+**A learnset out of level order is not proof of a shifted read**, which is the
+obvious check and the wrong one. MUK's entry genuinely runs Lv45 SLUDGE in
+front of Lv23 MINIMIZE on this cartridge, verified against `MukEvosAttacks`
+byte for byte — the game does not care because it scans the whole list. It is
+the only species in the game that does it. So the verifier counts them and
+reports the count rather than failing, and the check that actually catches a
+shift is structural: **the pointers ascend and the entries sit end to end**, so
+species N's record must be exactly as long as the gap to species N+1's pointer.
+That length is recomputed from the *decoded* record — the widths of the
+evolutions it found, two bytes per move it found, and the two terminators — so
+a record read at the wrong width comes out the wrong length even when every
+field in it looks plausible.
+
+What it reports on this cartridge: 251 species, 122 evolutions, 2215 level-up
+moves, four growth rates in use, every entry the right length, and both
+`CyndaquilEvosAttacks` and `PidgeyEvosAttacks` landing exactly where the symbol
+file says they do.
 
 </details>
 
@@ -4558,7 +4680,7 @@ before a step is taken, so a stopped walk does not move at all.
 
 ### What is behind the Gym door, before you open it
 
-<!-- covers: gen2/romdata.js gen2/engine.js app/rows.js @ 49a28ff54a2f -->
+<!-- covers: gen2/romdata.js gen2/engine.js app/rows.js @ 2084414088ed -->
 
 The Gym row could say where the Gym is and who is in it. **Whether it is worth
 going** is two facts the cartridge has had all along, and neither of them
@@ -4633,7 +4755,7 @@ is the noise this list exists to replace.
 
 ### Leading with the one that can answer the room
 
-<!-- covers: gen2/romdata.js gen2/menus.js gen2/journey.js @ 33a02e1bb7c5 -->
+<!-- covers: gen2/romdata.js gen2/menus.js gen2/journey.js @ 94e761a8c78d -->
 
 **Gen 2 sends out slot one and asks nobody.** So the party's order decides the
 first battle of a Gym — and since the pass before, the pilot has known exactly
@@ -5481,7 +5603,7 @@ this needed upstream rather than in the vendored copy.
 The options went through this room first on purpose: the small half, standing up
 the whole path — config, rules, anonymous sign-in, merge, debounce — with a
 slider position at stake rather than a save. Three things travel this way, and
-all three merge: the remembered options, the 63 addresses out of the symbol
+all three merge: the remembered options, the 65 addresses out of the symbol
 file, and the notes two devices use to introduce their screens to each other.
 The save goes over the same room and does *not* merge, which is the next
 section.
@@ -5950,16 +6072,16 @@ and change what a past handover said.
 
 ### The symbol file stops travelling
 
-The `.sym` is 1.8MB and this app looks up **63 symbols in it**. So the room
-carries those 63 lines — about a kilobyte, `{name: [bank, addr]}` — and a
+The `.sym` is 1.8MB and this app looks up **65 symbols in it**. So the room
+carries those 65 lines — about a kilobyte, `{name: [bank, addr]}` — and a
 second device needs the ROM and nothing else. `Symbols.fromDigest` builds a
 table that behaves like the parsed file; `size` is the only honest difference,
-and it reports 63 because that is how many symbols it has.
+and it reports 65 because that is how many symbols it has.
 
 ```mermaid
 flowchart LR
     F["the .sym file<br/>1.8MB, 58,456 symbols"] --> S["Symbols<br/>the parsed table"]
-    S -->|"digest(SHARED_SYMBOLS)"| D["{name: [bank, addr]}<br/>63 entries, ~1KB"]
+    S -->|"digest(SHARED_SYMBOLS)"| D["{name: [bank, addr]}<br/>65 entries, ~1KB"]
     D --> R[["the room"]]
     R --> D2["the same 47 entries"]
     D2 -->|"Symbols.fromDigest"| T["a table that behaves<br/>like the parsed file"]

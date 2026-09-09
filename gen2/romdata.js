@@ -126,6 +126,15 @@ export class RomData {
     // Optional, like the wild tables: a cartridge whose symbol file does not
     // name it keeps every map it was told about and loses the rest.
     this.landmarks = symbols.has('Landmarks') ? this.at('Landmarks') : null;
+    // What a species turns into and what it learns doing it. Optional like
+    // every other table here, and the thing it costs is bounded: without it a
+    // dex entry says what the Pokemon *is* and cannot say what it will become.
+    this.evos = symbols.has('EvosAttacksPointers')
+      ? this.at('EvosAttacksPointers') : null;
+    // The cartridge's own word for a type number. Optional, and the fallback
+    // is the number -- which is what every reader in this app used until a dex
+    // entry needed to be read by a person rather than by the ranker.
+    this.typeNames = symbols.has('TypeNames') ? this.at('TypeNames') : null;
   }
 
   _read(bank, addr, length) {
@@ -211,6 +220,32 @@ export class RomData {
   }
 
   /**
+   * A name behind a pointer, or '' when the bytes behind it are not one.
+   *
+   * The rule `_packedName` already had and these two readers did not: **a run
+   * with no terminator inside its bound is not a name.** Without it a symbol
+   * file aimed at a bank of zeroes comes back as twelve question marks, which
+   * `decodeText` will happily produce from any bytes at all -- and a screen
+   * saying `????????????` where a type should be reads like a decoding bug in
+   * the charmap rather than like a table that could not be found.
+   *
+   * Found by a test asking `typeName` what a cartridge with no `TypeNames`
+   * says. The same hole was in `landmarkName`, which is how one fix became
+   * one helper: both are a pointer, a bound, and a terminator.
+   */
+  _terminatedName({ bank, addr }, ptr, max) {
+    if (!ptr) return '';
+    const bytes = [];
+    for (let i = 0; i < max; i++) {
+      const b = this.gb.romByte(bank, ptr + i);
+      if (b === NAME_TERMINATOR) return decodeText(bytes);
+      if (b === undefined) return '';
+      bytes.push(b);
+    }
+    return '';
+  }
+
+  /**
    * A landmark's name, straight out of the cartridge.
    *
    * The one table that retires hand-written data rather than adding to it.
@@ -234,11 +269,11 @@ export class RomData {
     if (this._landmarkCache && this._landmarkCache.has(id)) {
       return this._landmarkCache.get(id);
     }
-    const { bank, addr } = this.landmarks;
-    const at = addr + id * LANDMARK_BYTES;
+    const { bank } = this.landmarks;
+    const at = this.landmarks.addr + id * LANDMARK_BYTES;
     const ptr = this.gb.romByte(bank, at + LANDMARK_NAME)
       | (this.gb.romByte(bank, at + LANDMARK_NAME + 1) << 8);
-    const name = decodeText(this._read(bank, ptr, LANDMARK_NAME_MAX));
+    const name = this._terminatedName(this.landmarks, ptr, LANDMARK_NAME_MAX);
     if (!this._landmarkCache) this._landmarkCache = new Map();
     this._landmarkCache.set(id, name);
     return name;
@@ -529,22 +564,173 @@ export class RomData {
    * nothing else.
    */
   speciesTypes(id) {
+    const entry = this.baseStats(id);
+    return entry ? entry.types : null;
+  }
+
+  /**
+   * A species' whole base-stats entry, or null where it cannot be read.
+   *
+   * `speciesTypes` used to do this read itself and take two bytes out of it.
+   * That was fine while the types were the only thing anybody wanted, and it
+   * stopped being fine the moment a dex entry wanted the six stats sitting
+   * immediately in front of them -- two readers of one 32-byte record, each
+   * with its own copy of the id guard and its own cache, is the shape that
+   * drifts. There is one reader now and `speciesTypes` asks it.
+   *
+   * The guard is the entry's own id, and it is the only one available: there
+   * is no terminator here to run off the end of. A symbol file pointing
+   * somewhere else reads zeroes, and `[0, 0]` is NORMAL/NORMAL -- a real type
+   * pair, so a caller cannot tell it from an answer.
+   */
+  baseStats(id) {
     if (!this.base || !id || id > this.e.speciesCount) return null;
-    if (!this._types) this._types = new Map();
-    if (this._types.has(id)) return this._types.get(id);
+    if (!this._base) this._base = new Map();
+    if (this._base.has(id)) return this._base.get(id);
+    const f = this.e.baseField;
     const { bank, addr } = this.base;
     const entry = addr + (id - 1) * this.e.baseBytes;
-    // The entry says whose it is, and that is the only guard available: there
-    // is no terminator here to run off the end of. A symbol file pointing
-    // somewhere else reads zeroes, and `[0, 0]` is NORMAL/NORMAL -- a real
-    // type pair, so a caller cannot tell it from an answer.
-    const whose = this.gb.romByte(bank, entry + this.e.baseField.id);
-    if (whose !== id) { this._types.set(id, null); return null; }
-    const at = entry + this.e.baseField.types;
-    const pair = [this.gb.romByte(bank, at), this.gb.romByte(bank, at + 1)];
-    const out = pair.some((t) => t === undefined) ? null : pair;
-    this._types.set(id, out);
+    const at = (o) => this.gb.romByte(bank, entry + o);
+    const miss = () => { this._base.set(id, null); return null; };
+    if (at(f.id) !== id) return miss();
+    const types = [at(f.types), at(f.types + 1)];
+    if (types.some((t) => t === undefined)) return miss();
+    const growth = at(f.growth);
+    const out = {
+      id,
+      types,
+      // Named rather than positional, because six numbers in a row is exactly
+      // the shape that gets read off by one -- which is how the types were
+      // once read out of the special defence. `statNames` is the engine's list
+      // and the only place the order is decided.
+      stats: Object.fromEntries(
+        this.e.statNames.map((k, i) => [k, at(f.stats + i)])),
+      catchRate: at(f.catchRate),
+      baseExp: at(f.baseExp),
+      hatch: at(f.hatch),
+      // A key, not a curve. Which experience curve a species is on is a fact
+      // about the cartridge; what to call it is the interface's business, and
+      // an id the profile has no name for stays a number rather than becoming
+      // a wrong word.
+      growth: this.e.growthRates[growth] ?? growth,
+    };
+    this._base.set(id, out);
     return out;
+  }
+
+  /**
+   * What a species turns into and what it learns, in one read.
+   *
+   * One method for both because they are one record: `EvosAttacksPointers` is
+   * a `dw` per species into its own bank, and behind that pointer the
+   * evolutions run first, ended by a zero, and the level-up moves follow
+   * immediately. There is no way to read the second without walking the
+   * first, so a `learnset()` that pretended otherwise would be walking the
+   * evolutions anyway and throwing them away.
+   *
+   * An evolution comes back as a record naming its own kind:
+   *
+   *     { kind: 'level',     level: 14,  into: 156 }
+   *     { kind: 'item',      item: 24,   into: 62 }
+   *     { kind: 'trade',     item: 82,   into: 186 }   // item 0 means plain
+   *     { kind: 'happiness', when: 'night', into: 197 }
+   *     { kind: 'stat',      level: 20, compare: 'atkOverDef', into: 106 }
+   *
+   * Records rather than sentences, because five conditions in English is the
+   * interface's problem and the numbers are the cartridge's.
+   *
+   * **The widths differ and only EVOLVE_STAT is four bytes.** TYROGUE is the
+   * only species in the game that has one -- three of them, in fact -- and
+   * reading them narrow shifts everything behind them, which decodes into a
+   * learnset rather than into a failure.
+   *
+   * Null where the table cannot be read, which is a cartridge whose symbol
+   * file does not name it. An empty pair of lists is a different answer and a
+   * real one: plenty of species evolve into nothing and a few learn nothing.
+   */
+  evosAttacks(id) {
+    if (!this.evos || !id || id > this.e.speciesCount) return null;
+    if (!this._evos) this._evos = new Map();
+    if (this._evos.has(id)) return this._evos.get(id);
+    const { bank, addr } = this.evos;
+    const spec = this.e.evo;
+    const byte = (a) => this.gb.romByte(bank, a);
+    const word = (a) => byte(a) | (byte(a + 1) << 8);
+    const ptr = word(addr + (id - 1) * 2);
+    // **The table ends where its own first pointer lands**, which is the same
+    // trick `trainerIndex` uses and it is worth the two lines: the entries sit
+    // immediately behind the pointers, so the first pointer *is* the end of
+    // the table, and a pointer below it is one pointing back into the pointer
+    // list rather than at a species.
+    //
+    // Getting the direction of that comparison wrong is not subtle and was not
+    // caught by reading: written as "below the table" -- which is where the
+    // trainer parties sit -- every one of the 251 species refused, because
+    // here the data is *above* it. `tools/dex --verify` said so in one run.
+    const first = word(addr);
+    if (!(first > addr) || !(ptr >= first)) {
+      this._evos.set(id, null);
+      return null;
+    }
+    const kindOf = Object.fromEntries(
+      Object.entries(spec.kind).map(([k, v]) => [v, k]));
+    const nameOf = (table, v) =>
+      Object.keys(table).find((k) => table[k] === v) ?? v;
+    const evolves = [];
+    let at = ptr;
+    for (let guard = 0; guard < spec.maxEvos; guard++) {
+      const tag = byte(at);
+      if (tag === spec.end || tag === undefined) break;
+      const wide = spec.bytes[tag];
+      // A kind the profile has never heard of means this is not an evolution
+      // run, and reading on past it is how a table becomes nonsense -- the
+      // same refusal `_trainerAt` makes about an unknown party type byte.
+      if (!wide) { this._evos.set(id, null); return null; }
+      const into = byte(at + wide - 1);
+      const kind = kindOf[tag];
+      const rec = { kind, into };
+      if (kind === 'level' || kind === 'stat') rec.level = byte(at + 1);
+      if (kind === 'item' || kind === 'trade') rec.item = byte(at + 1);
+      if (kind === 'happiness') rec.when = nameOf(spec.when, byte(at + 1));
+      if (kind === 'stat') rec.compare = nameOf(spec.compare, byte(at + 2));
+      evolves.push(rec);
+      at += wide;
+    }
+    at += 1;                                   // over the run's own terminator
+    const learns = [];
+    for (let guard = 0; guard < spec.maxLearn; guard++) {
+      const level = byte(at);
+      if (level === spec.end || level === undefined) break;
+      learns.push({ level, move: byte(at + 1) });
+      at += 2;
+    }
+    const out = { evolves, learns };
+    this._evos.set(id, out);
+    return out;
+  }
+
+  /**
+   * The cartridge's own word for a type number, or '' where it cannot say.
+   *
+   * `TypeNames` is a `dw` per type id in the order of the type constants, so
+   * the id is the index. Two gaps in that order are real and not a decoding
+   * problem: Gen 2 leaves $0a-$13 unused between the physical types and the
+   * special ones, and $06 is the unused BIRD type.
+   *
+   * Here rather than in `tools/types`, which had a decoder of its own with its
+   * own partial charmap -- the second reader that agrees with the first until
+   * it does not. The tool asks this now.
+   */
+  typeName(id) {
+    if (!this.typeNames || id === undefined || id === null) return '';
+    if (!this._typeNames) this._typeNames = new Map();
+    if (this._typeNames.has(id)) return this._typeNames.get(id);
+    const { bank, addr } = this.typeNames;
+    const ptr = this.gb.romByte(bank, addr + id * 2)
+      | (this.gb.romByte(bank, addr + id * 2 + 1) << 8);
+    const name = this._terminatedName(this.typeNames, ptr, this.e.typeNameMax);
+    this._typeNames.set(id, name);
+    return name;
   }
 
   /**

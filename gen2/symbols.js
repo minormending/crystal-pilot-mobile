@@ -137,7 +137,7 @@ export class Symbols {
  * Every symbol this app reads, by name.
  *
  * It exists so a device with a ROM and no .sym can be handed the addresses
- * instead of the file: 63 lines is about a kilobyte, against 1.8MB, and it
+ * instead of the file: 65 lines is about a kilobyte, against 1.8MB, and it
  * fits in a room with space for a save beside it.
  *
  * Written down rather than discovered, because nothing at run time can know
@@ -153,7 +153,13 @@ export const SHARED_SYMBOLS = [
   'KantoGrassWildMons', 'Landmarks', 'MapGroupPointers',
   'MoveNames', 'Moves', 'PokemonNames', 'sCheckValue1', 'sCheckValue2', 'wBalls', 'wBattleMenuCursorPosition',
   'wBattleMode', 'wBattleMonHP', 'wBattleMonMaxHP', 'wCurItem', 'wCurPocket',
-  'TrainerClassNames', 'TrainerGroups', 'TypeMatchups',
+  'TrainerClassNames', 'TrainerGroups', 'TypeMatchups', 'TypeNames',
+  // What a species turns into and what it learns doing it, and the
+  // cartridge's own word for a type number. Both feed the dex card, both
+  // are optional in `romdata.js`, and both have to travel: a second phone
+  // with a digest and no .sym reads the ROM through these addresses, so a
+  // name missing here is a dex that works on one device and not the other.
+  'EvosAttacksPointers',
   'wBattleMonType1', 'wBattleMonType2',
   'wEnemyMonHP', 'wEnemyMonLevel', 'wEnemyMonMaxHP', 'wEnemyMonSpecies',
   'wEnemyMonType1', 'wEnemyMonType2',
