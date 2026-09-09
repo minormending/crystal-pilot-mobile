@@ -1010,6 +1010,12 @@
      stroke-linecap="round" stroke-linejoin="round">
     <path d="M9 15.5s5.5-5 5.5-8.8A5.5 5.5 0 0 0 3.5 6.7C3.5 10.5 9 15.5 9 15.5Z"/>
     <circle cx="9" cy="6.9" r="1.9"/></g>
+  <!-- A clock face. The one offer that is about the hour rather than the map,
+       and the only glyph here that is not a thing you can walk to. -->
+  <g id="i-wait" fill="none" stroke="currentColor" stroke-width="1.8"
+     stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="9" cy="9" r="6.6"/>
+    <path d="M9 5.2V9l2.6 1.9"/></g>
   <g id="i-shop" fill="none" stroke="currentColor" stroke-width="1.8"
      stroke-linecap="round" stroke-linejoin="round">
     <path d="M3.2 5.5h11.6l-1 8.5a1 1 0 0 1-1 .9H5.2a1 1 0 0 1-1-.9Z"/>
@@ -1373,6 +1379,15 @@
         <span class="jstate" id="travelstate">—</span>
       </div>
       <button class="jgo" id="travel" disabled>Walk</button>
+    </div>
+
+    <div class="job" id="job-wait">
+      <svg class="jicon" viewBox="0 0 18 18" aria-hidden="true"><use href="#i-wait"/></svg>
+      <div class="what">
+        <span class="jname">Wait</span>
+        <span class="jstate" id="waitstate">—</span>
+      </div>
+      <button class="jgo" id="wait" disabled>Wait</button>
     </div>
     </div>
 

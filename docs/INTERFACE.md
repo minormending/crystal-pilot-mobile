@@ -487,6 +487,31 @@ name the Pokédex flags the box is not there at all: a Pokédex nobody can read
 and a Pokédex with nothing in it are different, and only one of them deserves a
 heading.
 
+### The row that is about the hour rather than the map
+
+Nine of the ten offers are about where you are standing. This one is about
+*when*:
+
+```
+⏱  Wait        HOOTHOOT after dark                  [Wait]
+```
+
+It is drawn only where the clock is hiding something — where this map's grass
+is the same all day there is nothing to offer, and rule one says do not draw
+it. And it is **last on the list**, below Travel and Shop, which are themselves
+the two that are never urgent. The reason is worth stating because it is not
+obvious from the row: *every other job advances the clock too.* A grind runs
+the same frames standing still would and comes back with levels, so waiting is
+strictly the worst use of the same time — right up until there is nothing else
+to do here, which is exactly the situation being last describes.
+
+What it says while it runs is the other half. The app does not know whether
+this emulator's clock can be hurried along, so the job reports which world it
+turned out to be in rather than promising one: *it is night — 3.4h of game
+time*, or *still day after 26h of game time — this cartridge's clock does not
+follow the pilot*. A row that had guessed either way would have been wrong for
+half its readers, and the guess would have looked like a feature.
+
 ## What the pilot is doing, and how you stop it
 
 There were once two Stop buttons, one per card, at 1181px and 1463px down the
@@ -1149,4 +1174,4 @@ So this page carries a marker naming the files it describes and the hash they
 had when it was last read against them. `tools/docs-check` reports it when they
 move, and the pre-commit hook blocks on that report.
 
-<!-- covers: index.html app/main.js app/rows.js @ dc109db1faeb -->
+<!-- covers: index.html app/main.js app/rows.js @ e2169702d758 -->

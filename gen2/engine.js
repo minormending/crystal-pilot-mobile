@@ -274,6 +274,16 @@ export const gen2 = {
   // A grass entry is: map group, map number, three rates, then three blocks of
   // seven (level, species) -- morning, day, night.
   encounter: { blocks: 3, slotsPerBlock: 7, headerBytes: 5 },
+  // What those three blocks are called, in the order `wTimeOfDay` numbers
+  // them. Keys rather than prose, the same bargain `growthRates` makes: what
+  // to call "after dark" on a screen is the interface's business and `rows.js`
+  // has those words; this is what a log line and a job message say.
+  //
+  // It is the same three the encounter table is indexed by, and saying so
+  // here rather than leaving it implicit is the point -- a cartridge with four
+  // blocks changes both numbers or neither, and `tools/check-app` holds them
+  // to each other.
+  timeNames: ['morning', 'day', 'night'],
 
   // --- things on the map you can take something from -----------------------
   // Map objects carry a sprite id in wMapObjects, and two of those sprites are

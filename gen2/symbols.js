@@ -137,7 +137,7 @@ export class Symbols {
  * Every symbol this app reads, by name.
  *
  * It exists so a device with a ROM and no .sym can be handed the addresses
- * instead of the file: 68 lines is about a kilobyte, against 1.8MB, and it
+ * instead of the file: 71 lines is about a kilobyte, against 1.8MB, and it
  * fits in a room with space for a save beside it.
  *
  * Written down rather than discovered, because nothing at run time can know
@@ -164,6 +164,10 @@ export const SHARED_SYMBOLS = [
   'wEnemyMonHP', 'wEnemyMonLevel', 'wEnemyMonMaxHP', 'wEnemyMonSpecies',
   'wEnemyMonType1', 'wEnemyMonType2',
   'wEventFlags',
+  // The game's own playtime. Optional in `state.js` and shared because a
+  // device with a digest and no .sym has to be able to tell a clock that
+  // will not move from a game that is not running.
+  'wGameTimeHours', 'wGameTimeMinutes', 'wGameTimeSeconds',
   'wMapGroup', 'wMapHeight', 'wMapNumber', 'wMapObjects', 'wMapStatus',
   'wMapWidth', 'wMenuBorderLeftCoord', 'wMenuBorderRightCoord',
   'wMenuBorderTopCoord',

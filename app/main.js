@@ -1657,6 +1657,7 @@ const JOB_ROWS = {
   errand: ['#errandstate', '#runerrand', '#job-errand'],
   gym: ['#gymstate', '#gym', '#job-gym'],
   travel: ['#travelstate', '#travel', '#job-travel'],
+  wait: ['#waitstate', '#wait', '#job-wait'],
 };
 
 /**
@@ -1677,6 +1678,10 @@ function offersNow(s) {
                 canFetch: typeof boot.eggErrand === 'function',
                 places: travelPlaces, travelTo, huntable, wilds,
                 hours, hourNow, takeables, trainers, trainersOnMap,
+                // The *remembered* quarry, not the live one. `huntWanted` is
+                // cleared the moment the hour takes the species away, which is
+                // the moment the Wait row wants to know about it.
+                quarry: wanted.hunt || huntWanted,
                 canBox: !!boxedPhrase(),
                 bagHeal, bagCure,
                 // Whether there is a counter *within reach*, not whether the
@@ -2324,7 +2329,7 @@ function refreshBag(s) {
 
 async function refreshSpecies(s) {
   if (!romdata) return;
-  const tod = (await gb.readBytes(symbols.addr('wTimeOfDay'), 1))[0];
+  const tod = s.timeOfDay;
   const key = `${s.map[0]}.${s.map[1]}:${tod}`;
   if (key === speciesKey) return;
   speciesKey = key;
@@ -2448,7 +2453,7 @@ async function refreshPlaces(s) {
   // layer on purpose: `placesFrom` is the map graph's answer and `wildLevels` is
   // the cartridge's, and this is the only place that holds both.
   if (romdata) {
-    const tod = (await gb.readBytes(symbols.addr('wTimeOfDay'), 1))[0];
+    const tod = s.timeOfDay;
     for (const place of travelPlaces) {
       place.wilds = romdata.wildLevels(place.key >> 8, place.key & 0xff, tod);
     }
@@ -2544,6 +2549,31 @@ $('#hunt').onclick = async () => {
   const res = await runTask('#hunt', `looking for ${huntWanted}`,
     () => tasks.hunt(huntWanted, { regrass: () => boot.backToGrass() }));
   paintSeen(res);
+};
+
+/**
+ * Wait for the hour that has what this map is hiding.
+ *
+ * The block comes off the row rather than out of a picker, because there is
+ * only ever one answer worth offering here -- the hour that has the species
+ * you asked for, or failing that the hour that brings the most this one does
+ * not. Two of those would be a choice; one is an offer.
+ *
+ * No undo point. A wait moves the clock and nothing else, and a slot taken
+ * before it would restore a game to a moment whose only difference is the one
+ * thing a save cannot carry back.
+ */
+$('#wait').onclick = async () => {
+  if (!tasks) return;
+  const { rows } = offersNow(await tasks.snap());
+  const block = rows.wait && rows.wait.waitFor;
+  if (block === null || block === undefined) return;
+  await runTask('#wait', rows.wait.text,
+                () => tasks.waitForHour(block), { takeUndoPoint: false });
+  // The species picker is keyed on the map *and the hour*, so the hour moving
+  // is exactly the change that has to invalidate it -- and `refresh` is what
+  // asks. Without this the chips would still be the ones from before the wait.
+  refresh();
 };
 
 /**

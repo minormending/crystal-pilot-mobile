@@ -164,9 +164,24 @@ export class GameState {
       // 2 is a bit in here, so this is the address that turns "something turned
       // me back" into a question with an answer.
       events: symbols.has('wEventFlags') ? symbols.addr('wEventFlags') : null,
+      // The game's own playtime, which is the only clock in this machine the
+      // pilot can watch move. Optional like the badges: a cartridge whose
+      // symbol file does not name it loses the wait job's honesty and nothing
+      // else.
+      playHours: symbols.has('wGameTimeHours')
+        ? symbols.addr('wGameTimeHours') : null,
+      playMinutes: symbols.has('wGameTimeMinutes')
+        ? symbols.addr('wGameTimeMinutes') : null,
+      playSeconds: symbols.has('wGameTimeSeconds')
+        ? symbols.addr('wGameTimeSeconds') : null,
       // The game's own record of what has been seen and what has been caught,
       // one bit per species. Optional like the badges: a cartridge whose symbol
       // file does not name them keeps every job and loses the dex list.
+      // Which third of the day it is, as the game itself decides it. Read here
+      // rather than in `main.js`, which had the address and reached past this
+      // class for it -- the one work-RAM byte in the app that was not coming
+      // through the reader whose whole job is work-RAM bytes.
+      timeOfDay: symbols.has('wTimeOfDay') ? symbols.addr('wTimeOfDay') : null,
       caught: symbols.has('wPokedexCaught') ? symbols.addr('wPokedexCaught') : null,
       seen: symbols.has('wPokedexSeen') ? symbols.addr('wPokedexSeen') : null,
       curPocket: symbols.addr('wCurPocket'),
@@ -277,6 +292,13 @@ export class GameState {
       menuLeft: b(wram, a.menuLeft),
       menuTop: b(wram, a.menuTop),
       badges: this.badgeCount(wram),
+      // Which third of the day it is. In the snapshot rather than fetched on
+      // the side, which is where it was: `main.js` held the address and made
+      // its own `readBytes` call for this one byte, twice per refresh -- a
+      // second trip into the core for something the snapshot in its hand
+      // already contained, and the only work-RAM read in the app that did not
+      // come through this class.
+      timeOfDay: this.timeOfDay(wram),
     };
   }
 
@@ -542,6 +564,41 @@ export class GameState {
       when: caughtTimes[first >> caughtData.timeShift] || null,
       place: second & caughtData.placeMask,
     };
+  }
+
+  /**
+   * How long this save has been played, in seconds, or null.
+   *
+   * The counter behind the save screen's `TIME 1:23`, and the reason this app
+   * reads it is narrower than it looks: **it is the only clock here that is
+   * known to move when the pilot runs the machine.** `wTimeOfDay` comes from
+   * the cartridge's real-time clock and changes at a boundary hours apart;
+   * this ticks every frame the game is not paused. So a job that waits for an
+   * hour can tell *the game is running and the clock is not* from *nothing is
+   * running at all*, which are two different pieces of bad news.
+   *
+   * Seconds rather than the four fields it is made of, because every caller
+   * wants an elapsed time and none of them wants to do the arithmetic twice.
+   * The frame counter is deliberately dropped: it is sub-second, it wraps
+   * sixty times a second, and no decision here is that fine.
+   *
+   * The hours are two bytes read big-endian, which is the convention every
+   * other 16-bit field in this game uses -- HP, max HP, the enemy's both --
+   * and those were measured. This one is not: 999 hours is the cap and no save
+   * here has ever been near enough to it for the high byte to be non-zero, so
+   * the byte order is inherited rather than checked. It matters only to a
+   * wait that runs past an hour, which is why it is said here.
+   */
+  playtime(wram) {
+    if (this.a.playHours === null) return null;
+    return w(wram, this.a.playHours) * 3600
+      + b(wram, this.a.playMinutes) * 60
+      + b(wram, this.a.playSeconds);
+  }
+
+  /** Which third of the day the game says it is, or null. */
+  timeOfDay(wram) {
+    return this.a.timeOfDay === null ? null : b(wram, this.a.timeOfDay);
   }
 
   /**

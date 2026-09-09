@@ -414,9 +414,13 @@ There is a line under the chips for it now. It reads *PIDGEY is here in the
 morning, not now* when the clock has just taken your quarry, and *also here:
 HOOTHOOT after dark* when it has not — two named, then *and 3 more* if the grass
 has that much in it, and nothing at all where the hours are the same, which on
-most maps they are not. The clock is the game's own, which is the real one, so
-this is advice about your evening rather than something the pilot can hurry
-along.
+most maps they are not.
+
+For four versions this paragraph ended *"the clock is the game's own, which is
+the real one, so this is advice about your evening rather than something the
+pilot can hurry along."* That was written down as a fact and never measured.
+There is a **Wait** row now, and it is how you find out — see [waiting for the
+hour](#wait-for-the-hour-the-grass-is-hiding).
 
 Measured on Route 29 in the morning: the chips read HOPPIP, PIDGEY, SENTRET,
 RATTATA with *also here: HOOTHOOT after dark* below them; after dark they read
@@ -480,6 +484,59 @@ failure raises: you are on the wrong route for what you asked for.
 
 Until the twenty-eighth pass only **Hunt** did this. Catch ran the same walk
 through the same grass and threw the tally away.
+
+## Wait for the hour the grass is hiding
+
+A third of Johto's grass is behind the clock. HOOTHOOT is on Route 29 after
+dark and simply not there at noon, and until now the app could tell you that
+and nothing else.
+
+The **Wait** row appears when the hour is hiding something here:
+
+```
+Wait     HOOTHOOT after dark                        [Wait]
+```
+
+It names the species you asked for if this map has it at another hour — the
+same fact the line under the chips prints when a chip disappears — and
+otherwise the hour that brings the most species this one does not, as *3 more
+after dark*. Where the grass is the same all day there is no row, because there
+is nothing to wait for.
+
+**It is the last row on the list, deliberately.** Every other job runs the game
+too, and running the game is the whole of what waiting does — so a grind is a
+wait that comes back with levels, and Wait is only worth pressing when there is
+nothing else to do where you are standing. *Run the list* follows the same
+order, which means it will grind, duel and tidy up first and wait last, and
+then the species it was waiting for is in the grass.
+
+### Whether that takes minutes or takes until this evening
+
+**This is the honest part, and the app does not know the answer yet.** The time
+of day comes from the cartridge's real-time clock. Whether running the emulator
+fast runs *that* fast is a property of the emulator, and nothing in this
+repository has been able to test it — driving a real cartridge needs a browser
+window that is actually on screen, and the sessions this was built in did not
+have one.
+
+So the job measures it rather than assuming, and tells you which world you are
+in. It watches two clocks: the hour, and the game's own playtime counter, which
+ticks once per frame. Three things can happen:
+
+| it says | what happened | what to do |
+| --- | --- | --- |
+| *it is night — 3.4h of game time* | the clock followed the pilot | nothing; the grass has changed |
+| *still day after 26h of game time — this cartridge's clock does not follow the pilot* | the hour has to come round on its own | come back this evening, or leave the app open |
+| *the game did not advance at all* | nothing was running — paused, or stuck | this is not about the clock |
+
+It gives up after **26 hours of game time**, and that number is chosen so that
+reaching it means something rather than being a timeout: every boundary in the
+game is within twenty-four hours, so a clock that can be hurried along would
+have moved by then.
+
+Stop works throughout, and it takes no undo point — a wait moves the clock and
+nothing else, and a slot taken before it would restore you to a moment whose
+only difference is the one thing a save cannot carry back.
 
 ## Catching with a full party
 

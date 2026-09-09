@@ -128,6 +128,11 @@ export function describeRows(s, ctx = {}) {
   // boxed catch and a getaway are the same thing -- which is what `canBox` is.
   const canCatchHere = s.inBattle && !trainer && !!ballId
                        && (canBox || s.party.length < maxParty);
+  // The hour worth waiting for, asked once. `quarry` is the *remembered*
+  // choice rather than the live one on purpose: the live one is cleared the
+  // moment the clock takes it away, which is exactly the moment this row wants
+  // to know about it.
+  const waiting = waitOffer(ctx.hours, ctx.hourNow, ctx.quarry);
   // Indexed once, because the row asks about the chosen place twice and the
   // list is the journey's answer rather than something to search repeatedly.
   const byKey = new Map(places.map((pl) => [pl.key, pl]));
@@ -165,6 +170,17 @@ export function describeRows(s, ctx = {}) {
       text: huntWanted ? `${huntWanted} · here now` : '',
       needs: huntWanted ? null : 'species',
       enabled: !!huntWanted && afoot,
+    },
+    // The one offer that is about the clock rather than about the map. A third
+    // of Johto's grass is behind the time of day, and until now the app could
+    // say which third and nothing more.
+    //
+    // `waitFor` is the block, not a name: what to press is this row's business
+    // and what to call it is `hourName`'s, and the job takes the number.
+    wait: {
+      text: waiting ? waiting.text : 'the grass here is the same all day',
+      enabled: !!waiting && afoot,
+      waitFor: waiting ? waiting.block : null,
     },
     // Catch owns its own prerequisite. The errand is a one-time thing -- run it
     // twice and it reports "already carrying 5 ball(s)" without moving -- so it
@@ -456,6 +472,49 @@ function hourName(block) {
 }
 
 /**
+ * The hour worth waiting for here, or null.
+ *
+ * Two cases, and the first is much the stronger. **Something you already asked
+ * for is here at a different hour** -- which is a state the app has been able
+ * to describe since v130 and could do nothing about: pick HOOTHOOT on Route 29
+ * at night, come back at noon, and the chip goes away with a line saying where
+ * it went. That line is `otherHour`, and this is the same reading turned into
+ * an offer.
+ *
+ * The weaker one is for somebody who has not chosen: another third of the day
+ * brings species this one does not have. The block with the *most* of them,
+ * because if you are going to spend the hours it may as well be the hour that
+ * pays best.
+ *
+ * Null where the grass here is the same all day, which on most maps it is not
+ * -- and where it is, there is nothing to wait for and no row.
+ */
+export function waitOffer(hours, now, quarry = null) {
+  if (!Array.isArray(hours) || !hours[now]) return null;
+  const mine = new Set(hours[now].species);
+  if (quarry && !mine.has(quarry)) {
+    const other = otherHour(hours, quarry, now);
+    if (other) return { block: other.block, text: `${quarry} ${other.name}` };
+  }
+  let best = null;
+  hours.forEach((hour, block) => {
+    if (block === now || !hour) return;
+    const extra = hour.species.filter((name) => !mine.has(name));
+    if (extra.length && (!best || extra.length > best.extra.length)) {
+      best = { block, extra };
+    }
+  });
+  if (!best) return null;
+  const when = hourName(best.block);
+  return {
+    block: best.block,
+    text: best.extra.length === 1
+      ? `${best.extra[0]} ${when}`
+      : `${best.extra.length} more ${when}`,
+  };
+}
+
+/**
  * A better hour for the grass you are already standing on, or null.
  *
  * `wildHours` reads all three blocks of the encounter table; the app has only
@@ -633,8 +692,13 @@ export function describeOffers(s, ctx = {}) {
   // by picking a species, and above everything else bar a fainted party --
   // which is still first, since none of this can be done at all without
   // somebody able to fight.
+  // Wait is **last**, and the reason is the one fact that makes the whole row
+  // make sense: *every other job on this list advances the clock too.* A grind
+  // runs the same frames standing still would, and comes back with levels. So
+  // waiting is only ever worth pressing when there is nothing else to do here,
+  // which is precisely what being last means.
   order.push('catch', 'hunt', 'errand', 'grind', 'duel', 'gym', 'heal', 'take',
-             'travel', 'shop');
+             'travel', 'shop', 'wait');
 
   const offered = [];
   for (const key of order) {
@@ -826,6 +890,13 @@ export function describeOffers(s, ctx = {}) {
  * world exactly as it was, which is a real state rather than a hypothetical:
  * "off to heal" with a full party heals nothing, says so cheerfully, and is
  * offered again a tenth of a second later.
+ *
+ * **Wait is on the list**, which is worth stating because it is the longest
+ * step here and the argument for it is the ranking rather than the duration.
+ * It needs no choice and it ends in the overworld, which is the whole of the
+ * rule -- and it is ranked last, so the runner only reaches it once there is
+ * nothing else to do in this place. What it does then is the thing somebody
+ * pressing Run the list in an empty patch of grass at noon actually wants.
  */
 const AUTO_NEVER = ['travel', 'hunt'];
 

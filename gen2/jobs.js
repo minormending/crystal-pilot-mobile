@@ -13,6 +13,20 @@ const MAX_STUCK_BATTLES = 5;
 const MAX_CHIPS = 8;
 // Trips to a Center in one grind before calling it a loop rather than a cure.
 const MAX_HEALS = 12;
+// Frames to run between looks while waiting for the clock. A whole game-minute:
+// the thing being watched changes at most three times a day, so looking oftener
+// buys nothing and costs a snapshot each time.
+const WAIT_CHUNK = 3600;
+// How much *game* time a wait will spend before handing back, in hours. Any
+// boundary in Gen 2 is within twenty-four -- the longest block is the ten hours
+// of night -- so twenty-six is that with room, and it is chosen so that
+// reaching it means something: a clock the pilot can hurry along would have
+// moved by now, and one that has not is telling you it is the real one.
+const MAX_WAIT_HOURS = 26;
+// Frames per second the game counts its own playtime at. Not the emulator's
+// speed -- the *game's*, which advances one frame per frame however fast those
+// frames are produced, and that is the whole reason waiting can be quick.
+const GAME_FPS = 60;
 
 /**
  * Everyone is down.
@@ -101,6 +115,110 @@ export function captureOutcome(code) {
 export function withJobs(Base) {
   // Named, so a stack trace says which of these a frame came from.
   return class WithJobs extends Base {
+  /**
+   * Stand still until the game says it is a different time of day.
+   *
+   * Which exists because a third of Johto's grass is behind the clock: HOOTHOOT
+   * is on Route 29 after dark and nowhere on it at noon, and until now the app
+   * could say so and nothing else -- *advice about your evening*, as the usage
+   * guide put it.
+   *
+   * **Whether this is quick is a fact about the emulator, and this job is how
+   * you find out.** The game's clock comes from the cartridge's real-time
+   * clock; the game's *playtime* counter ticks once a frame. If the core's
+   * clock follows the frames it is producing, a wait of a few game-hours is a
+   * few minutes of yours and this is an ordinary job. If it follows the wall
+   * instead, no amount of running will move it, and the honest thing is to say
+   * so rather than to spin. So the loop watches both, and the three ways it
+   * can end are three different pieces of news:
+   *
+   *   the hour arrived        -- what you asked for
+   *   the game is not running -- the playtime did not move either, so this is
+   *                              not about the clock at all
+   *   the clock did not move  -- the playtime ran for a day and the hour did
+   *                              not, which is the answer to the question
+   *
+   * The last of those is a *measurement*, and it is the reason the bound is in
+   * game hours rather than in wall time or in iterations: reaching it means
+   * something, and reaching it is not a failure of this code.
+   */
+  async waitForHour(want, { maxGameHours = MAX_WAIT_HOURS,
+                            chunk = WAIT_CHUNK } = {}) {
+    // The engine profile's words, not this file's. A second list of the three
+    // thirds of a day would be the same fact twice, and the one on screen --
+    // "after dark" -- is the interface's phrasing rather than a job's.
+    const names = (this.state.e && this.state.e.timeNames) || [];
+    const naming = (block) => names[block] || `time of day ${block}`;
+    let s = await this.snap();
+    if (!s.worldLoaded) return { ok: false, message: 'start a game first' };
+    // Standing in a battle is not standing still, and the clock is the least
+    // of what is going on. Refused rather than waited through.
+    if (s.inBattle) return { ok: false, message: 'finish the battle first' };
+    const first = this.state.timeOfDay(s.wram);
+    if (first === null || first === undefined) {
+      return { ok: false, message: 'this cartridge does not say what time it is' };
+    }
+    if (first === want) {
+      return { ok: true, stats: { frames: 0 },
+               message: `it is already ${naming(want)}` };
+    }
+
+    const clock0 = this.state.playtime(s.wram);
+    const bound = maxGameHours * 3600 * GAME_FPS;
+    const stats = { frames: 0, from: first };
+    let saidAt = 0, block = first;
+    this.say(`waiting for ${naming(want)} — it is ${naming(first)}`);
+
+    while (stats.frames < bound && !this.cancelled) {
+      await this.step(chunk);
+      stats.frames += chunk;
+      s = await this.snap();
+      // A script, a warp, a wild battle out of nowhere: whatever it is, this
+      // job is standing in the overworld doing nothing, so anything that ends
+      // that has ended the job too.
+      if (!s.worldLoaded || s.inBattle) {
+        return { ok: false, stats,
+                 message: 'something interrupted the wait — the game is not '
+                          + 'standing in the overworld any more' };
+      }
+      const at = this.state.timeOfDay(s.wram);
+      if (at === want) {
+        stats.hours = +(stats.frames / GAME_FPS / 3600).toFixed(1);
+        return { ok: true, stats,
+                 message: `it is ${naming(want)} — ${stats.hours}h of game time` };
+      }
+      // Not the hour asked for, but not the one we started in either. Worth
+      // saying: it means the clock is moving, which is the thing in doubt.
+      if (at !== block) {
+        block = at;
+        this.say(`it is ${naming(at)} now — still waiting for ${naming(want)}`);
+      } else if (stats.frames - saidAt >= bound / 8) {
+        saidAt = stats.frames;
+        this.say(`still ${naming(block)} — `
+                 + `${(stats.frames / GAME_FPS / 3600).toFixed(1)}h of game time`);
+      }
+    }
+
+    stats.hours = +(stats.frames / GAME_FPS / 3600).toFixed(1);
+    if (this.cancelled) {
+      return { ok: false, stats, message: `stopped — still ${naming(block)}` };
+    }
+    // The two ways of running out, and they are not the same news. The clock
+    // this app can watch move is the *playtime*; if that stood still too then
+    // nothing was running and the time of day is not the thing at fault.
+    const clock1 = this.state.playtime(s.wram);
+    const played = clock0 === null || clock1 === null ? null : clock1 - clock0;
+    if (played !== null && played <= 0) {
+      return { ok: false, stats,
+               message: 'the game did not advance at all — it is paused or '
+                        + 'stuck, and the clock is not the problem' };
+    }
+    return { ok: false, stats,
+             message: `still ${naming(block)} after ${stats.hours}h of game `
+                      + 'time — this cartridge\'s clock does not follow the '
+                      + 'pilot, so the hour has to come round on its own' };
+  }
+
   /**
    * Walk the grass until a species turns up, fleeing everything else.
    *

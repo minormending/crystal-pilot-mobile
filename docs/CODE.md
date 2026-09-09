@@ -45,6 +45,7 @@ and the code disagree, the code is right and the section is a bug — see
    · [Slots, undo, and bringing a save in](#7c-slots-undo-and-bringing-a-save-in)
 8. [The errands](#8-the-errands)
    · [What a species becomes, and when](#8h-what-a-species-becomes-and-when)
+   · [Waiting for an hour](#8i-waiting-for-an-hour)
 9. [The interface](#9-the-interface)
    · [One thing at a time](#one-thing-at-a-time)
    · [Reading a gym out of the cartridge](#reading-a-gym-out-of-the-cartridge)
@@ -435,7 +436,7 @@ watching.
 
 ### `symbols.js` — where things live
 
-<!-- covers: gen2/symbols.js @ 6e97544a7fd5 -->
+<!-- covers: gen2/symbols.js @ 50263ec0654e -->
 
 Parses the `.sym` file into `name → { bank, addr }`. First definition wins;
 later duplicates are aliases and locals.
@@ -473,7 +474,7 @@ enforces it, so it is a fact about the build rather than a habit.
 
 ### `state.js` — what the game is doing right now
 
-<!-- covers: gen2/state.js @ e5cea1c597ac -->
+<!-- covers: gen2/state.js @ a6eba9f4c45d -->
 
 One snapshot, many answers: `inBattle`, `party`, `pos`, `onGrass`,
 `worldLoaded`, `menu`, `balls`, `items`, each party member's `status`, the
@@ -494,6 +495,24 @@ the cheap fields.
 `dex(wram)` is off `read()` for the same reason `screen()` is: two 32-byte bit
 arrays walked 251 times each is not a thing to do eight times a second, and
 nothing but the dex card wants it.
+
+**And two clocks, which are not the same clock.** `timeOfDay` is which third
+of the day the game says it is, from the cartridge's real-time clock, and it
+changes at a boundary hours apart. `playtime(wram)` is the counter behind the
+save screen's `TIME 1:23`, and it ticks once a frame while the game is not
+paused. The second is here for one reason: it is the only clock in this machine
+*known* to move when the pilot runs the machine, so a job that waits for an hour
+can tell **the clock will not move** from **nothing is running at all** — see
+[waiting for an hour](#8i-waiting-for-an-hour). The hours of a playtime are two
+bytes read big-endian, which is the convention every other 16-bit field here
+uses and which those had measured; this one has not, because 999 hours is the
+cap and no save has been near enough for the high byte to matter.
+
+`timeOfDay` moved *into* `read()` rather than being added beside it, and that
+is a small repair: `main.js` held the address and made its own `readBytes` call
+for this one byte, twice per refresh — a second trip into the core for
+something the snapshot already in its hand contained, and the only work-RAM
+read in the app that did not come through this class.
 
 <details>
 <summary><b>Advanced detail:</b> three list lengths, a stat that is not stored,
@@ -1471,7 +1490,7 @@ and a Pokémon Center restores PP, so the grind treats it as a trip it already
 knew how to make. See [the tiles that run a
 script](#8g-the-tiles-that-run-a-script-and-saying-hello) for the walk half.
 
-<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ a78753f8cc6a -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ aeb515802fbd -->
 
 ### Which move, and which question
 
@@ -1669,7 +1688,7 @@ mechanism's evidence spans two runs rather than one.
 
 ### The bigger number is not the harder hit
 
-<!-- covers: gen2/romdata.js gen2/engine.js gen2/battle.js @ 3a540a1fc9da -->
+<!-- covers: gen2/romdata.js gen2/engine.js gen2/battle.js @ 8e69da963e7c -->
 
 For twenty-three passes the pilot ranked its moves by one number: the `power`
 byte out of the cartridge's move table. `romdata.move()` had been returning the
@@ -1811,7 +1830,7 @@ pilot uses, not a second one beside it. See section 10.
 
 ### Sending out somebody who can touch it
 
-<!-- covers: gen2/battle.js gen2/engine.js @ 438d1be287e9 -->
+<!-- covers: gen2/battle.js gen2/engine.js @ 93622b8cbd4b -->
 
 The pass before could tell that the Pokémon on the field takes nothing off a
 Ghost, and said so. The remedy it named — *a different Pokémon* — was one the
@@ -2166,7 +2185,7 @@ fainted.
 
 ## 7. Catching something
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ 1c5b0c9c0c00 -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ 54c3c4cd74b3 -->
 
 Catching is the most involved loop, because a Poké Ball's odds turn on how much
 HP is left. Throwing at a full-health target is mostly throwing balls away.
@@ -2329,7 +2348,7 @@ flowchart TD
 
 ## 7a. Five that act on where you already are
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ 03519e3cd1a9 -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ 6da5413ab8cd -->
 
 Grind, hunt and catch all go *looking* for something. These five do the obvious
 thing with the situation you are already in, and take no parameters:
@@ -2600,7 +2619,7 @@ said *trainer battle: lost* **seven times**. One loss, reported seven ways.
 
 ## 7d. The counter, and the money it takes
 
-<!-- covers: gen2/menus.js gen2/state.js titles/crystal.js @ 26bae0262750 -->
+<!-- covers: gen2/menus.js gen2/state.js titles/crystal.js @ 8272fbe25bb5 -->
 
 Everything the pilot could do until now used what it found. **Shop** walks to a
 mart and buys, which is the first thing it does that spends rather than
@@ -2709,7 +2728,7 @@ counter and came away with **five potions and ¥1800**, in 49 seconds.
 
 ## 7b. Saving, and getting the save out
 
-<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ a78753f8cc6a -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ aeb515802fbd -->
 
 ```mermaid
 flowchart TD
@@ -3573,7 +3592,7 @@ by, which is the only leg it can measure.
 
 ## 8d. A route the game itself refuses
 
-<!-- covers: gen2/journey.js gen2/state.js @ e186ca3a92ea -->
+<!-- covers: gen2/journey.js gen2/state.js @ 12823dd58834 -->
 
 The pass before this one taught the walk to *quote* the man who turns it back.
 This is the pilot doing something about it.
@@ -3781,7 +3800,7 @@ costs however long it takes somebody to notice their money is gone.
 
 ## 8f. Going and winning a badge
 
-<!-- covers: gen2/journey.js gen2/state.js titles/crystal.js @ 39054261fe9a -->
+<!-- covers: gen2/journey.js gen2/state.js titles/crystal.js @ 35110f18c660 -->
 
 The pilot has been turned back from Route 32 since the pass it learned to find
 Pokémon Centers. `reopen` throws away every written-off road the moment a badge
@@ -3948,7 +3967,7 @@ sent the reader at it.
 
 ## 8h. What a species becomes, and when
 
-<!-- covers: gen2/romdata.js gen2/engine.js @ 31e69e04aa7d -->
+<!-- covers: gen2/romdata.js gen2/engine.js @ 8ebe15eeef92 -->
 
 Two questions a party entry cannot answer: *what will this turn into*, and
 *what is it about to learn*. Both are in one table, because in Gen 2 they are
@@ -4038,13 +4057,113 @@ file says they do.
 
 </details>
 
+## 8i. Waiting for an hour
+
+<!-- covers: gen2/jobs.js gen2/engine.js app/rows.js @ 2877cddbc7b8 -->
+
+A third of Johto's grass is behind the clock. HOOTHOOT is on Route 29 after
+dark and nowhere on it at noon, and the app has been able to say so since
+v130 — *PIDGEY is here in the morning, not now* — while the usage guide called
+it **advice about your evening rather than something the pilot can hurry
+along.**
+
+That sentence was a claim, and nobody had measured it. This is the job that
+does.
+
+### The question, and why the code cannot answer it
+
+Gen 2 gets the time of day from the cartridge's real-time clock. Whether
+running the emulator faster runs *that* faster is a fact about the emulator
+core, not about the cartridge — and it decides whether waiting for night is
+thirteen minutes or eight hours. Two things stopped this being settled by
+reading:
+
+- **The core will not step on a hidden page.** Measured again this pass: the
+  ROM loads, `gb.ready` and `gb.rom` both true, and `gb.run(300)` leaves the
+  map at `0.0` with the canvas black. So there was no game to watch a clock on.
+- **`wRTC` is not a live clock.** It is in work RAM and it looked like the
+  answer, and it is not: a byte search over the whole ROM finds it touched by
+  exactly two routines, `StageRTCTimeForSave` and `ClockContinue`. It is staged
+  for saving, not refreshed. The live hour is `hHours`, which is HRAM at
+  `$ff94` — outside the work-RAM window this app reads through, and the core
+  exposes no constant to locate it.
+
+So the job is built to **measure the thing rather than assume it**, and the
+three ways it can end are three different pieces of news:
+
+```mermaid
+flowchart TD
+    S["waitForHour(block)"] --> G{"in the overworld,<br/>not in a battle?"}
+    G -- no --> R["refused, and says which"]
+    G -- yes --> A{"already that hour?"}
+    A -- yes --> N["ok, no frames run"]
+    A -- no --> L["run a game-minute of frames"]
+    L --> C{"wTimeOfDay now?"}
+    C -- "the one asked for" --> W["<b>ok</b> — and the clock<br/>follows the pilot"]
+    C -- "a different one" --> SAY["say so: the clock is moving"]
+    SAY --> B
+    C -- "the same" --> B{"26 game-hours spent?"}
+    B -- no --> L
+    B -- yes --> P{"did the playtime<br/>move at all?"}
+    P -- no --> D["<b>the game is not running</b><br/>— paused or stuck, and the<br/>clock is not the problem"]
+    P -- yes --> F["<b>the clock does not follow<br/>the pilot</b> — the hour has to<br/>come round on its own"]
+```
+
+**The bound is in game hours rather than in wall time or in iterations, and
+that is what makes reaching it mean something.** Any boundary in Gen 2 is
+within twenty-four hours — the longest block is the ten hours of night — so
+twenty-six is that with room. A clock the pilot could hurry along would have
+moved by then; one that has not just answered the question, and the message
+says so in those words rather than reporting a timeout.
+
+The two ways of running out are told apart by the **playtime**, which is the
+whole reason `state.js` reads it. Both end at the bound and both report
+failure, and their remedies could not be further apart: one is *come back this
+evening* and the other is *something is stuck*.
+
+### Where the row sits, and why it is last
+
+`waitOffer` answers **which** hour is worth waiting for, and it has two cases.
+The strong one is that something you already asked for is here at a different
+hour — the same reading the note under the species chips makes, turned into
+something pressable. The weak one, for somebody who has not chosen, is the
+block that brings the most species this one does not have.
+
+It reads the **remembered** quarry rather than the live one, and that is not an
+oversight: the live choice is cleared the moment the clock takes the species
+away, which is exactly the moment this row wants to know about it.
+
+**Wait ranks last**, below Travel and Shop, and the reason is the one fact that
+makes the whole row make sense: *every other job on the list advances the clock
+too.* A grind runs the same frames standing still would and comes back with
+levels. So waiting is only ever worth pressing when there is nothing else to do
+here — which is precisely what being last means, and it is why the runner may
+take it without that being a way to lose an hour.
+
+<details>
+<summary><b>Advanced detail:</b> the signature that would have stopped one step
+short</summary>
+
+`Run the list` guards its loop with a signature of everything a job could move
+— where you are, the money, the badges, the party, both pockets — and hands
+back when a job reports success and none of it changed. **The time of day was
+not in it.** So a wait that worked perfectly, morning through to night with the
+species back in the grass, would have read as *Wait ran and changed nothing*
+and stopped the sequence one step before the thing it had been waiting for.
+
+It is the only job on the list that moves that byte and the only one that moves
+nothing else, which is what made the gap invisible until there was something to
+fall into it.
+
+</details>
+
 ## 9. The interface
 
 This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ e125c350f870 -->
+<!-- covers: app/main.js index.html @ cdf715f126d6 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -4593,7 +4712,7 @@ seconds by a page whose loop was supposedly running.
 
 ### One thing at a time
 
-<!-- covers: app/main.js @ 0ab6998d28de -->
+<!-- covers: app/main.js @ 49156d386b8b -->
 
 One Game Boy, one joypad, one canvas — so a great deal of this app is about
 making sure two things are never driving them at once. There are three claims,
@@ -4735,7 +4854,7 @@ before a step is taken, so a stopped walk does not move at all.
 
 ### What is behind the Gym door, before you open it
 
-<!-- covers: gen2/romdata.js gen2/engine.js app/rows.js @ 5552d19869f8 -->
+<!-- covers: gen2/romdata.js gen2/engine.js app/rows.js @ 3f5e38026176 -->
 
 The Gym row could say where the Gym is and who is in it. **Whether it is worth
 going** is two facts the cartridge has had all along, and neither of them
@@ -4990,7 +5109,7 @@ reads all seven out of both files and compares them, which is the repair for
 
 ### Gates: asking the cartridge what it wants
 
-<!-- covers: gen2/state.js gen2/journey.js titles/crystal.js @ 39054261fe9a -->
+<!-- covers: gen2/state.js gen2/journey.js titles/crystal.js @ 35110f18c660 -->
 
 Two kinds of closed road, and the difference is everything:
 
@@ -5099,7 +5218,7 @@ a conversation.
 
 ### The card behind a party row
 
-<!-- covers: app/rows.js app/main.js index.html @ dc109db1faeb -->
+<!-- covers: app/rows.js app/main.js index.html @ e2169702d758 -->
 
 Two questions the game itself will not answer about a Pokémon you are
 carrying — *what is this made of* and *what is it about to become* — and both
@@ -5171,7 +5290,7 @@ at body size.
 
 ### Running the list
 
-<!-- covers: app/rows.js app/main.js @ 97aeb0e48fd8 -->
+<!-- covers: app/rows.js app/main.js @ 5811a0c2d786 -->
 
 The app has spent forty passes learning to answer one question — *what can the
 pilot do here, and which of those is worth most?* — and twenty showing the
@@ -5295,7 +5414,7 @@ to deposit your last Pokémon.
 
 ### The settings and the save card
 
-<!-- covers: index.html app/main.js @ e125c350f870 -->
+<!-- covers: index.html app/main.js @ cdf715f126d6 -->
 
 The pilot's own list got a glyph column, shorter names and a slot to fill in
 v165. These two cards did not, and reading them found that they had a different
@@ -5730,7 +5849,7 @@ this needed upstream rather than in the vendored copy.
 The options went through this room first on purpose: the small half, standing up
 the whole path — config, rules, anonymous sign-in, merge, debounce — with a
 slider position at stake rather than a save. Three things travel this way, and
-all three merge: the remembered options, the 68 addresses out of the symbol
+all three merge: the remembered options, the 71 addresses out of the symbol
 file, and the notes two devices use to introduce their screens to each other.
 The save goes over the same room and does *not* merge, which is the next
 section.
@@ -5923,7 +6042,7 @@ they have been installed.
 
 ### Watching the other device's screen
 
-<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ 3f1ee5c819e6 -->
+<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ 985ccbfacba9 -->
 
 One device shows its screen; the other watches it, and plays it if the first
 one says so. The picture goes straight between them over WebRTC and never
@@ -6199,16 +6318,16 @@ and change what a past handover said.
 
 ### The symbol file stops travelling
 
-The `.sym` is 1.8MB and this app looks up **68 symbols in it**. So the room
-carries those 68 lines — about a kilobyte, `{name: [bank, addr]}` — and a
+The `.sym` is 1.8MB and this app looks up **71 symbols in it**. So the room
+carries those 71 lines — about a kilobyte, `{name: [bank, addr]}` — and a
 second device needs the ROM and nothing else. `Symbols.fromDigest` builds a
 table that behaves like the parsed file; `size` is the only honest difference,
-and it reports 68 because that is how many symbols it has.
+and it reports 71 because that is how many symbols it has.
 
 ```mermaid
 flowchart LR
     F["the .sym file<br/>1.8MB, 58,456 symbols"] --> S["Symbols<br/>the parsed table"]
-    S -->|"digest(SHARED_SYMBOLS)"| D["{name: [bank, addr]}<br/>68 entries, ~1KB"]
+    S -->|"digest(SHARED_SYMBOLS)"| D["{name: [bank, addr]}<br/>71 entries, ~1KB"]
     D --> R[["the room"]]
     R --> D2["the same 47 entries"]
     D2 -->|"Symbols.fromDigest"| T["a table that behaves<br/>like the parsed file"]
