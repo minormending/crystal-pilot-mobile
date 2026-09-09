@@ -339,14 +339,14 @@ second, which is there so the core's own waits finish, not to run a game.
 ## The audits, and how each defect was actually found
 
 Everything above was watched happening. This section was the exception, and the
-exception was the point of it: after the ROM-hack work shipped, **forty-four**
-passes went looking for defects in code that already worked, and found **197** —
+exception was the point of it: after the ROM-hack work shipped, **forty-five**
+passes went looking for defects in code that already worked, and found **200** —
 a handful of them created by a fix on the way, which are in the table in italics
 because they are a different kind of thing. None of them announced itself.
 
 **Reading found twenty-three**, more than any other single method, which is why
 it comes first in the table and why it is worth doing before touching the game.
-But the interesting number is the tail: the remaining hundred and seventy-four were
+But the interesting number is the tail: the remaining hundred and seventy-seven were
 found almost as many different ways, and almost every entry in that column is a sentence rather than
 a category — *measuring the fix*, *asking a second tile*, *feeding it the wrong
 thing*, *writing a cartridge Crystal is not*, *a test, before the cartridge*,
@@ -575,6 +575,9 @@ exactly why nothing failed.
 | 44 | `crossEdge` held 99 mutation survivors, the biggest cluster in the biggest module: which tiles form an edge, that only openings are tried, and that they are tried centre-out — every claim in a comment and none in a test | a westward walk in a build where any of it was wrong | `tools/mutate`, grouped by function |
 | 44 | **seven test fixtures had drifted from the shapes the app passes** — `bagHeal` as an item where `main.js` passes a name, `wilds` as a list where it passes `{low, high}` | any assertion on those rows' text, which there were none of | `tools/rank`, printing "1 hurt · [object Object] in the bag" in its first minute |
 | 44 | nothing asserted the whole ranking, only pairs of it, which is how a comment and a list came to disagree | — | writing the one line that spells it out |
+| 45 | **the runner could never fetch the first Poké Balls** — the errand that gets them was a *second* button on the Catch row, and the runner presses primaries. It reached the one state it could not get out of and stopped one step short | press Run the list in a fresh game | asking where every declared place is reachable from, and following the chain back to its first step |
+| 45 | *unifying the errands offered a walk to another town with no party at all* | *a fresh game, before the starter* | *`tools/rank --noparty`, built the pass before* |
+| 45 | *a Python copy of the app's map-graph traversal reported Cherrygrove City as "not a map this cartridge has"* | *asking for any route through it* | *comparing it with the app's own reader* |
 
 Five things in that table are worth more than the individual rows.
 
@@ -3125,6 +3128,50 @@ reading a gate stopped at the first field it wanted, so `tile:` and `errand:`
 were past the end of the match and the tile check printed nothing at all — the
 failure mode a check has that a test does not, which is why `tools/check-checks`
 exists and why every group here has to be shown to bite.
+
+### A forty-fifth pass: two hundred, and a button nobody could press
+
+**The defect worth the round number is one nobody could have found by reading.**
+The trip that fetches the first Poké Balls was a second button on the Catch
+row, put there deliberately in v165 for a good reason: the way out of *no Poké
+Balls yet* should sit in the row that says it. Then the runner arrived two
+passes later and presses a row's *own* button. Catch is not enabled without
+balls. So *Run the list* in a fresh game walked into the one state it could not
+get out of and stopped one step before the thing that would have unstuck it.
+
+Neither half was wrong when it was written. The rule that emerges is about
+what happens afterwards: **a button only a person can find is not on the
+list.** Every errand lives in one row now, ranked high, with a primary button —
+and Catch stops earning its place from needing balls, because the way out is on
+the list either way.
+
+**Unifying them introduced a bug in the same breath, and the tool built last
+pass printed it.** `tools/rank --noparty` — with no Pokémon at all, the Errand
+row offered a walk to Mr. Pokémon's. The game will not let anybody leave the
+first town without one. That is the state Shop was caught offering itself in
+four passes ago, found the same way both times: by something with no judgement
+looking at the front of the list.
+
+**And the pass's own tooling diverged from the app, for the fourth time in
+two.** `tools/route` was first written as a Python traversal beside
+`rom-events`, and it reported Cherrygrove City as *not a map this cartridge
+has* — because deriving a group's size from the next group's list pointer does
+not work for every group, and the app's `mapCount` is deliberately permissive
+where it cannot tell. Three constants and now a whole traversal. The copy is
+gone: `tools/route` imports `gen2/world.js` and asks the app.
+
+Which makes what it answers worth much more. `--reach` asks whether **the graph
+the pilot will actually plan over** has a route to every map a title declares —
+the question that matters now that this data is read out of the ROM instead of
+walked to. All eighteen are reachable, and Azalea's Gym is eleven legs from the
+bedroom.
+
+**The honest footnote is what routing does not claim.** Violet City → Azalea
+Town is three legs in the graph, and a walker cannot take the second of them:
+Route 32's south end is the mouth of Union Cave. The pilot tries, is refused,
+writes the leg off and re-routes through the cave, which is also in the graph.
+Demanding every leg be walkable would mean asserting terrain this cannot read.
+Demanding a route exist catches the thing worth catching.
 
 ## The part that had to be redesigned
 

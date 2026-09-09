@@ -398,6 +398,40 @@ It is not a check. `tests/cases/rows.mjs` asserts the whole order in one line,
 which is where a claim about the ranking belongs; this is for the ten minutes
 before that line is written.
 
+### Where the pilot can get to
+
+```
+tools/route 10.5 8.7        the way from Violet City to Azalea Town
+tools/route --exits 10.1    every way out of Route 32
+tools/route --reach         every map a title declares, from where a game starts
+```
+
+**It runs `gen2/world.js`.** That is the whole point of it: the app builds its
+map graph from the cartridge every time it plans a walk, and nothing could say
+whether that graph *connects the places the app declares*. A gym in a town no
+route reaches is a row that can never be pressed, and the only way to find one
+out was to press it and watch a walk fail — which matters more the more of this
+data is read out of the ROM rather than walked to.
+
+`--reach` answers it: all eighteen maps `crystal.js` declares are in some route
+from the bedroom, and Azalea's Gym is eleven legs away.
+
+**The first version was a second traversal, in Python, and it diverged
+immediately.** It reported Cherrygrove City as *not a map this cartridge has*,
+because deriving a group's size from the next group's list pointer does not work
+for every group — and the app's `mapCount` is deliberately permissive where it
+cannot tell. That is the fourth divergence in two passes between this app's ROM
+reading and a copy of it, three of them constants. So the copy is gone.
+
+**What routing does *not* claim is walkability**, and the difference is
+instructive. `tools/route` says Violet City → Azalea Town is three legs: down
+to Route 32, down to Route 33, left into Azalea. A walker cannot take the
+second one — Route 32's south end is the mouth of Union Cave — so the pilot
+tries, is refused, writes the leg off and re-routes through the cave, which is
+also in the graph as a warp. Route 32 has both exits, and the graph is honest
+about both. Demanding every leg be walkable would mean asserting terrain this
+cannot read; demanding a route *exist* catches the thing worth catching.
+
 ### Asking the cartridge, without running it
 
 ```

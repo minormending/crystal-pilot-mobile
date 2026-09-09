@@ -944,7 +944,14 @@ and a walk that gets turned back reports the remedy instead of the quote:
 
 ### And now it goes and gets it
 
-There is a row for it. **Errand** — *the Egg from Elm's aide* — walks to Violet
+**Errand** is the row for every scripted trip the pilot can make, and what it
+is fetching is on the line: *the first Poké Balls* at the start of a game, *the
+Egg from Elm's aide* once you have the badge. One row, because they are the
+same shape of thing — and because of what the alternative cost. The ball errand
+spent six versions as a second button on the Catch row, where *Run the list*
+could not see it.
+
+**Errand** — *the Egg from Elm's aide* — walks to Violet
 City, in through the Pokémon Center door, up to the aide, and says yes. It sits
 near the top of the list — above Grind and above Gym — because an errand is
 **finite and a precondition**: run it once and it is gone, and until it is run
@@ -1311,7 +1318,7 @@ deployed, which is not the question you are asking when a bug you saw fixed is
 still in front of you. `tools/check-app` asserts that number matches the service
 worker's cache name, because a version display that lies is worse than none.
 
-<!-- covers: sw.js @ de64f24cb56d -->
+<!-- covers: sw.js @ 16c0aaffa601 -->
 
 The worker fetches **network first, falling back to the cache**. That is the
 opposite of the usual offline-first advice, on purpose.

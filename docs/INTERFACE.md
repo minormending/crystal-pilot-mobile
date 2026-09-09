@@ -868,6 +868,21 @@ name, because the ball errand is the same shape of thing and the next cartridge
 will have its own — and a row called *Egg* would be a row that could only ever
 mean one thing on one game.
 
+**The ball errand moved into it in v171, and the reason is the runner.** That
+trip used to be a *second* button on the Catch row, put there in v165 so the
+way out of "no Poké Balls yet" sat in the row that says it. Good reasoning —
+and then the runner arrived, which presses a row's own button. Catch is not
+enabled without balls, a secondary button is invisible to a mechanism that
+presses primaries, and so *Run the list* in a fresh game reached the one state
+it could not get out of and stopped one step before the thing that would have
+unstuck it.
+
+Which is a rule worth keeping for the next time a control is tucked somewhere
+convenient: **a button only a person can find is not on the list.** Catch has
+one button again, and stops earning its place from needing balls — the way out
+is on the list either way, said by a row that can be pressed rather than by one
+that cannot.
+
 **It is ranked above Grind and above Gym**, which is the only interesting
 decision in it — and the first draft got it half wrong in the most instructive
 way: the comment said *worth more than levelling up* while the order put it
@@ -1070,4 +1085,4 @@ So this page carries a marker naming the files it describes and the hash they
 had when it was last read against them. `tools/docs-check` reports it when they
 move, and the pre-commit hook blocks on that report.
 
-<!-- covers: index.html app/main.js app/rows.js @ 28689c3b6986 -->
+<!-- covers: index.html app/main.js app/rows.js @ fd628e5f01f2 -->
