@@ -340,13 +340,13 @@ second, which is there so the core's own waits finish, not to run a game.
 
 Everything above was watched happening. This section was the exception, and the
 exception was the point of it: after the ROM-hack work shipped, **forty-five**
-passes went looking for defects in code that already worked, and found **200** —
+passes went looking for defects in code that already worked, and found **205** —
 a handful of them created by a fix on the way, which are in the table in italics
 because they are a different kind of thing. None of them announced itself.
 
 **Reading found twenty-three**, more than any other single method, which is why
 it comes first in the table and why it is worth doing before touching the game.
-But the interesting number is the tail: the remaining hundred and seventy-seven were
+But the interesting number is the tail: the remaining hundred and eighty-two were
 found almost as many different ways, and almost every entry in that column is a sentence rather than
 a category — *measuring the fix*, *asking a second tile*, *feeding it the wrong
 thing*, *writing a cartridge Crystal is not*, *a test, before the cartridge*,
@@ -578,6 +578,11 @@ exactly why nothing failed.
 | 45 | **the runner could never fetch the first Poké Balls** — the errand that gets them was a *second* button on the Catch row, and the runner presses primaries. It reached the one state it could not get out of and stopped one step short | press Run the list in a fresh game | asking where every declared place is reachable from, and following the chain back to its first step |
 | 45 | *unifying the errands offered a walk to another town with no party at all* | *a fresh game, before the starter* | *`tools/rank --noparty`, built the pass before* |
 | 45 | *a Python copy of the app's map-graph traversal reported Cherrygrove City as "not a map this cartridge has"* | *asking for any route through it* | *comparing it with the app's own reader* |
+| 45 | **`gen2/nav.js` — the module that walks the player — had no tests at all**, and could not have had any: `Nav`'s constructor asks for two symbols the test harness's fake table did not have, so constructing one threw and nobody had ever tried | — | making `tools/coverage` count the files the suite never loads |
+| 45 | **`tools/coverage` reported a percentage over a subset**: `app/` was excluded wholesale, and a file the suite never loaded appeared in neither the numerator nor the denominator. 73% was really 54% | reading the number | asking where `app/rows.js` was in the list |
+| 45 | the walk loop's refusal counter resets after a good step and nothing asserted the reset — the same consecutive-versus-cumulative shape as the grind loop's, one module along | a walk past two separate people | writing the fourteen tests |
+| 45 | *the harness allocated `wXCoord` before `wYCoord`, where the cartridge has Y first — so any test reading a position through the real `Nav` would have transposed them* | *—* | *checking the fake against the symbol file* |
+| 45 | `tools/renumber` could correct a number but not add a row, so a new test file left `counts` failing with nothing the writer could do — the state a check gets edited around in | add a test file | adding one |
 
 Five things in that table are worth more than the individual rows.
 
@@ -3165,6 +3170,29 @@ the pilot will actually plan over** has a route to every map a title declares �
 the question that matters now that this data is read out of the ROM instead of
 walked to. All eighteen are reachable, and Azalea's Gym is eleven legs from the
 bedroom.
+
+**And the audit half found the largest single gap in the repository, by
+correcting a number rather than by looking for a bug.** `tools/coverage` said
+73% of lines were run. It was reporting a percentage over a subset: `app/` was
+excluded by a comment reading *main.js needs a DOM* — true, and the wrong
+conclusion, since it also excluded `app/rows.js` — and a file the suite never
+*loaded* appeared in neither the numerator nor the denominator.
+
+Counting everything puts it at **54%**, and the first thing that fell out was
+`gen2/nav.js` at **0 of 130 lines**. The module that walks the player had no
+tests, because every test in the repository fakes `nav`.
+
+**It could not have had any.** `Nav`'s constructor asks for
+`wPlayerBGMapOffsetX` and `wPlayerBGMapOffsetY`; the harness's fake symbol
+table did not have them, so constructing one threw. Two symbols stood between
+the walk loop and being testable, and because nobody had tried, nobody knew.
+
+Fourteen tests later it is 61% of lines, and one of them is a rule this
+repository has now met twice in three passes: **the refusal counter resets
+after a step that works.** Two refusals, a good step, two more refusals is not
+the game refusing input — and without the reset a walk past two separate people
+ends in the middle. The grind loop needed exactly that reset, in exactly that
+shape, one module along.
 
 **The honest footnote is what routing does not claim.** Violet City → Azalea
 Town is three legs in the graph, and a walker cannot take the second of them:
