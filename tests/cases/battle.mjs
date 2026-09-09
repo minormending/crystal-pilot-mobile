@@ -15,9 +15,10 @@ function pilot({ wram = null, onPress = null, rom = undefined } = {}) {
   const sym = symbols();
   const state = new GameState(sym);
   const gb = new FakeGameBoy({ wram: wram || worldRam(sym, {}), onPress });
-  const tasks = new Tasks(gb, state, () => {},
+  const said = [];
+  const tasks = new Tasks(gb, state, (line) => said.push(line),
                           rom === undefined ? fakeRom() : rom);
-  return { sym, state, gb, tasks };
+  return { sym, state, gb, tasks, said };
 }
 
 test('the drawn battle menu is told apart from the pack over the top of it', async (t) => {
@@ -1051,4 +1052,169 @@ test('a wiped party found at the battle menu is pressed through too', async (t) 
   tasks.awaitBattleMenu = async () => ({ party: [{ hp: 0, maxHp: 30 }] });
   t.eq(await tasks.fightBattle(), 'lost', 'a loss');
   t.false(wiped.inBattle, 'and over');
+});
+
+test('a battle nothing carried can touch is its own dead end', async (t) => {
+  // A different question from PP, and invisible to the one that asks it: the
+  // move has power, so `canStillWin` says yes, and the type chart says the
+  // swing takes nothing off. A Normal-only moveset facing a GASTLY swings for
+  // forty turns while the enemy's HP does not move, and the loop reports
+  // 'stuck' — which is true and says nothing anybody can act on.
+  const { tasks } = pilot({ rom: typedRom() });
+  const normalOnly = { moves: [33, 45, 0, 0], pp: [35, 40, 0, 0] };
+  t.true(tasks.nothingLands(normalOnly, [GHOST, GHOST]),
+         'Tackle is the only attack, and it does nothing to a Ghost');
+  t.false(tasks.nothingLands(normalOnly, [NORMAL, NORMAL]),
+          'against something it can hit, it can hit');
+
+  const withFire = { moves: [33, 52, 0, 0], pp: [35, 25, 0, 0] };
+  t.false(tasks.nothingLands(withFire, [GHOST, GHOST]),
+          'one move that lands is enough, whichever slot it is in');
+  t.true(tasks.nothingLands({ moves: [33, 52, 0, 0], pp: [35, 0, 0, 0] },
+                            [GHOST, GHOST]),
+         'and it has to have PP: with the Ember spent, nothing lands again');
+});
+
+test('cannot tell is not the same as cannot touch', async (t) => {
+  // The rule the whole app is built on, in the one place where breaking it
+  // would stand the pilot still: with no chart, or no types to price against,
+  // every move is worth swinging.
+  const { tasks } = pilot({ rom: typedRom() });
+  const normalOnly = { moves: [33, 45, 0, 0], pp: [35, 40, 0, 0] };
+  t.false(tasks.nothingLands(normalOnly, null), 'no types, keep swinging');
+  const { tasks: blind } = pilot({ rom: null });
+  t.false(blind.nothingLands(normalOnly, [GHOST, GHOST]),
+          'and no cartridge, the same');
+  t.false(tasks.nothingLands({ moves: [45, 0, 0, 0], pp: [40, 0, 0, 0] },
+                             [GHOST, GHOST]),
+          'a moveset with nothing but status moves is a PP question, not this one');
+});
+
+test('the loop hands that word back rather than pressing on to stuck',
+     async (t) => {
+  const { tasks } = pilot({ rom: typedRom() });
+  const party = [{ slot: 0, species: 19, level: 9, hp: 20, maxHp: 20,
+                   moves: [33, 45, 0, 0], pp: [35, 40, 0, 0] }];
+  const menu = { party, inBattle: true, menu: [1, 1], menuItems: 34,
+                 menuTop: 12, worldLoaded: true, windowOpen: true,
+                 enemy: { species: 92, level: 5, hp: 20, maxHp: 20,
+                          types: [GHOST, GHOST] },
+                 active: { hp: 20, maxHp: 20, types: [NORMAL, NORMAL] } };
+  let swings = 0;
+  tasks.coverFaint = async () => null;
+  tasks.awaitBattleMenu = async () => menu;
+  tasks.chooseAction = async () => { swings++; };
+  tasks.step = async () => {};
+  tasks.pump = async () => {};
+  tasks.push = async () => {};
+  tasks.snap = async () => menu;
+  t.eq(await tasks.fightBattle(2), 'notouch', 'the word, first time round');
+  t.eq(swings, 0, 'and not one swing spent finding out');
+});
+
+// --- four guards the mutation run found nothing standing behind ------------
+
+test('the Pokémon on the field is the one on the field at 1 HP', async (t) => {
+  // `onField` falls back to the first party member that is still standing,
+  // and "standing" is above zero. Read it as above one and a Pokémon on its
+  // last hit point is stepped over — so every move the pilot then reasons
+  // about belongs to the Pokémon *behind* it, which is not the one whose
+  // moves the menu is showing.
+  const nearly = { slot: 0, hp: 1, maxHp: 24, moves: [33], pp: [10] };
+  const behind = { slot: 1, hp: 20, maxHp: 20, moves: [52], pp: [10] };
+  t.eq(onField({ party: [nearly, behind] }).slot, 0,
+       'one hit point is still on the field');
+  t.eq(onField({ party: [{ ...nearly, hp: 0 }, behind] }).slot, 1,
+       'and none at all is not');
+});
+
+test('a move that computes its damage can still win a battle', async (t) => {
+  // The eleven moves that lie about their power store 0 or 1, and `canStillWin`
+  // asks whether the power is above zero rather than above one for exactly
+  // that reason: HORN DRILL reads 1 and ends battles. Read it as above one and
+  // a Pokémon holding nothing else is declared unable to win, which sends a
+  // grind to a Center it does not need and stops it there.
+  const { tasks } = pilot();
+  t.true(tasks.canStillWin({ moves: [32, 0, 0, 0], pp: [5, 0, 0, 0] }),
+         'Horn Drill at power 1 counts');
+  t.false(tasks.canStillWin({ moves: [43, 0, 0, 0], pp: [30, 0, 0, 0] }),
+          'Leer at power 0 does not');
+});
+
+test('the move menu has to be drawn before a move is aimed at', async (t) => {
+  // Cursor row 0 means the move menu is not up — most often the message
+  // refusing the move just picked is still on screen. Pressing into that
+  // re-picks the refused move, which is the eighty-four "battles" in one
+  // grind that were the same refusal over and over.
+  const { tasks } = pilot({ rom: typedRom() });
+  const party = [{ slot: 0, species: 155, level: 9, hp: 20, maxHp: 20,
+                   moves: [33, 52, 0, 0], pp: [35, 25, 0, 0] }];
+  const noMenu = { party, inBattle: true, menu: [1, 0], menuItems: 34,
+                   menuTop: 12, worldLoaded: true, windowOpen: true,
+                   enemy: { species: 16, level: 3, hp: 10, maxHp: 10,
+                            types: [NORMAL, NORMAL] },
+                   active: { hp: 20, maxHp: 20, types: [FIRE, FIRE] } };
+  let asked = 0, turns = 0;
+  tasks.coverFaint = async () => null;
+  tasks.awaitBattleMenu = async () => noMenu;
+  tasks.chooseAction = async () => {};
+  tasks.step = async () => {};
+  tasks.pump = async () => {};
+  tasks.push = async () => {};
+  tasks.snap = async () => (turns++ > 2 ? { ...noMenu, inBattle: false } : noMenu);
+  tasks.chooseMove = async () => { asked++; return 0; };
+  await tasks.fightBattle(1);
+  t.eq(asked, 0, 'nothing was aimed at a menu that is not there');
+});
+
+test('a caught Pokémon is a party that grew, not a party that is the same size',
+     async (t) => {
+  // The evidence for a catch is one more party member than there was. Read as
+  // "at least as many" and the very first poll after the throw reports
+  // caught — before the ball has finished animating, and whether or not it
+  // held.
+  const { tasks } = pilot();
+  const party = [{ slot: 0, hp: 20, maxHp: 20, moves: [33], pp: [10] }];
+  const stillOne = { party, inBattle: true, menu: [1, 1], menuItems: 34,
+                     menuTop: 12, windowOpen: true,
+                     enemy: { species: 16, level: 3, hp: 10, maxHp: 10 },
+                     active: { hp: 20, maxHp: 20 } };
+  tasks.step = async () => {};
+  tasks.pump = async () => {};
+  tasks.push = async () => {};
+  tasks.screenSays = async () => false;
+  tasks.snap = async () => stillOne;
+  t.eq(await tasks.watchThrow(1), 'broke free',
+       'one party member where there was one is not a catch');
+  const grew = { ...stillOne, party: [...party, { slot: 1, hp: 9, maxHp: 9 }] };
+  tasks.snap = async () => grew;
+  t.eq(await tasks.watchThrow(1), 'caught', 'two where there was one is');
+});
+
+test('the line about the chart is said for the move in slot one too',
+     async (t) => {
+  // Slot indices are zero-based and the log guard is `>= 0`, which is the
+  // difference between saying something about every move and saying nothing
+  // about the first one — and the first one is where a starter's best move
+  // usually is.
+  const { tasks, said } = pilot({ rom: typedRom() });
+  const party = [{ slot: 0, species: 155, level: 9, hp: 20, maxHp: 20,
+                   moves: [52, 33, 0, 0], pp: [25, 35, 0, 0] }];
+  const menu = { party, inBattle: true, menu: [1, 1], menuItems: 34,
+                 menuTop: 12, worldLoaded: true, windowOpen: true,
+                 enemy: { species: 1, level: 5, hp: 20, maxHp: 20,
+                          types: [GRASS, GRASS] },
+                 active: { hp: 20, maxHp: 20, types: [FIRE, FIRE] } };
+  let turns = 0;
+  tasks.coverFaint = async () => null;
+  tasks.awaitBattleMenu = async () => menu;
+  tasks.chooseAction = async () => {};
+  tasks.step = async () => {};
+  tasks.pump = async () => {};
+  tasks.push = async () => {};
+  tasks.snap = async () => (turns > 0 ? { ...menu, inBattle: false } : menu);
+  tasks.chooseMove = async (mon, prefer) => { turns++; return prefer([0, 1], mon); };
+  await tasks.fightBattle(1);
+  t.true(said.some((l) => l === 'EMBER — super effective'),
+         `slot one's move was named: ${JSON.stringify(said)}`);
 });

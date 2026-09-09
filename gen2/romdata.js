@@ -333,14 +333,17 @@ export class RomData {
   effectiveness(id, types) {
     const info = this.move(id);
     if (!info || !types || !types.length) return null;
-    let out = 1, known = false;
+    let out = 1;
     for (const t of new Set(types)) {
+      // One unreadable type makes the whole answer unreadable, rather than
+      // being skipped: half a matchup is a multiplier that looks like an
+      // answer, and a Fire move priced against only the Grass half of a
+      // Grass/Water Pokemon comes out double when it is neutral.
       const m = this.matchup(info.type, t);
       if (m === null) return null;
       out *= m;
-      known = true;
     }
-    return known ? out : null;
+    return out;
   }
 
   /**

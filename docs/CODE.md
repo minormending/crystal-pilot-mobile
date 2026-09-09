@@ -580,7 +580,7 @@ and in `bootstrap.js`, with nothing able to notice if they drifted.
 
 ### `romdata.js` — what the cartridge knows
 
-<!-- covers: gen2/romdata.js @ ad8626d8d26e -->
+<!-- covers: gen2/romdata.js @ f4a2e14c1fb4 -->
 
 Species names, item names, move names, wild-encounter tables, move power and
 the type chart. All read out of the ROM, not shipped as a copy, so they cannot
@@ -1135,7 +1135,7 @@ point those coordinates mean somewhere else entirely.
 
 ## 5. Crossing to the next map
 
-<!-- covers: gen2/journey.js gen2/world.js @ 8c079a8f229f -->
+<!-- covers: gen2/journey.js gen2/world.js @ f5220cc05f4f -->
 
 A connection spans only part of a shared edge, so "walk west until something
 happens" does not work. `crossEdge()` closes the distance in stages, then tries
@@ -1352,7 +1352,7 @@ and a Pokémon Center restores PP, so the grind treats it as a trip it already
 knew how to make. See [the tiles that run a
 script](#8g-the-tiles-that-run-a-script-and-saying-hello) for the walk half.
 
-<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ ec4ef23366c0 -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 85d11ba68bcd -->
 
 ### Which move, and which question
 
@@ -1550,7 +1550,7 @@ mechanism's evidence spans two runs rather than one.
 
 ### The bigger number is not the harder hit
 
-<!-- covers: gen2/romdata.js gen2/engine.js gen2/battle.js @ 979db9debe8c -->
+<!-- covers: gen2/romdata.js gen2/engine.js gen2/battle.js @ b58d0923faa8 -->
 
 For twenty-three passes the pilot ranked its moves by one number: the `power`
 byte out of the cartridge's move table. `romdata.move()` had been returning the
@@ -1634,6 +1634,29 @@ move on a Water/Water POLIWAG came out at four rather than two. The game applies
 each matching row once whichever slot matched it, so `effectiveness` deduplicates
 the types before multiplying. A genuinely dual-typed defender still collects
 both rows — Fire on a Grass/Bug PARAS doubles twice, and ×4 is correct.
+
+**And a battle nothing carried can touch is now its own word.** This is the
+same dead end `canStillWin` was written for, reached from the direction it
+cannot see: the move *has* power, so it counts as one that could end a battle,
+and the chart says the swing takes nothing off. `nothingLands` asks the other
+question, and `fightBattle` asks it on the first turn rather than the
+fortieth — forty turns to arrive at `stuck` is time nobody gets back, and
+`stuck` is not a thing a person can act on.
+
+The word matters because the *remedies differ*, and a walk cannot tell them
+apart while whoever reads the message must:
+
+| word | what happened | what fixes it |
+| --- | --- | --- |
+| `nopp` | nothing with PP left does damage | a Center, which restores PP |
+| `notouch` | full PP, and none of it can touch what is in front of it | a different move, or a different Pokémon |
+| `stuck` | the loop ran out of turns and cannot say why | look at the screen |
+
+So `grind` **stops** on `notouch` rather than walking to a Center: a Center
+does not teach a move, and healing to come back at the same wall with a fuller
+bar is the sort of loop this app has been written to notice. And like every
+other null in here, `nothingLands` answers *false* when it cannot read the
+chart — cannot tell must never become do not swing.
 
 **The chart reorders the list; it never empties it.** `strongest` still chooses
 *which moves are candidates* by raw power, and only their order by the chart.
@@ -1933,7 +1956,7 @@ fainted.
 
 ## 7. Catching something
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ c914c293a264 -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ 6dff25440aa2 -->
 
 Catching is the most involved loop, because a Poké Ball's odds turn on how much
 HP is left. Throwing at a full-health target is mostly throwing balls away.
@@ -2081,7 +2104,7 @@ flowchart TD
 
 ## 7a. Five that act on where you already are
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ 3c19ecea4887 -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ e2fc7ce61c29 -->
 
 Grind, hunt and catch all go *looking* for something. These five do the obvious
 thing with the situation you are already in, and take no parameters:
@@ -2461,7 +2484,7 @@ counter and came away with **five potions and ¥1800**, in 49 seconds.
 
 ## 7b. Saving, and getting the save out
 
-<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ ec4ef23366c0 -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 85d11ba68bcd -->
 
 ```mermaid
 flowchart TD
@@ -2703,7 +2726,7 @@ because that failure is only otherwise discovered by reaching for the undo.
 
 ## 8. The errands
 
-<!-- covers: titles/crystal.js gen2/journey.js @ 4c9d6a9bfdf9 -->
+<!-- covers: titles/crystal.js gen2/journey.js @ e3e4a7578c54 -->
 
 Everything in this section is `crystal.js` — the only file in the app that names
 a Crystal map, a Crystal door or a Crystal NPC. What it stands on is
@@ -3075,7 +3098,7 @@ the bag" rather than "did we gain any".
 
 ## 8a. Finding the Centers and the Marts in the cartridge
 
-<!-- covers: gen2/world.js gen2/journey.js @ 8c079a8f229f -->
+<!-- covers: gen2/world.js gen2/journey.js @ f5220cc05f4f -->
 
 The last thing in this app that had to be written out by hand. A title said
 where the Centers and the Marts were, so the pilot healed in the two towns
@@ -3152,7 +3175,7 @@ after](#8d-a-route-the-game-itself-refuses).
 
 ## 8b. Asking the cartridge what its places are called
 
-<!-- covers: gen2/romdata.js gen2/world.js @ 6b4c5a36194b -->
+<!-- covers: gen2/romdata.js gen2/world.js @ 4898ecf152b9 -->
 
 The one table that **retires** hand-written data rather than adding to it. A map
 used to be called whatever the title profile said, and everything else was
@@ -3311,7 +3334,7 @@ by, which is the only leg it can measure.
 
 ## 8d. A route the game itself refuses
 
-<!-- covers: gen2/journey.js gen2/state.js @ c7a5dd86f63c -->
+<!-- covers: gen2/journey.js gen2/state.js @ e639f56a9b42 -->
 
 The pass before this one taught the walk to *quote* the man who turns it back.
 This is the pilot doing something about it.
@@ -3418,7 +3441,7 @@ counting bytes reads a full case as one.
 
 ## 8e. Fighting everybody here
 
-<!-- covers: gen2/journey.js @ 72a1f3db22ab -->
+<!-- covers: gen2/journey.js @ 55f1bd342eb4 -->
 
 The primitive a Gym needs. The pilot has been stopped on Route 32 for three
 passes by a man who wants Falkner beaten first, and beating Falkner means
@@ -3519,7 +3542,7 @@ costs however long it takes somebody to notice their money is gone.
 
 ## 8f. Going and winning a badge
 
-<!-- covers: gen2/journey.js gen2/state.js titles/crystal.js @ dfcf2d5c11af -->
+<!-- covers: gen2/journey.js gen2/state.js titles/crystal.js @ 06000e05b634 -->
 
 The pilot has been turned back from Route 32 since the pass it learned to find
 Pokémon Centers. `reopen` throws away every written-off road the moment a badge
@@ -3602,7 +3625,7 @@ everybody is a heal whatever it says about itself.
 
 ## 8g. The tiles that run a script, and saying hello
 
-<!-- covers: gen2/world.js gen2/journey.js @ 8c079a8f229f -->
+<!-- covers: gen2/world.js gen2/journey.js @ f5220cc05f4f -->
 
 Four passes of machinery pointed at one sentence a man says, and the reader that
 made it diagnosable is twelve lines.
@@ -4451,7 +4474,7 @@ reads all seven out of both files and compares them, which is the repair for
 
 ### Gates: asking the cartridge what it wants
 
-<!-- covers: gen2/state.js gen2/journey.js titles/crystal.js @ dfcf2d5c11af -->
+<!-- covers: gen2/state.js gen2/journey.js titles/crystal.js @ 06000e05b634 -->
 
 Two kinds of closed road, and the difference is everything:
 

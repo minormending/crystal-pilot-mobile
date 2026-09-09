@@ -907,6 +907,27 @@ you rather than pacing for ever.
 If you see the message outside a grind, the answer is a Center, or an Ether, or
 a different Pokémon in front.
 
+### And a battle you cannot touch, which no amount of PP fixes
+
+A Normal-type move does **nothing at all** to a Ghost. Not less — nothing. So a
+Pokémon whose only attacks are Normal, facing a Gastly in Sprout Tower, swings
+with full PP while the Gastly's HP does not move, and the fight cannot end.
+
+The pilot now reads the cartridge's own type chart, so it can tell on the first
+turn instead of the fortieth:
+
+> nothing this Pokémon carries can touch what it is facing
+
+**A grind stops there rather than walking to a Center**, because a Center does
+not teach a move. The remedy is a different move or a different Pokémon in
+front, and those are both yours to choose.
+
+The same reading makes the pilot better at the fights it *can* win: it swings
+the move that will actually land hardest rather than the one with the biggest
+number in the table. On this cartridge those differ early — a Chikorita in
+Sprout Tower does more with Tackle than with Razor Leaf, because Razor Leaf is
+Grass and so is everything in there.
+
 ### When the game says no, the pilot tells you what it said
 
 A place the pilot **found** in the cartridge can be somewhere the game will not

@@ -15,7 +15,7 @@ what CI checks and what the pre-commit hook blocks on.
 ```mermaid
 flowchart LR
     E[an edit] --> H{{".githooks/pre-commit"}}
-    H --> T["./run-tests<br/>686 behaviour tests"]
+    H --> T["./run-tests<br/>696 behaviour tests"]
     H --> C["tools/check-app<br/>26 groups"]
     H --> D["tools/docs-check<br/>25 tracked sections"]
     T --> OK[commit]
@@ -39,14 +39,14 @@ git config core.hooksPath .githooks
 ./run-tests -v         # notes and stack lines
 ```
 
-686 tests in 26 files, and what each file is about says more than the count:
+696 tests in 26 files, and what each file is about says more than the count:
 
 | file | tests | what it pins down |
 | --- | --- | --- |
 | `journey.mjs` | 150 | the walking: routes, doors, shut legs, healers, gyms, and the map graph |
 | `rows.mjs` | 102 | what every row and offer says, when its button works, and what the runner picks |
 | `menus.mjs` | 61 | the order the START menu is driven in, and what is closed between tries |
-| `battle.mjs` | 52 | whose turn it is, which Pokémon is out, and a win from a whiteout |
+| `battle.mjs` | 60 | whose turn it is, which Pokémon is out, and a win from a whiteout |
 | `collision.mjs` | 34 | which tiles can be walked, and which have somebody standing on them |
 | `capture.mjs` | 25 | weakening, ball choice, the party prompt, and the refusals before a throw |
 | `grind.mjs` | 22 | what a grind says while it works, and the bounds that make it stop |
@@ -54,7 +54,7 @@ git config core.hooksPath .githooks
 | `control.mjs` | 22 | the task lifecycle: stopping, failing, undo points, and loops that must end |
 | `state.mjs` | 19 | reading the party, the map, the badges and the battery out of work RAM |
 | `titles.mjs` | 19 | choosing a profile for a cartridge, and falling back to generic |
-| `romdata.mjs` | 25 | the cartridge's own character encoding and tables, byte by byte |
+| `romdata.mjs` | 27 | the cartridge's own character encoding and tables, byte by byte |
 | `remember.mjs` | 14 | which remembered choices are believed, and which dropped |
 | `worker.mjs` | 14 | the idle loop: one step outstanding, and a lost step recovered |
 | `nav.mjs` | 14 | the walk loop: what it decides between two steps, and every reason it stops |
@@ -126,7 +126,7 @@ section gives. Everything by hand runs against a local build.
 
 ```mermaid
 flowchart BT
-    C["the app"] --> T["./run-tests<br/>686 behaviour tests"]
+    C["the app"] --> T["./run-tests<br/>696 behaviour tests"]
     C --> A["tools/check-app<br/>26 groups"]
     C --> D["tools/docs-check<br/>31 tracked sections"]
     C --> V["tools/coverage<br/>what the suite never runs"]

@@ -702,6 +702,21 @@ export function withJobs(Base) {
       //
       // Counted against the same trip budget as a knockout, for the same
       // reason: nothing here advances while walking to a Center.
+      // **And a Center does not teach a move.** The same shape of dead end as
+      // running dry, with the opposite remedy: full PP on a Normal-only
+      // moveset facing a GHOST takes nothing off it, so healing and coming
+      // back meets the same wall with a fuller bar. Every other outcome here
+      // is something this job can do something about; this one is a sentence
+      // for whoever is reading, and the honest move is to stop and say it.
+      if (outcome === 'notouch') {
+        return {
+          ok: false,
+          message: `nothing the Lv${mon.level} lead carries can touch what it `
+                   + 'just met — a Center will not help; it needs a different '
+                   + 'move or a different Pokémon',
+          stats: { ...stats, levels: mon.level - startLevel },
+        };
+      }
       if (outcome === 'nopp') {
         stats.dry = (stats.dry || 0) + 1;
         if (!heal || ++trips > MAX_HEALS) {

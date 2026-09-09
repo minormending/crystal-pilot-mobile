@@ -328,3 +328,30 @@ test('a move can say its own name, which is what a log needs', async (t) => {
   none.moveNames = null;
   t.eq(none.moveName(1), '', 'a cartridge that will not say, says nothing');
 });
+
+test('a type nobody can price makes the whole answer unreadable', async (t) => {
+  // Not skipped, which is the tempting alternative and is worse than saying
+  // nothing: half a matchup is a multiplier that reads like an answer. A Fire
+  // move priced against only the Grass half of a Grass/Water Pokémon comes
+  // out double when it is neutral.
+  const rom = charted();
+  t.eq(rom.matchup(null, WATER), null, 'no attacking type, no answer');
+  t.eq(rom.matchup(FIRE, null), null, 'and none without a defender either');
+  t.eq(rom.matchup(FIRE, undefined), null, 'a slot that was never written is the same');
+  t.eq(rom.effectiveness(52, [GRASS, null]), null,
+       'so one unreadable slot takes the pair with it');
+});
+
+test('twenty-four bytes with no terminator in them is not a name', async (t) => {
+  // `decodeText` will turn any bytes at all into a string, so a symbol file
+  // pointing somewhere that is not a name table would otherwise hand back a
+  // row of question marks -- which reads like an answer. The longest name on
+  // this cartridge is twelve characters.
+  const letters = (n) => Array.from({ length: n }, () => 0x80);
+  t.eq(romReading(TYPED, { names: letters(40) }).moveName(1), '',
+       'no terminator, no name');
+  t.eq(romReading(TYPED, { names: [...letters(24), 0x50] }).moveName(1), '',
+       'and the bound is the bound: the twenty-fifth byte is not consulted');
+  t.eq(romReading(TYPED, { names: [...letters(3), 0x50] }).moveName(1), 'AAA',
+       'while a name that does terminate comes back whole');
+});

@@ -104,6 +104,17 @@ const LEADER_TRIES = 6;
 // rather than a press.
 const NAME_TRIES = 12, NAME_SETTLE = 20;
 
+// What a battle nobody can finish is *called*, by the word `fightBattle`
+// hands back. A walk treats all three the same -- there is nothing to be done
+// from here -- and whoever reads the message needs them apart, because the
+// remedies are a Center, a different Pokemon, and a look at the screen.
+// Anything not named here falls back to the vaguest of the three, which is
+// the honest place for a word this file has not been taught.
+const BATTLE_STUCK = {
+  nopp: 'out of PP on anything that does damage',
+  notouch: 'nothing this Pokémon carries can touch what it is facing',
+};
+
 const NOTHING_THERE = 'nothing there to take';
 const OUT_OF_REACH = 'could not get to it';
 
@@ -693,11 +704,9 @@ export class Journey {
   /** What a walk says when a battle has made it pointless. */
   _stuckMessage() {
     return { ok: false,
-             message: this.stuckReason === 'nopp'
-               ? 'out of PP on anything that does damage — nothing else will '
-                 + 'work until that is dealt with'
-               : 'stuck in a battle nothing can finish — nothing else will '
-                 + 'work until it is dealt with' };
+             message: `${BATTLE_STUCK[this.stuckReason]
+                        || 'stuck in a battle nothing can finish'} — nothing `
+                      + 'else will work until it is dealt with' };
   }
 
   /**
@@ -745,9 +754,8 @@ export class Journey {
       // way is dealt with rather than counted as the door being unreachable.
       await this.escapeBattle();
       if (this.stuckInBattle) {
-        this.say(this.stuckReason === 'nopp'
-          ? 'out of PP on anything that does damage'
-          : 'stuck in a battle nothing can finish');
+        this.say(BATTLE_STUCK[this.stuckReason]
+                 || 'stuck in a battle nothing can finish');
         return false;
       }
       const res = await this.nav.walkTo(this.collision, goal, this.longWalk);
@@ -1752,7 +1760,7 @@ export class Journey {
       // 'nopp' is the same to a walk as 'stuck' -- there is nothing to be done
       // from here -- and different to whoever reads the message, which is the
       // whole reason it is its own word.
-      if (how === 'stuck' || how === 'nopp') {
+      if (how === 'stuck' || how === 'nopp' || how === 'notouch') {
         this.battleStuck = true;
         this.stuckReason = how;
       }

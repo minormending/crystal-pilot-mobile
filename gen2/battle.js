@@ -304,6 +304,36 @@ export function withBattle(Base) {
    * Answers null where there is no ROM to price the moves with, so a caller can
    * tell "no" from "cannot say".
    */
+  /**
+   * Can this Pokemon touch *that* one at all?
+   *
+   * A different dead end from having no PP, arrived at from a direction
+   * `canStillWin` cannot see: the move has power, so it counts as a move that
+   * could end a battle, and the type chart says it will take nothing off. A
+   * Normal-only moveset facing a GHOST swings for forty turns while the
+   * enemy's HP does not move, and `fightBattle` reports 'stuck' -- which is
+   * true and says nothing anybody can act on.
+   *
+   * Null where the chart cannot be read, and *true* is the answer the caller
+   * wants from a null: "cannot tell" must never become "do not swing". So
+   * this answers false only when the cartridge's own chart says so, for every
+   * move with PP left.
+   */
+  nothingLands(mon, against) {
+    if (!this.rom || !mon || !mon.moves || !against) return false;
+    let priced = false;
+    for (let i = 0; i < mon.moves.length; i++) {
+      if (!mon.moves[i] || !(mon.pp[i] > 0)) continue;
+      const info = this.rom.move(mon.moves[i]);
+      if (!info || info.power <= 0) continue;      // a status move lands nothing anyway
+      const eff = this.rom.effectiveness(mon.moves[i], against);
+      if (eff === null) return false;              // cannot tell: keep swinging
+      if (eff > 0) return false;
+      priced = true;
+    }
+    return priced;
+  }
+
   canStillWin(mon) {
     if (!this.rom || !mon || !mon.moves) return null;
     for (let i = 0; i < mon.moves.length; i++) {
@@ -386,7 +416,10 @@ export function withBattle(Base) {
     return idx;
   }
 
-  /** Play out one wild battle. -> 'won' | 'lost' | 'ended' | 'stuck' | 'nopp' */
+  /**
+   * Play out one wild battle.
+   * -> 'won' | 'lost' | 'ended' | 'stuck' | 'nopp' | 'notouch'
+   */
   /**
    * How a battle that has ended actually ended.
    *
@@ -560,6 +593,12 @@ export function withBattle(Base) {
       // no fleeing either. `nopp` says the one useful thing: the answer is
       // Ethers, or a Center, or a different Pokemon.
       if (this.canStillWin(onField(menu)) === false) return 'nopp';
+      // And **nothing that can touch this one**, which is the same dead end
+      // reached with full PP. Asked here for the same reason as the line
+      // above: forty turns to arrive at 'stuck' is time nobody gets back.
+      if (this.nothingLands(onField(menu), menu.enemy && menu.enemy.types)) {
+        return 'notouch';
+      }
       // Before the swing, not after the faint. `coverFaint` above is the
       // recovery; this is the avoidance, and it is cheaper by a Center.
       if (heals && potions < MAX_BATTLE_POTIONS && this.rom) {
