@@ -339,14 +339,14 @@ second, which is there so the core's own waits finish, not to run a game.
 ## The audits, and how each defect was actually found
 
 Everything above was watched happening. This section was the exception, and the
-exception was the point of it: after the ROM-hack work shipped, **forty-two**
-passes went looking for defects in code that already worked, and found **180** —
+exception was the point of it: after the ROM-hack work shipped, **forty-three**
+passes went looking for defects in code that already worked, and found **184** —
 a handful of them created by a fix on the way, which are in the table in italics
 because they are a different kind of thing. None of them announced itself.
 
 **Reading found twenty-three**, more than any other single method, which is why
 it comes first in the table and why it is worth doing before touching the game.
-But the interesting number is the tail: the remaining hundred and fifty-seven were
+But the interesting number is the tail: the remaining hundred and sixty-one were
 found almost as many different ways, and almost every entry in that column is a sentence rather than
 a category — *measuring the fix*, *asking a second tile*, *feeding it the wrong
 thing*, *writing a cartridge Crystal is not*, *a test, before the cartridge*,
@@ -558,6 +558,10 @@ exactly why nothing failed.
 | 42 | **`cancel()` — the one line the Stop button is wired to — had nothing asserting it.** Eighteen tests about stopping all set the flag by hand, so writing `this.cancelled = false` in there passed the whole suite | press Stop, in a build where that line was wrong | mutation, on the module the per-file report ranked third-weakest |
 | 42 | both halves of the condition that tells a *question* on screen from a text box could be flipped with the suite green — the rule whose absence once cost ¥2900 in Poké Balls | any yes-or-no during a job | the same |
 | 42 | *`tools/mutate` was subtracting a constant from every score: 27% of its survivors were `n → n+1` on frame counts and try budgets, which no honest test can distinguish* | *reading the survivor list* | *counting the survivor list* |
+| 43 | *the object type looked like byte four — 00, 02, 02, 00 against Falkner, two Bird Keepers and a guide, four for four and wrong. It is the low nibble of byte seven* | *any gym but Violet's* | *checking two maps instead of one* |
+| 43 | *`COORD_BYTES` was hand-copied into the new tool as 5 where the app says 8, so every map with a coord event parsed into drift: 233 disagreements over 3879 phantom objects, and Cianwood City produced objects of "type 9"* | *any map with a trigger tile on it* | *`--verify`, over all 388 maps* |
+| 43 | *`MAP_ATTRIBUTES` was hand-copied as 1 where the app says 3, so no map could be named at all* | *the gym check, on its first run* | *the gym check, on its first run* |
+| 43 | three constants copied by hand into a second reader of the same cartridge tables, three of them wrong — the duplication was the defect rather than the carelessness | — | writing the third one |
 
 Five things in that table are worth more than the individual rows.
 
@@ -2975,6 +2979,54 @@ The one thing it will never do is guess. `hasEvent` answers null where the
 symbol file cannot say, and `gateSaid` turns null into silence rather than into
 *the road is shut* — because *I do not know* dressed up as a fact is exactly
 the shape of the claim this pass spent its time deleting.
+
+### A forty-third pass: a gym declared without walking into it
+
+The pane was hidden for a third pass, so the method that opened the last one
+got used in earnest: **read the cartridge instead of running it.** The result is
+the second gym — Azalea, Bugsy, five facts — declared with the game never
+started.
+
+The interesting part is not that it worked. It is that the first two readings
+were **wrong and looked right**, and what caught them.
+
+**Byte four is the object type, four for four.** In Violet Gym it reads 00, 02,
+02, 00 against Falkner, two Bird Keepers and the guide, which is exactly the
+app's own `objectTypes: { script: 0, itemball: 1, trainer: 2 }`. Azalea Gym has
+byte four at 00 for all seven of its objects, five of which are trainers. The
+type is the low nibble of byte seven — `90 92 92 80` in Violet, `a0 b2 b2 b2 82
+82 80` in Azalea. One map agreed perfectly with a false rule.
+
+So the rule went to **all 388 maps**: an object whose script symbol is named
+`Trainer…` is a trainer, and one that is not, is not. Two independent parts of
+the file, several thousand times. Twelve disagreements out of 1396, every one
+explicable — some trainers are talked to rather than seen.
+
+**And that first run reported 233 disagreements over 3879 objects**, which is a
+worse error than the one it was written to catch. `COORD_BYTES` had been copied
+into the new tool as 5 where `gen2/world.js` says 8, so every map carrying a
+coord event parsed into drift; Cianwood City produced objects of "type 9" whose
+script pointers landed three bytes inside a trainer's `.AskNumber2` label. And
+Violet Gym and Azalea Gym have **no coord events at all** — the two maps the
+layout was derived from were the two maps it could not fail on.
+
+Three constants were hand-copied into a second reader of the same tables, and
+three of them were wrong. The lesson is not *be more careful*: it is that **two
+copies of a structure is the defect**, and four lines comparing them is the
+repair. `check-app romlayout` reads all seven out of both files.
+
+**What made the declaration trustworthy was checking the method before using
+it.** Three doors this repository had measured by hand, passes apart — Violet's
+Gym at (18,17), its Mart at (9,17), its Centre at (31,25) — all fall out of the
+town's warp table. Falkner's tile and his badge bit fall out of the object
+table and the cartridge's own `EngineFlags`. Five agreements with numbers got
+the slow way, and only then the same reading applied to Azalea.
+
+**The honest limit is written into the app's own documentation.** Bugsy has not
+been fought. The road to Azalea wants the Egg, taking the Egg is a
+conversation, and a pilot that will not answer a yes-or-no cannot get there. So
+`docs/USING.md` says two gyms are declared and one has been won, and which is
+which — because the alternative is a page that reads as a promise.
 
 ## The part that had to be redesigned
 

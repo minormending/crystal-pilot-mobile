@@ -46,6 +46,7 @@ and the code disagree, the code is right and the section is a bug — see
 8. [The errands](#8-the-errands)
 9. [The interface](#9-the-interface)
    · [One thing at a time](#one-thing-at-a-time)
+   · [Reading a gym out of the cartridge](#reading-a-gym-out-of-the-cartridge)
    · [Gates: asking the cartridge what it wants](#gates-asking-the-cartridge-what-it-wants)
    · [Running the list](#running-the-list)
    · [The settings and the save card](#the-settings-and-the-save-card)
@@ -2201,7 +2202,7 @@ said *trainer battle: lost* **seven times**. One loss, reported seven ways.
 
 ## 7d. The counter, and the money it takes
 
-<!-- covers: gen2/menus.js gen2/state.js titles/crystal.js @ ff48c2db2c35 -->
+<!-- covers: gen2/menus.js gen2/state.js titles/crystal.js @ e5c54e300793 -->
 
 Everything the pilot could do until now used what it found. **Shop** walks to a
 mart and buys, which is the first thing it does that spends rather than
@@ -2552,7 +2553,7 @@ because that failure is only otherwise discovered by reaching for the undo.
 
 ## 8. The errands
 
-<!-- covers: titles/crystal.js gen2/journey.js @ ebb88ee0d621 -->
+<!-- covers: titles/crystal.js gen2/journey.js @ 2439db7145c5 -->
 
 Everything in this section is `crystal.js` — the only file in the app that names
 a Crystal map, a Crystal door or a Crystal NPC. What it stands on is
@@ -3036,7 +3037,7 @@ go](#8c-naming-a-city-is-a-feature).
 
 ## 8c. Naming a city is a feature
 
-<!-- covers: titles/crystal.js gen2/world.js @ de6318813b32 -->
+<!-- covers: titles/crystal.js gen2/world.js @ 97a558f86aad -->
 
 The map graph has always reached most of Johto. A flood over its exits from
 Route 31 finds sixty-odd maps in five legs — and every feature in this app was
@@ -3328,7 +3329,7 @@ costs however long it takes somebody to notice their money is gone.
 
 ## 8f. Going and winning a badge
 
-<!-- covers: gen2/journey.js gen2/state.js titles/crystal.js @ 0087e71866d8 -->
+<!-- covers: gen2/journey.js gen2/state.js titles/crystal.js @ 7c1be115aa59 -->
 
 The pilot has been turned back from Route 32 since the pass it learned to find
 Pokémon Centers. `reopen` throws away every written-off road the moment a badge
@@ -4177,9 +4178,90 @@ before a step is taken, so a stopped walk does not move at all.
 
 </details>
 
+### Reading a gym out of the cartridge
+
+<!-- covers: titles/crystal.js @ 089e4a1e5830 -->
+
+A gym declaration is five hand-written facts:
+
+```js
+{ map: AZALEA_TOWN, inside: AZALEA_GYM, door: [10, 15],
+  leader: 'BUGSY', leaderAt: [5, 7], badge: 1 }
+```
+
+and until this pass every one of them could only be got by walking into the
+room and reading work RAM. Getting `leaderAt` wrong sends the pilot to press A
+at an empty floor and report that the leader would not fight; getting `badge`
+wrong leaves a gym that has been won on offer for ever.
+
+All five are in the ROM. **The second gym was declared without the game being
+run once** — and, because that is a claim worth distrusting, three of its five
+fields were derived by a method first checked against the entry above it:
+
+| the app already declared | derived from the ROM | agrees |
+| --- | --- | --- |
+| `VIOLET_GYM` door `[18, 17]` | Violet City's warp to map 10.7 | ✓ |
+| `VIOLET_MART` door `[9, 17]` | Violet City's warp to map 10.6 | ✓ |
+| `VIOLET_POKECENTER` door `[31, 25]` | Violet City's warp to map 10.10 | ✓ |
+| Falkner at `[5, 1]`, a script object | object 1 of `VioletGym_MapEvents` | ✓ |
+| `badge: 0` for Falkner | `EngineFlags` `$1b` → `wJohtoBadges` bit 0 | ✓ |
+
+Five independent agreements with numbers measured by hand, passes apart, on a
+real cartridge. Then the same reading applied to Azalea gives the entry above.
+
+```mermaid
+flowchart LR
+    G["AzaleaGym_MapEvents"] -->|"its exit warp<br/>leads to 8.7"| T["Azalea Town<br/>= key(8, 7)"]
+    T -->|"the town warp that<br/>lands on 8.5"| D["door (10, 15)<br/>and the gym is key(8, 5)"]
+    G -->|"object 1, low nibble<br/>of byte 7 is 0"| L["a <b>script</b> object at (5,7)"]
+    L -->|"its script pointer"| N["AzaleaGymBugsyScript<br/><i>a name, not a guess</i>"]
+    B["badge bit 1"] -->|"EngineFlags $1c"| W["wJohtoBadges, mask $02"]
+```
+
+**What has not happened is a pilot winning it.** The road to Azalea needs the
+Egg, and [taking the Egg is a
+conversation](#gates-asking-the-cartridge-what-it-wants). So this is data the
+cartridge vouches for and the game has not been asked to confirm — a weaker
+claim than the first gym's, and the difference is written down rather than
+smoothed over.
+
+<details>
+<summary><b>Advanced detail:</b> the field that was wrong four times for four</summary>
+
+The object type looked like byte four. In Violet Gym it reads **00, 02, 02,
+00** against Falkner, two Bird Keepers and the guide — which is exactly the
+app's own `objectTypes: { script: 0, itemball: 1, trainer: 2 }`, four objects
+for four, and wrong.
+
+Azalea Gym has byte four at 00 for all seven of its objects, five of which are
+trainers. The type is the **low nibble of byte seven**: `90 92 92 80` in
+Violet, `a0 b2 b2 b2 82 82 80` in Azalea — zero wherever the script symbol is a
+leader or a guide, two wherever it is named `Trainer...`.
+
+Two maps is not a sample, which is why `tools/rom-events --verify` checks that
+rule against **all 388 maps** in the game: 1396 objects, twelve disagreements,
+every one of them explicable — some trainers are talked to rather than seen, so
+`TrainerOfficerDirk` is legitimately a script object, and the Trainer House's
+receptionist is named `Trainer…` while being nobody to fight.
+
+**And the first run of that verification found a worse error than the one it
+was written for.** 233 disagreements out of 3879 objects — because
+`COORD_BYTES` had been copied into the tool as 5 where `gen2/world.js` says 8.
+Every map carrying a coord event parsed into drift: Cianwood City produced
+objects of "type 9" whose script pointers landed three bytes inside a trainer's
+`.AskNumber2` label. Violet Gym and Azalea Gym have no coord events at all, so
+the two maps the layout was derived from were the two maps it could not fail
+on.
+
+Three constants were hand-copied and three were wrong. `check-app romlayout`
+reads all seven out of both files and compares them, which is the repair for
+*two copies of a structure* rather than for carelessness.
+
+</details>
+
 ### Gates: asking the cartridge what it wants
 
-<!-- covers: gen2/state.js gen2/journey.js titles/crystal.js @ 0087e71866d8 -->
+<!-- covers: gen2/state.js gen2/journey.js titles/crystal.js @ 7c1be115aa59 -->
 
 Two kinds of closed road, and the difference is everything:
 
@@ -5626,7 +5708,7 @@ about that code did not.
 
 ### The other checks
 
-<!-- covers: tools/check-app @ c9b9b641bc1a -->
+<!-- covers: tools/check-app @ 1c0161ca1698 -->
 
 `tools/check-app` runs everything that can be verified without a ROM:
 
@@ -5660,6 +5742,8 @@ tools/check-app contrast     # or one group
 | `labels` | every job row is named after its own key, which is the word the runner prints |
 | `counts` | every number in the prose the repository can compute is right — `tools/renumber` writes them in |
 | `gates` | a declared gate names an event the ROM sets — skipped without a cartridge |
+| `gyms` | a declared gym's leader, tile, kind and badge bit are what the cartridge says — skipped without a cartridge |
+| `romlayout` | `tools/rom-events` and `gen2/world.js` agree about the map-events strides |
 
 Half of that table was missing until the marker above was added: six groups had
 been written and never listed, so the document described five checks while

@@ -15,8 +15,8 @@ what CI checks and what the pre-commit hook blocks on.
 ```mermaid
 flowchart LR
     E[an edit] --> H{{".githooks/pre-commit"}}
-    H --> T["./run-tests<br/>596 behaviour tests"]
-    H --> C["tools/check-app<br/>23 groups"]
+    H --> T["./run-tests<br/>600 behaviour tests"]
+    H --> C["tools/check-app<br/>25 groups"]
     H --> D["tools/docs-check<br/>25 tracked sections"]
     T --> OK[commit]
     C --> OK
@@ -39,7 +39,7 @@ git config core.hooksPath .githooks
 ./run-tests -v         # notes and stack lines
 ```
 
-596 tests in 23 files, and what each file is about says more than the count:
+600 tests in 23 files, and what each file is about says more than the count:
 
 | file | tests | what it pins down |
 | --- | --- | --- |
@@ -54,7 +54,7 @@ git config core.hooksPath .githooks
 | `control.mjs` | 22 | the task lifecycle: stopping, failing, undo points, and loops that must end |
 | `state.mjs` | 19 | reading the party, the map, the badges and the battery out of work RAM |
 | `romdata.mjs` | 15 | the cartridge's own character encoding and tables, byte by byte |
-| `titles.mjs` | 15 | choosing a profile for a cartridge, and falling back to generic |
+| `titles.mjs` | 19 | choosing a profile for a cartridge, and falling back to generic |
 | `remember.mjs` | 14 | which remembered choices are believed, and which dropped |
 | `worker.mjs` | 14 | the idle loop: one step outstanding, and a lost step recovered |
 | `screen.mjs` | 13 | the frames that go between two devices, and who may press what |
@@ -123,8 +123,8 @@ section gives. Everything by hand runs against a local build.
 
 ```mermaid
 flowchart BT
-    C["the app"] --> T["./run-tests<br/>596 behaviour tests"]
-    C --> A["tools/check-app<br/>23 groups"]
+    C["the app"] --> T["./run-tests<br/>600 behaviour tests"]
+    C --> A["tools/check-app<br/>25 groups"]
     C --> D["tools/docs-check<br/>31 tracked sections"]
     C --> V["tools/coverage<br/>what the suite never runs"]
     T --> M["tools/mutate<br/>break a line, see who notices"]
@@ -335,7 +335,7 @@ is wrong, not the check. It is not in the pre-commit hook: it runs `check-app`
 about fifty times, which is the wrong price for every commit and the right
 one for the commit that changes a check.
 
-`tools/check-app` is twenty-three groups, each one a class of mistake that parses
+`tools/check-app` is twenty-five groups, each one a class of mistake that parses
 fine and is wrong at run time:
 
 | group | asserts |
@@ -360,15 +360,21 @@ fine and is wrong at run time:
 | `deadcss` | no single-class rule is overridden on every element that could carry it, which is how `.slots{display:block}` lost to `.param{display:flex}` |
 | `labels` | every job row is named after its own key, capitalised — which is the word the runner prints, built from the key rather than from a second table |
 | `gates` | every road a title declares shut names an event the ROM actually sets — skipped without a cartridge |
+| `gyms` | every gym a title declares has the right leader on the right tile, as a script object, with a badge bit that is a badge — skipped without a cartridge |
+| `romlayout` | `tools/rom-events` and `gen2/world.js` agree about all seven map-table strides. Three were hand-copied into the tool and three were wrong |
 | `counts` | every number in the prose that the repository can compute is right — the test table, the group count, the digest's size, the audit's rows. Two have shipped wrong: *143 tests in seventeen files* while 576 ran, and a digest drawn as 47 entries carrying 53 |
 
 ### Asking the cartridge, without running it
 
 ```
 tools/rom-events --set 0x2d                 which script sets this event
+tools/rom-events --map Route32              every event this map's scripts read
+tools/rom-events --objects AzaleaGym        warps and objects, scripts named
 tools/rom-events --script Route32CooltrainerMContinueScene
 tools/rom-events --text Route32CooltrainerMText_AideIsWaiting
 tools/rom-events --gates                    every declared gate, against the ROM
+tools/rom-events --gyms                     every declared gym, against the ROM
+tools/rom-events --verify                   the object layout, over all 388 maps
 ```
 
 Every gate in Gen 2 is a script reading one bit of `wEventFlags`, so *why does
@@ -387,6 +393,31 @@ interesting part: `Route32Noop1Scene` is one byte, `91`, which gives `end`; a
 `.DontHaveZephyrBadge` gives the `iffalse` before it. It stops decoding after
 three unknown bytes in a row, because reading on past the end of the table is
 inventing things.
+
+**`--map` exists because `--script` runs out.** A scene script uses commands
+this tool has never heard of within a dozen bytes — the first real one it was
+pointed at used seven — and the honest response was not to grow the table to a
+hundred instructions but to stop needing it. What a gate actually asks is
+*which event does this map check?*, and that is the three-byte pattern
+`31 xx xx` inside the map's own script region, which every map bounds exactly
+with a `<Map>_MapScripts` and a `<Map>_MapEvents` symbol. 388 of each.
+
+**`--verify` is there because two maps is not a sample**, and it earned its
+keep on its first run. The object type looked like byte four: in Violet Gym
+that field reads 00, 02, 02, 00 against Falkner, two Bird Keepers and the
+guide, which is four for four and wrong. It is the low nibble of byte seven.
+Checking the rule against all 388 maps — an object whose script symbol is named
+`Trainer…` is a trainer, and one that is not, is not — reports 1396 objects and
+twelve disagreements, all explicable: some trainers are *talked to* rather than
+seen.
+
+And the first run reported **233** disagreements over 3879 objects, because
+`COORD_BYTES` had been copied into the tool as 5 where `gen2/world.js` says 8.
+Every map with a coord event on it parsed into drift. Violet Gym and Azalea Gym
+have none, so the two maps the layout came from were the two it could not fail
+on. Three constants were hand-copied and three were wrong, which is why
+`check-app romlayout` now reads all seven out of both files and compares them:
+two copies of a structure is the defect, and more care is not the repair.
 
 **What it will not do is decide.** A byte search over 2MB finds coincidences —
 `setevent $2d` also reads out of three bytes of `DunsparceFrames.frame3` — and

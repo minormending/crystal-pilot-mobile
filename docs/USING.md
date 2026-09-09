@@ -702,10 +702,27 @@ Which means two things you can rely on:
 
 * **A Gym you have already beaten stops being offered.** Not because the pilot
   remembers going — it reads your badge case.
-* **The road it opens opens.** Route 32 is shut until Falkner is beaten, and the
-  pilot writes that road off after being turned back once. Winning any badge
-  throws away every write-off, so the walk it refused this morning is offered
-  again the moment you have the badge for it.
+* **A road a badge opens, opens.** The pilot writes off a road it was turned
+  back from, and winning any badge throws away every write-off — so a walk it
+  refused this morning is offered again the moment you have the badge for it.
+  (Route 32 wants the badge *and* the Egg; see [when the game says
+  no](#when-the-game-says-no-the-pilot-tells-you-what-it-said).)
+
+### Two gyms are declared, and only one has been won
+
+**Falkner** was fought on a real cartridge: healed, shopped, walked
+Cherrygrove → Violet, cleared both Bird Keepers, beaten for ¥675, and the badge
+read back out of the game's own memory afterwards.
+
+**Bugsy** is declared and untested. Every fact about his gym — the town, the
+room, the door, the tile he stands on, the badge bit — was read out of the
+cartridge's own data rather than measured by walking in, and `check-app gyms`
+holds all of it to the ROM. What has not happened is a pilot going there: the
+road to Azalea needs the Egg, and taking the Egg is a conversation the pilot
+does not have.
+
+So if you get yourself to Azalea Town, Gym should work. It has not been watched
+working, and this page would rather say so than let you find out.
 
 **It will not go in if it cannot heal first.** A Gym is several battles with no
 Pokémon Center between them, so the pilot mends up on the way — and if it
@@ -1265,7 +1282,7 @@ deployed, which is not the question you are asking when a bug you saw fixed is
 still in front of you. `tools/check-app` asserts that number matches the service
 worker's cache name, because a version display that lies is worse than none.
 
-<!-- covers: sw.js @ a60e64d40b29 -->
+<!-- covers: sw.js @ 206ec7f23c08 -->
 
 The worker fetches **network first, falling back to the cache**. That is the
 opposite of the usual offline-first advice, on purpose.

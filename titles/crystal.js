@@ -59,6 +59,12 @@ const VIOLET_CITY = key(10, 5);
 const VIOLET_POKECENTER = key(10, 10);
 const VIOLET_MART = key(10, 6);
 const VIOLET_GYM = key(10, 7);
+// Azalea, and every number here was read out of the cartridge rather than
+// measured by walking -- see `tools/rom-events` and docs/CODE.md. The town's
+// number comes from where the gym's exit warp leads (8.7); the gym's from the
+// town warp that lands on it (8.5).
+const AZALEA_TOWN = key(8, 7);
+const AZALEA_GYM = key(8, 5);
 
 const MAP_NAMES = {
   [PLAYERS_HOUSE_2F]: 'your bedroom',
@@ -76,6 +82,8 @@ const MAP_NAMES = {
   [VIOLET_POKECENTER]: "Violet's Pokémon Center",
   [VIOLET_MART]: "Violet's Mart",
   [VIOLET_GYM]: "Violet's Gym",
+  [AZALEA_TOWN]: 'Azalea Town',
+  [AZALEA_GYM]: "Azalea's Gym",
 };
 
 // CherrygroveCity warp_events, and the nurse behind her counter.
@@ -188,6 +196,32 @@ export const crystal = {
     // is not this badge. See docs/PROVEN.md.
     { map: VIOLET_CITY, inside: VIOLET_GYM, door: [18, 17],
       leader: 'FALKNER', leaderAt: [5, 1], badge: 0 },
+    // **The second badge, declared without ever walking into the room.**
+    // Every field came out of the ROM, and three of them were checked against
+    // the entry above it first -- the same method reproduces Violet's door
+    // (18,17), its Mart's (9,17) and its Centre's (31,25), all three measured
+    // by hand passes ago:
+    //
+    //   * the town is where `AzaleaGym`'s exit warp leads, 8.7;
+    //   * the gym is the map the town's fifth warp lands on, 8.5, and that
+    //     warp's own position (10,15) is therefore the door;
+    //   * Bugsy is object 1 of `AzaleaGym_MapEvents` at (5,7), a *script*
+    //     object -- the low nibble of its seventh byte is 0 -- and its script
+    //     pointer resolves to `AzaleaGymBugsyScript`, which is a name rather
+    //     than an inference. The five `Trainer...` objects beside him are
+    //     type 2, which is what `clearHere` fights;
+    //   * and the badge bit is 1, out of the cartridge's own `EngineFlags`
+    //     table: flag $1c points at `wJohtoBadges` with bitmask $02, where
+    //     $1b -- the one Route 32's blocker checks by the name
+    //     `.DontHaveZephyrBadge` -- points at the same byte with $01, and bit
+    //     0 is the Zephyr Badge this app has already won and read back.
+    //
+    // `check-app gyms` holds all of it to the cartridge. What has *not*
+    // happened is a pilot walking in and winning it: the road there needs the
+    // Egg, and taking the Egg is a conversation. So this is data the cartridge
+    // vouches for and the game has not yet been asked to confirm.
+    { map: AZALEA_TOWN, inside: AZALEA_GYM, door: [10, 15],
+      leader: 'BUGSY', leaderAt: [5, 7], badge: 1 },
   ],
   // --- roads the game keeps shut, and what opens them ----------------------
   //
