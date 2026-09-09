@@ -488,3 +488,152 @@ test('a cartridge whose symbol file has no tilemap does not crash on it',
   t.ne(await tasks.watchThrow(6, 'WAS SENT TO BILL'), 'caught',
        'no tilemap, no evidence — and no throw either');
 });
+
+test('a whiteout with a party of one is still a whiteout', async (t) => {
+  // `partyDown` asks whether there is a party *and* whether all of it is
+  // down, and the first half is why: an empty party is not a defeat, it is a
+  // read taken before the game loaded one. But the bound is above zero, not
+  // above one — a single fainted Pokémon is the commonest whiteout there is,
+  // and it is the whole early game.
+  t.true(partyDown({ party: [{ hp: 0, maxHp: 20 }] }), 'one, and it is down');
+  t.true(partyDown({ party: [{ hp: 0 }, { hp: 0 }] }), 'and two');
+  t.false(partyDown({ party: [{ hp: 3 }, { hp: 0 }] }), 'one standing is not');
+  t.false(partyDown({ party: [] }),
+          'and no party at all is a read taken too early, not a defeat');
+});
+
+test('a catch that joined the party reports its level; a boxed one does not',
+     async (t) => {
+  // The party *growing* is what says it joined here. With six carried it does
+  // not grow, and reading the last slot's level then reports somebody else's
+  // — a Pokémon that has been in the party all along.
+  const grew = await caught({ before: 1, after: 2, level: 7 });
+  t.false(grew.boxed, 'it joined');
+  t.eq(grew.level, 7, 'and its level is the new slot’s');
+
+  const boxedOne = await caught({ before: 6, after: 6, level: 14 });
+  t.true(boxedOne.boxed, 'six carried, so it went to the box');
+  t.eq(boxedOne.level, null,
+       'and no level is reported rather than the sixth slot’s');
+});
+
+/** Run captureHere to the point where a catch is reported. */
+async function caught({ before, after, level }) {
+  const sym = symbols();
+  const state = new GameState(sym);
+  const mons = (n, last) => Array.from({ length: n }, (_, i) => ({
+    species: 155, level: i === n - 1 ? last : 14, hp: 40, maxHp: 44,
+    moves: [33, 0, 0, 0], pp: [35, 0, 0, 0] }));
+  let party = mons(before, 14);
+  const gb = new FakeGameBoy();
+  const tasks = new Tasks(gb, state, () => {}, fakeRom({}, {}));
+  tasks.snap = async () => state.read(worldRam(sym, {
+    battleMode: 1, party, balls: [[POKE_BALL, 5]],
+    enemy: { species: 16, level: 3, hp: 20, maxHp: 20 },
+    active: { hp: 40, maxHp: 44 }, menuItems: 34, menuTop: 12, menu: [1, 1],
+  }));
+  tasks.chip = async () => 'ok';
+  tasks.throwBall = async () => true;
+  tasks.watchThrow = async () => { party = mons(after, level); return 'caught'; };
+  tasks.closeMenus = async () => {};
+  tasks.settleText = async () => {};
+  tasks.state.e = { ...tasks.state.e, maxParty: 6 };
+  return tasks.captureHere(POKE_BALL, { weakenTo: 0, memory: { biggestHit: 0 },
+                                        boxed: 'was sent to BILL' });
+}
+
+test('weakenTo of nothing means throw, not weaken a little first', async (t) => {
+  // Zero is the way a caller says *do not soften it up*: a Lv2 Rattata at
+  // full health is already inside one swing of being knocked out. Read as
+  // "at or above zero" and every catch takes a swing first.
+  const { tasks } = inBattle({ enemyHp: 20, enemyMax: 20 });
+  await tasks.captureHere(POKE_BALL, { weakenTo: 0, memory: { biggestHit: 0 } });
+  t.eq(tasks.log.filter((x) => x === 'chip').length, 0, 'not one swing');
+  t.gte(tasks.log.filter((x) => x === 'throw').length, 1, 'straight to the ball');
+});
+
+// --- hunting, which had no test at all ------------------------------------
+//
+// A whole job: it decides which encounters to flee and which to stop on,
+// counts what it met, and tells the difference between a refused escape and a
+// whiteout. `tools/mutate` could invert its species match, drop the `!` from
+// its own "no fight appeared" guard, and turn its success into a failure, all
+// with the suite green — because nothing had ever called it.
+
+test('a hunt stops on the one it wants and leaves the battle running',
+     async (t) => {
+  // Leaving it running is the point of hunting rather than catching: what to
+  // do with the thing it found is yours to choose.
+  const { tasks } = hunting({ species: [16] });
+  const r = await tasks.hunt('PIDGEY');
+  t.true(r.ok, `found it: ${r.message}`);
+  t.eq(r.stats.found, 'PIDGEY', 'and says which');
+  t.eq(r.stats.level, 3, 'with the level it is, not the level it might be');
+  t.eq(r.stats.encounters, 1, 'in one encounter');
+  t.eq(r.stats.fled, 0, 'having run from nothing');
+});
+
+test('and runs from everything else on the way', async (t) => {
+  const { tasks } = hunting({ species: [19, 19, 16] });
+  const r = await tasks.hunt('PIDGEY');
+  t.true(r.ok, `found it eventually: ${r.message}`);
+  t.eq(r.stats.encounters, 3, 'three met');
+  t.eq(r.stats.fled, 2, 'two run from');
+  t.eq(r.seen.get('RATTATA'), 2, 'and it counted them');
+});
+
+test('a budget spent without finding it says what did turn up', async (t) => {
+  // The count is the answer to the question the failure raises: a name this
+  // cartridge never puts in this grass looks identical to bad luck, and the
+  // list of what did appear is the one thing that tells them apart.
+  const { tasks } = hunting({ species: [19] });
+  const r = await tasks.hunt('SENTRET', { maxEncounters: 4 });
+  t.false(r.ok, 'it did not find one');
+  t.eq(r.stats.encounters, 4, 'and stopped at the budget');
+  t.contains(r.message, 'RATTATA x4', `naming what it met: ${r.message}`);
+});
+
+test('a hunt that cannot find a fight says so rather than pacing for ever',
+     async (t) => {
+  const { tasks } = hunting({ findFight: async () => false });
+  // Standing in the world rather than in a battle, which is the state
+  // `_findFight` is asked about — the fixture's default is mid-encounter,
+  // where the question never comes up.
+  tasks.snap = async () => ({
+    inBattle: false, party: [{ hp: 20, maxHp: 20 }], balls: [[POKE_BALL, 5]],
+    items: [], money: 0, enemy: { species: 0, level: 0, hp: 0, maxHp: 0 },
+    active: { hp: 20, maxHp: 20 }, menuItems: 0, menuTop: 0, menu: [0, 0],
+  });
+  const r = await tasks.hunt('PIDGEY');
+  t.false(r.ok, 'it stops');
+  t.contains(r.message, 'standing in grass', 'and asks the useful question');
+  t.eq(r.stats.encounters, 0, 'having met nothing');
+});
+
+test('a hunt that cannot run tells a refusal from a whiteout', async (t) => {
+  // Why it could not run matters more than that it could not: one is an
+  // escape to try again, the other has already moved you to a Center and
+  // taken half your money.
+  const refused = hunting({ species: [19], flee: async () => false });
+  const r = await refused.tasks.hunt('PIDGEY');
+  t.false(r.ok, 'either way it stops');
+  t.contains(r.message, 'could not run from a RATTATA', 'a refusal names it');
+
+  const wiped = hunting({ species: [19], party: 1, flee: async () => false });
+  wiped.tasks.snap = async () => ({
+    inBattle: true, party: [{ hp: 0, maxHp: 20 }],
+    enemy: { species: 19, level: 3, hp: 15, maxHp: 15 },
+    active: { hp: 0, maxHp: 20 }, menuItems: 34, menuTop: 12, menu: [1, 1],
+    balls: [[POKE_BALL, 5]], items: [], money: 0,
+  });
+  const w = await wiped.tasks.hunt('PIDGEY');
+  t.contains(w.message, 'party fainted', 'and a whiteout says that instead');
+});
+
+test('a hunt stopped by hand says it was stopped', async (t) => {
+  const { tasks } = hunting({ species: [19] });
+  tasks.cancelled = true;
+  const r = await tasks.hunt('PIDGEY');
+  t.false(r.ok, 'nothing found');
+  t.contains(r.message, 'stopped after', 'and not "saw 0 encounters"');
+});

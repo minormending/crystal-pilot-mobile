@@ -15,7 +15,7 @@ what CI checks and what the pre-commit hook blocks on.
 ```mermaid
 flowchart LR
     E[an edit] --> H{{".githooks/pre-commit"}}
-    H --> T["./run-tests<br/>742 behaviour tests"]
+    H --> T["./run-tests<br/>751 behaviour tests"]
     H --> C["tools/check-app<br/>27 groups"]
     H --> D["tools/docs-check<br/>40 tracked sections"]
     T --> OK[commit]
@@ -39,7 +39,7 @@ git config core.hooksPath .githooks
 ./run-tests -v         # notes and stack lines
 ```
 
-742 tests in 26 files, and what each file is about says more than the count:
+751 tests in 26 files, and what each file is about says more than the count:
 
 | file | tests | what it pins down |
 | --- | --- | --- |
@@ -48,7 +48,7 @@ git config core.hooksPath .githooks
 | `menus.mjs` | 61 | the order the START menu is driven in, and what is closed between tries |
 | `battle.mjs` | 84 | whose turn it is, which Pokémon is out, and a win from a whiteout |
 | `collision.mjs` | 34 | which tiles can be walked, and which have somebody standing on them |
-| `capture.mjs` | 32 | weakening, ball choice, the party prompt, and the refusals before a throw |
+| `capture.mjs` | 41 | weakening, ball choice, the party prompt, and the refusals before a throw |
 | `grind.mjs` | 22 | what a grind says while it works, and the bounds that make it stop |
 | `world.mjs` | 22 | reading a cartridge's own maps: sizes, warps, objects and triggers |
 | `control.mjs` | 22 | the task lifecycle: stopping, failing, undo points, and loops that must end |
@@ -126,7 +126,7 @@ section gives. Everything by hand runs against a local build.
 
 ```mermaid
 flowchart BT
-    C["the app"] --> T["./run-tests<br/>742 behaviour tests"]
+    C["the app"] --> T["./run-tests<br/>751 behaviour tests"]
     C --> A["tools/check-app<br/>27 groups"]
     C --> D["tools/docs-check<br/>40 tracked sections"]
     C --> V["tools/coverage<br/>what the suite never runs"]
@@ -135,7 +135,7 @@ flowchart BT
     T -.-> V
     M -.->|"survivors, by file"| R(["the suite is load-bearing"])
     K -.->|"27 of 27 bite"| R2(["the groups are awake"])
-    V -.->|"57%, and where"| R3(["the gaps are known"])
+    V -.->|"58%, and where"| R3(["the gaps are known"])
 ```
 
 The two on the right are the same idea pointed at different subjects, and the
@@ -269,6 +269,18 @@ Before this, every one of those third steps was a Python heredoc written by
 hand, one per survivor, which is precisely the step this tool exists to stop
 anybody doing. Five were written that way in the forty-seventh pass alone
 before it became obvious they should be a flag.
+
+It paid for itself in the next one. Two modules, two replays:
+
+| module | survivors | caught by the tests written for them |
+| --- | --- | --- |
+| `gen2/battle.js` | 71 | **8** |
+| `gen2/jobs.js` | 65 | **13** |
+
+Neither number is the interesting one. What the replay buys is knowing it
+*before* the pass ends: the same two runs cost about four minutes each the
+long way round, and both were the third step of a loop nobody would have run
+twice.
 
 **And one class of mutation was removed, because it could only ever survive.**
 `n → n + 1` asks *is this exact value right?*, which is the classic off-by-one
