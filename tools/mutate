@@ -29,6 +29,15 @@ tool now.
     tools/mutate gen2/battle.js --save /tmp/s.txt     keep the survivors
     ...write the tests...
     tools/mutate --from /tmp/s.txt                    just those, per verdict
+    tools/mutate --try gen2/romdata.js 'a > b' 'a >= b'
+                                       one exact edit, and did anything notice
+    tools/mutate --tries /tmp/edits.txt   a file of them, one per line
+
+`--try` is the loop that was written as a python heredoc in three passes
+running, thirty-odd times: read the file, substitute, run the suite, print,
+put it back. It also puts it back more reliably -- a hand-written one edits
+the *working tree*, so an interrupted run leaves the repository mutated, and
+this copies the tree the way every other mode here does.
 
 `--save` and `--from` are the loop this repository already says out loud --
 *measure, write the test for the survivor, measure again* -- and the third step
@@ -410,6 +419,87 @@ def _worker(job):
     return cand, ok, note
 
 
+def try_edits(edits, only):
+    """Apply one exact edit at a time and say whether the suite noticed.
+
+    **The heredoc this replaces was written by hand in three passes running**,
+    once per boundary being pinned, and it is the same six lines every time:
+    read the file, substitute, run the suite, print, put it back. Between
+    thirty and forty of them.
+
+    It also puts them back more reliably than a heredoc does. A hand-written
+    one edits the *working tree* and restores it at the end, so an interrupted
+    run leaves the repository mutated -- and a mutated repository that still
+    compiles is exactly the state this tool exists to create on purpose and
+    nowhere else. This copies the tree first, the way every other mode here
+    does, and the working tree is never touched at all.
+
+    An edit is `(path, old, new)`. `old` has to appear exactly once, because
+    an ambiguous anchor is how a hand-written one silently mutated the wrong
+    line: only the first occurrence was replaced and nobody looked.
+    """
+    root = tempfile.mkdtemp(prefix="mutate-")
+    try:
+        copy_tree(pathlib.Path(root))
+        import time
+        t0 = time.monotonic()
+        ok, _ = suite_ok(root, only)
+        clean = time.monotonic() - t0
+        if not ok:
+            print("  the suite does not pass on a clean tree; fix that first")
+            return 2
+        set_timeout(clean)
+        print(f"mutate: {len(edits)} edit(s), clean run {clean:.1f}s")
+        lived, ran, skipped = 0, 0, 0
+        for rel, old, new in edits:
+            src = pathlib.Path(root) / rel
+            if not src.exists():
+                print(f"  skipped   {rel}: no such file")
+                skipped += 1
+                continue
+            text = src.read_text()
+            seen = text.count(old)
+            if seen != 1:
+                print(f"  skipped   {rel}: the anchor appears {seen} time(s), "
+                      f"and an ambiguous anchor mutates the wrong line")
+                print(f"      {old.strip()[:70]}")
+                skipped += 1
+                continue
+            src.write_text(text.replace(old, new, 1))
+            noticed, note = suite_ok(root, only)
+            src.write_text(text)
+            alive = noticed and note != "hung"
+            ran += 1
+            if alive:
+                lived += 1
+            print(f"  {'SURVIVED' if alive else 'killed  '}  {rel}")
+            print(f"      {old.strip()[:70]}")
+            print(f"   -> {new.strip()[:70]}")
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+    # `ran` and not `len(edits)`, because a skipped edit was not noticed and
+    # was not missed either -- counting it as either is the kind of summary
+    # that makes a tool's own output untrustworthy. It said "1 of 1 noticed"
+    # for an edit it had refused to make, which was the first thing this mode
+    # got wrong.
+    print(f"\n{ran - lived} of {ran} noticed"
+          + (f", {skipped} skipped" if skipped else ""))
+    return 1 if lived or skipped else 0
+
+
+def read_edits(path):
+    """`(path, old, new)` per line, tab separated, or None with a reason."""
+    out = []
+    for n, raw in enumerate(pathlib.Path(path).read_text().splitlines(), 1):
+        if not raw.strip():
+            continue
+        parts = raw.split("\t")
+        if len(parts) != 3:
+            return None, f"line {n} is not three tab-separated fields"
+        out.append(tuple(parts))
+    return out, None
+
+
 def save_list(path, survivors):
     """Write the survivors somewhere a later run can read them back.
 
@@ -528,12 +618,25 @@ def main(argv):
                     help="write the survivors to this file, for --from")
     ap.add_argument("--from", dest="source", default=None,
                     help="replay exactly the mutations in a --save file")
+    ap.add_argument("--try", dest="one", nargs=3, default=None,
+                    metavar=("FILE", "OLD", "NEW"),
+                    help="apply one exact edit and say whether the suite noticed")
+    ap.add_argument("--tries", dest="many", default=None,
+                    help="a file of `path<TAB>old<TAB>new` edits, one per line")
     ap.add_argument("-h", "--help", action="store_true")
     args = ap.parse_args(argv)
     if args.help:
         print(__doc__)
         return 0
 
+    if args.one:
+        return try_edits([tuple(args.one)], args.tests)
+    if args.many:
+        edits, why = read_edits(args.many)
+        if edits is None:
+            print(f"  {why}")
+            return 2
+        return try_edits(edits, args.tests)
     if args.source:
         return replay(args.source, args.tests, args.jobs)
 

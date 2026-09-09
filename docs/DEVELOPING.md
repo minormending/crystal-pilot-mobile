@@ -154,6 +154,8 @@ tools/mutate -k shut               # only lines whose text matches
 tools/mutate gen2/state.js --list  # print the mutations, run nothing
 tools/mutate gen2/battle.js --save /tmp/s.txt   # keep the survivors
 tools/mutate --from /tmp/s.txt     # replay just those, verdict each
+tools/mutate --try gen2/romdata.js 'a > b' 'a >= b'   # one exact edit
+tools/mutate --tries /tmp/edits.txt  # a file of them, one per line
 ```
 
 **And it counts every source file, including the ones it cannot reach.** That
@@ -236,6 +238,33 @@ tools/mutate gbcore/room.js --all      # before: 45 of 92
 # write the tests
 tools/mutate gbcore/room.js --all      # after: 45 of 92 — so they bought nothing
 ```
+
+**`--try` is the loop that was a Python heredoc in three passes running.**
+Thirty-odd of them, the same six lines every time: read the file, substitute,
+run the suite, print, put it back. It is used for the step in between the two
+above — pinning *one* boundary and checking that the test written for it
+actually kills the mutation, before spending a replay:
+
+```
+$ tools/mutate --try gen2/romdata.js 'score += hardest;' 'score = hardest;'
+  killed    gen2/romdata.js
+      score += hardest;
+   -> score = hardest;
+```
+
+**It puts the file back more reliably than a heredoc does.** A hand-written
+one edits the *working tree* and restores it at the end, so an interrupted run
+leaves the repository mutated — and a mutated repository that still compiles is
+exactly the state this tool exists to create on purpose and nowhere else.
+`--try` copies the tree first, the way every other mode here does, and the
+working tree is never touched.
+
+**And an ambiguous anchor is refused rather than guessed at**, which fired on
+its first real use: `i >= 0 && i < wram.length` appears twice in `screen.js`,
+and a hand-written substitution would have replaced the first and said nothing
+about the second. That refusal counts as *skipped* rather than as noticed or
+missed, which is the second thing this mode got wrong — it reported "1 of 1
+noticed" for an edit it had declined to make.
 
 **And the third step is `--from`, because it was the one that cost.** Re-running
 the module re-runs every mutation of it — two minutes for `gen2/battle.js`, to
