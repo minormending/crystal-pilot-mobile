@@ -2034,3 +2034,59 @@ test('the button carries the cost, and says nothing before there is one',
   const warm = describeRows(state.read(worldRam(sym, world)), { ...ctx, rate: 2200 });
   t.eq(warm.wait.cost, '13m', 'and with a rate, what it would cost you');
 });
+
+test('the line above the dex says which list is under it', async (t) => {
+  // The two lists have nothing in common to count, so the line is what tells
+  // them apart at a glance — "24 caught of 251" against "every species".
+  t.eq(describeDexTotals({ caught: [1, 2], seen: [1, 2, 3] }, { engine: gen2 }),
+       '2 caught of 251 · 3 seen', 'what this game has');
+  t.eq(describeDexTotals(null, { engine: gen2, mode: 'all' }),
+       'every species · 251 in this cartridge',
+       'and what the cartridge has, which needs no save at all');
+});
+
+test('a game not loaded yet is a different answer from a cartridge that '
+     + 'cannot say', async (t) => {
+  // The flags are bits in work RAM and before a game is loaded they are
+  // whatever the boot left there. Reading them would put a confident number on
+  // a screen, which is the failure this repository keeps writing down.
+  t.eq(describeDexTotals(null, { engine: gen2 }),
+       'this cartridge does not keep a Pokédex', 'never able to say');
+  t.eq(describeDexTotals({ caught: [], seen: [] }, { engine: gen2, started: false }),
+       'start a game to see what you have caught', 'cannot say yet');
+  t.eq(describeDexTotals({ caught: [], seen: [] }, { engine: gen2, started: false,
+                                                     mode: 'all' }),
+       'every species · 251 in this cartridge',
+       'and All is unaffected, because that half is the ROM\'s');
+});
+
+test('a species entry carries the whole learnset, a carried one does not',
+     async (t) => {
+  // Two different questions. A Pokémon you have gets `knows` and `next`,
+  // because those are the two facts somebody grinding acts on. A species has
+  // neither — and the moves it gets, and when, are most of what a Pokédex is.
+  const species = describeDex({ species: 155, level: 0, moves: [], pp: [] },
+                              { rom: DEX_ROM(), engine: gen2 });
+  t.eq(species.learns.map((m) => m.level), [1, 12, 19, 36],
+       'every level-up move, in level order');
+  t.eq(species.learns[0].name, 'TACKLE', 'named, not numbered');
+  t.eq(species.knows, [], 'and nothing it "knows", because nothing carries it');
+  const carried = describeDex(MY_CYNDAQUIL, { rom: DEX_ROM(), engine: gen2 });
+  t.eq(carried.knows.length, 4, 'where a real one knows its four');
+});
+
+test('the list is sorted, because one cartridge entry is not', async (t) => {
+  // MUK's entry genuinely runs Lv45 SLUDGE in front of Lv23 MINIMIZE on this
+  // cartridge — the game scans the whole list and does not care. A card that
+  // printed it in that order would read as a decoding bug.
+  const rom = fakeRom({
+    species: { 89: 'MUK' },
+    moves: { 124: { id: 124, name: 'SLUDGE', power: 65, effect: 0, pp: 20, type: 3 },
+             107: { id: 107, name: 'MINIMIZE', power: 0, effect: 0, pp: 20, type: 0 } },
+    evos: { 89: { evolves: [], learns: [{ level: 45, move: 124 },
+                                        { level: 23, move: 107 }] } },
+  });
+  const d = describeDex({ species: 89, level: 0, moves: [], pp: [] },
+                        { rom, engine: gen2 });
+  t.eq(d.learns.map((m) => m.level), [23, 45], 'climbing, whatever the ROM says');
+});

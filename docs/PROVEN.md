@@ -3989,6 +3989,50 @@ refresh** — a second trip into the core for something the snapshot already in
 its hand contained, and the only work-RAM read in the app that did not come
 through the class whose whole job is work-RAM reads.
 
+### A fifty-third pass: the half of a Pokédex that is not yours
+
+The dex box could only be entered two ways, and both of them wanted something
+of you: tap a Pokémon in the party, or tap one you had caught. So the question
+a Pokédex is actually for — *what does this become, and when?* — could only be
+asked about things you already had.
+
+**All** is the second list, and the interesting part is what it does not need.
+Which species exist, what they become and what they learn is the **ROM's** half
+of a Pokédex; what you have caught is the **save's**. The first needs no party,
+no catches and no game loaded at all — so the box now appears as soon as a
+cartridge is in, and the summary line says which half is missing rather than
+the box disappearing. A cartridge whose symbol file has no Pokédex flags keeps
+All and loses Caught, which is the honest split.
+
+**And the flags are deliberately not read in All mode.** They are bits in work
+RAM and before a game is loaded they are whatever the boot left there — asking
+for them to fill in a total nobody needed would have put a confident number on
+a screen, which is the failure this document keeps recording. `started` is a
+separate state from *this cartridge cannot say*: one is *not yet* and the other
+is *never*, and they have different sentences.
+
+### Two segments, and a table that said nothing
+
+The control is two segments rather than one button that cycles, which is the
+lesson the Colour row paid for eighteen passes ago: a control that prints its
+own state and changes on press tells you neither how many states there are nor
+which way round.
+
+The other half was found by looking at it. Tapping a species drew the party
+card — six stats, a DV column and two bars — against a thing that has no
+individual behind it, so it came out as **six rows of em-dashes beside two
+empty bars**. A table saying nothing, in the space where the answer goes. It
+had shipped that way since the dex card existed, because the only way to reach
+it was through the caught list and nobody had asked a species anything.
+
+So there are two shapes now, picked on whether any stat has a value at all. A
+species gets its **base** stats — drawn against 255 rather than against its own
+best, because the point of a base-stat row is the shape of the thing and a bar
+scaled to itself has no shape — and the **whole learnset** instead of *knows*
+and *next*, which are facts about a Pokémon being levelled rather than about a
+species. Sorted, because MUK's entry is genuinely out of level order on this
+cartridge and a list that jumped backwards would read as a decoding bug.
+
 ## The part that had to be redesigned
 
 The desktop pilot hangs its whole design on CPU hooks: the game's own routines
