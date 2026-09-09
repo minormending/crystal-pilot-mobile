@@ -1156,7 +1156,7 @@ test('the runner takes the front of the list, and says which row that is',
   // Worth writing the test around, because it is the whole claim: the runner
   // has no ranking of its own and takes whatever the screen is showing.
   const world = { party: [{ species: CYNDAQUIL, level: 5, hp: 8, maxHp: 20 }] };
-  const ctx = { bagHeal: { id: 17, name: 'POTION', count: 3 } };
+  const ctx = { bagHeal: 'POTION' };
   const list = offers(world, ctx);
   const rows = look(world, ctx);
   const a = autoFor(world, ctx);
@@ -1193,7 +1193,7 @@ test('Hunt is never taken on its own, because it ends inside a battle',
   const world = { party: [{ species: CYNDAQUIL, level: 5, hp: 20, maxHp: 20 }],
                   map: [3, 1] };
   const ctx = { huntWanted: 'PIDGEY', huntable: 2,
-                wilds: [{ species: PIDGEY, low: 2, high: 3 }] };
+                wilds: { low: 2, high: 3 } };
   const a = autoFor(world, ctx);
   t.ne(a.key, 'hunt', 'not on its own');
 });
@@ -1205,7 +1205,7 @@ test('a row still waiting on a choice is not taken either', async (t) => {
   const world = { party: [{ species: CYNDAQUIL, level: 5, hp: 20, maxHp: 20 }],
                   items: [[POKE_BALL, 5]], map: [3, 1] };
   const ctx = { ballId: POKE_BALL, huntable: 2,
-                wilds: [{ species: PIDGEY, low: 2, high: 3 }] };
+                wilds: { low: 2, high: 3 } };
   const list = offers(world, ctx);
   t.true(list.offered.includes('catch'), 'the row is on the list');
   const a = autoFor(world, ctx);
@@ -1218,7 +1218,7 @@ test('a job that ran and changed nothing stops the sequence', async (t) => {
   // reports success while all of that stands still did nothing, whatever it
   // said.
   const world = { party: [{ species: CYNDAQUIL, level: 5, hp: 8, maxHp: 20 }] };
-  const ctx = { bagHeal: { id: 17, name: 'POTION', count: 3 } };
+  const ctx = { bagHeal: 'POTION' };
   const again = autoFor(world, ctx, { last: 'grind', changed: true });
   t.eq(again.key, 'grind', 'the same job twice is fine while something moves');
   const stuck = autoFor(world, ctx, { last: 'grind', changed: false });
@@ -1237,7 +1237,7 @@ test('the runner is never one of the jobs it can choose', async (t) => {
   // It presses a row's button. Its own row is not in that table, and the day
   // it is, one press would recurse.
   const world = { party: [{ species: CYNDAQUIL, level: 5, hp: 8, maxHp: 20 }] };
-  const a = autoFor(world, { bagHeal: { id: 17, name: 'POTION', count: 3 } });
+  const a = autoFor(world, { bagHeal: 'POTION' });
   t.ne(a.key, 'auto', 'not itself');
   t.true(['heal', 'grind', 'duel', 'gym', 'take', 'shop', 'catch'].includes(a.key),
          'always one of the jobs with a button');
@@ -1401,4 +1401,112 @@ test('a gate with no errand is a hint and not a row', async (t) => {
   t.contains(rows.errand.text, 'nothing to fetch', 'and it says why');
   t.false(offers(world, { gated }).offered.includes('errand'), 'not on the list');
   t.contains(offers(world, { gated }).hint, 'ROUTE 32', 'but still hinted');
+});
+
+test('the whole ranking, in one assertion', async (t) => {
+  // **The ordering is load-bearing now.** It decides which row wears the rail,
+  // and since v167 it decides what "Run the list" presses -- so a reorder is a
+  // behaviour change and not a presentation one. Twice it has been tuned by
+  // editing a list and a comment beside it, and the second time the two
+  // disagreed: the comment said an errand outranks levelling up while the list
+  // put it below Grind. Nothing failed, because every test asserted one pair at
+  // a time.
+  //
+  // This asserts all of it. A situation with everything on offer at once, and
+  // the exact order it comes out in -- so any future reorder has to be
+  // deliberate enough to edit this line.
+  const world = {
+    party: [{ species: CYNDAQUIL, level: 5, hp: 8, maxHp: 20 }],
+    items: [[POKE_BALL, 5]], map: [3, 1],
+  };
+  const list = offers(world, {
+    ballId: POKE_BALL, huntWanted: 'PIDGEY', huntable: 2,
+    wilds: { low: 2, high: 3 },
+    gated: [{ where: 'ROUTE 32', needs: 'an Egg', errand: 'talkToOpen' }],
+    gym: { at: 'Violet City', leader: 'FALKNER', legs: 1 },
+    trainers: [{ x: 2, y: 2, sprite: 39 }], trainersOnMap: 1,
+    takeables: [{ x: 4, y: 4 }],
+    places: [{ key: '3.2', name: 'ROUTE 31', legs: 1 }], travelTo: '3.2',
+    marts: [{ key: '3.9', name: 'CHERRYGROVE CITY', legs: 2 }],
+    shopFor: '5 more potion',
+    bagHeal: 'POTION',
+  });
+  t.eq(list.offered,
+       ['catch', 'hunt', 'errand', 'grind', 'duel', 'gym', 'heal', 'take',
+        'travel', 'shop'],
+       'every offer, in the order the app ranks them');
+});
+
+test('a fainted party puts Heal first, whatever else is on offer', async (t) => {
+  // The one override in the ordering, and the reason for it: nothing else on
+  // the list can be done at all by a party that cannot fight.
+  const world = {
+    party: [{ species: CYNDAQUIL, level: 5, hp: 0, maxHp: 20 }],
+    map: [3, 1],
+  };
+  const list = offers(world, {
+    healPlace: "Elm's lab",
+    gated: [{ where: 'ROUTE 32', needs: 'an Egg', errand: 'talkToOpen' }],
+    takeables: [{ x: 4, y: 4 }],
+  });
+  t.eq(list.offered[0], 'heal', `heal leads: ${list.offered.join(',')}`);
+});
+
+test('no row ever says "undefined" or "[object Object]"', async (t) => {
+  // **The guard for a fixture that has drifted from the app.** Seven fixtures
+  // in this file passed `bagHeal` as an item object and `wilds` as a list,
+  // where `main.js` passes a *name* and a `{low, high}` pair -- and nothing
+  // noticed, because every test asserted `enabled` or a key and none asserted
+  // the text those fields feed. `tools/rank` printed "1 hurt · [object Object]
+  // in the bag" the first time it was run.
+  //
+  // Which is the same trap as a fake laid out more conveniently than the thing
+  // it stands for: the fixture was wrong, the tests passed, and the row on a
+  // real phone would have read the same nonsense if the app had ever been
+  // handed that shape.
+  //
+  // So this asserts the one thing that is true of every row in every
+  // situation, whatever the fields are: a row says words. A future ctx field
+  // read with the wrong shape lands here rather than on somebody's screen.
+  const situations = [
+    ['nothing', {}, {}],
+    ['a party', { party: [{ species: CYNDAQUIL, level: 5, hp: 20, maxHp: 20 }] }, {}],
+    ['hurt, with a potion',
+     { party: [{ species: CYNDAQUIL, level: 5, hp: 8, maxHp: 20 }] },
+     { bagHeal: 'POTION', healPlace: "Elm's lab" }],
+    ['fainted', { party: [{ species: CYNDAQUIL, level: 5, hp: 0, maxHp: 20 }] },
+     { healPlace: "Elm's lab" }],
+    ['grass here', { party: [{ species: CYNDAQUIL, level: 5, hp: 20, maxHp: 20 }], map: [3, 1] },
+     { wilds: { low: 2, high: 3 }, huntable: 2, huntWanted: 'PIDGEY',
+       ballId: POKE_BALL }],
+    ['a gate', { party: [{ species: CYNDAQUIL, level: 5, hp: 20, maxHp: 20 }] },
+     { gated: [{ where: 'ROUTE 32', needs: 'an Egg', errand: 'talkToOpen' }] }],
+    ['a gym', { party: [{ species: CYNDAQUIL, level: 5, hp: 20, maxHp: 20 }] },
+     { gym: { at: 'Violet City', leader: 'FALKNER', legs: 1 } }],
+    ['a mart', { party: [{ species: CYNDAQUIL, level: 5, hp: 20, maxHp: 20 }] },
+     { marts: [{ key: '3.9', name: 'CHERRYGROVE CITY', legs: 2 }],
+       shopFor: '5 more potion' }],
+    ['somewhere to go', { party: [{ species: CYNDAQUIL, level: 5, hp: 20, maxHp: 20 }] },
+     { places: [{ key: '3.2', name: 'ROUTE 31', legs: 1 }], travelTo: '3.2' }],
+    ['a trainer', { party: [{ species: CYNDAQUIL, level: 5, hp: 20, maxHp: 20 }] },
+     { trainers: [{ x: 2, y: 2, sprite: 39 }], trainersOnMap: 1 }],
+    ['something on the ground', { party: [{ species: CYNDAQUIL, level: 5, hp: 20, maxHp: 20 }] },
+     { takeables: [{ x: 4, y: 4 }] }],
+    ['a battle', { battleMode: 1, party: [{ hp: 20, maxHp: 20 }],
+                   enemy: { species: PIDGEY, level: 3, hp: 15, maxHp: 15 } }, {}],
+  ];
+  for (const [what, world, ctx] of situations) {
+    const rows = look(world, ctx);
+    const list = offers(world, ctx);
+    for (const [key, row] of Object.entries(rows)) {
+      const text = String(row && row.text !== undefined ? row.text : '');
+      t.false(text.includes('undefined'), `${what}: ${key} says "${text}"`);
+      t.false(text.includes('[object'), `${what}: ${key} says "${text}"`);
+      t.false(text.includes('NaN'), `${what}: ${key} says "${text}"`);
+    }
+    t.false(String(list.hint).includes('undefined'),
+            `${what}: the hint says "${list.hint}"`);
+    t.false(String(list.hint).includes('[object'),
+            `${what}: the hint says "${list.hint}"`);
+  }
 });

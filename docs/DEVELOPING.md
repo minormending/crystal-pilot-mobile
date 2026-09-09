@@ -15,7 +15,7 @@ what CI checks and what the pre-commit hook blocks on.
 ```mermaid
 flowchart LR
     E[an edit] --> H{{".githooks/pre-commit"}}
-    H --> T["./run-tests<br/>623 behaviour tests"]
+    H --> T["./run-tests<br/>626 behaviour tests"]
     H --> C["tools/check-app<br/>25 groups"]
     H --> D["tools/docs-check<br/>25 tracked sections"]
     T --> OK[commit]
@@ -39,12 +39,12 @@ git config core.hooksPath .githooks
 ./run-tests -v         # notes and stack lines
 ```
 
-623 tests in 23 files, and what each file is about says more than the count:
+626 tests in 23 files, and what each file is about says more than the count:
 
 | file | tests | what it pins down |
 | --- | --- | --- |
 | `journey.mjs` | 150 | the walking: routes, doors, shut legs, healers, gyms, and the map graph |
-| `rows.mjs` | 97 | what every row and offer says, when its button works, and what the runner picks |
+| `rows.mjs` | 100 | what every row and offer says, when its button works, and what the runner picks |
 | `menus.mjs` | 61 | the order the START menu is driven in, and what is closed between tries |
 | `battle.mjs` | 44 | whose turn it is, which Pokémon is out, and a win from a whiteout |
 | `collision.mjs` | 34 | which tiles can be walked, and which have somebody standing on them |
@@ -123,7 +123,7 @@ section gives. Everything by hand runs against a local build.
 
 ```mermaid
 flowchart BT
-    C["the app"] --> T["./run-tests<br/>623 behaviour tests"]
+    C["the app"] --> T["./run-tests<br/>626 behaviour tests"]
     C --> A["tools/check-app<br/>25 groups"]
     C --> D["tools/docs-check<br/>31 tracked sections"]
     C --> V["tools/coverage<br/>what the suite never runs"]
@@ -363,6 +363,40 @@ fine and is wrong at run time:
 | `gyms` | every gym a title declares has the right leader on the right tile, as a script object, with a badge bit that is a badge — skipped without a cartridge |
 | `romlayout` | `tools/rom-events` and `gen2/world.js` agree about all seven map-table strides. Three were hand-copied into the tool and three were wrong |
 | `counts` | every number in the prose that the repository can compute is right — the test table, the group count, the digest's size, the audit's rows. Two have shipped wrong: *143 tests in seventeen files* while 576 ran, and a digest drawn as 47 entries carrying 53 |
+
+### Looking at the ranking
+
+```
+tools/rank                     a party at full health, nothing else
+tools/rank --hurt --bag        somebody hurt, a potion in the bag
+tools/rank --fainted           the override: Heal goes first
+tools/rank --all               everything on offer at once
+tools/rank --all --json        the same, for a script to read
+```
+
+The ranking is the app's central claim and it is load-bearing twice over: it
+decides which row wears the accent rail, and since v167 it decides what *Run
+the list* presses. So a reorder is a behaviour change — and until this tool
+there was no way to *look* at one without a browser, a ROM and a running game.
+`DEV.plan()` answers it on a live cartridge; this answers it in a second, out
+of the same pure function the screen uses.
+
+It exists because the ordering has been tuned twice by editing a list and a
+comment beside it, and the second time **the two disagreed for a whole
+version**: the comment said an errand outranks levelling up while the list put
+it below Grind. One command would have shown that.
+
+**And it paid for itself in its first minute** by printing
+`1 hurt · [object Object] in the bag`. Seven fixtures in `tests/cases/rows.mjs`
+passed `bagHeal` as an item object and `wilds` as a list, where `main.js`
+passes a *name* and a `{low, high}` pair — and nothing had noticed, because
+every test asserted `enabled` or a key and none asserted the text those fields
+feed. There is a test for that class now: no row, in a dozen situations, may
+say *undefined*, *NaN* or *[object Object]*. A row says words.
+
+It is not a check. `tests/cases/rows.mjs` asserts the whole order in one line,
+which is where a claim about the ranking belongs; this is for the ten minutes
+before that line is written.
 
 ### Asking the cartridge, without running it
 

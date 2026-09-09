@@ -4410,7 +4410,7 @@ a conversation.
 
 ### Running the list
 
-<!-- covers: app/rows.js app/main.js @ 2f53a12d5401 -->
+<!-- covers: app/rows.js app/main.js @ a13462a38e72 -->
 
 The app has spent forty passes learning to answer one question — *what can the
 pilot do here, and which of those is worth most?* — and twenty showing the

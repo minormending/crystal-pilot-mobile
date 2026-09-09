@@ -29,6 +29,9 @@
  *   travelTo          the map key chosen to walk to, or null
  *   huntable          how many species appear here at this hour
  *   wilds             the levels the grass gives here, { low, high } or null
+ *   bagHeal           the *name* of the cheapest thing in the bag that mends
+ *                     HP, or null -- a string, because that is all the row
+ *                     needs and `main.js` passes `pick.name`
  *   trainers          who is near enough to fight, [{ x, y, sprite }]
  *   trainersOnMap     how many the map places anywhere, near or not
  *   canBox            whether this cartridge has said what a boxed catch says

@@ -1,0 +1,93 @@
+#!/usr/bin/env node
+// What the pilot would offer, and in what order, for a situation described on
+// the command line.
+//
+// The ranking is the app's central claim and it is load-bearing twice over: it
+// decides which row wears the accent rail, and since v167 it decides what "Run
+// the list" presses. So a reorder is a behaviour change -- and there was no way
+// to *look* at it without a browser, a ROM and a running game. `DEV.plan()`
+// answers this on a live cartridge; this answers it in a second, from the same
+// pure function the screen uses.
+//
+// It exists because the ordering has now been tuned twice by editing a list and
+// a comment beside it, and the second time the two disagreed for a whole
+// version: the comment said an errand outranks levelling up while the list put
+// it below Grind. One command would have shown that.
+//
+//     tools/rank                        a party at full health, nothing else
+//     tools/rank --hurt --bag           somebody hurt, a potion in the bag
+//     tools/rank --fainted              the override: Heal goes first
+//     tools/rank --all                  everything on offer at once
+//     tools/rank --all --json           the same, for a script to read
+//
+// Not a check. `tests/cases/rows.mjs` asserts the whole order in one line,
+// which is where a claim about the ranking belongs; this is for the ten minutes
+// before that line is written.
+import { describeOffers, describeRows } from '../app/rows.js';
+
+const argv = process.argv.slice(2);
+const has = (f) => argv.includes(`--${f}`);
+const all = has('all');
+
+const CYNDAQUIL = 155, PIDGEY = 16, POKE_BALL = 5;
+const hp = has('fainted') ? 0 : has('hurt') || all ? 8 : 20;
+const state = {
+  worldLoaded: true,
+  inBattle: has('battle'),
+  party: has('noparty') ? [] : [{ species: CYNDAQUIL, level: 5, hp, maxHp: 20 }],
+  map: [3, 1], money: 3000,
+  items: all || has('balls') ? [[POKE_BALL, 5]] : [],
+  balls: [], enemy: { species: PIDGEY, level: 3, hp: 15, maxHp: 15 },
+  badges: 1, battleMode: has('battle') ? 1 : 0,
+};
+const ctx = {
+  // The one context field with no cartridge behind it: a species name, which
+  // the real one reads out of the ROM.
+  rom: { speciesName: () => 'PIDGEY', itemName: () => 'POKE BALL' },
+  ballId: all || has('balls') ? POKE_BALL : null,
+  huntWanted: all ? 'PIDGEY' : null,
+  huntable: all ? 2 : 0,
+  // `{ low, high }`, not a list -- which is what `romdata.wildLevels` answers
+  // and what the Heal and Grind rows read. The first draft of this file passed
+  // a list and the Grind row printed "here Lvundefined", which is how this
+  // file paid for itself in its first minute.
+  wilds: all ? { low: 2, high: 3 } : null,
+  // A *name*, not an item: `main.js` passes `pick.name` and the row
+  // interpolates it straight into "… in the bag".
+  bagHeal: all || has('bag') ? 'POTION' : null,
+  healPlace: "Elm's lab",
+  gated: all || has('gated')
+    ? [{ where: 'ROUTE 32', needs: 'an Egg', errand: 'talkToOpen' }] : [],
+  gym: all || has('gym')
+    ? { at: 'Violet City', leader: 'FALKNER', legs: 1 } : null,
+  trainers: all || has('trainers') ? [{ x: 2, y: 2, sprite: 39 }] : [],
+  trainersOnMap: all || has('trainers') ? 1 : 0,
+  takeables: all || has('take') ? [{ x: 4, y: 4 }] : [],
+  places: all || has('travel')
+    ? [{ key: '3.2', name: 'ROUTE 31', legs: 1 }] : [],
+  travelTo: all || has('travel') ? '3.2' : null,
+  marts: all || has('shop')
+    ? [{ key: '3.9', name: 'CHERRYGROVE CITY', legs: 2 }] : false,
+  shopFor: all || has('shop') ? '5 more potion' : null,
+};
+
+const rows = describeRows(state, ctx);
+const list = describeOffers(state, ctx);
+
+if (has('json')) {
+  console.log(JSON.stringify({ offered: list.offered, rank: list.rank,
+                               hint: list.hint }, null, 1));
+} else {
+  const flags = argv.filter((a) => a.startsWith('--')).join(' ') || '(default)';
+  console.log(`${flags}\n`);
+  if (!list.offered.length) console.log('  nothing on offer');
+  for (const key of list.offered) {
+    const row = rows[key] || {};
+    const mark = list.rank[key] === 1 ? '▎' : ' ';
+    const state_ = row.needs ? `waiting on a ${row.needs}`
+      : row.enabled ? (row.text || '—') : `(greyed) ${row.text || ''}`;
+    console.log(`${mark} ${String(list.rank[key]).padStart(2)}. `
+                + `${key.padEnd(8)} ${state_}`);
+  }
+  if (list.hint) console.log(`\n  hint: ${list.hint}`);
+}
