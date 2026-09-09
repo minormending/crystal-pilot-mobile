@@ -5,6 +5,7 @@
 import { readHeader } from '../gbcore/cartridge.js';
 import { GameBoy } from '../gbcore/gb.js';
 import { Symbols, sharedNames } from '../gen2/symbols.js';
+import { runSequence, sequenceSaid } from './runner.js';
 import {
   describeAuto, describeHandoff, describeOffers, describeParty, describeReplaced,
   describeRoom, describeRows, describeSaying, describeScreen, describeSlot,
@@ -2909,49 +2910,21 @@ $('#stopRun').onclick = () => {
 
 // --- running the list --------------------------------------------------------
 //
-// The app has spent forty passes learning to answer one question -- *what can
-// the pilot do here, and which of those is worth most?* -- and has answered it
-// on screen, every refresh, for the last twenty. This runs the answer.
-//
-// There is deliberately no new decision in here. The list is ranked by
-// `describeOffers` from what the game says; `describeAuto` takes the front of
-// it; this presses that row's own button and reads the list again. A pilot that
-// planned would be a second, worse copy of the ranking.
+// The sequencing lives in `app/runner.js`, which no test could reach while it
+// was in here. What is left is the adapter: read the situation, press a row's
+// own button, and put the answer on the bar.
 
-/** How many jobs one press will run. */
-const AUTO_STEPS = 8;
-
-/**
- * The things a job could move, as one string.
- *
- * This is the runner's only guard against the loop that never ends, and it is
- * evidence rather than a claim: a job that reports success and leaves all of
- * this identical did nothing, whatever it said. That is a real state and not a
- * hypothetical -- "off to heal" with a full party walks to the Center, heals
- * nobody, says so cheerfully, and is offered again a tenth of a second later.
- *
- * Where you are, the money, the badges, every member's level and HP, and both
- * pockets. Between them they cover what every job on the list is *for*: money
- * is a purchase, HP is a heal, a level is a battle, a badge is a Gym, an item
- * is a pick-up, a ball is a throw, and the map is a walk.
- *
- * The balls are a pocket of their own in Gen 2 and were missed on the first
- * draft, which would have read "Catch threw four balls and caught nothing" as
- * *nothing happened*. Four balls happened.
- */
-function stateSignature(s) {
-  return [
-    (s.map || []).join('.'),
-    s.money,
-    s.badges,
-    (s.party || []).map((m) => `${m.species}/${m.level}/${m.hp}`).join(','),
-    (s.items || []).map(([id, n]) => `${id}x${n}`).join(','),
-    (s.balls || []).map(([id, n]) => `${id}x${n}`).join(','),
-  ].join('|');
-}
+/** Which button runs a job the runner has chosen. */
+const JOB_BUTTON = {
+  ...Object.fromEntries(
+    Object.entries(JOB_ROWS).map(([key, [, button]]) => [key, button])),
+  // The one job that is not a row of its own: Clear rides on the Duel row, and
+  // `jobFor` chooses it wherever that row offers it.
+  clear: '#clear',
+};
 
 /**
- * Run the top of the list, then read the list again, until it stops.
+ * Run the ranked list until it stops, and say what happened.
  *
  * Not itself a `runTask`: every step *is* one, and `running` is the flag that
  * keeps a single job on the joypad. Nesting would have the first step refused
@@ -2962,65 +2935,37 @@ function stateSignature(s) {
  * It presses the row's own button rather than calling the job behind it. That
  * is not laziness: the handler is where the target, the busy line, the undo
  * point and the reporting live, and a second path into a job is a second path
- * to keep in step. Which means the handlers have to hand their result back --
- * they used to await it and drop it, and the runner cannot tell a job that
- * failed from one that worked without it.
+ * to keep in step.
  */
 async function keepGoing() {
   if (running || autoOn || !tasks) return;
   autoOn = true;
   autoStop = false;
   setMode(true);
-  let last = null, lastSig = null, ran = 0, why = '';
+  let done = { ran: 0, why: '', saved: null };
   try {
-    for (let step = 0; step < AUTO_STEPS; step++) {
-      if (autoStop) { why = 'stopped'; break; }
-      const s = await tasks.snap();
-      if (!s.worldLoaded) { why = 'no game running'; break; }
-      const { rows, offers } = offersNow(s);
-      const sig = stateSignature(s);
-      const auto = describeAuto(offers, rows,
-                                { last, changed: sig !== lastSig });
-      if (!auto.key) { why = auto.text; break; }
-      // Clear beats Duel wherever the row offers it: the same fights, in one
-      // job with its own budget, instead of one per step out of eight. The
-      // Duel row has carried two buttons since the day Clear was written, and
-      // this is the one place that has to know which of them is the better
-      // press.
-      const button = auto.key === 'duel' && rows.duel.clearable
-        ? '#clear' : JOB_ROWS[auto.key][1];
-      last = auto.key;
-      lastSig = sig;
-      // `autoOn` stays true across this: `setMode` reads it, so the pad stays
-      // dim and Stop stays on screen while one step hands over to the next.
-      const res = await $(button).onclick();
-      // Three outcomes, and telling two of them apart matters. `runTask`
-      // answers `null` for a refusal, a throw and a Stop, and every one of
-      // those has already put its own sentence on the bar -- so adding one of
-      // ours would overwrite the useful half. A handler that declines before
-      // reaching `runTask` answers `undefined` and says *nothing*, which is
-      // the one stop that would be silent. Nothing on the list should be able
-      // to reach that -- a row is not enabled unless its handler's
-      // preconditions hold -- so if it happens it is a defect, and a defect
-      // that stops the runner dead with a blank bar is the worst shape for
-      // one.
-      if (res === undefined) { why = `${last} would not start`; break; }
-      if (res === null || !res.ok) { why = ''; break; }
-      ran += 1;
-    }
-    if (ran >= AUTO_STEPS) why = `${AUTO_STEPS} jobs is one press's worth`;
+    done = await runSequence({
+      read: async () => {
+        const s = await tasks.snap();
+        return { s, ...offersNow(s) };
+      },
+      run: async (job) => $(JOB_BUTTON[job]).onclick(),
+      // The game's own save, driven the way a person would -- and `keepGame`
+      // copies the battery out afterwards, the same as pressing Save by hand.
+      save: async () => {
+        const res = await runTask('#savegame', 'saving', () => tasks.saveGame());
+        if (res && res.ok) { savedThisSession = true; await keepGame(); }
+        return res;
+      },
+      stopped: () => autoStop,
+    });
   } finally {
     autoOn = false;
     setMode(false);
     refresh();
   }
-  // Said only where there is something to say that the last job did not
-  // already say. Two jobs and a reason is the useful shape: what it got done,
-  // and why it is handing back.
-  if (why) {
-    setStatus(ran ? `${ran} job${ran === 1 ? '' : 's'} done — ${why}`
-                  : why, ran ? 'ok' : 'bad');
-  }
+  const said = sequenceSaid(done);
+  if (said) setStatus(said, done.ran ? 'ok' : 'bad');
 }
 
 $('#keepgoing').onclick = keepGoing;

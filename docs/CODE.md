@@ -113,7 +113,7 @@ of the subtleties in sections 6 and 7.
 
 <!-- covers-api: app/main.js gen2/journey.js titles/crystal.js gen2/tasks.js gen2/nav.js gen2/world.js gen2/collision.js gen2/state.js gen2/romdata.js gen2/symbols.js gbcore/gb.js @ ee70003738fb -->
 
-Twenty-eight modules, in four directories, and the directories are the design:
+Twenty-nine modules, in four directories, and the directories are the design:
 **an import may point down this list and never up.**
 
 | | holds | may import from |
@@ -172,6 +172,7 @@ flowchart LR
     subgraph app["app/ — the interface"]
         main["main.js<br/>the page and its controls"]
         rows["rows.js<br/>what each row says"]
+        runner["runner.js<br/>the list, run in order"]
     end
     subgraph titles["titles/ — one cartridge"]
         pick["pick.js<br/>which cartridge is this?"]
@@ -274,6 +275,7 @@ flowchart LR
 | `generic.js` | the same questions, answered "I was not told" |
 | `saves.js` | "keep this in slot 2", "put that .sav into the cartridge" |
 | `rows.js` | "why is that button greyed out?" |
+| `runner.js` | "what should the pilot do next, and is that worth saving?" |
 | `version.js` | "which build am I running?" |
 | `remember.js` | "what did they choose last time?" |
 | `room.js` | "what has my other device chosen?" |
