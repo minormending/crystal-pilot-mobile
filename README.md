@@ -44,6 +44,12 @@ the hard part. It boots a Pokémon Crystal ROM on the device, reads the game's
 live state through the disassembly's symbol file, and drives it with synthetic
 input. No app store, no NDK, no cable.
 
+It also reads things the game itself will not show you. Tap a Pokémon in the
+party and you get its DVs and the stat experience behind each of its six
+stats, the level it learns its next move at, and the level it becomes something
+else — all out of your own cartridge, so it is right for the build you are
+driving even if that build is a hack that changed it.
+
 <img src="docs/on-device.png" alt="Running in a phone browser" width="330">
 
 That screenshot is the app running in a phone-sized browser, having booted the
@@ -58,7 +64,7 @@ how to run it. Everything else has a page of its own.
 
 | | |
 | --- | --- |
-| **[Using it](docs/USING.md)** | the controls, tap-to-walk, starting a game, grinding, hunting and what the hour changes, travel, healing, your save, slots and undo, updates |
+| **[Using it](docs/USING.md)** | the controls, tap-to-walk, starting a game, grinding, hunting and what the hour changes, the Pokédex, travel, healing, your save, slots and undo, updates |
 | **[The interface](docs/INTERFACE.md)** | why it is shaped like a Game Boy: the fixed screen and pad, the ranked offers, the two doors, three layouts, colour |
 | **[Two devices, one game](docs/DEVICES.md)** | what the page remembers, room codes, handing the save over, watching the other screen, and what leaves the device |
 | **[What is proven](docs/PROVEN.md)** | the engineering log — what has been run and measured, what broke, the eighty-six defects twenty-six audits found, and the traps in the emulator core |

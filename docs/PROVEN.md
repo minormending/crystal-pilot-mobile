@@ -3801,6 +3801,44 @@ using all three of its bytes, the caught level believed at both ends of its
 range, the Pokédex bit array starting at the first species and stopping at the
 last, and a card built with no cartridge behind it at all.
 
+### And the tool that can close the gaps this pass wrote down
+
+Two things here are the disassembly's word rather than a measurement — which
+nibble of the DV word is which stat, and how the caught-data byte is packed —
+and both were written down as gaps rather than glossed. `tools/dex --party`
+is what closes them, whenever a save turns up: a `.sav` holds the same struct
+a running game does, at `sGameData + (wAddr - wPlayerData)`, so `GameState`
+reads it unchanged and what comes out is the app's reading rather than a second
+one.
+
+`--check` settles the first outright, and the trick is that the cartridge has
+already done the arithmetic: **the six stats are stored beside the DVs that
+made them.** Recompute them from base, level, DV and stat experience; if they
+do not come back, try the other twenty-three orderings of the four nibbles and
+report which one does — an answer rather than a failure, and if none fits, that
+itself says the disagreement is somewhere other than the nibble order.
+
+The stat formula lives in the tool and not in the app, deliberately. The game
+supplies those numbers and the app reads them, so a copy in `state.js` would be
+a second source of a fact the cartridge already states; a *check* is exactly
+where an independent derivation belongs, the same way `tools/types --verify`
+asserts matchups nobody read out of the chart.
+
+Smoke-tested against a synthetic save built from the real ROM's base stats —
+two Pokémon, twelve of twelve stats reproduced, and the profile's order the
+only one of the twenty-four that fits. Which proves the plumbing and proves
+nothing about the cartridge, and is said that way in the tool.
+
+**And `--verify` grew the sharper version of its growth-rate check**: nine
+species pinned to the experience curve they were on before this app existed,
+rather than "at least two curves are in use". PIDGEY is deliberately not among
+them. It reads `mediumSlow`, which contradicted the first guess at what it
+should be — and the cartridge is right, corroborated by the other nine and by a
+distribution that makes sense (119 medium-fast, 64 medium-slow, 45 slow, 23
+fast, and the two "slightly" curves unused, as Gen 2 leaves them). A check
+whose expected values come from memory is a check that can be wrong in the
+direction nobody looks.
+
 ## The part that had to be redesigned
 
 The desktop pilot hangs its whole design on CPU hooks: the game's own routines
