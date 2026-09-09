@@ -247,7 +247,7 @@ test('the whole flow saves, through the real menu code', async (t) => {
 
 // --- using an item out of the pack -------------------------------------------
 
-const POTION = 18, BERRY = 154;
+const POTION = 18, BERRY = 154, ANTIDOTE = 12;
 
 /**
  * A pilot whose pack is a scripted state machine.
@@ -940,4 +940,135 @@ test('Stop ends the answering', async (t) => {
   tasks.cancelled = true;
   t.false(await tasks.keepDefaultName(), 'it stopped');
   t.eq(log.length, 0, 'having pressed nothing');
+});
+
+// --- the evidence that a save happened --------------------------------------
+//
+// `tools/mutate` rated menus.js the weakest module in gen2 at 39%, and the
+// survivor that matters most is one line: the condition that decides whether
+// the game was actually saved.
+//
+//     if (digest(after) !== hashBefore && this.state.saveIsPresent(after))
+//
+// Both halves could be broken with the whole suite green. `!==` to `===` makes
+// the app report success precisely when the battery did *not* move; `&&` to
+// `||` makes it accept a battery that changed but holds no save. Either way
+// somebody closes the tab believing their game is safe. This is the app's
+// central safety claim and nothing was watching it.
+
+/** A pilot whose menu flow always "works", so only the evidence is under test. */
+function committing({ moves = true, present = true, blankBefore = false } = {}) {
+  const sym = symbols();
+  const state = new GameState(sym);
+  const gb = new FakeGameBoy({ wram: worldRam(sym, { mapStatus: 2 }) });
+  const first = new Uint8Array(32768);
+  if (!blankBefore) { first[0] = 99; first[1] = 127; }
+  const second = Uint8Array.from(first);
+  if (moves) second[64] = 7;                    // the bytes moved
+  let reads = 0;
+  gb.batterySave = async () => (reads++ === 0 ? first : second);
+  const tasks = new Tasks(gb, state, () => {}, fakeRom());
+  state.saveIsPresent = (b) => (b === first ? !blankBefore : present);
+  tasks.awaitQuiet = async () => ({ inBattle: false, worldLoaded: true,
+                                    scriptRunning: false });
+  tasks._saveOnce = async () => true;
+  tasks.closeMenus = async () => {};
+  tasks.step = async () => {};
+  tasks.said = [];
+  tasks.say = (m) => tasks.said.push(m);
+  return tasks;
+}
+
+test('a save is believed only when the battery moved AND holds a save',
+     async (t) => {
+  const good = await committing().saveGame();
+  t.true(good.ok, `both true: ${good.message}`);
+  t.contains(good.message, 'saved', 'and it says so');
+});
+
+test('a battery that did not move is not a save, whatever the menu did',
+     async (t) => {
+  // The menu flow completed and the bytes stood still, which is the state the
+  // app used to have no way to tell from success. Reported rather than
+  // smoothed over: a save that did not commit is the thing worth knowing.
+  const r = await committing({ moves: false }).saveGame();
+  t.false(r.ok, 'not believed');
+  t.contains(r.message, 'could not get the game to save', 'and says so plainly');
+});
+
+test('bytes that moved but hold no save are not a save either', async (t) => {
+  // The other half. A half-written battery moves and would load as "no save
+  // file" in any emulator, so accepting it hands somebody a file that looks
+  // like a backup and is not one.
+  const r = await committing({ present: false }).saveGame();
+  t.false(r.ok, 'not believed');
+});
+
+test('it says the battery did not change, rather than going quiet', async (t) => {
+  const tasks = committing({ moves: false });
+  await tasks.saveGame();
+  t.true(tasks.said.some((m) => m.includes('battery did not change')),
+         `said as it happened: ${tasks.said.join(' | ')}`);
+});
+
+test('the first save on a blank cartridge is announced as one', async (t) => {
+  // `firstSave` is read off the battery *before* the attempt, and inverting it
+  // survived every test. It is the difference between "saved" and "the game
+  // now has save data", which is the one moment that sentence is worth saying.
+  const first = await committing({ blankBefore: true }).saveGame();
+  t.true(first.ok, 'saved');
+  t.true(first.firstSave, 'and known to be the first');
+  t.contains(first.message, 'now has save data', 'which the message says');
+  const later = await committing().saveGame();
+  t.false(later.firstSave, 'an ordinary save is not the first');
+  t.eq(later.message, 'saved', 'and says the short thing');
+});
+
+test('the three states a save refuses in each say which', async (t) => {
+  // All three returned `ok: false` and all three could be flipped to true with
+  // the suite passing. A save that reports success from inside a battle is the
+  // worst of them: nothing was written and nothing said otherwise.
+  const cases = [
+    [{ inBattle: true, worldLoaded: true, scriptRunning: false }, 'battle'],
+    [{ inBattle: false, worldLoaded: false, scriptRunning: false }, 'start a game'],
+    [{ inBattle: false, worldLoaded: true, scriptRunning: true }, 'on screen'],
+  ];
+  for (const [state, says] of cases) {
+    const tasks = committing();
+    tasks.awaitQuiet = async () => state;
+    tasks.settleText = async () => {};
+    tasks.snap = async () => state;
+    const r = await tasks.saveGame();
+    t.false(r.ok, `refused: ${says}`);
+    t.contains(r.message, says, 'and named the reason');
+  }
+});
+
+test('walking off the end of the stock list stops rather than buying wrongly',
+     async (t) => {
+  // The stock list does not wrap, so `wCurItem` reaching CANCEL means the item
+  // asked for is not stocked. The guard steps back up once -- in case CANCEL
+  // was overshot by one -- and otherwise gives up.
+  //
+  // Inverting that test survived every test in this file, and what it would do
+  // is walk the cursor past CANCEL and press A at whatever is under it. This
+  // is the same family as the defect that emptied a wallet: A answers whatever
+  // question is on screen, and a job has no business answering one it did not
+  // read.
+  const { tasks } = shopping({ stock: [ANTIDOTE] });
+  const r = await tasks.buyFromClerk(POTION, 1);
+  t.false(r.ok, 'nothing bought');
+  t.eq(r.bought, 0, 'and nothing counted');
+  t.eq(r.spent, 0, 'and no money gone');
+  t.contains(r.message, 'does not stock', 'saying what is wrong');
+});
+
+test('an overshoot by one is walked back rather than given up on', async (t) => {
+  // The other side of the same guard: the cursor lands on CANCEL, steps up,
+  // finds what it wanted, and carries on. Without the step-up a list whose
+  // last entry is the wanted one can never be bought.
+  const { tasks } = shopping({ stock: [ANTIDOTE, POTION] });
+  const r = await tasks.buyFromClerk(POTION, 1);
+  t.true(r.ok, `bought after stepping back: ${r.message}`);
+  t.eq(r.bought, 1, 'one of them');
 });
