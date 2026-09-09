@@ -339,14 +339,14 @@ second, which is there so the core's own waits finish, not to run a game.
 ## The audits, and how each defect was actually found
 
 Everything above was watched happening. This section was the exception, and the
-exception was the point of it: after the ROM-hack work shipped, **forty-seven**
-passes went looking for defects in code that already worked, and found **227** —
+exception was the point of it: after the ROM-hack work shipped, **forty-eight**
+passes went looking for defects in code that already worked, and found **239** —
 a handful of them created by a fix on the way, which are in the table in italics
 because they are a different kind of thing. None of them announced itself.
 
 **Reading found twenty-three**, more than any other single method, which is why
 it comes first in the table and why it is worth doing before touching the game.
-But the interesting number is the tail: the remaining two hundred and four were
+But the interesting number is the tail: the remaining two hundred and sixteen were
 found almost as many different ways, and almost every entry in that column is a sentence rather than
 a category — *measuring the fix*, *asking a second tile*, *feeding it the wrong
 thing*, *writing a cartridge Crystal is not*, *a test, before the cartridge*,
@@ -605,6 +605,18 @@ exactly why nothing failed.
 | 47 | **ten sentences in three files said the shared digest was 45 addresses when it held 59** — a privacy claim understating what leaves the device, in the one direction such a claim must never be wrong | read any of them | making them a computed number instead of a remembered one |
 | 47 | four of the six numbers in the checks diagram were hand-typed and three had drifted, including a coverage headline reading 65% against a real 57% — too flattering *and* unwatched, so every argument resting on it read stronger than it was | read the diagram | the same |
 | 47 | *`docs-check` printed how many sections it tracks only when none had drifted, so the number could not be asked for during a pass — which is the only time a pass asks* | *ask mid-edit* | *asking it, and getting nothing* |
+| 47 | *`tools/types` counted five stats in front of `BaseData`'s types where there are six, and read CHIKORITA as "type 65/GRASS" — a plausible type number, so it printed rather than failed* | *ask it to rank anything* | *checking three species whose types nobody needs a table to know* |
+| 48 | **the remedy `notouch` named was one the pilot was holding and could not reach for** — nothing in this app had ever pressed PKMN, so "a different Pokémon" was a sentence rather than an action | any hopeless matchup with a party of two | reading the sentence the pass before had just written |
+| 48 | **three menu headers in the ROM read 34 items at row 12** — the battle menu, the Bug-Catching Contest's and the Safari Zone's — so `menuIsLive` cannot tell them apart. In the Contest item 3 is not the PACK, it is a PARK BALL thrown directly, and a catch there opened no pack, walked pockets that were not on screen, and reported *could not find the ball* | catch something in the Bug Contest | a tool built to read box shapes out of the cartridge, listing the ones that share a signature |
+| 48 | **`tools/types` had a second `BaseData` reader**, written out again with its own stride and field offset — the fifth time copying this app's ROM reading into another place produced a confident wrong answer | — | needing the same read inside the app, where a party member's types can only come from |
+| 48 | **`watchThrow`'s boxed branch had never run**: not the screen read, not the phrase, not the nickname answer. It is the one place where a *successful* catch is reported as an escape if it is wrong, because with six carried the party count never moves | catch anything with a full party | `tools/mutate` dropping the `!` from its own guard |
+| 48 | and the guard beside it has to be an `&&`: on a cartridge whose symbol file has no tilemap `state.screen` answers null, and `||` dereferences it | the same, without a tilemap | the same |
+| 48 | **`hunt` had no test at all** — a whole job: which encounters to flee, which to stop on, the tally it reports, and the difference between a refused escape and a whiteout. Its species match could be *inverted* with the suite green | — | the same, on the module it rated 45% |
+| 48 | **`partyDown`'s bound was checked by nothing**, and a party of one is the commonest whiteout there is | faint a single Pokémon | the same |
+| 48 | what a caught Pokémon reports: the party *growing* is what says it joined here, and with six carried it does not — so reading the last slot's level reports a Pokémon that has been in the party all along | catch with a full party | the same |
+| 48 | `weakenTo: 0` means throw, not weaken a little first — read as *at or above zero* and every catch takes a swing, which against a Lv2 Rattata at full health is how the thing being caught is knocked out | catch with the threshold at zero | the same |
+| 48 | `otherBattleMenu` needs both of its numbers, `switchFor` counts a power-1 move as damage, the switch budget bounds the loop in both directions, and `chip` reports a knockout only when the enemy is down — four guards with nothing behind them | any of the four boundaries | the same |
+| 48 | *`BaseData` has no terminator to run off the end of, so a symbol file pointing elsewhere reads zeroes — and `[0, 0]` is NORMAL/NORMAL, a real type pair* | *a wrong address* | *writing the reader, and asking what a bad read would return* |
 
 Five things in that table are worth more than the individual rows.
 
@@ -3383,6 +3395,94 @@ mutation that survives is either a test worth writing or a branch worth
 removing**, and which one it is takes reading the line to say. The pass before,
 six tests killed nothing. This pass, two survivors turned out to be code that
 could not run.
+
+### A forty-eighth pass: the Pokémon the pilot was already holding
+
+The pass before could tell that the thing on the field takes nothing off a
+Ghost, and said so. **The remedy it named — *a different Pokémon* — was one
+the pilot was holding and could not reach for**: nothing in this app had ever
+pressed PKMN. So `notouch` is the fallback now rather than the answer.
+
+Two screens, and the second is the one that could not be guessed at:
+
+| | first option | second |
+| --- | --- | --- |
+| the field party menu (`MonMenuOptionStrings`) | **STATS** | SWITCH |
+| the battle party menu (`BattleMonMenu`) | **SWITCH** | STATS |
+
+They are opposite. Assume the order you have seen more often and the press
+that switches a Pokémon in during a fight opens its stats instead, while the
+trainer takes its turn.
+
+**Both facts came out of the cartridge rather than off a screen, because there
+is no screen here to read.** The Browser pane has been unable to boot a game
+for seven passes, and a menu header in pokecrystal is
+`flags, y1, x1, y2, x2`, a pointer to `flags, count`, then the strings:
+
+```
+09:4ed4  00 0b 0b 11 13 dc 4e 01       BattleMonMenu: rows 11-17, columns 11-19
+09:4edc  c0 03 "SWITCH@STATS@CANCEL@"  three items, and SWITCH first
+```
+
+**And the derivation reproduces a measurement.** Read the same way,
+`BattleMenuHeader` comes out as *34 items at row 12* — which is what
+`gen2/engine.js` has said since somebody watched it on a real cartridge, long
+before any of this. A derivation that agrees with an old measurement is worth
+more than either alone, and it is the whole reason the other headers can be
+trusted with nothing to look at.
+
+### The box that is not ours, found by the tool that read the boxes
+
+Listing the headers that *share* a declared signature is the hazard the app
+cannot see for itself, and it turned up a real one immediately:
+
+```
+  shared: battleMenu (3 boxes with its signature)
+      BattleMenuHeader
+      ContestBattleMenuHeader
+      SafariBattleMenuHeader
+```
+
+All three are 34 items at row 12. They differ only in the box's **left**
+column — 8, 2 and 0 — which the app did not read. And the items are not the
+same: **in the Bug-Catching Contest item 3 is not the PACK, it is a PARK BALL
+thrown directly.** So a catch there opened no pack, walked pockets that were
+not on screen, and reported *could not find the ball* — true, and about the
+wrong thing.
+
+`menuIsLive` is deliberately **left alone**. It is the gate on the whole
+battle loop, and narrowing it on a number no cartridge has confirmed at run
+time would risk every battle to fix a case nobody has met. The refusal works
+the other way round — positive evidence of a menu that is somebody else's —
+and what makes that safe is a number the tool checks:
+
+> left column 2 is unique to `ContestBattleMenuHeader`
+
+**One header out of seventy-three.** The only way to read a 2 there is to
+actually be in one, and if a future build adds a second the tool says so
+before the pilot starts refusing battles it could have fought. A fingerprint
+nobody has confirmed is unique is not a fingerprint. Safari's column 0 is
+*not* acted on for the mirror reason: 0 is the commonest left edge in the ROM
+at twenty-five headers, so it identifies nothing.
+
+### And the two paths nothing had ever run
+
+`watchThrow`'s **boxed branch** — the screen read, the phrase, the nickname
+answer — had never executed. `tools/mutate` dropped the `!` from its own guard
+and nothing failed. It is the one place where a *successful* catch is reported
+as an escape if it is wrong, because with six carried the party count never
+moves and the screen is the only evidence there is. This app measured *"was
+sent to BILL's PC."* on a real cartridge and then never exercised reading it.
+
+`hunt` had **no test at all**, which is a whole job: which encounters to flee,
+which to stop on, the tally it reports, and the difference between a refused
+escape and a whiteout. Its species match could be *inverted* with the suite
+green.
+
+The two together are the same shape as the forty-sixth pass's finding about
+the runner, and it is worth naming as a rule rather than a coincidence: **a
+path that was measured once on a cartridge and then wired up is the path least
+likely to have a test.** Measuring it felt like verifying it.
 
 ## The part that had to be redesigned
 
