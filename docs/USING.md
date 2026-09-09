@@ -724,6 +724,11 @@ does not have.
 So if you get yourself to Azalea Town, Gym should work. It has not been watched
 working, and this page would rather say so than let you find out.
 
+The same caveat covers the Egg errand below: it is composed of walks and
+presses this app has done thousands of times, its refusals are tested against
+the aide's own script, and **nobody has watched it happen.** The Browser pane
+it was built in could not boot a cartridge.
+
 **It will not go in if it cannot heal first.** A Gym is several battles with no
 Pokémon Center between them, so the pilot mends up on the way — and if it
 cannot, it says so and stays out. Measured the first time this ran: a lead at 1
@@ -937,9 +942,32 @@ and a walk that gets turned back reports the remedy instead of the quote:
 
 > turned back — the Egg from Elm's aide — Violet's Pokémon Center
 
-**The pilot will not take the Egg for you.** The aide asks a yes-or-no
-question, and answering questions is not walking — the same line the app draws
-around choosing your starter. What it does is stop you hunting for the reason.
+### And now it goes and gets it
+
+There is a row for it. **Errand** — *the Egg from Elm's aide* — walks to Violet
+City, in through the Pokémon Center door, up to the aide, and says yes. It sits
+above Gym on the list, because a road being open is worth more than a level:
+everything else is reachable afterwards, and Azalea is not reachable without
+it.
+
+Which means **Run the list opens the road by itself.** Press it in Violet with
+the badge in hand and the pilot fetches the Egg, and the walk south stops being
+refused.
+
+It says *the Egg is yours — ROUTE 32 is open* when the game has written the
+event down, and nothing of the sort otherwise. The row is not the evidence and
+neither is the aide: one who says yes and hands over nothing reads as a
+refusal, the same way a Gym that ends without a badge does.
+
+**Two things it will not do.** If your party is full it reports *the party is
+full, so it was not handed over* and stops — the aide keeps the Egg, and
+shuffling somebody into a box is not this errand's business. And it will not
+guess: a road whose gate this build cannot read gets no row and no hint at all.
+
+*(The pass before this said the pilot would never do this, because answering a
+question is not walking. That was the wrong line — this app has answered
+yes-or-no boxes since it could shop. What it will not decide is which starter
+you want, because that is a choice with no right answer.)*
 
 **And it says nothing at all if it cannot read the answer.** These gates are
 bits in the game's own memory, found through the symbol file, so a cartridge
@@ -1282,7 +1310,7 @@ deployed, which is not the question you are asking when a bug you saw fixed is
 still in front of you. `tools/check-app` asserts that number matches the service
 worker's cache name, because a version display that lies is worse than none.
 
-<!-- covers: sw.js @ 206ec7f23c08 -->
+<!-- covers: sw.js @ de64f24cb56d -->
 
 The worker fetches **network first, falling back to the cache**. That is the
 opposite of the usual offline-first advice, on purpose.

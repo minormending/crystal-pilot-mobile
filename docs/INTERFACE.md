@@ -856,6 +856,44 @@ the collapsed paragraph was counted as visible and the improvement looked like
 then re-measured against the pre-pass build on the same origin rather than
 trusted from memory.
 
+## The row that opens a road
+
+The gate hint has had a companion since v170: an **Errand** row that goes and
+does what the road is waiting on.
+
+> ▤ Errand · the Egg from Elm's aide · [Go]
+
+It is deliberately generic. What it fetches is in the line rather than in the
+name, because the ball errand is the same shape of thing and the next cartridge
+will have its own — and a row called *Egg* would be a row that could only ever
+mean one thing on one game.
+
+**It is ranked above Gym**, which is the only interesting decision in it. The
+ordering on this list has been about urgency and cost since v89; a gate is
+neither. It is about *reachability*: everything else on the list can be done
+afterwards, and the place on the other side of the road cannot be reached at
+all until the errand is run. So it goes above the job that opens roads by
+force.
+
+**And it is drawn only where there is something to press**, which is where the
+hint and the row divide cleanly:
+
+| what the app knows | what it draws |
+| --- | --- |
+| a road is shut, and the pilot can open it | the row, with a button |
+| a road is shut, and it cannot | the hint alone |
+| the gate cannot be read on this cartridge | nothing |
+
+The middle case is the interface's first rule doing its work — a road the pilot
+cannot open is worth saying and not worth a button. The last is the rule this
+project keeps having to re-learn: *I do not know* must not be dressed up as a
+fact.
+
+The consequence worth knowing is that **Run the list will now open the road by
+itself.** The runner takes the front of the ranked list, and once the errand is
+on it, pressing one button in Violet fetches the Egg and the road south stops
+being refused.
+
 ## A road that is shut, and the thing that opens it
 
 The hint under the offers has one more thing it can say:
@@ -1025,4 +1063,4 @@ So this page carries a marker naming the files it describes and the hash they
 had when it was last read against them. `tools/docs-check` reports it when they
 move, and the pre-commit hook blocks on that report.
 
-<!-- covers: index.html app/main.js app/rows.js @ 5e4582050318 -->
+<!-- covers: index.html app/main.js app/rows.js @ f2de25bf3d82 -->

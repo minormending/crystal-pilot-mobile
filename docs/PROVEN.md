@@ -339,14 +339,14 @@ second, which is there so the core's own waits finish, not to run a game.
 ## The audits, and how each defect was actually found
 
 Everything above was watched happening. This section was the exception, and the
-exception was the point of it: after the ROM-hack work shipped, **forty-three**
-passes went looking for defects in code that already worked, and found **189** —
+exception was the point of it: after the ROM-hack work shipped, **forty-four**
+passes went looking for defects in code that already worked, and found **193** —
 a handful of them created by a fix on the way, which are in the table in italics
 because they are a different kind of thing. None of them announced itself.
 
 **Reading found twenty-three**, more than any other single method, which is why
 it comes first in the table and why it is worth doing before touching the game.
-But the interesting number is the tail: the remaining hundred and sixty-six were
+But the interesting number is the tail: the remaining hundred and seventy were
 found almost as many different ways, and almost every entry in that column is a sentence rather than
 a category — *measuring the fix*, *asking a second tile*, *feeding it the wrong
 thing*, *writing a cartridge Crystal is not*, *a test, before the cartridge*,
@@ -567,6 +567,10 @@ exactly why nothing failed.
 | 43 | the shop's stock-list guard could be inverted, which walks the cursor past CANCEL and presses A at whatever is under it | ask a mart for something it does not stock | the same |
 | 43 | the first-save announcement's flag inverted with the suite green | the first save on a blank cartridge | the same |
 | 43 | nothing exercised choosing between two gyms, because there had only ever been one | win a badge, ask for the next gym | declaring the second one |
+| 44 | **the pass before had drawn the wrong line and written it into three documents**: that the pilot would never answer a yes-or-no, when it has driven yes-or-no boxes since it could shop | reading the claim beside `buyFromClerk` | re-reading the reason rather than the rule |
+| 44 | *an errand written on the title's own class named no Crystal anything — it was engine behaviour in a title's coat* | *—* | *reading the first draft back* |
+| 44 | *the gate regex stopped at the first field it wanted, so `tile:` and `errand:` were invisible and the new tile check silently did nothing* | *the check, on its first run* | *the check printing nothing where it should have printed a tile* |
+| 44 | *the static half of `gates` looked for an errand only in the title, and failed for real the moment the method moved into the engine* | *—* | *the check itself, unmutated* |
 
 Five things in that table are worth more than the individual rows.
 
@@ -3049,6 +3053,51 @@ been fought. The road to Azalea wants the Egg, taking the Egg is a
 conversation, and a pilot that will not answer a yes-or-no cannot get there. So
 `docs/USING.md` says two gyms are declared and one has been won, and which is
 which — because the alternative is a page that reads as a promise.
+
+### A forty-fourth pass: a line drawn in the wrong place
+
+The pass before this ended by declining to write one method, on a principle:
+the aide asks a yes-or-no question, and *answering questions is not walking*.
+That sentence went into three documents.
+
+It was wrong, and re-reading it is what showed why. This app has driven
+yes-or-no boxes since it could shop — `buyFromClerk` confirms a purchase and
+`saveGame` confirms a save. The line it actually draws is around **choices with
+no right answer**: which starter you want. "Do me a favour?" has one right
+answer, and refusing to give it was not principle but a rule applied past its
+reason.
+
+So the errand exists, and the road south opens. Which is worth recording as a
+defect rather than as a change of mind: a rule that outlives its reason is the
+same failure as a comment that outlives its code, and this repository has a
+whole tool for the second kind.
+
+**The errand then moved a layer down, for the same sort of reason.** It was
+written as `takeTheEgg` on the `Crystal` class, where an errand plainly
+belongs — and read back, every line of it came out of the gate declaration and
+out of the healer that already declares the same door. It named no Crystal
+anything. A title-owned method that mentions no title is engine behaviour
+wearing a title's coat, so it is `Journey.talkToOpen` now and the title's
+contribution is two fields on a gate.
+
+`tile` went into the gate rather than into `places` because that makes the
+whole claim one entry — *the thing that sets this event stands on this tile on
+this map* — and `check-app gates` now checks it whole against the ROM. Split
+across two tables it could only ever have been checked in halves.
+
+**Two checks earned their keep before any mutation testing**, which is the
+happiest way for a check to be justified:
+
+* the static half of `gates` — an errand must name a real method — failed *for
+  real* the moment the method moved into the engine, and its message named the
+  file and the missing name;
+* `counts` caught the documentation's test totals going stale in the same run.
+
+And one of the new checks silently did nothing on its first run. The regex
+reading a gate stopped at the first field it wanted, so `tile:` and `errand:`
+were past the end of the match and the tile check printed nothing at all — the
+failure mode a check has that a test does not, which is why `tools/check-checks`
+exists and why every group here has to be shown to bite.
 
 ## The part that had to be redesigned
 

@@ -1113,7 +1113,7 @@ point those coordinates mean somewhere else entirely.
 
 ## 5. Crossing to the next map
 
-<!-- covers: gen2/journey.js gen2/world.js @ 4bd9a3383e6f -->
+<!-- covers: gen2/journey.js gen2/world.js @ 8c079a8f229f -->
 
 A connection spans only part of a shared edge, so "walk west until something
 happens" does not work. `crossEdge()` closes the distance in stages, then tries
@@ -1931,7 +1931,7 @@ flowchart TD
 
 ## 7a. Five that act on where you already are
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ 1a3f9ab868e7 -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ 3c19ecea4887 -->
 
 Grind, hunt and catch all go *looking* for something. These five do the obvious
 thing with the situation you are already in, and take no parameters:
@@ -2202,7 +2202,7 @@ said *trainer battle: lost* **seven times**. One loss, reported seven ways.
 
 ## 7d. The counter, and the money it takes
 
-<!-- covers: gen2/menus.js gen2/state.js titles/crystal.js @ e5c54e300793 -->
+<!-- covers: gen2/menus.js gen2/state.js titles/crystal.js @ e9c7c035dc93 -->
 
 Everything the pilot could do until now used what it found. **Shop** walks to a
 mart and buys, which is the first thing it does that spends rather than
@@ -2553,7 +2553,7 @@ because that failure is only otherwise discovered by reaching for the undo.
 
 ## 8. The errands
 
-<!-- covers: titles/crystal.js gen2/journey.js @ 2439db7145c5 -->
+<!-- covers: titles/crystal.js gen2/journey.js @ 5d278653fade -->
 
 Everything in this section is `crystal.js` — the only file in the app that names
 a Crystal map, a Crystal door or a Crystal NPC. What it stands on is
@@ -2575,6 +2575,46 @@ export const crystal = {
   legCost: LEG_COST,                             // what a further leg is worth, in tiles
 };
 ```
+
+### An errand that turned out to belong to the engine
+
+**`talkToOpen` is the counter-example to this whole division, and worth reading
+as one.** It was written as `takeTheEgg` on the `Crystal` class, where an errand
+plainly belongs — and then read back. Every line of it came out of the gate
+declaration (the map, the tile, the event) and out of the healer that already
+declares the same door. *Nothing in it named a Crystal anything.*
+
+A title-owned method that mentions no title is engine behaviour wearing a
+title's coat. So it lives in `journey.js`, and the title's contribution is the
+two extra fields on the gate:
+
+```js
+{ from: VIOLET_CITY, to: ROUTE_32, event: 0x2d,
+  needs: 'the Egg from Elm’s aide', at: VIOLET_POKECENTER,
+  tile: [4, 3], errand: 'talkToOpen' }
+```
+
+which is the same test the rest of this section applies, run in the other
+direction: *could a second cartridge declare this and get the behaviour free?*
+Here the answer turned out to be yes, so the code moved down a layer.
+
+`tile` sits in the gate rather than in `places` because that makes the whole
+claim one entry — **the thing that sets this event stands on this tile on this
+map** — and `check-app gates` checks it whole, out of the ROM: the object at
+(4,3) in `VioletPokecenter1F` is `VioletPokecenter1F_ElmsAideScript`, whose
+`.AskTakeEgg` is the only thing in the cartridge that sets `$2d`. Split across
+two tables it could only ever have been checked in halves.
+
+**And the pilot answers a yes-or-no**, which the pass before this refused to
+let it do. That refusal read *a yes-or-no prompt* as *a decision that is
+yours*, and they are different things: this app has driven yes-or-no boxes
+since it could shop — `buyFromClerk` confirms a purchase, `saveGame` confirms a
+save. What it declines to decide is which starter you want, because that is a
+choice with no right answer. "Do me a favour?" has one.
+
+The evidence, as everywhere else here, is the game's own record rather than the
+screen: `hasEvent($2d)`, not `answerYes` having returned true. An aide who says
+yes and hands over nothing must not read as success.
 
 The class is *procedure*. Knowing that Elm's machine is read by facing it, or
 that the nurse's question defaults to yes, is not something a table can hold —
@@ -2885,7 +2925,7 @@ the bag" rather than "did we gain any".
 
 ## 8a. Finding the Centers and the Marts in the cartridge
 
-<!-- covers: gen2/world.js gen2/journey.js @ 4bd9a3383e6f -->
+<!-- covers: gen2/world.js gen2/journey.js @ 8c079a8f229f -->
 
 The last thing in this app that had to be written out by hand. A title said
 where the Centers and the Marts were, so the pilot healed in the two towns
@@ -3037,7 +3077,7 @@ go](#8c-naming-a-city-is-a-feature).
 
 ## 8c. Naming a city is a feature
 
-<!-- covers: titles/crystal.js gen2/world.js @ 97a558f86aad -->
+<!-- covers: titles/crystal.js gen2/world.js @ c1ec58904560 -->
 
 The map graph has always reached most of Johto. A flood over its exits from
 Route 31 finds sixty-odd maps in five legs — and every feature in this app was
@@ -3121,7 +3161,7 @@ by, which is the only leg it can measure.
 
 ## 8d. A route the game itself refuses
 
-<!-- covers: gen2/journey.js gen2/state.js @ e6a03cbd0a17 -->
+<!-- covers: gen2/journey.js gen2/state.js @ 646dae7eeb8c -->
 
 The pass before this one taught the walk to *quote* the man who turns it back.
 This is the pilot doing something about it.
@@ -3228,7 +3268,7 @@ counting bytes reads a full case as one.
 
 ## 8e. Fighting everybody here
 
-<!-- covers: gen2/journey.js @ af3c335f728f -->
+<!-- covers: gen2/journey.js @ 72a1f3db22ab -->
 
 The primitive a Gym needs. The pilot has been stopped on Route 32 for three
 passes by a man who wants Falkner beaten first, and beating Falkner means
@@ -3329,7 +3369,7 @@ costs however long it takes somebody to notice their money is gone.
 
 ## 8f. Going and winning a badge
 
-<!-- covers: gen2/journey.js gen2/state.js titles/crystal.js @ 7c1be115aa59 -->
+<!-- covers: gen2/journey.js gen2/state.js titles/crystal.js @ 7acb5701bb42 -->
 
 The pilot has been turned back from Route 32 since the pass it learned to find
 Pokémon Centers. `reopen` throws away every written-off road the moment a badge
@@ -3412,7 +3452,7 @@ everybody is a heal whatever it says about itself.
 
 ## 8g. The tiles that run a script, and saying hello
 
-<!-- covers: gen2/world.js gen2/journey.js @ 4bd9a3383e6f -->
+<!-- covers: gen2/world.js gen2/journey.js @ 8c079a8f229f -->
 
 Four passes of machinery pointed at one sentence a man says, and the reader that
 made it diagnosable is twelve lines.
@@ -3489,7 +3529,7 @@ This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ 7244923e8198 -->
+<!-- covers: app/main.js index.html @ c4996115e291 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -4038,7 +4078,7 @@ seconds by a page whose loop was supposedly running.
 
 ### One thing at a time
 
-<!-- covers: app/main.js @ db122426d416 -->
+<!-- covers: app/main.js @ 530e73f1bfbb -->
 
 One Game Boy, one joypad, one canvas — so a great deal of this app is about
 making sure two things are never driving them at once. There are three claims,
@@ -4180,7 +4220,7 @@ before a step is taken, so a stopped walk does not move at all.
 
 ### Reading a gym out of the cartridge
 
-<!-- covers: titles/crystal.js @ 089e4a1e5830 -->
+<!-- covers: titles/crystal.js @ 5cb1b3d95800 -->
 
 A gym declaration is five hand-written facts:
 
@@ -4261,7 +4301,7 @@ reads all seven out of both files and compares them, which is the repair for
 
 ### Gates: asking the cartridge what it wants
 
-<!-- covers: gen2/state.js gen2/journey.js titles/crystal.js @ 7c1be115aa59 -->
+<!-- covers: gen2/state.js gen2/journey.js titles/crystal.js @ 7acb5701bb42 -->
 
 Two kinds of closed road, and the difference is everything:
 
@@ -4370,7 +4410,7 @@ a conversation.
 
 ### Running the list
 
-<!-- covers: app/rows.js app/main.js @ 45e7ff811e3b -->
+<!-- covers: app/rows.js app/main.js @ c330dbf7a622 -->
 
 The app has spent forty passes learning to answer one question — *what can the
 pilot do here, and which of those is worth most?* — and twenty showing the
@@ -4467,7 +4507,7 @@ to deposit your last Pokémon.
 
 ### The settings and the save card
 
-<!-- covers: index.html app/main.js @ 7244923e8198 -->
+<!-- covers: index.html app/main.js @ c4996115e291 -->
 
 The pilot's own list got a glyph column, shorter names and a slot to fill in
 v165. These two cards did not, and reading them found that they had a different
@@ -5095,7 +5135,7 @@ they have been installed.
 
 ### Watching the other device's screen
 
-<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ f23eb7ce5ac5 -->
+<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ 6c00d0086877 -->
 
 One device shows its screen; the other watches it, and plays it if the first
 one says so. The picture goes straight between them over WebRTC and never
@@ -5708,7 +5748,7 @@ about that code did not.
 
 ### The other checks
 
-<!-- covers: tools/check-app @ 1c0161ca1698 -->
+<!-- covers: tools/check-app @ bed1b9d04d99 -->
 
 `tools/check-app` runs everything that can be verified without a ROM:
 
@@ -5741,7 +5781,7 @@ tools/check-app contrast     # or one group
 | `deadcss` | no single-class rule is overridden on every element that could carry it |
 | `labels` | every job row is named after its own key, which is the word the runner prints |
 | `counts` | every number in the prose the repository can compute is right — `tools/renumber` writes them in |
-| `gates` | a declared gate names an event the ROM sets — skipped without a cartridge |
+| `gates` | a declared errand names a real method; and, with a cartridge, its event is one the ROM sets and its tile holds whoever sets it |
 | `gyms` | a declared gym's leader, tile, kind and badge bit are what the cartridge says — skipped without a cartridge |
 | `romlayout` | `tools/rom-events` and `gen2/world.js` agree about the map-events strides |
 
