@@ -3946,12 +3946,18 @@ and they are three different pieces of news:
 | *the game did not advance at all* | the playtime did not move either, so this is not about the clock |
 
 **The bound is in game hours rather than in wall time or in iterations, and
-that is what makes reaching it mean something.** Every boundary in Gen 2 is
-within twenty-four — the longest block is the ten hours of night — so
-twenty-six is that with room, and a clock that could be hurried along would
-have moved by then. A bound in iterations would have got shorter every time the
-chunk size changed, which is a patience that depends on an implementation
-detail.
+that is what makes reaching it mean something.** A bound in iterations would
+have got shorter every time the chunk size changed, which is a patience that
+depends on an implementation detail.
+
+It started as a blanket twenty-six — every boundary in Gen 2 is within
+twenty-four — and the estimate is what showed that up: twenty-six game hours is
+forty-three minutes of a laptop and **an hour and three quarters of a phone**,
+spent to learn something the cartridge's own table already bounds at ten. So
+the bound is now the longest wait that table allows from where the clock is,
+plus two hours of margin. Twenty-six survives as the fallback for a cartridge
+that does not name the table, which is the same cartridge whose row has no Skip
+and no estimate on its Wait.
 
 The playtime is the other half and the reason `state.js` now reads it. Both
 failures end at the bound and both report failure; their remedies are *come

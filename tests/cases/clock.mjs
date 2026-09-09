@@ -267,3 +267,31 @@ test('a cartridge that keeps its clock elsewhere is not edited by guesswork',
   const noBlock = new GameState(blindTo(sym, 'sGameData'));
   t.eq(noBlock.advanceClock(battery(), 8), null, 'and with no saved block either');
 });
+
+test('the bound is the longest wait the cartridge allows, not a blanket one',
+     async (t) => {
+  // From the day the next night is at most eight hours off, so spending
+  // twenty-six to find out the clock is not moving costs three times what the
+  // question is worth — and most of that on a phone's battery.
+  const DAYPARTS = {
+    0: { from: 4, to: 9, hours: 6 },
+    1: { from: 10, to: 17, hours: 8 },
+    2: { from: 18, to: 3, hours: 10 },
+  };
+  const w = waiter({ hour: () => DAY });
+  w.tasks.rom = fakeRom({ hours: DAYPARTS });
+  await w.tasks.waitForHour(NIGHT);
+  t.eq(w.frames(), (8 + 2) * 3600 * 60,
+       'eight hours at the outside, and two of margin');
+});
+
+test('and a cartridge that will not say when night begins gets the blanket one',
+     async (t) => {
+  // The same cartridge whose row has no Skip and no estimate: with no table
+  // there is no worst case to compute, so the bound goes back to covering any
+  // boundary in the game.
+  const w = waiter({ hour: () => DAY });
+  w.tasks.rom = fakeRom({});
+  await w.tasks.waitForHour(NIGHT);
+  t.eq(w.frames(), 26 * 3600 * 60, 'twenty-six hours, which covers all of them');
+});
