@@ -599,7 +599,7 @@ and in `bootstrap.js`, with nothing able to notice if they drifted.
 
 ### `romdata.js` — what the cartridge knows
 
-<!-- covers: gen2/romdata.js @ a665f1552888 -->
+<!-- covers: gen2/romdata.js @ 65bbde29d963 -->
 
 Species names, item names, move names, wild-encounter tables, move power and
 the type chart. All read out of the ROM, not shipped as a copy, so they cannot
@@ -1584,7 +1584,7 @@ mechanism's evidence spans two runs rather than one.
 
 ### The bigger number is not the harder hit
 
-<!-- covers: gen2/romdata.js gen2/engine.js gen2/battle.js @ 7a033b552b73 -->
+<!-- covers: gen2/romdata.js gen2/engine.js gen2/battle.js @ 8a7e06d82913 -->
 
 For twenty-three passes the pilot ranked its moves by one number: the `power`
 byte out of the cartridge's move table. `romdata.move()` had been returning the
@@ -2081,7 +2081,7 @@ fainted.
 
 ## 7. Catching something
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ 5647eef15933 -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ 9aab0212e7de -->
 
 Catching is the most involved loop, because a Poké Ball's odds turn on how much
 HP is left. Throwing at a full-health target is mostly throwing balls away.
@@ -3329,7 +3329,7 @@ after](#8d-a-route-the-game-itself-refuses).
 
 ## 8b. Asking the cartridge what its places are called
 
-<!-- covers: gen2/romdata.js gen2/world.js @ 87e7f91ded13 -->
+<!-- covers: gen2/romdata.js gen2/world.js @ f3344dd0ee4b -->
 
 The one table that **retires** hand-written data rather than adding to it. A map
 used to be called whatever the title profile said, and everything else was
@@ -4558,7 +4558,7 @@ before a step is taken, so a stopped walk does not move at all.
 
 ### What is behind the Gym door, before you open it
 
-<!-- covers: gen2/romdata.js gen2/engine.js app/rows.js @ 58ee1bfe0212 -->
+<!-- covers: gen2/romdata.js gen2/engine.js app/rows.js @ 4e9a78d71b11 -->
 
 The Gym row could say where the Gym is and who is in it. **Whether it is worth
 going** is two facts the cartridge has had all along, and neither of them

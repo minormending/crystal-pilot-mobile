@@ -339,11 +339,22 @@ export class RomData {
     // below the table itself is not a pointer table.
     if (!(first > addr)) return (this._trainers = null);
     const count = (first - addr) >> 1;
-    const ptr = [];
-    for (let i = 0; i < count; i++) ptr.push(word(addr + i * 2));
+    // Built from the length rather than counted up to it: reading one
+    // pointer too many puts the first trainer's *name* in the list as a
+    // word, which is a plausible address and bounds the last class with
+    // whatever it happens to be. There is no comparison here to get wrong
+    // now, which is the better answer than a test for one.
+    const ptr = Array.from({ length: count }, (_, i) => word(addr + i * 2));
     const out = new Map();
     for (let g = 0; g < count; g++) {
-      const stop = g + 1 < count ? ptr[g + 1] : null;
+      // The next class's pointer, or nothing for the last one -- which is
+      // deliberately unbounded and reads until the bytes stop being a
+      // trainer. Written as "is there a next pointer" rather than "is g+1
+      // below the count" because the two are the same thing and only one of
+      // them has an off-by-one to get wrong; `tools/mutate` widened the
+      // comparison and nothing could fail either way, which is a survivor
+      // that is really a spare decision.
+      const stop = ptr[g + 1] === undefined ? null : ptr[g + 1];
       let at = ptr[g];
       for (let guard = 0; guard < 64; guard++) {
         if (stop !== null && at >= stop) break;

@@ -219,6 +219,9 @@ const TYPED = {
   75: { power: 55, type: GRASS, pp: 25 },             // RAZOR LEAF
   84: { power: 40, type: ELECTRIC, pp: 30 },          // THUNDERSHOCK
   43: { power: 0, type: N, effect: 19, pp: 30 },      // LEER
+  // Stores power 1 and ends battles, which is why every reader here asks
+  // whether the power is above *zero* rather than above one.
+  32: { power: 1, type: N, effect: 38, pp: 5 },       // HORN DRILL
 };
 /** A real RomData reading that chart, from bytes. */
 const charted = (chart = CHART) => romReading(TYPED, { chart });
@@ -600,4 +603,94 @@ test('an outlook nobody can price is not an outlook', async (t) => {
     chart: CHART, trainers: trainerBytes(LEADERS), classes: CLASS_NAMES });
   t.eq(blind.outlook(mine, blind.trainer('BUGSY').party), null,
        'and not without knowing what they are');
+});
+
+test('two trainers in one class are read one after the other', async (t) => {
+  // The `$ff` that ends a party is **one** byte. Step two and the next
+  // trainer's name starts one byte in, which decodes to something and
+  // terminates somewhere — a table of plausible nonsense rather than an
+  // error.
+  const rom = withTrainers([[['JOEY', 1, [[4, 19]]], ['MIKEY', 1, [[6, 16]]]]]);
+  t.eq(rom.trainerIndex().size, 2, 'both of them');
+  t.eq(rom.trainer('MIKEY').party[0].level, 6, 'and the second is itself');
+  t.eq(rom.trainer('MIKEY').group, 1, 'in the same class as the first');
+});
+
+test('a class is bounded by the next pointer, and the last one by the bytes',
+     async (t) => {
+  // Two failures with one shape. Read one pointer too many and the last
+  // class gets a bound out of whatever follows the table; read one too few
+  // and the second-to-last class runs into the last.
+  const rom = withTrainers([[['JOEY', 1, [[4, 19]]]],
+                            [['MIKEY', 1, [[6, 16]]]],
+                            [['SILVER', 1, [[5, 158]]]]]);
+  t.eq(rom.trainer('JOEY').group, 1, 'the first');
+  t.eq(rom.trainer('MIKEY').group, 2, 'the middle one');
+  t.eq(rom.trainer('SILVER').group, 3, 'and the last');
+  t.eq(rom.trainerIndex().size, 3, 'three, not one class holding three');
+});
+
+test('a name that runs to its bound without terminating is not a name',
+     async (t) => {
+  // Fourteen bytes, which is a bound rather than a size: the longest class
+  // name on this cartridge is twelve characters and a trainer's own is
+  // shorter. Reaching the bound means the bytes are not a name table.
+  const long = 'A'.repeat(20);
+  const rom = withTrainers([[[long, 1, [[4, 19]]]]]);
+  t.eq(rom.trainerIndex().size, 0, 'nothing was read');
+});
+
+test('a move with no PP left cannot hurt anything', async (t) => {
+  // `outlook` asks the same question `nothingLands` does, and it has to ask
+  // it the same way: a spent move is not an answer. Read as "at or above
+  // zero" and a party of empty movesets looks able to fight a gym.
+  const rom = withTrainers();
+  const spent = [{ species: 155, level: 20, hp: 20, maxHp: 20,
+                   moves: [52, 0, 0, 0], pp: [0, 0, 0, 0] }];
+  t.eq(rom.outlook(spent, rom.trainer('BUGSY').party).helpless.length, 3,
+       'nothing it carries can be used, so nothing it carries can land');
+});
+
+test('a Pokémon on one hit point is still your best level', async (t) => {
+  // `best` is what you can send out. One hit point is still standing, and
+  // reading the bound as above one hides the only Pokémon you have.
+  const rom = withTrainers();
+  const nearly = [{ species: 155, level: 12, hp: 1, maxHp: 20,
+                    moves: [52, 0, 0, 0], pp: [25, 0, 0, 0] }];
+  t.eq(rom.outlook(nearly, rom.trainer('BUGSY').party).best, 12,
+       'twelve, not zero');
+});
+
+test('a move that computes its damage still counts as a way to hurt them',
+     async (t) => {
+  // HORN DRILL stores power 1 and ends battles, so `outlook` asks whether the
+  // power is above zero for the same reason every other reader here does.
+  const rom = romReading(TYPED, {
+    chart: CHART, trainers: trainerBytes(LEADERS), classes: CLASS_NAMES,
+    species: { 11: [BUG, BUG], 14: [BUG, 0x03], 123: [BUG, 0x02] },
+  });
+  const drill = [{ species: 31, level: 20, hp: 20, maxHp: 20,
+                   moves: [32, 0, 0, 0], pp: [5, 0, 0, 0] }];
+  t.eq(rom.outlook(drill, rom.trainer('BUGSY').party).helpless, [],
+       'a power-1 move is a way to hurt them');
+});
+
+test('the last species in the Pokédex has types like every other', async (t) => {
+  // 251 is CELEBI, and the bound is *above* the count rather than at it —
+  // read the other way and the last entry in every table this app touches is
+  // unreadable.
+  const rom = romReading(TYPED, { chart: CHART, species: { 251: [0x18, GRASS] } });
+  t.eq(rom.speciesTypes(251), [0x18, GRASS], 'CELEBI is PSYCHIC/GRASS');
+  t.eq(rom.speciesTypes(252), null, 'and 252 is nothing');
+});
+
+test('fourteen bytes is a name and fifteen is not', async (t) => {
+  // A bound, not a size. The longest class name on this cartridge is twelve
+  // characters and a trainer's own is shorter, so the boundary is slack — and
+  // it is the boundary that says "these bytes are not a name table" when a
+  // symbol file points somewhere else.
+  t.eq(withTrainers([[['A'.repeat(14), 1, [[4, 19]]]]]).trainerIndex().size, 1,
+       'fourteen is inside it');
+  t.eq(withTrainers([[['A'.repeat(15), 1, [[4, 19]]]]]).trainerIndex().size, 0,
+       'and fifteen is past it');
 });
