@@ -119,6 +119,16 @@ def mutations(root):
         # table came to claim 143 while 576 ran.
         "counts": lambda: edit("tests/cases/input.mjs", append(
             "\ntest('probe', async (t) => { t.true(true); });\n")),
+        # The leader moved one tile, which is what a hand-measured
+        # coordinate off by one looks like -- and it would send the pilot to
+        # press A at an empty floor.
+        "gyms": lambda: edit("titles/crystal.js", sub(
+            "leaderAt: [5, 7], badge: 1", "leaderAt: [5, 8], badge: 1")),
+        # One stride moved in the tool, which is what happened by hand and
+        # cost an hour of confident nonsense.
+        "romlayout": lambda: edit("tools/rom-events", sub(
+            "WARP_BYTES, COORD_BYTES, BG_BYTES, OBJECT_BYTES = 5, 8, 5, 13",
+            "WARP_BYTES, COORD_BYTES, BG_BYTES, OBJECT_BYTES = 5, 5, 5, 13")),
         # The event number changed to one no script sets, which is the whole
         # content of a gate's claim -- and a wrong bit reads exactly like a bit
         # that is not set yet.

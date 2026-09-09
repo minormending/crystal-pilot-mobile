@@ -1482,6 +1482,111 @@ def check_gates():
               f"{len(named)} place(s)")
 
 
+# Every constant both readers of the cartridge's map tables have to agree
+# about. Three of them were copied by hand into `tools/rom-events` and three
+# were wrong, which is the argument for the check rather than for more care.
+ROM_LAYOUT_NAMES = ("WARP_BYTES", "COORD_BYTES", "BG_BYTES", "OBJECT_BYTES",
+                    "MAP_BYTES", "MAP_ATTRIBUTES_BANK", "MAP_ATTRIBUTES")
+_NAMES = "|".join(ROM_LAYOUT_NAMES)
+ROM_LAYOUT = re.compile(rf"^({_NAMES})\s*=\s*(\d+)", re.M)
+ROM_LAYOUT_JS = re.compile(rf"\b({_NAMES})\s*=\s*(\d+)")
+# Both files write some of them as a tuple on one line.
+ROM_LAYOUT_TUPLE = re.compile(rf"^((?:{_NAMES})(?:,\s*(?:{_NAMES}))+)"
+                              r"\s*=\s*([\d,\s]+)$", re.M)
+
+
+def check_rom_layout():
+    """`tools/rom-events` and `gen2/world.js` agree about the map-events block.
+
+    Both read the same structure out of the cartridge -- the app for warps and
+    coord events at run time, the tool for objects when somebody asks where a
+    gym leader stands -- so the strides live in two places, and two copies of a
+    structure is a defect waiting for its moment.
+
+    **This check exists because the moment came immediately.** The tool's
+    constants were written out by hand and `COORD_BYTES` was 5 where the app
+    says 8. Every map with a coord event on it parsed into drift: Cianwood City
+    produced objects of "type 9" whose script pointers landed three bytes
+    inside a trainer's `.AskNumber2` label. And the two maps the layout was
+    derived from -- Violet Gym and Azalea Gym -- have no coord events, so they
+    were the two maps it could not fail on.
+
+    Reading the numbers out of both files and comparing is four lines. Deriving
+    a layout from two examples and believing it cost an hour.
+    """
+    def numbers(text, pattern):
+        found = dict(pattern.findall(text))
+        for packed in ROM_LAYOUT_TUPLE.finditer(text):
+            names = [n.strip() for n in packed.group(1).split(",")]
+            values = [v.strip() for v in packed.group(2).split(",") if v.strip()]
+            found.update(dict(zip(names, values)))
+        return found
+
+    js = (ROOT / "gen2" / "world.js").read_text()
+    want = numbers(js, ROM_LAYOUT_JS)
+    if len(want) < len(ROM_LAYOUT_NAMES):
+        missing = sorted(set(ROM_LAYOUT_NAMES) - set(want))
+        return fail(f"gen2/world.js does not define {', '.join(missing)}")
+    got = numbers((HERE / "rom-events").read_text(), ROM_LAYOUT)
+    problems = []
+    for name, value in sorted(want.items()):
+        if name not in got:
+            problems.append(f"tools/rom-events  does not define {name}")
+        elif got[name] != value:
+            problems.append(f"tools/rom-events  {name} is {got[name]}, "
+                            f"and gen2/world.js says {value}")
+    for p in problems:
+        print(f"        {p}")
+    return fail(f"{len(problems)} stride(s) the two readers disagree about") \
+        if problems else ok(f"both readers of the map-events block agree "
+                            f"about all {len(want)} strides")
+
+
+def check_gyms():
+    """Every gym a title declares is where the cartridge says it is.
+
+    Skipped without a cartridge, like `moves` and `gates`.
+
+    A gym declaration is five hand-written facts -- the town, the room, the
+    door, where the leader stands, and which badge bit says it is won -- and
+    every one of them used to be obtainable only by walking into the room and
+    reading work RAM. Getting `leaderAt` wrong means the pilot walks to an
+    empty tile, presses A at nothing, and reports that the leader would not
+    fight; getting `badge` wrong means a gym that is beaten goes on being
+    offered for ever.
+
+    All five are in the ROM, so all five are checked:
+
+    * the leader's tile has an object on it;
+    * that object's *script pointer* resolves to a symbol containing the
+      leader's name, which is a name rather than an inference --
+      `AzaleaGymBugsyScript`;
+    * it is a **script** object rather than a trainer, because a leader is
+      talked to and not walked into. This is the fact that cost a pass: Falkner
+      is type 0 and `clearHere`, which fights what the map calls a trainer,
+      could never have beaten him;
+    * and the badge bit points at `wJohtoBadges` in the cartridge's own
+      `EngineFlags` table -- bit 0 is engine flag `$1b`, which is the flag
+      Route 32's blocker checks under the name `.DontHaveZephyrBadge`.
+
+    The bridge from `key(group, number)` to a symbol name is the attributes
+    pointer in `MapGroupPointers`, so there is no hand-written table of map
+    names to drift. The reading lives in `tools/rom-events --gyms`.
+    """
+    if not (ROOT / "dev" / "pokecrystal.gbc").exists():
+        return ok("no cartridge here, so the declared gyms are not checked")
+    out = subprocess.run([sys.executable, str(HERE / "rom-events"), "--gyms"],
+                         capture_output=True, text=True)
+    bad = [l for l in out.stdout.splitlines() if "!!" in l or "??" in l]
+    for l in bad:
+        print(f"        {l.strip()}")
+    if out.returncode or bad:
+        return fail(f"{len(bad) or 1} gym(s) the cartridge does not agree with")
+    found = [l for l in out.stdout.splitlines() if l.startswith("  at (")]
+    return ok(f"all {len(found)} declared gym(s) match the cartridge, "
+              f"leader and badge bit")
+
+
 CHECKS = {
     "syntax": check_syntax,
     "layers": check_layers,
@@ -1506,6 +1611,8 @@ CHECKS = {
     "labels": check_labels,
     "counts": check_counts,
     "gates": check_gates,
+    "romlayout": check_rom_layout,
+    "gyms": check_gyms,
 }
 
 

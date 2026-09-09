@@ -16,8 +16,27 @@ So it is a tool.
         fact. Coincidental byte matches are named too; the symbol file is what
         tells them from scripts.
 
+    tools/rom-events --gyms
+        every gym a title declares, against the cartridge: who stands on the
+        leader's tile, whether that object is one you talk to, and whether the
+        badge bit is a badge
+
+    tools/rom-events --verify
+        check the object layout against all 388 maps: the type field and the
+        script's own name have to agree about which objects are trainers
+
+    tools/rom-events --objects AzaleaGym
+        the map's warps and objects, with each object's script named -- which
+        is where a gym leader stands, answered without a running game
+
+    tools/rom-events --map Route32
+        every event this map's scripts ask about, and who sets each -- which
+        is how a gate is found without decoding a whole scene
+
     tools/rom-events --script Route32CooltrainerMContinueScene
-        the bytes, with the branches and the text pointers resolved to names
+        the bytes, with the branches and the text pointers resolved to names.
+        Stops when the command table runs out, which real scenes reach fast:
+        use --map for those.
 
     tools/rom-events --text Route32CooltrainerMText_AideIsWaiting
         what it says, in the game's own words
@@ -110,13 +129,29 @@ class Cart:
         self.at.sort()
         self.offs = [o for o, _ in self.at]
 
-    def label(self, off):
-        """The nearest symbol at or before a file offset, with the distance."""
+    # How far past a symbol a byte can be and still be described by it. A
+    # branch target inside a script is usually an unnamed local a few bytes in;
+    # something two hundred bytes past the last symbol is not *in* that symbol,
+    # and saying so was actively misleading -- the first survey of a real scene
+    # reported a `scall` landing in `EcruteakCityLass2Text_ReleasedBeasts+13`,
+    # which is a text string in the same bank and nothing to do with it.
+    NEAR = 64
+
+    def label(self, off, bound=None):
+        """The nearest symbol at or before a file offset, with the distance.
+
+        `bound` is how far past a symbol still counts as inside it; the default
+        is generous for a script and honest about a pointer.
+        """
         i = bisect.bisect_right(self.offs, off) - 1
         if i < 0:
             return f'${off:06x}'
         name, base = self.at[i][1], self.offs[i]
-        return name if base == off else f'{name}+{off - base}'
+        if base == off:
+            return name
+        if (bound if bound is not None else self.NEAR) < off - base:
+            return f'${off:06x}'
+        return f'{name}+{off - base}'
 
     def near(self, bank, addr):
         """A label for a pointer inside a bank, for resolving a branch."""
@@ -199,6 +234,310 @@ class Cart:
             start = found + 1
 
 
+CHECKEVENT = 0x31
+
+# A map's `_MapEvents` block, as the cartridge lays it out. **Derived, not
+# looked up** -- and the derivation is why it can be trusted: Violet Gym's
+# fourth field distinguishes two objects (00) from two others (02), which is
+# the app's own `objectTypes` {script: 0, trainer: 2}; its ninth and tenth
+# bytes resolve to `VioletGymFalknerScript`, `TrainerBirdKeeperRod`,
+# `TrainerBirdKeeperAbe` and `VioletGymGuideScript`, which is four for four;
+# and reading fields 1 and 2 as y+4 and x+4 puts Falkner at (5,1) and Abe at
+# (2,10) -- the two positions this repository had already measured out of work
+# RAM, a pass and a cartridge apart.
+#
+# Four independent agreements is what makes this a reading rather than a guess.
+# `gen2/world.js` decodes the first two sections of the same block for coord
+# events; this is the rest of it.
+# **These are the app's numbers, and `check-app romlayout` holds them to it.**
+# They were written out here by hand and one of them was wrong: coord events
+# are eight bytes and this said five, so every map with a coord event on it
+# parsed into drift -- Cianwood City produced objects of "type 9" whose script
+# pointers landed three bytes inside a trainer's `.AskNumber2` label. Violet
+# Gym and Azalea Gym have no coord events, so the two maps this was derived
+# from were the two it could not fail on.
+#
+# `gen2/world.js` holds the same layout because the app reads warps and coord
+# events at run time. Two copies of a structure is the defect; the check is the
+# repair.
+FILLER = 2
+WARP_BYTES, COORD_BYTES, BG_BYTES, OBJECT_BYTES = 5, 8, 5, 13
+OBJ_SPRITE, OBJ_Y, OBJ_X, OBJ_SCRIPT = 0, 1, 2, 9
+# **The type is the low nibble of byte seven, and byte four is not the type.**
+# Worth writing down because byte four *is* the type in Violet Gym -- 00, 02,
+# 02, 00 against Falkner, two Bird Keepers and the guide, which is four for
+# four and completely wrong. Azalea Gym has byte four at 00 for all seven of
+# its objects, five of which are trainers.
+#
+# Byte seven reads 90 92 92 80 in Violet and a0 b2 b2 b2 82 82 80 in Azalea:
+# low nibble 0 wherever the script symbol is a leader or a guide, 2 wherever it
+# is named `Trainer...`. Eleven objects across two maps, and `--verify` checks
+# the same rule against all 388 maps in the game rather than these two.
+OBJ_TYPE, OBJ_TYPE_MASK = 7, 0x0f
+# The cartridge stores an object's coordinates four higher than the map's own.
+OBJ_OFFSET = 4
+OBJ_KINDS = {0: 'script', 1: 'item ball', 2: 'trainer'}
+
+
+def map_objects(cart, name):
+    """A map's warps and objects, from the ROM, with their scripts named.
+
+    Which answers the question a gym declaration asks -- *where does the
+    leader stand?* -- without a running game. Better than without: the object's
+    script pointer resolves to a symbol, so the leader is *named* rather than
+    inferred from a position. `AzaleaGymBugsyScript` is not a heuristic.
+    """
+    key = f'{name}_MapEvents'
+    if key not in cart.by_name:
+        return [f'{name}: no _MapEvents in the symbol file']
+    bank, addr = cart.by_name[key]
+    rd = lambda i: cart.rom[offset(bank, addr + i)]
+    at = FILLER
+    out = [f'{name}:']
+    warps = rd(at); at += 1
+    # **Warps store their coordinates as-is; objects store them four higher.**
+    # Two conventions in one block, and checking rather than assuming is what
+    # caught it: New Bark's first warp reads (6,3) to map 24.5, which is
+    # exactly the `labDoor: [6, 3]` and `ELMS_LAB = key(24, 5)` this repository
+    # measured by hand a long time ago. Subtracting four there gives y = -1.
+    for i in range(warps):
+        b = at + i * WARP_BYTES
+        out.append(f'  warp {i + 1}: ({rd(b + 1)},{rd(b)}) '
+                   f'to {rd(b + 3)}.{rd(b + 4)} (its warp {rd(b + 2)})')
+    at += warps * WARP_BYTES
+    for label, size in (('coord', COORD_BYTES), ('bg', BG_BYTES)):
+        n = rd(at); at += 1 + n * size
+        out.append(f'  {n} {label} event(s)')
+    objects = rd(at); at += 1
+    for i in range(objects):
+        b = at + i * OBJECT_BYTES
+        ptr = rd(b + OBJ_SCRIPT) | rd(b + OBJ_SCRIPT + 1) << 8
+        raw = rd(b + OBJ_TYPE) & OBJ_TYPE_MASK
+        kind = OBJ_KINDS.get(raw, f'type {raw}')
+        out.append(f'  object {i + 1}: '
+                   f'({rd(b + OBJ_X) - OBJ_OFFSET},{rd(b + OBJ_Y) - OBJ_OFFSET})'
+                   f'  {kind:9}  sprite {rd(b + OBJ_SPRITE):3}  '
+                   f'{cart.near(bank, ptr)}')
+    return out
+
+
+def gym_objects(cart, name):
+    """{script symbol: (x, y, kind)} for one map, for checking a declaration."""
+    found = {}
+    key = f'{name}_MapEvents'
+    if key not in cart.by_name:
+        return found
+    bank, addr = cart.by_name[key]
+    rd = lambda i: cart.rom[offset(bank, addr + i)]
+    at = FILLER
+    warps = rd(at); at += 1 + warps * WARP_BYTES
+    for size in (COORD_BYTES, BG_BYTES):
+        n = rd(at); at += 1 + n * size
+    objects = rd(at); at += 1
+    for i in range(objects):
+        b = at + i * OBJECT_BYTES
+        ptr = rd(b + OBJ_SCRIPT) | rd(b + OBJ_SCRIPT + 1) << 8
+        found[cart.near(bank, ptr)] = (rd(b + OBJ_X) - OBJ_OFFSET,
+                                       rd(b + OBJ_Y) - OBJ_OFFSET,
+                                       rd(b + OBJ_TYPE) & OBJ_TYPE_MASK)
+    return found
+
+
+def map_events(cart, name):
+    """Every event a map's own scripts ask about, and who sets each.
+
+    **The survey that does not need a decoder.** Deciding what a road wants
+    means finding the event its blocker checks, and decoding a whole scene to
+    get there is a losing game: the full command set is over a hundred
+    instructions with a dozen argument shapes, and the first real scene this
+    tool met used seven it did not know. Reading three bytes at a time does not
+    need any of that.
+
+    The region is exact rather than guessed. Every map in the game has both a
+    `<Map>_MapScripts` and a `<Map>_MapEvents` symbol -- 388 of each -- and the
+    scripts are laid out between them.
+
+    False positives are possible, since `31 xx xx` also occurs in whatever data
+    shares the region, and the cross-reference is what sorts them out: an event
+    nothing sets is either a read of the game's own bookkeeping or a
+    coincidence, and either way not a gate. That is the same shape of answer
+    `--set` gives, and for the same reason.
+    """
+    first, last = f'{name}_MapScripts', f'{name}_MapEvents'
+    if first not in cart.by_name or last not in cart.by_name:
+        return [f'{name}: no _MapScripts/_MapEvents pair in the symbol file']
+    start = offset(*cart.by_name[first])
+    end = offset(*cart.by_name[last])
+    if end <= start:
+        return [f'{name}: its events come before its scripts, which cannot be read']
+    out, seen = [f'{name}: {end - start} bytes of script'], {}
+    for i in range(start, end - 2):
+        if cart.rom[i] != CHECKEVENT:
+            continue
+        event = cart.rom[i + 1] | cart.rom[i + 2] << 8
+        seen.setdefault(event, []).append(i)
+    for event, wheres in sorted(seen.items()):
+        setters = [n for _, n in cart.setters(event)
+                   if not DATA_ISH.search(n)]
+        out.append(f'  checkevent ${event:04x}  at {cart.label(wheres[0])}'
+                   + (f' (+{len(wheres) - 1} more)' if len(wheres) > 1 else ''))
+        for setter in setters[:4] or ['nothing sets it — bookkeeping, or a coincidence']:
+            out.append(f'      set by {setter}')
+    return out
+
+
+MAP_EVENTS = '_MapEvents'
+# One map's row in its group's list, and where the attributes pointer sits in
+# it. The app's `world.js` reads the same table to find a map's size and its
+# events; `check-app romlayout` holds the two to each other.
+MAP_BYTES, MAP_ATTRIBUTES_BANK, MAP_ATTRIBUTES = 9, 0, 3
+
+
+def map_symbol(cart):
+    """A lookup from (group, number) to the map's own name in the symbol file.
+
+    A title declares its maps as `key(group, number)`, because that is what the
+    game puts in work RAM; the symbol file knows them as `AzaleaGym_...`. The
+    bridge is the attributes pointer: every map's row in `MapGroupPointers`
+    holds one, and there is a `<Map>_MapAttributes` symbol at that address.
+
+    Without this the checking has to be told which symbol goes with which
+    number, which is one more hand-written table to drift.
+    """
+    if 'MapGroupPointers' not in cart.by_name:
+        return lambda key: None
+    gbank, gaddr = cart.by_name['MapGroupPointers']
+    attrs = {}
+    for name, (bank, addr) in cart.by_name.items():
+        if name.endswith('_MapAttributes'):
+            attrs[(bank, addr)] = name[:-len('_MapAttributes')]
+
+    def find(key):
+        group, number = key
+        base = offset(gbank, gaddr) + (group - 1) * 2
+        listed = cart.rom[base] | cart.rom[base + 1] << 8
+        row = offset(gbank, listed) + (number - 1) * MAP_BYTES
+        bank = cart.rom[row + MAP_ATTRIBUTES_BANK]
+        addr = cart.rom[row + MAP_ATTRIBUTES] | cart.rom[row + MAP_ATTRIBUTES + 1] << 8
+        return attrs.get((bank, addr))
+    return find
+
+
+def verify(cart):
+    """Check the object layout against every map in the game.
+
+    The rule: an object whose script symbol is named `Trainer...` is a trainer,
+    and one that is not, is not. The cartridge says which in the low nibble of
+    byte seven, and the names come from a different part of the file entirely
+    -- so agreement across every map is two independent sources saying the same
+    thing several thousand times.
+
+    This is here because the first reading of that field was **wrong and looked
+    right**: byte four is the type in Violet Gym, four objects for four, and is
+    00 for all seven of Azalea Gym's, five of which are trainers. Two maps is
+    not a sample.
+    """
+    maps = sorted(n[:-len(MAP_EVENTS)] for n in cart.by_name
+                  if n.endswith(MAP_EVENTS))
+    objects = disagree = 0
+    for name in maps:
+        for script, (_, _, kind) in gym_objects(cart, name).items():
+            objects += 1
+            named = script.startswith('Trainer')
+            if named != (kind == 2):
+                disagree += 1
+                if disagree <= 10:
+                    print(f'  {name}: {script} is type {kind}')
+    print(f'{len(maps)} maps, {objects} objects, {disagree} disagreement(s) '
+          f'between the type field and the script name')
+    # Reported, not failed. The name rule is a validator with real exceptions:
+    # some trainers are *talked to* rather than seen, so `TrainerOfficerDirk`
+    # is legitimately a script object, and the Trainer House's receptionist is
+    # named `Trainer...` while being nobody to fight. Twelve of 1396 at the
+    # time of writing, every one of them explicable. What the layout is held to
+    # instead is `check-app romlayout`, which is binary and cannot drift.
+    return 0
+
+
+GYM = re.compile(r'\{\s*map:\s*(\w+),\s*inside:\s*(\w+),\s*door:\s*\[(\d+),\s*(\d+)\],'
+                 r'\s*\n?\s*leader:\s*[\'"](\w+)[\'"],\s*leaderAt:\s*\[(\d+),\s*(\d+)\],'
+                 r'\s*badge:\s*(\d+)', re.S)
+KEY = re.compile(r'const (\w+) = key\((\d+),\s*(\d+)\);')
+BADGE_FLAG_BYTES = 3
+
+
+def badge_bits(cart):
+    """{bit: engine flag} for the badge byte, out of the cartridge's own table.
+
+    `EngineFlags` is three bytes an entry -- a two-byte address and a bitmask
+    -- so the badges are the run of entries pointing at `wJohtoBadges`. The
+    Zephyr Badge is bit 0 there, which is what this app measured on a real
+    cartridge after beating Falkner, so the table and the measurement agree
+    about the one case that could be checked both ways.
+    """
+    if 'EngineFlags' not in cart.by_name or 'wJohtoBadges' not in cart.by_name:
+        return {}
+    bank, addr = cart.by_name['EngineFlags']
+    byte_at = cart.by_name['wJohtoBadges'][1]
+    out = {}
+    for i in range(0x100):
+        e = offset(bank, addr) + i * BADGE_FLAG_BYTES
+        if e + 2 >= len(cart.rom):
+            break
+        where = cart.rom[e] | cart.rom[e + 1] << 8
+        mask = cart.rom[e + 2]
+        if where == byte_at and mask and not (mask & (mask - 1)):
+            out.setdefault(mask.bit_length() - 1, i)
+    return out
+
+
+def gyms(cart, name_of=None):
+    """Every declared gym, against what the cartridge says."""
+    bad = 0
+    bits = badge_bits(cart)
+    for path in sorted((ROOT / 'titles').glob('*.js')):
+        src = path.read_text()
+        keys = {m.group(1): (int(m.group(2)), int(m.group(3)))
+                for m in KEY.finditer(src)}
+        for m in GYM.finditer(src):
+            town, room, dx, dy, leader, lx, ly, badge = m.groups()
+            print(f'{path.name}: {leader} in {room}')
+            if room not in keys or town not in keys:
+                print('  !! its maps are not `key(group, number)` constants')
+                bad += 1
+                continue
+            # The room's own name in the symbol file, found by the map it exits
+            # into and the number it sits at -- the same reasoning a person
+            # would do, done by the tool.
+            room_name = name_of(keys[room]) if name_of else None
+            if not room_name:
+                print(f'  ?? no symbol found for map {keys[room][0]}.{keys[room][1]}')
+                continue
+            objects = gym_objects(cart, room_name)
+            at = [(sym, xy) for sym, xy in objects.items()
+                  if (xy[0], xy[1]) == (int(lx), int(ly))]
+            if not at:
+                print(f'  !! nothing stands at ({lx},{ly}) in {room_name}')
+                bad += 1
+            for sym, (_, _, kind) in at:
+                named = leader.title() in sym or leader.capitalize() in sym
+                ok_kind = kind == 0
+                flag = f', engine flag ${bits[int(badge)]:02x}' \
+                    if int(badge) in bits else ''
+                print(f'  at ({lx},{ly}): {sym}  {"script" if ok_kind else f"type {kind}"}'
+                      f'  badge bit {badge}{flag}')
+                if not named:
+                    print(f'  !! that script is not named for {leader}')
+                    bad += 1
+                if not ok_kind:
+                    print('  !! a leader is talked to, so it must be a script object')
+                    bad += 1
+                if int(badge) not in bits:
+                    print(f'  !! badge bit {badge} is not a badge in EngineFlags')
+                    bad += 1
+    return bad
+
+
 def load():
     rom, sym = DEV / 'pokecrystal.gbc', DEV / 'pokecrystal.sym'
     if not rom.exists() or not sym.exists():
@@ -264,6 +603,18 @@ def main(argv):
         return 0
     if '--script' in argv:
         for line in cart.script(argv[argv.index('--script') + 1]):
+            print(line)
+        return 0
+    if '--gyms' in argv:
+        return 1 if gyms(cart, map_symbol(cart)) else 0
+    if '--verify' in argv:
+        return 1 if verify(cart) else 0
+    if '--objects' in argv:
+        for line in map_objects(cart, argv[argv.index('--objects') + 1]):
+            print(line)
+        return 0
+    if '--map' in argv:
+        for line in map_events(cart, argv[argv.index('--map') + 1]):
             print(line)
         return 0
     if '--text' in argv:
