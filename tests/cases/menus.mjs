@@ -1137,3 +1137,165 @@ test('an item gone from the bag entirely has settled', async (t) => {
   t.eq(reads, 1, 'and one look was enough — no entry is the strongest '
                  + 'evidence there is, so there is nothing to wait for');
 });
+
+// --- putting the right Pokémon in front ------------------------------------
+//
+// Gen 2 sends out slot one and asks nobody, so the party's order decides the
+// first battle of a Gym. Two things make this walk different from every other
+// one in this file: the submenu's shape is built at run time, so there is no
+// signature to match and reading the *word* is the only way; and the field
+// menu's options begin STATS, SWITCH where the battle one begins SWITCH,
+// STATS — opposite, so a press count carried over opens a stats screen.
+
+/**
+ * A pilot at the field party menu, with the four screens scripted.
+ *
+ * `saysRow` is which row the screen reports as selected, so a menu that never
+ * offers SWITCH is reachable — the option list depends on the Pokémon.
+ */
+function reordering({ party = null, swaps = true, offersSwitch = true,
+                      partyOpens = true, menuOpens = true } = {}) {
+  const sym = symbols();
+  const state = new GameState(sym);
+  const gb = new FakeGameBoy({ wram: worldRam(sym, {}) });
+  const tasks = new Tasks(gb, state, () => {}, fakeRom());
+  const mons = party || [
+    { species: 152, level: 12, hp: 20, maxHp: 24 },
+    { species: 155, level: 10, hp: 18, maxHp: 22 },
+    { species: 19, level: 8, hp: 0, maxHp: 16 },
+  ];
+  const at = { box: 'closed', row: 1, picked: null };
+  const log = [];
+  tasks.step = async () => {};
+  tasks.closeMenus = async () => { at.box = 'closed'; log.push('close'); };
+  tasks._openStartMenu = async () => { if (menuOpens) at.box = 'start'; return menuOpens; };
+  tasks.menuCursor = async () => at.row;
+  tasks.screen = async () => ({
+    arrow: () => at.box !== 'closed',
+    // What the row the cursor is on says. The START menu's rows and the
+    // submenu's are different lists, which is the whole point of asking.
+    selectedSays: (word) => {
+      if (at.box === 'start') return word === 'POKéMON' ? at.row === 2 : false;
+      if (at.box === 'sub') return word === 'SWITCH' && offersSwitch && at.row === 2;
+      return false;
+    },
+  });
+  tasks._arrowMoved = async () => { at.row++; return at.row <= 6; };
+  tasks.push = async (b) => {
+    log.push(`${b}@${at.box}`);
+    if (b === 'DOWN') { at.row++; return; }
+    if (b === 'UP') { at.row = Math.max(1, at.row - 1); return; }
+    if (b !== 'A') return;
+    if (at.box === 'start') { at.box = partyOpens ? 'party' : 'start'; at.row = 1; return; }
+    if (at.box === 'party') {
+      if (at.picked === null) { at.picked = at.row - 1; at.box = 'sub'; at.row = 1; }
+      else if (swaps) {
+        const to = at.row - 1;
+        const [mon] = mons.splice(at.picked, 1);
+        mons.splice(to, 0, mon);
+        at.box = 'closed';
+      }
+      return;
+    }
+    if (at.box === 'sub') { at.box = 'party'; at.row = at.picked + 1; }
+  };
+  tasks.snap = async () => ({
+    ...state.read(worldRam(sym, {})),
+    party: mons.map((m, i) => ({ slot: i, moves: [33, 0, 0, 0], pp: [35, 0, 0, 0], ...m })),
+    windowOpen: at.box !== 'closed',
+    menuItems: at.box === 'party' ? 4 : at.box === 'start' ? 7 : 3,
+    menuTop: at.box === 'party' ? 0 : at.box === 'start' ? 0 : 5,
+    menu: [1, at.row],
+  });
+  return { tasks, mons, log };
+}
+
+test('the second Pokémon can be moved to the front', async (t) => {
+  const { tasks, mons } = reordering();
+  const r = await tasks.leadWith(1);
+  t.true(r.ok, `moved: ${r.message}`);
+  t.eq(mons[0].species, 155, 'the Cyndaquil leads');
+  t.eq(mons[1].species, 152, 'and the Chikorita is behind it');
+});
+
+test('the evidence is the order, not the presses', async (t) => {
+  // A screen that takes every press and changes nothing is the failure this
+  // whole app is built around noticing.
+  const { tasks } = reordering({ swaps: false });
+  const r = await tasks.leadWith(1);
+  t.false(r.ok, 'it says so');
+  t.contains(r.message, 'did not change', 'and names what it looked at');
+});
+
+test('a submenu with no SWITCH row is backed out of', async (t) => {
+  // The option list is built at run time and depends on the Pokémon, so
+  // "SWITCH is the second row" is not a fact — it is a thing to look for.
+  const { tasks, log } = reordering({ offersSwitch: false });
+  const r = await tasks.leadWith(1);
+  t.false(r.ok, 'nothing was swapped');
+  t.contains(r.message, 'SWITCH', 'and it says which word it wanted');
+  t.true(log.includes('close'), 'and the screen was put back');
+});
+
+test('the front slot is never asked to move to the front', async (t) => {
+  // Four presses and a menu walk to swap the front Pokémon with itself.
+  const { tasks, log } = reordering();
+  const r = await tasks.leadWith(0);
+  t.false(r.ok, 'refused');
+  t.eq(log, [], 'without pressing anything');
+});
+
+test('a fainted Pokémon is not moved to the front', async (t) => {
+  const { tasks, log } = reordering();
+  const r = await tasks.leadWith(2);
+  t.false(r.ok, 'refused');
+  t.contains(r.message, 'fainted', 'and says why');
+  t.eq(log, [], 'having pressed nothing');
+});
+
+test('two identical Pokémon make a swap invisible, and that is a failure',
+     async (t) => {
+  // The evidence is species, level and HP of the front slot. Two the same at
+  // the same HP cannot be told apart that way — and a reorder nobody can see
+  // is not evidence of one, so it is reported rather than assumed.
+  const twin = { species: 155, level: 10, hp: 18, maxHp: 22 };
+  const { tasks, log } = reordering({ party: [{ ...twin }, { ...twin }] });
+  const r = await tasks.leadWith(1);
+  t.false(r.ok, 'refused');
+  t.contains(r.message, 'identical', 'and says why');
+  t.eq(log, [], 'having pressed nothing');
+});
+
+test('a menu that will not open, and a party that never comes up', async (t) => {
+  const shut = reordering({ menuOpens: false });
+  t.contains((await shut.tasks.leadWith(1)).message, 'would not open',
+             'the menu');
+  const empty = reordering({ partyOpens: false });
+  const r = await empty.tasks.leadWith(1);
+  t.false(r.ok, 'and a POKéMON row that opens nothing');
+  t.true(empty.log.includes('close'), 'is backed out of');
+});
+
+test('the cursor is walked towards the row, not always downwards', async (t) => {
+  // It only ever pressed DOWN, which worked everywhere it was used because
+  // every one of those screens opens at row one. The party menu's second
+  // visit is not one of those: after SWITCH the cursor sits on the Pokémon
+  // that was picked, and the answer to "move to where?" is the row *above*
+  // it. Down-only reaches that by wrapping, if the list wraps, and by running
+  // out of presses if it does not.
+  const { tasks } = pilot();
+  let row = 4;
+  const pressed = [];
+  tasks.menuCursor = async () => row;
+  tasks.push = async (b) => {
+    pressed.push(b);
+    if (b === 'DOWN') row++;
+    if (b === 'UP') row = Math.max(1, row - 1);
+  };
+  t.true(await tasks._driveMenuCursor(1, 6), 'it got there');
+  t.eq(pressed, ['UP', 'UP', 'UP'], 'three presses up, not five down and a wrap');
+
+  row = 2; pressed.length = 0;
+  t.true(await tasks._driveMenuCursor(5, 6), 'and downwards still works');
+  t.eq(pressed, ['DOWN', 'DOWN', 'DOWN'], 'the way it always did');
+});

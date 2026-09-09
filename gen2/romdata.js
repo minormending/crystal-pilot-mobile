@@ -463,6 +463,60 @@ export class RomData {
   }
 
   /**
+   * Which of your party should be in front of that one, by slot.
+   *
+   * Gen 2 sends out slot one and asks nobody, so walking into a Gym with the
+   * wrong Pokemon in front is a battle lost before the door closes -- and the
+   * pilot has known what is in there since the pass before and could only
+   * *say* so. This is the same reading turned into a slot number.
+   *
+   * Scored by adding up, for each of theirs, the hardest hit this Pokemon has
+   * against it. Summed rather than "the best against their worst", because a
+   * Gym is several battles in a row: the Pokemon that leads has to answer the
+   * *room*, not the one Pokemon it is worst against.
+   *
+   * Null when there is nothing to do -- the best one is already leading, the
+   * chart cannot be read, or nothing scores at all. Never a fainted slot: it
+   * would be sent out and refused.
+   */
+  bestLead(mine, theirs) {
+    if (!this.matchups() || !mine || !mine.length || !theirs || !theirs.length) {
+      return null;
+    }
+    const types = theirs.map((m) => this.speciesTypes(m.species));
+    if (types.some((t) => !t)) return null;
+    let best = null, top = 0;
+    for (let slot = 0; slot < mine.length; slot++) {
+      const m = mine[slot];
+      if (!m || !(m.hp > 0) || !m.moves) continue;
+      const own = m.types || this.speciesTypes(m.species);
+      let score = 0;
+      for (const against of types) {
+        let hardest = 0;
+        for (let i = 0; i < m.moves.length; i++) {
+          if (!m.moves[i] || !((m.pp || [])[i] > 0)) continue;
+          const info = this.move(m.moves[i]);
+          if (!info || info.power <= 0) continue;
+          hardest = Math.max(hardest, this.hitPower(m.moves[i], against, own));
+        }
+        score += hardest;
+      }
+      // Strictly greater, so a tie leaves the earlier slot in front. Which
+      // matters more than it looks: a switch costs four presses and a menu
+      // walk, and a rule that reshuffles the party on every tie would spend
+      // them every time the pilot looked at a Gym.
+      if (score > top) { top = score; best = slot; }
+    }
+    // `best === 0` covers the "nothing scores" case too, and that is why
+    // there is no test for a score of zero here: `score > top` starting from
+    // zero means a slot only becomes `best` by scoring above it, so a null
+    // `best` and a zero top are the same state. A third clause asking about
+    // the top would be a branch that cannot be taken -- `tools/mutate`
+    // widened it and nothing could fail either way.
+    return best === null || best === 0 ? null : best;
+  }
+
+  /**
    * A species' own two types, out of the cartridge's base stats.
    *
    * The only way to know what a party member *is*: Gen 2 does not keep a

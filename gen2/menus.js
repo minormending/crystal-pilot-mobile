@@ -47,6 +47,12 @@ const PRESS_SETTLES = 3;
 // not interactive the instant a cursor reads non-zero -- and by the second the
 // box has always been up.
 const MENU_STEP_TRIES = 3;
+// The two words this walk drives to. Written here rather than in a title,
+// which is a judgement worth stating: they are the *engine's* own menu, in
+// the same class as PACK and SAVE two screens away -- a hack that renamed
+// them has renamed the START menu, and `check-app phrases` holds all of them
+// to the cartridge either way.
+const PARTY_ROW = 'POKéMON', SWITCH_ROW = 'SWITCH';
 
 export function withMenus(Base) {
   // Named, so a stack trace says which of these a frame came from.
@@ -222,6 +228,94 @@ export function withMenus(Base) {
    * nothing here believes that. It drives to a row, presses A, and asks whether
    * the pack's own box is what appeared.
    */
+  /**
+   * Put the Pokemon in `slot` at the front of the party.
+   *
+   * **Gen 2 sends out slot one and asks nobody.** So walking into a Gym with
+   * the wrong Pokemon in front is a battle lost before the door closes -- and
+   * since the pass before, the pilot has known what is in the room and could
+   * only *say* so. Four presses fix it.
+   *
+   * Two things about the screens make this different from every other menu
+   * walk in this file.
+   *
+   * **The submenu's shape is built at run time.** `MonSubmenu`'s header has
+   * its data pointer filled in by `PopulateMonMenu`, and its top coordinate
+   * computed by `MonSubmenu.GetTopCoord`, because which options it holds
+   * depends on the Pokemon -- a MON that knows CUT gets a CUT row. So there
+   * is no signature to match, and reading the *word* is the only way. Which
+   * is what `_driveToSaying` was written for.
+   *
+   * **And the word is in a different place than in a battle.** The field
+   * menu's options begin STATS, SWITCH; the battle one begins SWITCH, STATS.
+   * They are opposite -- see `switchBox` in engine.js -- so a press count
+   * carried over from the battle version opens a stats screen out here.
+   *
+   * The evidence is the party *order*, not the presses: species, level and HP
+   * of the front slot all matching what was in `slot` before. Two identical
+   * Pokemon at identical HP cannot be told apart that way, and that is
+   * reported as a failure rather than as a swap that happened -- a reorder
+   * nobody can see is not evidence of one.
+   */
+  async leadWith(slot) {
+    const before = await this.snap();
+    const want = before.party[slot];
+    if (!slot || !want) return { ok: false, message: 'no such party slot' };
+    if (!(want.hp > 0)) {
+      return { ok: false, message: 'that one is fainted, so it cannot lead' };
+    }
+    const same = (a, b) => !!a && !!b && a.species === b.species
+      && a.level === b.level && a.hp === b.hp;
+    if (before.party.filter((m) => same(m, want)).length > 1) {
+      return { ok: false,
+               message: 'two of those are identical, so a swap would not show' };
+    }
+
+    if (!await this._openStartMenu()) {
+      return { ok: false, message: 'the menu would not open' };
+    }
+    if (!await this._driveToSaying(PARTY_ROW)) {
+      await this.closeMenus();
+      return { ok: false, message: `no row says ${PARTY_ROW}` };
+    }
+    await this.push('A', 6, 10);
+    await this.step(SETTLE_PACK);
+    const e = this.state.e;
+    if (!await this._awaitBox(e.field && e.field.partyPick)) {
+      await this.closeMenus();
+      return { ok: false, message: 'the party never came up' };
+    }
+    if (!await this._driveMenuCursor(slot + 1, e.maxParty)) {
+      await this.closeMenus();
+      return { ok: false, message: `could not reach party slot ${slot + 1}` };
+    }
+    await this.push('A', 6, 10);
+    await this.step(SETTLE_PACK);
+    // The submenu, by its word rather than its shape.
+    if (!await this._driveToSaying(SWITCH_ROW)) {
+      await this.closeMenus();
+      return { ok: false, message: `no row says ${SWITCH_ROW}` };
+    }
+    await this.push('A', 6, 10);
+    await this.step(SETTLE_PACK);
+    // "Move to where?" -- the party list again, and the front slot is the
+    // answer. Driven rather than assumed: the cursor is left on the Pokemon
+    // that was picked, which is not row one unless slot one was picked.
+    if (!await this._driveMenuCursor(1, e.maxParty)) {
+      await this.closeMenus();
+      return { ok: false, message: 'could not reach the front of the party' };
+    }
+    await this.push('A', 6, 10);
+    await this.step(SETTLE_PACK);
+    await this.closeMenus();
+
+    const after = await this.snap();
+    if (!same(after.party[0], want)) {
+      return { ok: false, message: 'the party order did not change' };
+    }
+    return { ok: true, message: `moved slot ${slot + 1} to the front` };
+  }
+
   async _openPack(tries = 8) {
     if (!await this._openStartMenu()) return false;
     const shape = this.state.e.field && this.state.e.field.pack;
@@ -858,10 +952,25 @@ export function withMenus(Base) {
     return false;
   }
 
+  /**
+   * Walk the cursor to a row, downwards or upwards.
+   *
+   * **It only pressed DOWN**, which worked everywhere it was used because
+   * every one of those screens opens at row one and the target is below. The
+   * party menu's second visit is not one of those: after SWITCH the cursor is
+   * left on the Pokemon that was picked, and the answer to "move to where?"
+   * is row one -- *above* it. Down-only reaches that by wrapping, if the list
+   * wraps, and by running out of presses if it does not.
+   *
+   * Pressing towards the target is strictly fewer presses either way, and it
+   * cannot change what the older callers do: they are already below their
+   * target, so the direction chosen for them is the one they had.
+   */
   async _driveMenuCursor(target, count) {
     for (let i = 0; i < count + 2; i++) {
-      if (await this.menuCursor() === target) return true;
-      await this.push('DOWN', 5, 8);
+      const at = await this.menuCursor();
+      if (at === target) return true;
+      await this.push(at > target ? 'UP' : 'DOWN', 5, 8);
     }
     return await this.menuCursor() === target;
   }

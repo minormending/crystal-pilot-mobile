@@ -222,6 +222,10 @@ const TYPED = {
   // Stores power 1 and ends battles, which is why every reader here asks
   // whether the power is above *zero* rather than above one.
   32: { power: 1, type: N, effect: 38, pp: 5 },       // HORN DRILL
+  // Big and Normal, which makes it the specialist in the test below: huge
+  // against anything the chart is quiet about and nothing at all against a
+  // Ghost.
+  63: { power: 150, type: N, pp: 5 },                 // HYPER BEAM
 };
 /** A real RomData reading that chart, from bytes. */
 const charted = (chart = CHART) => romReading(TYPED, { chart });
@@ -693,4 +697,155 @@ test('fourteen bytes is a name and fifteen is not', async (t) => {
        'fourteen is inside it');
   t.eq(withTrainers([[['A'.repeat(15), 1, [[4, 19]]]]]).trainerIndex().size, 0,
        'and fifteen is past it');
+});
+
+// --- which of yours should be in front ------------------------------------
+
+test('the one that answers the room leads, not the one already there',
+     async (t) => {
+  // Gen 2 sends out slot one and asks nobody, so the party's order decides
+  // the first battle. Bugsy's room is three Bugs; a Fire move doubles on all
+  // three and a Grass one is halved on all three.
+  const rom = withTrainers();
+  const party = [
+    { species: 152, level: 12, hp: 20, maxHp: 24,
+      moves: [75, 0, 0, 0], pp: [25, 0, 0, 0] },       // GRASS, halved
+    { species: 155, level: 10, hp: 20, maxHp: 22,
+      moves: [52, 0, 0, 0], pp: [25, 0, 0, 0] },       // FIRE, doubled
+  ];
+  t.eq(rom.bestLead(party, rom.trainer('BUGSY').party), 1,
+       'the Cyndaquil, two levels behind and hitting four times as hard');
+});
+
+test('and nothing is moved when the right one is already leading', async (t) => {
+  // Null rather than 0. A caller that acted on "slot 0" would walk the party
+  // menu to swap the front Pokémon with itself, which is four presses and a
+  // screen to buy nothing.
+  const rom = withTrainers();
+  const party = [
+    { species: 155, level: 10, hp: 20, maxHp: 22,
+      moves: [52, 0, 0, 0], pp: [25, 0, 0, 0] },
+    { species: 152, level: 12, hp: 20, maxHp: 24,
+      moves: [75, 0, 0, 0], pp: [25, 0, 0, 0] },
+  ];
+  t.eq(rom.bestLead(party, rom.trainer('BUGSY').party), null, 'already right');
+});
+
+test('the room is scored as a whole, not by its worst member', async (t) => {
+  // A Gym is several battles in a row, so the Pokémon that leads has to
+  // answer the *room*. Scored the other way — best against their hardest —
+  // a specialist that beats one and loses to two would lead.
+  const three = [[['BUGSY', 1, [[14, 11], [14, 14], [16, 123]]]]];
+  const rom = romReading(TYPED, {
+    chart: CHART, trainers: trainerBytes(three), classes: CLASS_NAMES,
+    species: { 11: [BUG, BUG], 14: [BUG, 0x03], 123: [BUG, 0x02],
+               152: [GRASS, GRASS], 155: [FIRE, FIRE], 19: [N, N] },
+  });
+  const party = [
+    { species: 19, level: 20, hp: 20, maxHp: 20,
+      moves: [33, 0, 0, 0], pp: [35, 0, 0, 0] },       // neutral on all three
+    { species: 155, level: 6, hp: 20, maxHp: 22,
+      moves: [52, 0, 0, 0], pp: [25, 0, 0, 0] },       // doubled on all three
+  ];
+  t.eq(rom.bestLead(party, rom.trainer('BUGSY').party), 1, 'the Fire one');
+});
+
+test('a fainted Pokémon is never sent to the front', async (t) => {
+  // It would be sent out and refused with "There's no will to battle!", which
+  // is a turn spent being told no.
+  const rom = withTrainers();
+  const party = [
+    { species: 152, level: 12, hp: 20, maxHp: 24,
+      moves: [75, 0, 0, 0], pp: [25, 0, 0, 0] },
+    { species: 155, level: 10, hp: 0, maxHp: 22,
+      moves: [52, 0, 0, 0], pp: [25, 0, 0, 0] },
+  ];
+  t.eq(rom.bestLead(party, rom.trainer('BUGSY').party), null,
+       'the one that would answer it is down');
+});
+
+test('a party with nothing that can hurt them is not reordered', async (t) => {
+  // Moving a Pokémon that cannot touch the room in front of one that also
+  // cannot is four presses for nothing, and the hint already says the useful
+  // thing about that situation.
+  const ghosts = [[['MORTY', 1, [[21, 92]]]]];
+  const rom = romReading(TYPED, {
+    chart: CHART, trainers: trainerBytes(ghosts), classes: CLASS_NAMES,
+    species: { 92: [GHOST, 0x03], 19: [N, N] },
+  });
+  const party = [
+    { species: 19, level: 5, hp: 20, maxHp: 20,
+      moves: [33, 0, 0, 0], pp: [35, 0, 0, 0] },
+    { species: 19, level: 40, hp: 20, maxHp: 20,
+      moves: [33, 0, 0, 0], pp: [35, 0, 0, 0] },
+  ];
+  t.eq(rom.bestLead(party, rom.trainer('MORTY').party), null,
+       'neither of them lands, so neither is worth the walk');
+});
+
+test('a tie leaves the party alone', async (t) => {
+  // Strictly greater, and it matters: a rule that reshuffled on every tie
+  // would spend four presses and a menu walk every time the pilot looked at
+  // a Gym.
+  const rom = withTrainers();
+  const twin = { species: 155, level: 10, hp: 20, maxHp: 22,
+                 moves: [52, 0, 0, 0], pp: [25, 0, 0, 0] };
+  t.eq(rom.bestLead([{ ...twin }, { ...twin }], rom.trainer('BUGSY').party),
+       null, 'the one in front stays in front');
+});
+
+test('an unreadable cartridge picks nobody', async (t) => {
+  const rom = withTrainers();
+  const party = [{ species: 152, level: 12, hp: 20, maxHp: 24,
+                   moves: [75, 0, 0, 0], pp: [25, 0, 0, 0] }];
+  t.eq(rom.bestLead(party, []), null, 'nobody to answer');
+  t.eq(rom.bestLead([], rom.trainer('BUGSY').party), null, 'nobody to send');
+  t.eq(rom.bestLead(null, rom.trainer('BUGSY').party), null, 'and no party');
+  const blind = romReading(TYPED, {
+    chart: CHART, trainers: trainerBytes(LEADERS), classes: CLASS_NAMES });
+  t.eq(blind.bestLead(party, blind.trainer('BUGSY').party), null,
+       'nor without knowing what they are');
+});
+
+test('a Pokémon on one hit point can still be sent to the front', async (t) => {
+  // One hit point is still standing, and the alternative reading hides the
+  // only Pokémon that can answer the room.
+  const rom = withTrainers();
+  const party = [
+    { species: 152, level: 12, hp: 20, maxHp: 24,
+      moves: [75, 0, 0, 0], pp: [25, 0, 0, 0] },       // halved on Bugs
+    { species: 155, level: 10, hp: 1, maxHp: 22,
+      moves: [52, 0, 0, 0], pp: [25, 0, 0, 0] },       // doubled on Bugs
+  ];
+  t.eq(rom.bestLead(party, rom.trainer('BUGSY').party), 1,
+       'a Pokémon at 1 of 22 is still the answer');
+});
+
+test('summing the room and taking its hardest hit are different answers',
+     async (t) => {
+  // A Gym is several battles in a row, so the score has to be the *room*.
+  // Slot one here is a specialist: 150 against the one thing the chart is
+  // quiet about, and nothing at all against the two Ghosts. Slot two answers
+  // all three moderately. Summed, slot two wins; ranked by hardest single
+  // hit, slot one does — and slot one is already in front, so the two rules
+  // give opposite instructions.
+  // The Grass one **last**, deliberately: a score that kept only the newest
+  // number instead of adding them up would be the hit against whoever is at
+  // the end of the list, and with the Grass one first that happens to give
+  // the same answer as summing. The order is what makes the test able to
+  // fail.
+  const mixed = [[['MORTY', 1, [[21, 92], [21, 94], [20, 152]]]]];
+  const rom = romReading(TYPED, {
+    chart: CHART, trainers: trainerBytes(mixed), classes: CLASS_NAMES,
+    species: { 152: [GRASS, GRASS], 92: [GHOST, GHOST], 94: [GHOST, GHOST],
+               19: [0x02, 0x02], 155: [0x02, 0x02] },
+  });
+  const party = [
+    { species: 19, level: 30, hp: 20, maxHp: 20,
+      moves: [63, 0, 0, 0], pp: [5, 0, 0, 0] },        // 150, and 0 on a Ghost
+    { species: 155, level: 10, hp: 20, maxHp: 22,
+      moves: [52, 0, 0, 0], pp: [25, 0, 0, 0] },       // 40, doubling on Grass
+  ];
+  t.eq(rom.bestLead(party, rom.trainer('MORTY').party), 1,
+       'the one that can hurt all three, not the one that flattens one');
 });

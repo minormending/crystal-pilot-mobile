@@ -588,12 +588,28 @@ def find_text(cart, phrase, limit=12):
             out.append(SPACE)
         elif ch == '.':
             out.append(0xe8)
+        elif ch == 'é':
+            out.append(0xea)
         else:
             return None, f'"{ch}" is not a byte this can search for'
-    hits, at = [], cart.rom.find(bytes(out))
-    while at >= 0 and len(hits) < limit:
-        hits.append(at)
-        at = cart.rom.find(bytes(out), at + 1)
+    # **"POKéMON" is one byte in the ROM and seven on screen.** $54 is the
+    # ligature, which the game expands to POKé when it prints -- so a phrase
+    # the app matches against the *tilemap* is written in the ROM with a byte
+    # that is not in it. Both forms are searched, which is the honest way to
+    # answer "does the cartridge say this": it does, in the only place it
+    # could.
+    forms = [bytes(out)]
+    poke = bytes([0x8f, 0x8e, 0x8a, 0xea])          # P O K é
+    if poke in forms[0]:
+        forms.append(forms[0].replace(poke, bytes([LIGATURE])))
+    hits = []
+    for form in forms:
+        at = cart.rom.find(form)
+        while at >= 0 and len(hits) < limit:
+            hits.append(at)
+            at = cart.rom.find(form, at + 1)
+        if hits:
+            break
     return hits, None
 
 
@@ -634,6 +650,20 @@ def app_phrases():
     menus = (ROOT / 'gen2' / 'menus.js').read_text()
     for m in re.finditer(r"_driveToSaying\('([^']+)'", menus):
         out.append((m.group(1), 'gen2/menus.js', 'a menu row it drives to'))
+    # And the ones passed as a named constant, which is how two of them are
+    # written -- so the first draft of this scan reported three phrases while
+    # five were being looked for. A scan that finds a subset of what it
+    # describes is the failure this whole file keeps warning about.
+    # Any `NAME = 'text'`, which covers both a `const` of its own and the
+    # second half of `const A = 'x', B = 'y';` -- the form two of these are
+    # actually written in.
+    consts = {}
+    for m in re.finditer(r"(\w+)\s*=\s*'([^']*)'", menus):
+        consts.setdefault(m.group(1), m.group(2))
+    for m in re.finditer(r"_driveToSaying\((\w+)\)", menus):
+        text = consts.get(m.group(1))
+        if text:
+            out.append((text, 'gen2/menus.js', 'a menu row it drives to'))
     return out
 
 

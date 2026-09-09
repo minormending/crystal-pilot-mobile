@@ -928,6 +928,24 @@ advice as well as the less useful one.
 is the good state, and a line telling you a job would work is exactly the
 noise this list exists to replace.
 
+**And it puts the right Pokémon in front before it goes.** Gen 2 sends out
+slot one and asks nobody, so the order of your party decides the first battle
+— and walking into Bugsy with a Chikorita leading while a Cyndaquil sits in
+slot three is a fight lost before the door closes. The pilot opens the party
+menu, moves the one that answers the *room* to the front, and says which:
+
+> MON2 answers BUGSY better — moving it to the front
+
+It scores the whole room rather than the leader's best Pokémon, because a Gym
+is several battles in a row. It leaves the party alone when the right one is
+already in front, or when two Pokémon score the same. And it will not send a
+fainted one — though one hit point still counts, because one hit point is
+still standing.
+
+If the menu refuses for any reason it says so and goes in anyway, which is the
+same judgement it makes about shopping first: walking in as you are beats not
+going.
+
 ### And a battle you cannot touch, which no amount of PP fixes
 
 A Normal-type move does **nothing at all** to a Ghost. Not less — nothing. So a
@@ -1380,7 +1398,7 @@ deployed, which is not the question you are asking when a bug you saw fixed is
 still in front of you. `tools/check-app` asserts that number matches the service
 worker's cache name, because a version display that lies is worse than none.
 
-<!-- covers: sw.js @ 5525630972cc -->
+<!-- covers: sw.js @ d10579d7e328 -->
 
 The worker fetches **network first, falling back to the cache**. That is the
 opposite of the usual offline-first advice, on purpose.

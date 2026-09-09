@@ -599,7 +599,7 @@ and in `bootstrap.js`, with nothing able to notice if they drifted.
 
 ### `romdata.js` — what the cartridge knows
 
-<!-- covers: gen2/romdata.js @ 65bbde29d963 -->
+<!-- covers: gen2/romdata.js @ ed7f493f3ff9 -->
 
 Species names, item names, move names, wild-encounter tables, move power and
 the type chart. All read out of the ROM, not shipped as a copy, so they cannot
@@ -1169,7 +1169,7 @@ point those coordinates mean somewhere else entirely.
 
 ## 5. Crossing to the next map
 
-<!-- covers: gen2/journey.js gen2/world.js @ 0d8b690e802e -->
+<!-- covers: gen2/journey.js gen2/world.js @ dfe3f2566259 -->
 
 A connection spans only part of a shared edge, so "walk west until something
 happens" does not work. `crossEdge()` closes the distance in stages, then tries
@@ -1584,7 +1584,7 @@ mechanism's evidence spans two runs rather than one.
 
 ### The bigger number is not the harder hit
 
-<!-- covers: gen2/romdata.js gen2/engine.js gen2/battle.js @ 8a7e06d82913 -->
+<!-- covers: gen2/romdata.js gen2/engine.js gen2/battle.js @ 331146343c65 -->
 
 For twenty-three passes the pilot ranked its moves by one number: the `power`
 byte out of the cartridge's move table. `romdata.move()` had been returning the
@@ -2081,7 +2081,7 @@ fainted.
 
 ## 7. Catching something
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ 9aab0212e7de -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ 48a2c4d8e3c7 -->
 
 Catching is the most involved loop, because a Poké Ball's odds turn on how much
 HP is left. Throwing at a full-health target is mostly throwing balls away.
@@ -2244,7 +2244,7 @@ flowchart TD
 
 ## 7a. Five that act on where you already are
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ fba0424d7be9 -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ 03519e3cd1a9 -->
 
 Grind, hunt and catch all go *looking* for something. These five do the obvious
 thing with the situation you are already in, and take no parameters:
@@ -2515,7 +2515,7 @@ said *trainer battle: lost* **seven times**. One loss, reported seven ways.
 
 ## 7d. The counter, and the money it takes
 
-<!-- covers: gen2/menus.js gen2/state.js titles/crystal.js @ 11a55c633e32 -->
+<!-- covers: gen2/menus.js gen2/state.js titles/crystal.js @ 42b12f968868 -->
 
 Everything the pilot could do until now used what it found. **Shop** walks to a
 mart and buys, which is the first thing it does that spends rather than
@@ -2880,7 +2880,7 @@ because that failure is only otherwise discovered by reaching for the undo.
 
 ## 8. The errands
 
-<!-- covers: titles/crystal.js gen2/journey.js @ dc59a04f8108 -->
+<!-- covers: titles/crystal.js gen2/journey.js @ 56cfd416b5a2 -->
 
 Everything in this section is `crystal.js` — the only file in the app that names
 a Crystal map, a Crystal door or a Crystal NPC. What it stands on is
@@ -3252,7 +3252,7 @@ the bag" rather than "did we gain any".
 
 ## 8a. Finding the Centers and the Marts in the cartridge
 
-<!-- covers: gen2/world.js gen2/journey.js @ 0d8b690e802e -->
+<!-- covers: gen2/world.js gen2/journey.js @ dfe3f2566259 -->
 
 The last thing in this app that had to be written out by hand. A title said
 where the Centers and the Marts were, so the pilot healed in the two towns
@@ -3329,7 +3329,7 @@ after](#8d-a-route-the-game-itself-refuses).
 
 ## 8b. Asking the cartridge what its places are called
 
-<!-- covers: gen2/romdata.js gen2/world.js @ f3344dd0ee4b -->
+<!-- covers: gen2/romdata.js gen2/world.js @ e307b99042c9 -->
 
 The one table that **retires** hand-written data rather than adding to it. A map
 used to be called whatever the title profile said, and everything else was
@@ -3488,7 +3488,7 @@ by, which is the only leg it can measure.
 
 ## 8d. A route the game itself refuses
 
-<!-- covers: gen2/journey.js gen2/state.js @ e9924ee64f63 -->
+<!-- covers: gen2/journey.js gen2/state.js @ d7d9bf056d63 -->
 
 The pass before this one taught the walk to *quote* the man who turns it back.
 This is the pilot doing something about it.
@@ -3595,7 +3595,7 @@ counting bytes reads a full case as one.
 
 ## 8e. Fighting everybody here
 
-<!-- covers: gen2/journey.js @ b5fe5ec61afd -->
+<!-- covers: gen2/journey.js @ 24b30fb03d29 -->
 
 The primitive a Gym needs. The pilot has been stopped on Route 32 for three
 passes by a man who wants Falkner beaten first, and beating Falkner means
@@ -3696,7 +3696,7 @@ costs however long it takes somebody to notice their money is gone.
 
 ## 8f. Going and winning a badge
 
-<!-- covers: gen2/journey.js gen2/state.js titles/crystal.js @ fe1d844ae5b4 -->
+<!-- covers: gen2/journey.js gen2/state.js titles/crystal.js @ 5e600340e898 -->
 
 The pilot has been turned back from Route 32 since the pass it learned to find
 Pokémon Centers. `reopen` throws away every written-off road the moment a badge
@@ -3779,7 +3779,7 @@ everybody is a heal whatever it says about itself.
 
 ## 8g. The tiles that run a script, and saying hello
 
-<!-- covers: gen2/world.js gen2/journey.js @ 0d8b690e802e -->
+<!-- covers: gen2/world.js gen2/journey.js @ dfe3f2566259 -->
 
 Four passes of machinery pointed at one sentence a man says, and the reader that
 made it diagnosable is twelve lines.
@@ -4558,7 +4558,7 @@ before a step is taken, so a stopped walk does not move at all.
 
 ### What is behind the Gym door, before you open it
 
-<!-- covers: gen2/romdata.js gen2/engine.js app/rows.js @ 4e9a78d71b11 -->
+<!-- covers: gen2/romdata.js gen2/engine.js app/rows.js @ 49a28ff54a2f -->
 
 The Gym row could say where the Gym is and who is in it. **Whether it is worth
 going** is two facts the cartridge has had all along, and neither of them
@@ -4630,6 +4630,78 @@ base stats cannot be read: a warning nobody can price is worse than none.
 The hint says nothing when you are ahead on level and can hurt everything in
 the room. That is the good state, and a line explaining that a job would work
 is the noise this list exists to replace.
+
+### Leading with the one that can answer the room
+
+<!-- covers: gen2/romdata.js gen2/menus.js gen2/journey.js @ 33a02e1bb7c5 -->
+
+**Gen 2 sends out slot one and asks nobody.** So the party's order decides the
+first battle of a Gym — and since the pass before, the pilot has known exactly
+what is waiting in there and could only *say* so. Four presses fix it.
+
+```mermaid
+flowchart TD
+    G["about to walk into a Gym"] --> R{"can the cartridge say<br/>what the leader carries?"}
+    R -- no --> IN["go in as we are"]
+    R -- yes --> S{"is the best answer<br/>already in front?"}
+    S -- yes --> IN
+    S -- no --> M["START → POKéMON → the slot → SWITCH → the front"]
+    M --> E{"did the party order change?"}
+    E -- yes --> IN
+    E -- no --> SAY["say what refused, and go in as we are"]
+    SAY --> IN
+```
+
+**`bestLead` scores the room, not its worst member.** For each of theirs it
+takes the hardest hit this Pokémon has, and adds them up — because a Gym is
+several battles in a row and the one that leads has to answer all of them. The
+alternative, *best against their hardest*, would put a specialist in front that
+flattens one and cannot touch the other two.
+
+Three things it will not do, each for its own reason:
+
+- **Never slot zero.** `null` rather than `0` when the right one already
+  leads: a caller acting on a slot number would walk the party menu to swap
+  the front Pokémon with itself, which is four presses and a screen to buy
+  nothing.
+- **Never a tie.** Strictly greater, so the earlier slot stays in front. A
+  rule that reshuffled on every tie would spend those presses every time the
+  pilot looked at a Gym.
+- **Never a fainted slot**, which would be sent out and refused with *There's
+  no will to battle!* — but **one hit point is still standing**, and the
+  reading that hides a Pokémon at 1 of 22 hides the only answer the party has.
+
+**And the walk is different from every other menu walk in this app**, in two
+ways that both came out of the ROM rather than a screen.
+
+`MonSubmenu`'s header has its data pointer filled in by `PopulateMonMenu` and
+its top coordinate computed by `MonSubmenu.GetTopCoord`, because which options
+it holds depends on the Pokémon — one that knows CUT gets a CUT row. **So
+there is no signature to match**, and reading the word is the only way, which
+is what `_driveToSaying` was written for two features ago.
+
+And the word is somewhere else than in a battle. The field menu's options
+begin STATS, SWITCH; the battle one begins SWITCH, STATS — see [sending out
+somebody who can touch it](#sending-out-somebody-who-can-touch-it). A press
+count carried over from the battle version opens a stats screen out here.
+
+**The cursor walks both ways now.** `_driveMenuCursor` only ever pressed DOWN,
+which worked everywhere it was used because every one of those screens opens
+at row one and the target is below. The party menu's *second* visit is not one
+of those: after SWITCH the cursor is left on the Pokémon that was picked, and
+the answer to *move to where?* is the row above it. Down-only reaches that by
+wrapping, if the list wraps, and by running out of presses if it does not.
+
+**The evidence is the party order.** Species, level and HP of the front slot
+all matching what was in the chosen slot before — not the presses landing, not
+the screens closing. Two identical Pokémon at identical HP cannot be told
+apart that way, and that is reported as a failure rather than as a swap that
+happened: a reorder nobody can see is not evidence of one.
+
+The whole thing is best effort and quiet about failing, in the same spirit as
+the shopping beside it in `beatGym`: a cartridge that cannot say what the
+leader carries, a party of one, and a party already led by the right one are
+all reasons to walk in as we are rather than reasons not to go.
 
 ### Reading a gym out of the cartridge
 
@@ -4714,7 +4786,7 @@ reads all seven out of both files and compares them, which is the repair for
 
 ### Gates: asking the cartridge what it wants
 
-<!-- covers: gen2/state.js gen2/journey.js titles/crystal.js @ fe1d844ae5b4 -->
+<!-- covers: gen2/state.js gen2/journey.js titles/crystal.js @ 5e600340e898 -->
 
 Two kinds of closed road, and the difference is everything:
 

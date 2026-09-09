@@ -2321,6 +2321,16 @@ export class Journey {
       const shopped = await this.restock(buy, GYM_POTIONS);
       if (!shopped.ok) this.say(`going in as we are — ${shopped.message}`);
     }
+    // **And lead with the one that can answer the room.** Gen 2 sends out
+    // slot one and asks nobody, so the order of the party decides the first
+    // battle -- and since the pass before, the pilot has known exactly what
+    // is waiting in there and could only *say* so.
+    //
+    // Best effort and quiet about failing, like the shopping above: a
+    // cartridge that cannot say what the leader carries, a party of one, and
+    // a party already led by the right one are all reasons to walk in as we
+    // are rather than reasons not to go.
+    await this.leadForGym(gym);
     if (await this.mapKey() !== gym.inside) {
       if (await this.mapKey() !== gym.map) {
         this.say(`travelling to ${where}`);
@@ -2389,6 +2399,35 @@ export class Journey {
    * Mends out of the bag first, because this is the fight the potions were
    * bought for and there is no Center on the way to it.
    */
+  /**
+   * Put the best answer to this Gym at the front of the party.
+   *
+   * Split out from `beatGym` because it is two decisions and they fail
+   * differently: *which* Pokemon should lead is arithmetic over the
+   * cartridge's own tables, and *moving* it is four menu presses that can be
+   * refused. Answering the first and being unable to do the second is worth
+   * saying; not being able to answer the first is not.
+   *
+   * Returns whether the order was changed, which no caller acts on yet and
+   * every test does -- the walk goes in either way.
+   */
+  async leadForGym(gym) {
+    const rom = this.tasks && this.tasks.rom;
+    if (!rom || !gym || !gym.leader || typeof rom.trainer !== 'function') {
+      return false;
+    }
+    const them = rom.trainer(gym.leader);
+    if (!them || !them.party.length) return false;
+    const s = await this.snap();
+    const slot = rom.bestLead(s.party, them.party);
+    if (slot === null) return false;
+    const who = this.nameOf ? this.nameOf(s.party[slot]) : `slot ${slot + 1}`;
+    this.say(`${who} answers ${them.name} better — moving it to the front`);
+    const moved = await this.tasks.leadWith(slot);
+    if (!moved.ok) this.say(`going in as we are — ${moved.message}`);
+    return moved.ok;
+  }
+
   async leaderFight(gym) {
     for (let go = 0; go < LEADER_TRIES; go++) {
       if (this.stopped) return { ok: false, message: 'stopped' };

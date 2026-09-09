@@ -806,6 +806,71 @@ function gymGoer({ badge = 0, has = false, inside = 2567, at = 2565,
   return j;
 }
 
+// --- leading with the one that answers the room ---------------------------
+
+test('the Pokémon that answers the Gym is moved to the front', async (t) => {
+  // Gen 2 sends out slot one and asks nobody, so the party's order decides
+  // the first battle — and since the pass before, the pilot has known what is
+  // waiting in the room and could only *say* so.
+  const j = gymGoer();
+  const moved = [];
+  j.snap = async () => ({
+    inBattle: false, money: 3000, wram: j.gb.wram, balls: [], items: [],
+    party: [{ slot: 0, species: 152, level: 12, hp: 20, maxHp: 24,
+              moves: [75, 0, 0, 0], pp: [25, 0, 0, 0] },
+            { slot: 1, species: 155, level: 10, hp: 18, maxHp: 22,
+              moves: [52, 0, 0, 0], pp: [25, 0, 0, 0] }],
+  });
+  j.nameOf = (m) => `MON${m.slot}`;
+  j.tasks = {
+    rom: fakeRom({
+      types: { 11: [0x07, 0x07], 152: [0x16, 0x16], 155: [0x14, 0x14] },
+      trainers: { FALKNER: { name: 'FALKNER', group: 1,
+                             party: [{ level: 14, species: 11 }] } },
+    }),
+    leadWith: async (slot) => { moved.push(slot); return { ok: true, message: 'moved' }; },
+  };
+  t.true(await j.leadForGym(j.title.gyms[0]), 'it reordered');
+  t.eq(moved, [1], 'the Cyndaquil, which doubles on the Bug');
+  t.true(j.said.some((l) => l.includes('answers FALKNER')),
+         `and said why: ${j.said.join(' | ')}`);
+});
+
+test('a cartridge that cannot say what the leader carries changes nothing',
+     async (t) => {
+  // Best effort and quiet about failing, like the shopping beside it: a walk
+  // in as we are beats not going.
+  const j = gymGoer();
+  const moved = [];
+  j.tasks = { rom: fakeRom(),
+              leadWith: async (slot) => { moved.push(slot); return { ok: true }; } };
+  t.false(await j.leadForGym(j.title.gyms[0]), 'nothing to reorder from');
+  t.eq(moved, [], 'and nothing was walked');
+});
+
+test('a reorder the menu refuses is said out loud and walked past', async (t) => {
+  const j = gymGoer();
+  j.snap = async () => ({
+    inBattle: false, money: 3000, wram: j.gb.wram, balls: [], items: [],
+    party: [{ slot: 0, species: 152, level: 12, hp: 20, maxHp: 24,
+              moves: [75, 0, 0, 0], pp: [25, 0, 0, 0] },
+            { slot: 1, species: 155, level: 10, hp: 18, maxHp: 22,
+              moves: [52, 0, 0, 0], pp: [25, 0, 0, 0] }],
+  });
+  j.nameOf = (m) => `MON${m.slot}`;
+  j.tasks = {
+    rom: fakeRom({
+      types: { 11: [0x07, 0x07], 152: [0x16, 0x16], 155: [0x14, 0x14] },
+      trainers: { FALKNER: { name: 'FALKNER', group: 1,
+                             party: [{ level: 14, species: 11 }] } },
+    }),
+    leadWith: async () => ({ ok: false, message: 'the party never came up' }),
+  };
+  t.false(await j.leadForGym(j.title.gyms[0]), 'it did not');
+  t.true(j.said.some((l) => l.includes('going in as we are')),
+         `and said so: ${j.said.join(' | ')}`);
+});
+
 test('the leader is talked to, because a leader is not a trainer', async (t) => {
   // **Read off Violet's Gym in work RAM.** Falkner is object 1 at (5,1) with
   // type 0 -- a *script* -- while the two Bird Keepers at (5,6) and (2,10) are
