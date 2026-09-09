@@ -9,6 +9,10 @@
 //     tools/dex --evolves 20          every species that evolves at Lv20
 //     tools/dex --verify              the whole table against things that were
 //                                     true about Pokemon before this app was
+//     tools/dex --party               the party out of a .sav in dev/, as the
+//                                     app's own card would say it
+//     tools/dex --party --check       and hold the DV nibble order to the
+//                                     stats the cartridge already worked out
 //
 // **This runs `gen2/romdata.js`.** Same rule as `tools/types` and `tools/route`
 // before it: a second reader written in the tool agrees with the app's reader
@@ -26,14 +30,32 @@
 // looks at TYROGUE. So the checks below ask the decoded table whether it
 // agrees with facts that predate this repository.
 //
+// **`--party` is the one that closes a gap rather than reporting one.** Two
+// things about a party entry are written down here as the disassembly's word
+// rather than as measurements -- which nibble of the DV word is which stat, and
+// how the caught-data byte is packed -- because settling either needs a party
+// whose numbers are already known. This is that, without a browser: a `.sav`
+// holds the same struct the live game does, at `sGameData + (wAddr -
+// wPlayerData)`, so `GameState` can read it unchanged.
+//
+// And `--check` settles the first of the two outright. The cartridge has
+// already worked the six stats out and stored them beside the DVs that made
+// them, so the DVs can be checked against their own consequences: recompute the
+// stats from base, level, DV and stat experience, and see whether they come
+// back. If they do not, try the other twenty-three orderings of the four
+// nibbles and say which one does -- an answer rather than a failure.
+//
 // Needs a ROM and a symbol file in `dev/`, which are not in this repository and
-// never will be. Without them it says so and exits 0.
-import { readFileSync, existsSync } from 'node:fs';
+// never will be; `--party` also needs a `.sav` there. Without them it says so
+// and exits 0.
+import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 import { Symbols } from '../gen2/symbols.js';
 import { RomData } from '../gen2/romdata.js';
+import { GameState } from '../gen2/state.js';
+import { describeDex } from '../app/rows.js';
 import { gen2 } from '../gen2/engine.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -218,6 +240,31 @@ function verify() {
     say(`every species has growth rate "${[...growths][0]}" — that is the`
       + ' signature of reading the wrong byte of the base-stats entry');
   }
+  // And the sharper version of the same check: species whose experience curve
+  // was known before this app existed. Nine rather than one, because a single
+  // species agreeing with a wrong offset is exactly how the type field was
+  // read out of the special defence -- one map agreeing perfectly with a false
+  // rule is the shape this repository keeps getting caught by.
+  //
+  // PIDGEY is deliberately not in this list. It reads MEDIUM_SLOW here, which
+  // contradicted the first guess at what it should be -- and the cartridge is
+  // right: the Pidgey line is Medium Slow in Gen 2, and the other nine plus a
+  // sane distribution (119 medium-fast, 64 medium-slow, 45 slow, 23 fast, and
+  // the two "slightly" curves unused, as Gen 2 leaves them) is what settled it.
+  const CURVES = [
+    ['BULBASAUR', 'mediumSlow'], ['CHIKORITA', 'mediumSlow'],
+    ['ABRA', 'mediumSlow'], ['CATERPIE', 'mediumFast'],
+    ['PIKACHU', 'mediumFast'], ['MAGIKARP', 'slow'], ['DRATINI', 'slow'],
+    ['CLEFAIRY', 'fast'], ['IGGLYBUFF', 'fast'],
+  ];
+  for (const [who, want] of CURVES) {
+    const id = speciesId(who);
+    const got = id ? data.baseStats(id) : null;
+    if (!got) { say(`${who}: no base-stats entry`); continue; }
+    if (got.growth !== want) {
+      say(`${who} is on the ${want} curve and this reads ${got.growth}`);
+    }
+  }
 
   // Facts that predate this repository.
   const KNOWN = [
@@ -271,8 +318,8 @@ function verify() {
   }
   console.log(`  ok  ${COUNT} species: ${evolveCount} evolutions and`
     + ` ${learnCount} level-up moves, all readable`);
-  console.log(`  ok  ${growths.size} growth rates in use, so the base-stats`
-    + ' entry is being read at the right offset');
+  console.log(`  ok  ${growths.size} growth rates in use, and ${CURVES.length}`
+    + ' species are on the curve they were on before this app existed');
   console.log(`  ok  ${KNOWN.length} species that were famous before this repo`
     + ' still are, and both pointers land on their own symbol');
   console.log('  ok  every entry is exactly as long as the gap to the next one,'
@@ -282,9 +329,195 @@ function verify() {
   return 0;
 }
 
+// --- a party out of a battery ------------------------------------------------
+
+const SRAM_START = 0xa000, SRAM_BANK = 0x2000, WRAM_START = 0xc000;
+
+/** The flat offset of an SRAM symbol inside a .sav. */
+function sramAt(name) {
+  return symbols.bank(name) * SRAM_BANK + (symbols.addr(name) - SRAM_START);
+}
+
+/**
+ * A work-RAM snapshot built out of a battery save.
+ *
+ * The whole point of doing it this way: `GameState` is handed the same shape it
+ * reads from a running game, so what comes out is the app's reading and not a
+ * second one. The mapping is the save file's own -- `sGameData` holds what
+ * `wPlayerData` onwards held when the game was saved, byte for byte -- and it
+ * is bounded by `sGameDataEnd` so a symbol outside the saved block reads as
+ * zero rather than as whatever is next in the file.
+ */
+function wramFromSave(sav) {
+  const from = sramAt('sGameData'), to = sramAt('sGameDataEnd');
+  const base = symbols.addr('wPlayerData');
+  const wram = new Uint8Array(0x2000);
+  for (let at = from; at < to && at < sav.length; at++) {
+    const w = base + (at - from);
+    if (w >= WRAM_START && w < WRAM_START + wram.length) {
+      wram[w - WRAM_START] = sav[at];
+    }
+  }
+  return wram;
+}
+
+/** The newest `.sav` in dev/, or null. */
+function findSave() {
+  const found = readdirSync(DEV).filter((f) => f.toLowerCase().endsWith('.sav'));
+  return found.length ? join(DEV, found.sort()[0]) : null;
+}
+
+/**
+ * Gen 2's own stat formula, for checking the DVs against their consequences.
+ *
+ * Not in the app, and deliberately: the game has already done this arithmetic
+ * and stored the answer, so a copy in `state.js` would be a second source of a
+ * number the cartridge supplies. It is here because a *check* needs an
+ * independent derivation, which is the same reason `tools/types --verify`
+ * asserts matchups nobody read out of the chart.
+ *
+ * The stat-experience term is `floor(min(255, ceil(sqrt(exp))) / 4)`.
+ */
+function statFrom(base, dv, statExp, level, isHp) {
+  const root = Math.min(255, Math.ceil(Math.sqrt(statExp)));
+  const inner = (base + dv) * 2 + (root >> 2);
+  const n = Math.floor((inner * level) / 100);
+  return isHp ? n + level + 10 : n + 5;
+}
+
+/** Every ordering of the four DV nibbles, as [name...] lists. */
+function nibbleOrders(names) {
+  if (names.length <= 1) return [names];
+  const out = [];
+  for (let i = 0; i < names.length; i++) {
+    const rest = names.filter((_, k) => k !== i);
+    for (const tail of nibbleOrders(rest)) out.push([names[i], ...tail]);
+  }
+  return out;
+}
+
+/** Read the DV word back out of a mon, under a given nibble order. */
+function dvsUnder(word, order) {
+  const out = {};
+  order.forEach((key, i) => {
+    out[key] = (word >> ((order.length - 1 - i) * 4)) & 0x0f;
+  });
+  out.hp = order.reduce((n, key) => (n << 1) | (out[key] & 1), 0);
+  return out;
+}
+
+/**
+ * Does this ordering reproduce every stat the cartridge stored?
+ *
+ * Returns the number of the six stats it gets right, summed over the party --
+ * a count rather than a boolean, so a near miss can be told from nonsense.
+ */
+function scoreOrder(mons, order) {
+  let right = 0, total = 0;
+  for (const { mon, base } of mons) {
+    const dvs = dvsUnder(mon.dvWord, order);
+    for (const key of gen2.statNames) {
+      const src = gen2.statSource[key];
+      total++;
+      const want = mon.stats[key];
+      const got = statFrom(base.stats[key], dvs[src], mon.statExp[src],
+                           mon.level, key === 'hp');
+      if (want === got) right++;
+    }
+  }
+  return { right, total };
+}
+
+function party({ check = false } = {}) {
+  const file = findSave();
+  if (!file) {
+    console.log('no .sav in dev/ — nothing to read');
+    console.log('(a save is not in this repository either)');
+    return 0;
+  }
+  const sav = readFileSync(file);
+  const state = new GameState(symbols, gen2);
+  if (!state.saveIsPresent(sav)) {
+    console.log(`${file}: the cartridge would not load this — no save markers`);
+    return 1;
+  }
+  const wram = wramFromSave(sav);
+  const mons = [];
+  for (let slot = 0; slot < state.partyCount(wram); slot++) {
+    const mon = state.monDetail(wram, slot);
+    if (!mon) break;
+    // The raw word too, so `--check` can re-split it a different way without
+    // going back through the reader it is checking.
+    const at = symbols.addr('wPartyMon1') + slot * gen2.partyStride
+      + gen2.mon.dvs - 0xc000;
+    mon.dvWord = (wram[at] << 8) | wram[at + 1];
+    mons.push({ mon, base: data.baseStats(mon.species) });
+  }
+  if (!mons.length) {
+    console.log('the save holds no party');
+    return 0;
+  }
+
+  for (const { mon } of mons) {
+    // The app's own words, so this prints what the card prints.
+    const d = describeDex(mon, { rom: data, engine: gen2 });
+    console.log(`\n${d.name} Lv${d.level}   ${d.types.join('/')}`
+      + `   ${mon.hp}/${mon.maxHp}`);
+    console.log('     stat    now   DV   trained');
+    for (const st of d.stats) {
+      console.log(`     ${st.label.padEnd(7)} ${String(st.value).padStart(3)}`
+        + `   ${String(st.dv).padStart(2)}   ${st.effort}`);
+    }
+    if (d.knows.length) {
+      console.log(`     knows   ${d.knows.map((m) => `${m.name} ${m.pp}`).join(', ')}`);
+    }
+    if (d.next) console.log(`     next    ${d.next}`);
+    for (const phrase of d.becomes) console.log(`     becomes ${phrase}`);
+    if (d.origin) console.log(`     ${d.origin}`);
+    if (d.extra) console.log(`     ${d.extra}`);
+  }
+
+  if (!check) return 0;
+
+  console.log('\n--- the DVs against the stats they made ---');
+  if (mons.some((m) => !m.base)) {
+    console.log('  a species with no readable base stats — cannot check');
+    return 1;
+  }
+  const orders = nibbleOrders(gen2.dvNames);
+  const scored = orders.map((order) => ({ order, ...scoreOrder(mons, order) }));
+  const mine = scored.find((s) => s.order.join() === gen2.dvNames.join());
+  const best = scored.reduce((a, b) => (b.right > a.right ? b : a));
+  const perfect = scored.filter((s) => s.right === s.total);
+
+  console.log(`  the profile's order ${gen2.dvNames.join(', ')}`
+    + ` reproduces ${mine.right} of ${mine.total} stored stats`);
+  if (mine.right === mine.total && perfect.length === 1) {
+    console.log('  ok  and it is the only one of the 24 orderings that does —'
+      + ' the nibble order is measured now, not assumed');
+    return 0;
+  }
+  if (mine.right === mine.total) {
+    console.log(`  note ${perfect.length} orderings fit these ${mons.length}`
+      + ' Pokemon. A bigger or more varied party would tell them apart:');
+    for (const s of perfect) console.log(`       ${s.order.join(', ')}`);
+    return 0;
+  }
+  console.log(`  ✗ it does not. The best of the 24 is`
+    + ` ${best.order.join(', ')} at ${best.right} of ${best.total}.`);
+  if (best.right < best.total) {
+    console.log('    No ordering fits, so the disagreement is not the nibble'
+      + ' order — suspect the stat-experience term or the base-stats offsets.');
+  }
+  return 1;
+}
+
 const args = process.argv.slice(2);
 if (args.includes('--verify')) {
   process.exit(verify());
+}
+if (args.includes('--party')) {
+  process.exit(party({ check: args.includes('--check') }));
 }
 
 const evolvesAt = args.indexOf('--evolves');

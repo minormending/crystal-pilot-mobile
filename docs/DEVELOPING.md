@@ -495,6 +495,45 @@ fine and is wrong at run time:
 | `types` | every optional symbol the app reads travels in the shared digest, both sides' type addresses are read, and — with a cartridge — the decoded type chart agrees with twenty-two matchups nobody had to look up |
 | `counts` | every number in the prose that the repository can compute is right — the test table, the group count, the digest's size, the audit's rows. Two have shipped wrong: *143 tests in seventeen files* while 576 ran, and a digest drawn as 47 entries carrying 53 |
 
+## The tools that ask the cartridge
+
+Everything above runs on a clean checkout. What follows needs a `.gbc` and a
+`.sym` in `dev/`, built from the disassembly — and every one of these says so
+and exits 0 without them, so `tools/check-app` is still green on a machine that
+has no cartridge at all.
+
+They divide into two kinds, and the division is worth keeping in mind because
+only one of them can fail:
+
+```mermaid
+flowchart LR
+    ROM[("dev/*.gbc<br/>dev/*.sym")] --> R["gen2/romdata.js<br/>gen2/world.js<br/><i>the app's own readers</i>"]
+    SAV[("dev/*.sav")] --> S["gen2/state.js<br/><i>the same reader,<br/>over a battery</i>"]
+    R --> ANS["<b>answers</b><br/>tools/dex · tools/types<br/>tools/route · tools/rank"]
+    S --> ANS
+    R --> CHK["<b>checks</b><br/>--verify · --check<br/>check-app's gates, gyms,<br/>types, menus, phrases"]
+    S --> CHK
+    ROM --> PY["tools/rom-events<br/><i>a second reader, in Python</i>"]
+    PY --> CHK
+    CHK -.->|"held to facts that<br/>predate this repo"| OK([the reading is right])
+    ANS -.->|"printed for a person"| USE([a question answered])
+```
+
+**Nothing in the left column is a second reader, except one.** A tool that
+parsed the ROM itself would agree with the app until it did not, and then it
+would be a confident wrong answer hiding the bug it was written to find — five
+of those have actually happened here, which is why `tools/route --maps` prints
+the app's own map table and the Python tool asks it. `tools/rom-events` is the
+deliberate exception: it decodes *scripts*, which the app does not read at all,
+and where it overlaps — the map-table strides — a `romlayout` check holds the
+two readers to each other.
+
+**And a check is only worth having if it can fail.** Each `--verify` asserts
+things that were true about Pokémon before this repository existed, rather than
+re-deriving what the reader just said: Electric cannot touch Ground; TYROGUE
+has three branches at Lv20; MAGIKARP is on the slow curve. A check that agrees
+with the code by construction is decoration.
+
 ### Looking at the ranking
 
 ```
@@ -627,6 +666,73 @@ special defence followed by half its real answer. 65 is a plausible type
 number, so it printed instead of failing, and a Grass move on a Grass/Grass
 CATERPIE came out at a quarter. Measured back into place against three species
 whose types nobody needs a table to know.
+
+### What a species becomes, and what one Pokémon is made of
+
+```
+tools/dex cyndaquil                    stats, types, evolutions, learnset
+tools/dex --at 12 cyndaquil            what it would know, and what is next
+tools/dex --evolves 20                 every species that evolves at Lv20
+tools/dex --verify                     the whole table, held to the cartridge
+tools/dex --party                      the party out of a .sav in dev/
+tools/dex --party --check              and the DV nibble order, settled
+```
+
+**This runs `gen2/romdata.js` too**, for the same reason `tools/types` does,
+and `--verify` found the reason on its first run: the pointer guard was
+backwards. `EvosAttacksPointers` was read the way `trainerIndex` reads
+`TrainerGroups` — *a pointer below the table is not a pointer*, because that
+is where the trainer parties sit — and this table keeps its entries **above**
+its pointers, so all 251 species refused.
+
+What `--verify` asks, and why each one is the question rather than the obvious
+one:
+
+| it asks | because |
+| --- | --- |
+| every entry is exactly as long as the gap to the next pointer | the pointers ascend and the records sit end to end, so a record read at the wrong width comes out the wrong length **even when every field in it looks plausible**. Recomputed from the decoded record rather than from where the reader stopped |
+| nine species are on the experience curve they were on before this app existed | one species agreeing with a wrong offset is how the types were once read out of the special defence. At 0x15 instead of 0x16, all 251 come back `mediumFast` — a real curve, and a believable one for whichever species you check first |
+| both `CyndaquilEvosAttacks` and `PidgeyEvosAttacks` land where the symbol file says | the one thing about a pointer table the `.sym` can settle on its own |
+| seven famous species are still famous | TYROGUE has three `EVOLVE_STAT` branches at Lv20 and is the only Pokémon in the game that has any — which makes it the only species a four-byte record can be got wrong on |
+
+**And one check it deliberately does not make.** A learnset out of level order
+is exactly what a shifted read looks like, and MUK's entry genuinely runs Lv45
+SLUDGE in front of Lv23 MINIMIZE on this cartridge — verified against
+`MukEvosAttacks` byte for byte, and the game does not care because it scans the
+whole list. It is the only species in the game that does it, so the count is
+reported and the structural check above is what catches a shift.
+
+<details>
+<summary><b>Advanced detail:</b> reading a party out of a battery, and the gap
+it closes</summary>
+
+Two things about a party entry are written down as the disassembly's word
+rather than as measurements: **which nibble of the DV word is which stat**, and
+how the caught-data byte is packed. Settling either needs a party whose numbers
+are already known — and a `.sav` is one, without a browser.
+
+`--party` builds a work-RAM snapshot out of the battery and hands it to the
+real `GameState`, so what comes out is the app's own reading rather than a
+second one. The mapping is the save file's: `sGameData` holds what
+`wPlayerData` onwards held at the moment of saving, byte for byte, and it is
+bounded by `sGameDataEnd` so a symbol outside the saved block reads as zero
+rather than as whatever is next in the file.
+
+`--check` then settles the first gap outright, and the trick is that the
+cartridge has already done the arithmetic: the six stats are stored **beside**
+the DVs that made them. So recompute them from base, level, DV and stat
+experience and see whether they come back. If they do not, try the other
+twenty-three orderings of the four nibbles and report which one does — an
+answer rather than a failure, and if *none* fits, that says the disagreement is
+somewhere other than the nibble order.
+
+The stat formula lives in the tool and not in the app on purpose. The game has
+already worked those numbers out and stored them, so a copy in `state.js` would
+be a second source of a number the cartridge supplies; a *check* is exactly
+where an independent derivation belongs, the same way `tools/types --verify`
+asserts matchups nobody read out of the chart.
+
+</details>
 
 ### Asking the cartridge, without running it
 
