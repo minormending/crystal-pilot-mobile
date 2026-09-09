@@ -314,15 +314,43 @@ export function withBattle(Base) {
     return false;
   }
 
-  strongest(usable, mon) {
+  strongest(usable, mon, against = null, mine = null) {
     const power = (i) => {
       const info = this.rom && this.rom.move(mon.moves[i]);
       return info ? info.power : 0;
     };
+    // What the move is worth *here*: its power scaled by the type chart and
+    // the same-type bonus. Ranking by the raw number picked RAZOR LEAF's 55
+    // over TACKLE's 35 against a Bug that takes half from one and full from
+    // the other -- so the bigger number was the smaller hit.
+    const hit = (i) => (this.rom
+      ? this.rom.hitPower(mon.moves[i], against, mine)
+      : 0);
+    // The *set* is still chosen by raw power, and deliberately: a damaging
+    // move is a damaging move, and the chart only says which of them to
+    // swing. Filtering on the scaled number would empty the pool against
+    // something immune to everything carried, and hand back slot order --
+    // which is how a grind ended up choosing GROWL.
     const hitters = usable.filter((i) => power(i) > 0);
     if (!hitters.length) return usable[0];
-    return hitters.reduce((best, i) => (power(i) > power(best) ? i : best),
+    return hitters.reduce((best, i) => (hit(i) > hit(best) ? i : best),
                           hitters[0]);
+  }
+
+  /**
+   * The move that was picked, and what the chart thought of it.
+   *
+   * Said only when there is something to say -- a neutral hit is the ordinary
+   * case and naming it every turn buries the log. Empty without a ROM to
+   * price the move with.
+   */
+  movePicked(id, against = null) {
+    if (!this.rom || !id) return '';
+    const eff = this.rom.effectiveness(id, against);
+    if (eff === null || eff === 1) return '';
+    const name = this.rom.moveName(id) || `move ${id}`;
+    if (eff === 0) return `${name} — no effect on this one`;
+    return `${name} — ${eff > 1 ? 'super effective' : 'not very effective'}`;
   }
 
   async chooseMove(mon, prefer = null) {
@@ -564,10 +592,16 @@ export function withBattle(Base) {
         inMoves = await this.snap();
       }
       if (inMoves.inBattle && inMoves.menu[1] >= 1) {
+        const against = inMoves.enemy && inMoves.enemy.types;
+        const mine = inMoves.active && inMoves.active.types;
+        const attacker = onField(inMoves) || { moves: [], pp: [] };
         const picked = await this.chooseMove(
-          onField(inMoves) || { moves: [], pp: [] },
-          (usable, mon) => this.strongest(usable, mon));
+          attacker, (usable, mon) => this.strongest(usable, mon, against, mine));
         if (picked === null) continue;      // could not aim; take the turn again
+        if (picked >= 0) {
+          const said = this.movePicked(attacker.moves[picked], against);
+          if (said) this.say(said);
+        }
       }
       // Turn resolution is text; press through it until the battle ends or the
       // menu comes back.
@@ -633,14 +667,17 @@ export function withBattle(Base) {
 
     // Weakest first, and only moves that take HP off at all -- ranking LEER as
     // gentle would weaken nothing and spend the turn.
-    const power = (i) => {
-      const info = this.rom && this.rom.move(mon.moves[i]);
-      return info ? info.power : 0;
-    };
-    const canChip = (i) =>
-      mon.moves[i] && mon.pp[i] > 0 &&
-      (!this.rom || this.rom.isChipMove(mon.moves[i]));
-    if (!mon.moves.some((_, i) => canChip(i))) return 'nomove';
+    //
+    // Weakest by what the move actually does to *this* target, not by the
+    // number in the table: the same reading that stopped `strongest` picking
+    // the bigger number over the harder hit stops this one picking the
+    // smaller number over the softer hit. And a move the target is immune to
+    // is the gentlest thing imaginable and weakens it forever, so it is out
+    // of the pool rather than at the front of it.
+    const canChip = (m, i) =>
+      m.moves[i] && m.pp[i] > 0 &&
+      (!this.rom || this.rom.isChipMove(m.moves[i]));
+    if (!mon.moves.some((_, i) => canChip(mon, i))) return 'nomove';
 
     await this.chooseAction(FIGHT);
     await this.step(30);
@@ -653,10 +690,15 @@ export function withBattle(Base) {
     if (!inMoves.inBattle) return 'ended';
     if (inMoves.menu[1] < 1) return 'stuck';
 
-    const picked = await this.chooseMove(onField(inMoves) || mon, (usable) => {
-      const chippers = usable.filter(canChip);
-      const pool = chippers.length ? chippers : usable;
-      return pool.reduce((best, i) => (power(i) < power(best) ? i : best), pool[0]);
+    const against = inMoves.enemy && inMoves.enemy.types;
+    const mine = inMoves.active && inMoves.active.types;
+    const picked = await this.chooseMove(onField(inMoves) || mon, (usable, m) => {
+      const hit = (i) => (this.rom ? this.rom.hitPower(m.moves[i], against, mine) : 0);
+      const chippers = usable.filter((i) => canChip(m, i));
+      const lands = chippers.filter(
+        (i) => !this.rom || this.rom.canHit(m.moves[i], against));
+      const pool = lands.length ? lands : (chippers.length ? chippers : usable);
+      return pool.reduce((best, i) => (hit(i) < hit(best) ? i : best), pool[0]);
     });
     if (picked === null) return 'stuck';
 

@@ -102,8 +102,18 @@ export class GameState {
       enemyLevel: symbols.addr('wEnemyMonLevel'),
       enemyHp: symbols.addr('wEnemyMonHP'),
       enemyMaxHp: symbols.addr('wEnemyMonMaxHP'),
+      // What the enemy *is*, so the pilot can price a move against it. Both
+      // slots: Gen 2 stores a single-typed Pokemon as both of its types, so
+      // slot two is never empty and never means "no second type".
+      enemyType1: symbols.addr('wEnemyMonType1'),
+      enemyType2: symbols.addr('wEnemyMonType2'),
       battleMonHp: symbols.addr('wBattleMonHP'),
       battleMonMaxHp: symbols.addr('wBattleMonMaxHP'),
+      // The types of the Pokemon on the field rather than the party entry's,
+      // because those are the ones the same-type bonus is paid on and a
+      // battle can change them.
+      battleMonType1: symbols.addr('wBattleMonType1'),
+      battleMonType2: symbols.addr('wBattleMonType2'),
       menuItems: symbols.addr('wMenuDataItems'),
       numBalls: symbols.addr('wNumBalls'),
       balls: symbols.addr('wBalls'),
@@ -195,10 +205,12 @@ export class GameState {
         level: b(wram, a.enemyLevel),
         hp: w(wram, a.enemyHp),
         maxHp: w(wram, a.enemyMaxHp),
+        types: [b(wram, a.enemyType1), b(wram, a.enemyType2)],
       },
       active: {
         hp: w(wram, a.battleMonHp),
         maxHp: w(wram, a.battleMonMaxHp),
+        types: [b(wram, a.battleMonType1), b(wram, a.battleMonType2)],
       },
       party: this.party(wram),
       balls: this.balls(wram),

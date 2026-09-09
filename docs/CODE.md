@@ -433,7 +433,7 @@ watching.
 
 ### `symbols.js` — where things live
 
-<!-- covers: gen2/symbols.js @ d64cb67b7911 -->
+<!-- covers: gen2/symbols.js @ 238975fac5b2 -->
 
 Parses the `.sym` file into `name → { bank, addr }`. First definition wins;
 later duplicates are aliases and locals.
@@ -461,11 +461,11 @@ enforces it, so it is a fact about the build rather than a habit.
 
 ### `state.js` — what the game is doing right now
 
-<!-- covers: gen2/state.js @ 16cab56e48dc -->
+<!-- covers: gen2/state.js @ 567bb5c25968 -->
 
 One snapshot, many answers: `inBattle`, `party`, `pos`, `onGrass`,
 `worldLoaded`, `menu`, `balls`, `items`, each party member's `status`, the
-enemy's HP, and `badges`. Events are read on demand rather than in `read()`,
+enemy's HP and **types**, the field Pokémon's own types, and `badges`. Events are read on demand rather than in `read()`,
 because a snapshot is taken several times a second and nothing wants the whole
 flag table that often — a gate asks about one bit when it is asked about.
 
@@ -478,6 +478,15 @@ thing no cartridge writes down. Counted in *bits* across both bytes, because
 eight Johto badges live in one byte and anything counting bytes reads a full
 case as one. Optional, like the tilemap: `null` and `0` are kept apart, since a
 cartridge that cannot say is not a cartridge with a new game.
+
+**Both sides carry two types, and neither slot is ever empty.** Gen 2 stores a
+single-typed Pokémon as both of its types — RATTATA reads NORMAL/NORMAL — so
+there is no *unset* to test for and nothing here pretends there is. Slot zero
+being NORMAL is not the same as unknown: NORMAL is a real type, `0` is its real
+number, and code that read a zero as "no type yet" would be answering a
+question the cartridge never asks. What that costs when it is got wrong is in
+[the bigger number is not the harder
+hit](#the-bigger-number-is-not-the-harder-hit).
 
 **`hasEvent` is the same idea about anything else the game remembers.** Gen 2
 keeps one bit per scripted event in `wEventFlags`, which makes it the address
@@ -571,19 +580,30 @@ and in `bootstrap.js`, with nothing able to notice if they drifted.
 
 ### `romdata.js` — what the cartridge knows
 
-<!-- covers: gen2/romdata.js @ 4aced1675a89 -->
+<!-- covers: gen2/romdata.js @ ad8626d8d26e -->
 
-Species names, item names, wild-encounter tables, move power. All read out of
-the ROM, not shipped as a copy, so they cannot drift from the build being driven.
+Species names, item names, move names, wild-encounter tables, move power and
+the type chart. All read out of the ROM, not shipped as a copy, so they cannot
+drift from the build being driven.
 
 <details>
 <summary><b>Advanced detail:</b> table layouts, and the one that bites</summary>
 
 - `PokemonNames` — fixed width 10, terminated by `$50`.
-- `ItemNames` — **variable length**, packed, each ended by `@`. Reading at a
-  fixed stride drifts one character further out per entry: `ULTRA BALL` came
-  back as `LTRA BALL`, `GREAT BALL` as `AT BALL`. `itemName()` walks the
-  terminators.
+- `ItemNames` and `MoveNames` — **variable length**, packed, each ended by `@`.
+  Reading at a fixed stride drifts one character further out per entry: `ULTRA
+  BALL` came back as `LTRA BALL`, `GREAT BALL` as `AT BALL`. One walk,
+  `_packedName()`, serves both — it was briefly two, which is the shape of
+  defect this file keeps finding. It answers **empty** rather than a string of
+  question marks when no terminator turns up inside twenty-four bytes, because
+  `decodeText` will turn any bytes at all into something that reads like a
+  name.
+- `TypeMatchups` — 110 rows of `attacker, defender, multiplier-in-tenths`, with
+  a one-byte separator in the middle and neutral left out entirely. See [the
+  bigger number is not the harder
+  hit](#the-bigger-number-is-not-the-harder-hit), which is the section about
+  what it is for; `matchups()`, `matchup()`, `effectiveness()`, `hitPower()`
+  and `canHit()` are the readers.
 - `JohtoGrassWildMons` — per map: group, number, three rates, then **three
   blocks of seven** `(level, species)` pairs for morning, day and night. Both
   halves of that pair are read now: `wildOn` gives the species, commonest first,
@@ -1332,7 +1352,7 @@ and a Pokémon Center restores PP, so the grind treats it as a trip it already
 knew how to make. See [the tiles that run a
 script](#8g-the-tiles-that-run-a-script-and-saying-hello) for the walk half.
 
-<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ d508d11efd79 -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ ec4ef23366c0 -->
 
 ### Which move, and which question
 
@@ -1527,6 +1547,123 @@ One loose end, recorded rather than smoothed: in that run the decline's own log
 line was not captured, though it was captured in the run before. The outcome is
 unambiguous — the moves survived where they previously did not — but the
 mechanism's evidence spans two runs rather than one.
+
+### The bigger number is not the harder hit
+
+<!-- covers: gen2/romdata.js gen2/engine.js gen2/battle.js @ 979db9debe8c -->
+
+For twenty-three passes the pilot ranked its moves by one number: the `power`
+byte out of the cartridge's move table. `romdata.move()` had been returning the
+move's **type** all along, and nothing in the app had ever read it.
+
+So the ranking was confidently wrong wherever the type chart disagreed with the
+power byte, and on this cartridge it disagrees early and often:
+
+| Situation | Ranked by power | What the chart says |
+| --- | --- | --- |
+| CHIKORITA against a BELLSPROUT in Sprout Tower | RAZOR LEAF, 55 | Grass on Grass/Poison is a **quarter** — 20.6 against TACKLE's 35 |
+| CHIKORITA against a ZUBAT on Route 32 | RAZOR LEAF, 55 | Poison/Flying, also a quarter, also 20.6 |
+| TOTODILE against a GASTLY in Sprout Tower | SCRATCH, 40 (a tie, and ties keep the first) | Normal on Ghost is **nothing at all**; WATER GUN is 60 |
+
+The last row is not "slower", it is a battle that cannot end. A Normal move on
+a Ghost does no damage, so the enemy's HP never moves, so `fightBattle` presses
+on until it reports `stuck` — the same dead end that `canStillWin` was written
+for, arrived at from a direction it cannot see, because the move *does* have
+power.
+
+**The chart is in the cartridge, so it is read from the cartridge.** `Moves`
+gave the type; `TypeMatchups` gives what the types do to each other.
+
+```
+TypeMatchups:
+    db NORMAL,   ROCK,  NOT_VERY_EFFECTIVE   ; 00 05 05
+    db NORMAL,   STEEL, NOT_VERY_EFFECTIVE   ; 00 09 05
+    ...                                        110 rows in all
+    db -2                                    ; fe   one byte, not a row
+    db NORMAL,   GHOST, NO_EFFECT            ; 00 08 00
+    db FIGHTING, GHOST, NO_EFFECT            ; 01 08 00
+    db -1                                    ; ff   the end
+```
+
+Three things about that layout are worth stating, because each of them is a way
+to read it wrongly and get a chart out rather than an error:
+
+- **The multiplier is in tenths, and neutral is not written down.** Only 0, 5
+  and 20 appear — seven immunities, fifty-seven halves, forty-six doubles. A
+  pair the table never mentions is neutral, so a miss is an answer and not a
+  gap. That is why `matchups()` hands back the map and lets `matchup()` decide
+  what a miss means, instead of trying to fill in a grid of 289 pairs it was
+  never told about.
+- **`$fe` is one byte where every row is three.** It marks the rows Foresight
+  cancels. Read it as a row and it swallows the row behind it — `NORMAL` on
+  `GHOST` — and shifts everything after by two bytes. Which is silent: what
+  comes out is still a chart, just not this cartridge's, and the one matchup it
+  loses first is the one that stops a battle dead.
+- **A table that does not end where a table ends is not a table.** A symbol
+  file pointing at the wrong place reads a bank of zeroes, which decodes to
+  exactly one row: NORMAL on NORMAL, immune. A pilot believing that prices
+  every move it owns at nothing. So running off the end of the scan without
+  finding `$ff` answers **null**, and null falls back to raw power.
+
+**Two scalings, and only one of them needs the chart.**
+
+```mermaid
+flowchart LR
+    P["power, out of Moves"] --> H["how hard it lands"]
+    T["move's type, out of Moves"] --> M["the chart: TypeMatchups"]
+    E["enemy's two types,<br/>out of wEnemyMonType1/2"] --> M
+    M --> H
+    T --> S["same type as the<br/>Pokémon holding it?"]
+    A["own two types,<br/>out of wBattleMonType1/2"] --> S
+    S --> H
+    H --> R["rank"]
+```
+
+The same-type bonus asks nothing but the move's type and the Pokémon's, both of
+which are readable without a chart — so a cartridge whose symbol file has no
+`TypeMatchups` keeps that half and loses the matchup. What it falls back to is
+ranking by power, which is what this replaced.
+
+**Both sides of the matchup are read from the field, not from the party.**
+`wBattleMonType1/2` rather than the party entry's, because those are the types
+the bonus is actually paid on and a battle can change them.
+
+**Gen 2 stores a single-typed Pokémon as both of its types.** RATTATA is
+NORMAL/NORMAL. Multiply once per slot and every multiplier is squared: a Grass
+move on a Water/Water POLIWAG came out at four rather than two. The game applies
+each matching row once whichever slot matched it, so `effectiveness` deduplicates
+the types before multiplying. A genuinely dual-typed defender still collects
+both rows — Fire on a Grass/Bug PARAS doubles twice, and ×4 is correct.
+
+**The chart reorders the list; it never empties it.** `strongest` still chooses
+*which moves are candidates* by raw power, and only their order by the chart.
+That is deliberate and it is the second time this loop has learned it: filter on
+the scaled number and a Normal-only moveset facing a Ghost prices every attack
+at zero, empties the pool, and falls back to slot order — which is how a grind
+came to choose GROWL in the first place. A move that does nothing is still a
+better answer than a move that cannot.
+
+`chip` is the same question backwards and gets the same fix. It wants the
+*softest* hit, so it was picking the smallest number — and against a Grass
+target EMBER at 40 doubled hits harder than RAZOR LEAF at 55 halved. One
+exception: a move the target is immune to is the gentlest thing imaginable and
+weakens it forever, so that one is taken **out** of the pool rather than put at
+the front of it. `canHit` answers that, and answers true wherever it cannot
+tell — "cannot say" must not become "do not swing".
+
+**What the log says.** Naming the move every turn buries everything else in it,
+so `movePicked` says something only when the chart does: `EMBER — super
+effective`, `TACKLE — no effect on this one`. A neutral hit is the ordinary case
+and says nothing. The name comes from `MoveNames`, which is packed and
+terminated exactly like `ItemNames` — so both now walk the same
+`_packedName`, because two copies of that walk was the defect that read ULTRA
+BALL as "LTRA BALL".
+
+`tools/types` prints the decoded chart as a grid, checks it against
+twenty-two things about Pokémon that were true before this app existed, and
+will rank a moveset for a named matchup showing what power alone would have
+picked beside what the chart picks. It runs `gen2/romdata.js` — the reader the
+pilot uses, not a second one beside it. See section 10.
 
 ### Is it our turn?
 
@@ -1796,7 +1933,7 @@ fainted.
 
 ## 7. Catching something
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ a8e63c8ad2bf -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ c914c293a264 -->
 
 Catching is the most involved loop, because a Poké Ball's odds turn on how much
 HP is left. Throwing at a full-health target is mostly throwing balls away.
@@ -1834,6 +1971,17 @@ the eleven moves that store 0 or 1 while taking half the bar, your level in HP,
 or all of it. The memory below cannot cover for that one — it learns from the
 swing it just took, so opening with Guillotine teaches it the maximum and costs
 the target to do it.
+
+**Nor off the power byte and the type chart alone, though both are read now.**
+"Gentlest" is the *softest landing*, so it is ranked by the same
+`hitPower` the winning half ranks by, downwards — against a Grass target EMBER
+at 40 doubled hits harder than RAZOR LEAF at 55 halved, and picking the smaller
+number would knock out the thing being caught. The one move taken out of the
+pool rather than put at the front of it is one the target is immune to: that is
+the gentlest hit imaginable and it weakens the target forever, so a Normal-only
+lead chipping a GASTLY threw balls at a full bar until the budget ran out. See
+[the bigger number is not the harder
+hit](#the-bigger-number-is-not-the-harder-hit).
 
 **The threshold alone is not a safe stopping point.** Against a Lv2 Rattata one
 swing carries it from above the line to zero. So the pilot remembers the biggest
@@ -2204,7 +2352,7 @@ said *trainer battle: lost* **seven times**. One loss, reported seven ways.
 
 ## 7d. The counter, and the money it takes
 
-<!-- covers: gen2/menus.js gen2/state.js titles/crystal.js @ 6983031ac9c6 -->
+<!-- covers: gen2/menus.js gen2/state.js titles/crystal.js @ e53de6ced7f4 -->
 
 Everything the pilot could do until now used what it found. **Shop** walks to a
 mart and buys, which is the first thing it does that spends rather than
@@ -2313,7 +2461,7 @@ counter and came away with **five potions and ¥1800**, in 49 seconds.
 
 ## 7b. Saving, and getting the save out
 
-<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ d508d11efd79 -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ ec4ef23366c0 -->
 
 ```mermaid
 flowchart TD
@@ -3004,7 +3152,7 @@ after](#8d-a-route-the-game-itself-refuses).
 
 ## 8b. Asking the cartridge what its places are called
 
-<!-- covers: gen2/romdata.js gen2/world.js @ 261e74642978 -->
+<!-- covers: gen2/romdata.js gen2/world.js @ 6b4c5a36194b -->
 
 The one table that **retires** hand-written data rather than adding to it. A map
 used to be called whatever the title profile said, and everything else was
@@ -3163,7 +3311,7 @@ by, which is the only leg it can measure.
 
 ## 8d. A route the game itself refuses
 
-<!-- covers: gen2/journey.js gen2/state.js @ 646dae7eeb8c -->
+<!-- covers: gen2/journey.js gen2/state.js @ c7a5dd86f63c -->
 
 The pass before this one taught the walk to *quote* the man who turns it back.
 This is the pilot doing something about it.
@@ -3371,7 +3519,7 @@ costs however long it takes somebody to notice their money is gone.
 
 ## 8f. Going and winning a badge
 
-<!-- covers: gen2/journey.js gen2/state.js titles/crystal.js @ 4724f5edf0c2 -->
+<!-- covers: gen2/journey.js gen2/state.js titles/crystal.js @ dfcf2d5c11af -->
 
 The pilot has been turned back from Route 32 since the pass it learned to find
 Pokémon Centers. `reopen` throws away every written-off road the moment a badge
@@ -4303,7 +4451,7 @@ reads all seven out of both files and compares them, which is the repair for
 
 ### Gates: asking the cartridge what it wants
 
-<!-- covers: gen2/state.js gen2/journey.js titles/crystal.js @ 4724f5edf0c2 -->
+<!-- covers: gen2/state.js gen2/journey.js titles/crystal.js @ dfcf2d5c11af -->
 
 Two kinds of closed road, and the difference is everything:
 
@@ -5449,7 +5597,7 @@ and it reports 45 because that is how many symbols it has.
 ```mermaid
 flowchart LR
     F["the .sym file<br/>1.8MB, 58,456 symbols"] --> S["Symbols<br/>the parsed table"]
-    S -->|"digest(SHARED_SYMBOLS)"| D["{name: [bank, addr]}<br/>53 entries, ~1KB"]
+    S -->|"digest(SHARED_SYMBOLS)"| D["{name: [bank, addr]}<br/>59 entries, ~1KB"]
     D --> R[["the room"]]
     R --> D2["the same 47 entries"]
     D2 -->|"Symbols.fromDigest"| T["a table that behaves<br/>like the parsed file"]

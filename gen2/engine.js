@@ -95,6 +95,27 @@ export const gen2 = {
   //  144 MIRROR_COAT. A hack that renumbered its effect table needs this list.
   lethalEffects: [38, 40, 87, 88, 89, 144],
 
+  // --- how hard a move lands ------------------------------------------------
+  // data/types/type_matchups.asm: `db attacker, defender, multiplier`, run
+  // together until $ff ends the table. The multiplier is in tenths, and only
+  // the pairs that are *not* ten are written down -- so a pair the table does
+  // not mention is neutral, which is why reading it means scanning for a pair
+  // rather than indexing at an offset.
+  //
+  // Measured on the cartridge rather than copied: 110 triples at
+  // TypeMatchups, carrying exactly three multipliers -- 0 (immune, 7 pairs),
+  // 5 (half, 57) and 20 (double, 46). $fe is a *one-byte* separator, not a
+  // triple of its own, and the two entries past it are the pair Foresight
+  // cancels: NORMAL and FIGHTING against GHOST. Reading $fe as a triple eats
+  // the first of those and shifts the rest by two.
+  //
+  // `stab` is the same-type bonus: Gen 2 scales damage by 15/10 when the move
+  // shares a type with the Pokemon using it.
+  damage: {
+    matchupBytes: 3, neutral: 10, chartEnd: 0xff, chartForesight: 0xfe,
+    chartScan: 256, stab: 1.5,
+  },
+
   // --- wild encounters -----------------------------------------------------
   // A grass entry is: map group, map number, three rates, then three blocks of
   // seven (level, species) -- morning, day, night.

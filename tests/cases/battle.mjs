@@ -436,6 +436,196 @@ test('fightBattle actually asks for the hardest move, not just could', async (t)
 });
 
 
+// --- the type chart, which is the difference between a number and a hit -----
+//
+// The moves are the real ones with their real types; the chart is the head of
+// the real table plus its real tail. Ranking by `power` alone picks the bigger
+// number, and the bigger number is not always the harder hit.
+
+const NORMAL = 0x00, BUG = 0x07, GHOST = 0x08, FIRE = 0x14, GRASS = 0x16;
+const CHART = [
+  NORMAL, GHOST, 0,
+  FIRE, GRASS, 20,
+  FIRE, BUG, 20,
+  GRASS, BUG, 5,
+  GRASS, FIRE, 5,
+  0xff,
+];
+const TYPED_MOVES = {
+  33: { power: 35, type: NORMAL, pp: 35 },        // TACKLE
+  45: { power: 0, effect: 18, type: NORMAL, pp: 40 }, // GROWL
+  52: { power: 40, type: FIRE, pp: 25 },          // EMBER
+  75: { power: 55, type: GRASS, pp: 25 },         // RAZOR LEAF
+};
+// Packed, terminated, and in the same numbering as the moves above, because
+// the log line names the move it picked and a name off by one entry names the
+// wrong one. Ids 33, 45, 52 and 75, so the table is mostly filler.
+const MOVE_NAMES = (() => {
+  const named = { 33: 'TACKLE', 45: 'GROWL', 52: 'EMBER', 75: 'RAZOR LEAF' };
+  const out = [];
+  for (let id = 1; id <= 75; id++) {
+    for (const c of named[id] || '-') {
+      out.push(c === ' ' ? 0x7f : (c === '-' ? 0xe3 : 0x80 + c.charCodeAt(0) - 65));
+    }
+    out.push(0x50);
+  }
+  return out;
+})();
+const typedRom = () => romReading(TYPED_MOVES, { chart: CHART, names: MOVE_NAMES });
+
+test('the bigger number is not the harder hit, and the chart says which is',
+     async (t) => {
+  // A Chikorita meeting a CATERPIE. Razor Leaf is 55 and halved on a Bug --
+  // 27.5 -- and Tackle is 35 and neutral. Ranking by power swings the 55 and
+  // takes longer over every Bug on Route 30 than the move in slot one would.
+  const { tasks } = pilot({ rom: typedRom() });
+  const chikorita = { moves: [33, 45, 75, 0], pp: [35, 40, 25, 0] };
+  t.eq(tasks.strongest([0, 1, 2], chikorita, [BUG, BUG]), 0,
+       'Tackle, because half of 55 is less than 35');
+  t.eq(tasks.strongest([0, 1, 2], chikorita, [NORMAL, NORMAL]), 2,
+       'and against something the chart is quiet about, Razor Leaf again');
+});
+
+test('a weaker move that is super effective wins', async (t) => {
+  const { tasks } = pilot({ rom: typedRom() });
+  const quilava = { moves: [33, 52, 0, 0], pp: [35, 25, 0, 0] };
+  t.eq(tasks.strongest([0, 1], quilava, [GRASS, GRASS]), 1,
+       'Ember at 40 doubled beats Tackle at 35');
+  t.eq(tasks.strongest([0, 1], quilava, [NORMAL, NORMAL]), 1,
+       'and it beats it on power alone anyway');
+});
+
+test('the same-type bonus is enough to change the pick', async (t) => {
+  // Nothing here is super effective and nothing is resisted: 55 against 40,
+  // and the only thing between them is which Pokemon is holding them. A Fire
+  // mon swings the 55; the bonus does not move it. The chart is the same.
+  const { tasks } = pilot({ rom: typedRom() });
+  const mon = { moves: [52, 75, 0, 0], pp: [25, 25, 0, 0] };
+  t.eq(tasks.strongest([0, 1], mon, [NORMAL, NORMAL]), 1,
+       'Razor Leaf on the raw numbers: 55 against 40');
+  t.eq(tasks.strongest([0, 1], mon, [NORMAL, NORMAL], [FIRE, FIRE]), 0,
+       'and Ember once the Fire mon is holding it: 40 and a half is 60');
+  t.eq(tasks.strongest([0, 1], mon, [NORMAL, NORMAL], [GRASS, GRASS]), 1,
+       'the other way round for a Grass one');
+});
+
+test('a chart that says nothing can land never hands back a status move',
+     async (t) => {
+  // The set is chosen by raw power and only the *order* by the chart, which
+  // is deliberate: a Normal-only moveset against a GASTLY prices every attack
+  // at nothing, and picking by the scaled number would empty the pool and
+  // fall back to slot order -- which is how a grind came to choose GROWL.
+  const { tasks } = pilot({ rom: typedRom() });
+  const rattata = { moves: [33, 45, 0, 0], pp: [35, 40, 0, 0] };
+  t.eq(tasks.strongest([0, 1], rattata, [GHOST, GHOST]), 0,
+       'Tackle, which does nothing, rather than Growl, which does less');
+});
+
+test('fightBattle hands the chooser both sides of the matchup', async (t) => {
+  // The wiring, not the function -- the same shape of gap as the first draft
+  // of the "hardest move" tests, which passed with the argument removed from
+  // `fightBattle` entirely. The enemy is a Bug, so a chooser that was told so
+  // picks Tackle and one that was not picks Razor Leaf.
+  const { tasks } = pilot({ rom: typedRom() });
+  const party = [{ slot: 0, species: 152, level: 13, hp: 36, maxHp: 36,
+                   moves: [33, 45, 75, 0], pp: [35, 40, 25, 0] }];
+  const inBattle = { party, inBattle: true, menu: [1, 1], menuItems: 34,
+                     menuTop: 12, worldLoaded: true, windowOpen: true,
+                     enemy: { species: 10, level: 3, hp: 10, maxHp: 10,
+                              types: [BUG, BUG] },
+                     active: { hp: 36, maxHp: 36, types: [FIRE, FIRE] } };
+  let asked = null, turns = 0;
+  tasks.coverFaint = async () => null;
+  tasks.awaitBattleMenu = async () => inBattle;
+  tasks.chooseAction = async () => {};
+  tasks.step = async () => {};
+  tasks.pump = async () => {};
+  tasks.snap = async () => (turns > 0 ? { ...inBattle, inBattle: false } : inBattle);
+  tasks.chooseMove = async (mon, prefer) => {
+    asked = prefer(mon.moves.map((_, i) => i).filter((i) => mon.moves[i]), mon);
+    turns++;
+    return 0;
+  };
+  await tasks.fightBattle(2);
+  t.eq(asked, 0, 'Tackle — so the Bug reached the chooser');
+
+  // And the other half of the wiring: the same Bug, and a Grass mon holding
+  // the Razor Leaf. The bonus is 41.25 against Tackle's 35, so a chooser told
+  // what it *is* swings the leaf and one told only what it faces does not.
+  const mine = { ...inBattle, active: { hp: 36, maxHp: 36, types: [GRASS, GRASS] } };
+  asked = null; turns = 0;
+  tasks.awaitBattleMenu = async () => mine;
+  tasks.snap = async () => (turns > 0 ? { ...mine, inBattle: false } : mine);
+  await tasks.fightBattle(2);
+  t.eq(asked, 2, 'Razor Leaf — so its own types reached the chooser too');
+});
+
+test('weakening something for a ball asks the same question backwards',
+     async (t) => {
+  // `chip` wants the *softest* real hit, and the mirror of the ranking bug is
+  // here: against a GRASS target, Ember at 40 doubled hits harder than Razor
+  // Leaf at 55 halved, so the smaller number is the bigger hit and picking it
+  // knocks out the thing being caught.
+  const { tasks } = pilot({ rom: typedRom() });
+  const mon = { moves: [52, 75, 0, 0], pp: [25, 25, 0, 0] };
+  const picked = await pickedByChip(tasks, mon, [GRASS, GRASS]);
+  t.eq(picked, 1, 'Razor Leaf, which is 55 and does less to a Grass than 40 does');
+});
+
+test('and it will not weaken something with a move that cannot touch it',
+     async (t) => {
+  // The gentlest imaginable move is one the target is immune to, and it
+  // weakens it forever: a Normal-only lead chipping a GASTLY threw balls at
+  // full health until the budget ran out.
+  const { tasks } = pilot({ rom: typedRom() });
+  const mon = { moves: [33, 52, 0, 0], pp: [35, 25, 0, 0] };
+  t.eq(await pickedByChip(tasks, mon, [GHOST, GHOST]), 1,
+       'Ember, because Tackle is not a gentle hit, it is no hit');
+  // Ember at 40 is the softer hit against something Normal, because Tackle is
+  // Normal too and the same-type bonus makes it 52.5. Which is the point: the
+  // softest *hit*, not the smallest number.
+  t.eq(await pickedByChip(tasks, mon, [NORMAL, NORMAL]), 1,
+       'Ember, once the bonus on Tackle is counted');
+});
+
+/** Run `chip` far enough to see which slot its preference picks. */
+async function pickedByChip(tasks, mon, types) {
+  const menu = { party: [{ slot: 0, hp: 20, maxHp: 20, ...mon }],
+                 inBattle: true, menu: [1, 1], menuItems: 34, menuTop: 12,
+                 enemy: { species: 92, level: 5, hp: 20, maxHp: 20, types },
+                 active: { hp: 20, maxHp: 20, types: [NORMAL, NORMAL] } };
+  let picked = null;
+  tasks.awaitBattleMenu = async () => menu;
+  tasks.chooseAction = async () => {};
+  tasks.step = async () => {};
+  tasks.pump = async () => {};
+  tasks.push = async () => {};
+  tasks.snap = async () => menu;
+  tasks.chooseMove = async (m, prefer) => {
+    picked = prefer(m.moves.map((_, i) => i).filter((i) => m.moves[i]), m);
+    return picked;
+  };
+  await tasks.chip();
+  return picked;
+}
+
+test('the log says what the chart thought, and only when there is something',
+     async (t) => {
+  const { tasks } = pilot({ rom: typedRom() });
+  t.eq(tasks.movePicked(52, [GRASS, GRASS]), 'EMBER — super effective',
+       'named, because the cartridge knows its name');
+  t.eq(tasks.movePicked(75, [BUG, BUG]), 'RAZOR LEAF — not very effective',
+       'and the other way');
+  t.eq(tasks.movePicked(33, [GHOST, GHOST]), 'TACKLE — no effect on this one',
+       'and the one worth saying loudest');
+  t.eq(tasks.movePicked(33, [NORMAL, NORMAL]), '',
+       'a neutral hit is the ordinary case and buries the log');
+  t.eq(tasks.movePicked(33, null), '', 'and so does one nobody can price');
+  const { tasks: blind } = pilot({ rom: null });
+  t.eq(blind.movePicked(33, [GHOST, GHOST]), '', 'no cartridge, nothing to say');
+});
+
+
 // --- the one question the battle loop must not answer with A ----------------
 
 test('the delete-a-move box is told apart from everything else drawn',

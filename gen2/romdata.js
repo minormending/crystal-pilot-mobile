@@ -48,6 +48,11 @@ const LINE_BREAKS = new Set([0x1f, 0x4e, 0x4f]);
 // reading past the table gives. A bound rather than a count, so it is here
 // rather than in the engine profile.
 const ITEM_SCAN_LIMIT = 256;
+// How far to walk for one packed name before giving up. A bound rather than a
+// size: the longest item name in Crystal is "MYSTERYBERRY" at twelve and the
+// longest move name "THUNDERSHOCK" at twelve, so this is slack, and its job is
+// to stop a table with no terminator in it from running off the end of a bank.
+const PACKED_NAME_MAX = 24;
 // A landmark entry: an x and a y for the town map, then a pointer to the name.
 // The name is terminated, so the length is a bound rather than a size --
 // "CIANWOOD CITY" is the longest in Johto at thirteen.
@@ -103,6 +108,10 @@ export class RomData {
     this._species = new Map();
     this._moves = new Map();
     this.moves = symbols.has('Moves') ? this.at('Moves') : null;
+    // Optional the same way `Moves` is: without the chart the pilot ranks
+    // moves by raw power, which is what it did before it could read one.
+    this.chart = symbols.has('TypeMatchups') ? this.at('TypeMatchups') : null;
+    this.moveNames = symbols.has('MoveNames') ? this.at('MoveNames') : null;
     // Optional, like the wild tables: a cartridge whose symbol file does not
     // name it keeps every map it was told about and loses the rest.
     this.landmarks = symbols.has('Landmarks') ? this.at('Landmarks') : null;
@@ -136,22 +145,57 @@ export class RomData {
   itemName(id) {
     if (!id || id === 0xff) return '';
     if (this._itemCache && this._itemCache.has(id)) return this._itemCache.get(id);
-    const { bank, addr } = this.items;
+    const name = this._packedName(this.items, id);
+    if (!this._itemCache) this._itemCache = new Map();
+    this._itemCache.set(id, name);
+    return name;
+  }
+
+  /**
+   * One entry from a packed, terminated name table.
+   *
+   * Shared by the item names and the move names, which are the same shape --
+   * and were briefly the same *code*, twice, which is the defect this closes.
+   * Both walk the "@" terminators rather than striding, because a packed
+   * table puts every entry after the first at an offset only the ones before
+   * it can tell you: read at a fixed stride and ULTRA BALL comes back
+   * "LTRA BALL".
+   */
+  _packedName({ bank, addr }, id) {
     let at = addr;
     for (let n = 1; n < id; n++) {
-      for (let guard = 0; guard < 24; guard++) {
+      for (let guard = 0; guard < PACKED_NAME_MAX; guard++) {
         if (this.gb.romByte(bank, at++) === NAME_TERMINATOR) break;
       }
     }
     const bytes = [];
-    for (let guard = 0; guard < 24; guard++) {
+    let ended = false;
+    for (let guard = 0; guard < PACKED_NAME_MAX; guard++) {
       const b = this.gb.romByte(bank, at + guard);
-      if (b === NAME_TERMINATOR) break;
+      if (b === NAME_TERMINATOR) { ended = true; break; }
       bytes.push(b);
     }
-    const name = decodeText(bytes);
-    if (!this._itemCache) this._itemCache = new Map();
-    this._itemCache.set(id, name);
+    // No terminator inside the bound, so that was not a name. The longest in
+    // Crystal is twelve characters, so reaching twenty-four means the symbol
+    // file is pointing somewhere that is not a name table -- and `decodeText`
+    // will happily turn any bytes at all into a string of question marks,
+    // which reads like an answer.
+    return ended ? decodeText(bytes) : '';
+  }
+
+  /**
+   * A move's name, for saying which one was picked and why.
+   *
+   * Empty for a cartridge whose symbol file does not name the table -- the
+   * pilot then says what it thought of the move without naming it, which is
+   * less useful and not wrong.
+   */
+  moveName(id) {
+    if (!id || !this.moveNames) return '';
+    if (!this._moveNames) this._moveNames = new Map();
+    if (this._moveNames.has(id)) return this._moveNames.get(id);
+    const name = this._packedName(this.moveNames, id);
+    this._moveNames.set(id, name);
     return name;
   }
 
@@ -211,6 +255,132 @@ export class RomData {
     };
     this._moves.set(id, info);
     return info;
+  }
+
+  /**
+   * The cartridge's own type chart, as a map from an attacking and defending
+   * type to a multiplier in tenths.
+   *
+   * Read once and kept, because it is 110 triples and the answer never
+   * changes. Null where the symbol file does not name the table, which is
+   * "cannot say" and lets the caller fall back to raw power.
+   *
+   * The table only records the pairs that are *not* neutral, so a miss here is
+   * a neutral matchup rather than a gap -- which is why this returns the map
+   * and lets `matchup` decide what a miss means, instead of trying to fill in
+   * 26 x 26 pairs it was never told about.
+   */
+  matchups() {
+    if (this._matchups !== undefined) return this._matchups;
+    if (!this.chart) return (this._matchups = null);
+    const { matchupBytes, chartEnd, chartForesight, chartScan } = this.e.damage;
+    const { bank, addr } = this.chart;
+    const table = new Map();
+    let at = addr;
+    for (let guard = 0; guard < chartScan; guard++) {
+      const attack = this.gb.romByte(bank, at);
+      if (attack === undefined) break;
+      if (attack === chartEnd) return (this._matchups = table);
+      // One byte, not a triple. Reading it as a triple swallows the first
+      // entry behind it and shifts every entry after that by two.
+      if (attack === chartForesight) { at += 1; continue; }
+      table.set((attack << 8) | this.gb.romByte(bank, at + 1),
+                this.gb.romByte(bank, at + 2));
+      at += matchupBytes;
+    }
+    // No terminator inside the bound, so whatever was read is not a table.
+    // The distinction earns its keep the first time a symbol file points at
+    // the wrong place: a bank of zeroes decodes into a chart with one row in
+    // it -- NORMAL against NORMAL, immune -- and the pilot would rank every
+    // move it owns at nothing rather than falling back to raw power.
+    return (this._matchups = null);
+  }
+
+  /**
+   * What one attacking type does to one defending type, as a plain multiplier:
+   * 2 for double, 0.5 for half, 0 for immune, 1 for neutral.
+   *
+   * Null means *cannot say* -- no chart, or a type nobody supplied -- and a
+   * caller that reads that as neutral is claiming to know something it does
+   * not. The distinction earns its keep in the same place every other null in
+   * this app does: a pilot that cannot read the chart should rank moves the
+   * way it used to, not rank them as if everything were neutral and then be
+   * surprised.
+   */
+  matchup(attack, defend) {
+    const table = this.matchups();
+    if (!table) return null;
+    if (attack === null || attack === undefined) return null;
+    if (defend === null || defend === undefined) return null;
+    const found = table.get((attack << 8) | defend);
+    const tenths = found === undefined ? this.e.damage.neutral : found;
+    return tenths / this.e.damage.neutral;
+  }
+
+  /**
+   * What a move is worth against a defender carrying these types.
+   *
+   * Gen 2 stores a single-typed Pokemon as *both* of its types -- RATTATA is
+   * NORMAL/NORMAL -- so multiplying once per slot squares every multiplier,
+   * and a Ground move on a Ground/Ground DIGLETT came out at a quarter
+   * instead of a half. The game applies each matching row once, whichever
+   * slot matched it, so the types are deduplicated before they are multiplied.
+   *
+   * A defender with two different types collects both rows: FIRE on
+   * MAGNEMITE, which is ELECTRIC/STEEL, is neutral against the ELECTRIC and
+   * double against the STEEL, so double.
+   */
+  effectiveness(id, types) {
+    const info = this.move(id);
+    if (!info || !types || !types.length) return null;
+    let out = 1, known = false;
+    for (const t of new Set(types)) {
+      const m = this.matchup(info.type, t);
+      if (m === null) return null;
+      out *= m;
+      known = true;
+    }
+    return known ? out : null;
+  }
+
+  /**
+   * How hard a move will actually land, as a power the pilot can rank by.
+   *
+   * The number `power` alone is not that, and the gap is a lost battle: RAZOR
+   * LEAF is 55 and TACKLE is 35, so ranking by power picks RAZOR LEAF against
+   * every enemy -- including a Bug that takes half from it and full from
+   * TACKLE, where the 35 is the harder hit. Against a Rock it is the other way
+   * about by a factor of four.
+   *
+   * Two scalings, both out of the cartridge: the type chart, and the same-type
+   * bonus for a move that shares a type with the Pokemon using it.
+   *
+   * The two scalings are independent, and only one of them needs the chart:
+   * a cartridge whose symbol file does not name TypeMatchups still gets the
+   * same-type bonus, because that asks nothing but the move's type and the
+   * Pokemon's. What it loses is the matchup, and what it falls back to is
+   * ranking by power -- which is the behaviour this replaced, so the pilot
+   * survives a cartridge it cannot read the chart of.
+   */
+  hitPower(id, against = null, mine = null) {
+    const info = this.move(id);
+    if (!info) return 0;
+    const eff = this.effectiveness(id, against);
+    const stab = mine && mine.includes(info.type) ? this.e.damage.stab : 1;
+    return info.power * (eff === null ? 1 : eff) * stab;
+  }
+
+  /**
+   * Can this move be used at all against that defender?
+   *
+   * Separate from `hitPower` because zero is the one multiplier a caller may
+   * want to act on rather than rank by: a Normal move on a GHOST is not a
+   * weak hit, it is not a hit. False only when the chart says so; true where
+   * it cannot be read, because "cannot tell" must not become "do not swing".
+   */
+  canHit(id, against = null) {
+    const eff = this.effectiveness(id, against);
+    return eff === null ? true : eff > 0;
   }
 
   /**
