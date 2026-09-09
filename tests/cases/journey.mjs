@@ -2496,3 +2496,52 @@ test('a leg written off for some other reason is not reopened by a gate',
   t.eq(j.reopen(0, worldRam(sym, { events: [0x2d] })), 0, 'not a gate, not swept');
   t.true(j.isShut(1, 10), 'still written off');
 });
+
+// --- more than one gym ------------------------------------------------------
+//
+// `gyms` held a single entry from the day it was written until v169, so the
+// rules about choosing between them had never been exercised. The pilot reads
+// the badge case rather than remembering, which means the choice is made from
+// work RAM every time it is asked.
+
+const twoGyms = (badges = 0) => {
+  const title = { legCost: 25, heals: ['potion'], gyms: [
+    { map: 2565, inside: 2567, door: [18, 17],
+      leader: 'FALKNER', leaderAt: [5, 1], badge: 0 },
+    { map: 2055, inside: 2053, door: [10, 15],
+      leader: 'BUGSY', leaderAt: [5, 7], badge: 1 },
+  ] };
+  const gb = new FakeGameBoy({ wram: worldRam(sym, { badges }) });
+  const j = new Journey(gb, new GameState(sym), null, null,
+                        { mapKey: async () => 2565 }, () => {}, {}, title);
+  j.snap = async () => ({ inBattle: false, wram: gb.wram, party: [], balls: [],
+                          items: [], money: 0 });
+  return j;
+};
+
+test('with no badges, the first gym is the one on offer', async (t) => {
+  const list = await twoGyms(0).gymList(2565);
+  t.eq(list.map((g) => g.leader), ['FALKNER', 'BUGSY'], 'both, in order');
+  t.eq(list[0].leader, 'FALKNER', 'and the first is first');
+});
+
+test('a gym that has been won drops off the list, and the next one leads',
+     async (t) => {
+  // One badge in the case, set from the bottom bit up, which is how the real
+  // one reads: beating Falkner sets bit 0.
+  const list = await twoGyms(1).gymList(2565);
+  t.eq(list.map((g) => g.leader), ['BUGSY'], 'Falkner is done');
+});
+
+test('with every badge won there is no gym to offer', async (t) => {
+  const list = await twoGyms(2).gymList(2565);
+  t.eq(list, [], 'nothing left');
+});
+
+test('each gym carries its own town as the leg to walk', async (t) => {
+  // `from: g.map` is what the row prices and what `beatGym` walks to, so two
+  // gyms in different towns must not share one. This was free with one entry.
+  const list = await twoGyms(0).gymList(2565);
+  t.eq(list.map((g) => g.from), [2565, 2055], 'each its own town');
+  t.eq(new Set(list.map((g) => g.from)).size, 2, 'and they differ');
+});
