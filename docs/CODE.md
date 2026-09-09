@@ -4044,7 +4044,7 @@ This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ 50408bf97a43 -->
+<!-- covers: app/main.js index.html @ e125c350f870 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -4593,7 +4593,7 @@ seconds by a page whose loop was supposedly running.
 
 ### One thing at a time
 
-<!-- covers: app/main.js @ 8a587059ca79 -->
+<!-- covers: app/main.js @ 0ab6998d28de -->
 
 One Game Boy, one joypad, one canvas — so a great deal of this app is about
 making sure two things are never driving them at once. There are three claims,
@@ -5099,7 +5099,7 @@ a conversation.
 
 ### The card behind a party row
 
-<!-- covers: app/rows.js app/main.js index.html @ 424a8de3097c -->
+<!-- covers: app/rows.js app/main.js index.html @ dc109db1faeb -->
 
 Two questions the game itself will not answer about a Pokémon you are
 carrying — *what is this made of* and *what is it about to become* — and both
@@ -5171,7 +5171,7 @@ at body size.
 
 ### Running the list
 
-<!-- covers: app/rows.js app/main.js @ 52a1333b6820 -->
+<!-- covers: app/rows.js app/main.js @ 97aeb0e48fd8 -->
 
 The app has spent forty passes learning to answer one question — *what can the
 pilot do here, and which of those is worth most?* — and twenty showing the
@@ -5295,7 +5295,7 @@ to deposit your last Pokémon.
 
 ### The settings and the save card
 
-<!-- covers: index.html app/main.js @ 50408bf97a43 -->
+<!-- covers: index.html app/main.js @ e125c350f870 -->
 
 The pilot's own list got a glyph column, shorter names and a slot to fill in
 v165. These two cards did not, and reading them found that they had a different
@@ -5923,7 +5923,7 @@ they have been installed.
 
 ### Watching the other device's screen
 
-<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ 89ec9b3aea94 -->
+<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ 3f1ee5c819e6 -->
 
 One device shows its screen; the other watches it, and plays it if the first
 one says so. The picture goes straight between them over WebRTC and never

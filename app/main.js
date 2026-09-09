@@ -1874,6 +1874,14 @@ function paintDex(s) {
   box.classList.toggle('hide', !dex || !s.worldLoaded);
   if (!dex) return;
   $('#dexline').textContent = describeDexTotals(dex, { engine: state.e });
+  // A species that is no longer in the record cannot still be the heading of
+  // what is under it. Both of these outlive a cartridge: loading another
+  // save -- which this app is built to do -- replaces the whole Pokedex and
+  // the whole party, and neither `dexSpecies` nor `dexSlot` is reset by that
+  // on its own. Left alone, the card under the chips goes on showing a
+  // species this game has never caught, with no chip lit to say where it came
+  // from.
+  if (dexSpecies !== null && !caught.includes(dexSpecies)) dexSpecies = null;
   const list = $('#dexchips');
   list.innerHTML = '';
   if (!caught.length) {
@@ -1940,6 +1948,10 @@ async function refresh() {
   // already says that most jobs want a Pokemon along.
   $('#panel').classList.toggle('hide', !s.party.length);
   $('#leadline').textContent = describeParty(s, { rom: romdata });
+  // The other half of the same staleness: a smaller party leaves `dexSlot`
+  // pointing past the end, and the card silently re-opens on whoever arrives
+  // in that slot next.
+  if (dexSlot !== null && dexSlot >= s.party.length) dexSlot = null;
   $('#party').innerHTML = s.party.length
     ? s.party.map((m) => monRow(m, s)).join('')
     : '<span class="seen">no party yet</span>';
