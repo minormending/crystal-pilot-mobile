@@ -433,7 +433,7 @@ watching.
 
 ### `symbols.js` — where things live
 
-<!-- covers: gen2/symbols.js @ 238975fac5b2 -->
+<!-- covers: gen2/symbols.js @ ae8db314fa28 -->
 
 Parses the `.sym` file into `name → { bank, addr }`. First definition wins;
 later duplicates are aliases and locals.
@@ -453,6 +453,16 @@ it, and it asks two questions rather than one:
   loaded without a word, `battleMode` read `undefined`, `inBattle` was therefore
   `undefined !== 0`, and the pilot believed it was in a battle it could never
   leave.
+
+**And the list itself is a number the repository now counts.** `SHARED_SYMBOLS`
+is what travels to a device with a ROM and no `.sym`, and ten sentences across
+three files said how big it was — every one of them typed by hand, and every
+one of them reading **45** when the list held 59. The digest had grown fourteen
+names over several passes with nothing watching, so each of those sentences was
+quietly *understating what leaves the device*, which is the one direction a
+claim about what leaves a device must never be wrong in. They are all one
+`shared_symbols()` claim in `tools/counts.py` now, and `tools/renumber` writes
+them.
 
 The naming convention is what makes the second question answerable: pokecrystal
 names a variable for the memory it lives in — `w` and a capital is work RAM, `s`
@@ -5173,7 +5183,7 @@ this needed upstream rather than in the vendored copy.
 The options went through this room first on purpose: the small half, standing up
 the whole path — config, rules, anonymous sign-in, merge, debounce — with a
 slider position at stake rather than a save. Three things travel this way, and
-all three merge: the remembered options, the 45 addresses out of the symbol
+all three merge: the remembered options, the 59 addresses out of the symbol
 file, and the notes two devices use to introduce their screens to each other.
 The save goes over the same room and does *not* merge, which is the next
 section.
@@ -5642,11 +5652,11 @@ and change what a past handover said.
 
 ### The symbol file stops travelling
 
-The `.sym` is 1.8MB and this app looks up **45 symbols in it**. So the room
-carries those 45 lines — about a kilobyte, `{name: [bank, addr]}` — and a
+The `.sym` is 1.8MB and this app looks up **59 symbols in it**. So the room
+carries those 59 lines — about a kilobyte, `{name: [bank, addr]}` — and a
 second device needs the ROM and nothing else. `Symbols.fromDigest` builds a
 table that behaves like the parsed file; `size` is the only honest difference,
-and it reports 45 because that is how many symbols it has.
+and it reports 59 because that is how many symbols it has.
 
 ```mermaid
 flowchart LR

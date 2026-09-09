@@ -340,13 +340,13 @@ second, which is there so the core's own waits finish, not to run a game.
 
 Everything above was watched happening. This section was the exception, and the
 exception was the point of it: after the ROM-hack work shipped, **forty-seven**
-passes went looking for defects in code that already worked, and found **224** —
+passes went looking for defects in code that already worked, and found **227** —
 a handful of them created by a fix on the way, which are in the table in italics
 because they are a different kind of thing. None of them announced itself.
 
 **Reading found twenty-three**, more than any other single method, which is why
 it comes first in the table and why it is worth doing before touching the game.
-But the interesting number is the tail: the remaining two hundred and one were
+But the interesting number is the tail: the remaining two hundred and four were
 found almost as many different ways, and almost every entry in that column is a sentence rather than
 a category — *measuring the fix*, *asking a second tile*, *feeding it the wrong
 thing*, *writing a cartridge Crystal is not*, *a test, before the cartridge*,
@@ -602,6 +602,9 @@ exactly why nothing failed.
 | 47 | a Pokémon topped up by the potion before it could be handed another, and a fainted one was cured of the poison that is not its problem | a party of two, one nearly full | the same, on the bag heal |
 | 47 | *`itemName` answered a table with no terminator in it with twenty-four question marks, which reads like a name* | *a symbol file pointing at the wrong place* | *writing its twin for the move names* |
 | 47 | *the new chart reader carried a `known` flag that could never be false: with a non-empty type list the loop either returns or sets it* | *—* | *`tools/mutate` flipping the initialiser and nothing failing* |
+| 47 | **ten sentences in three files said the shared digest was 45 addresses when it held 59** — a privacy claim understating what leaves the device, in the one direction such a claim must never be wrong | read any of them | making them a computed number instead of a remembered one |
+| 47 | four of the six numbers in the checks diagram were hand-typed and three had drifted, including a coverage headline reading 65% against a real 57% — too flattering *and* unwatched, so every argument resting on it read stronger than it was | read the diagram | the same |
+| 47 | *`docs-check` printed how many sections it tracks only when none had drifted, so the number could not be asked for during a pass — which is the only time a pass asks* | *ask mid-edit* | *asking it, and getting nothing* |
 
 Five things in that table are worth more than the individual rows.
 
@@ -3338,6 +3341,41 @@ offset before the start. Found by widening the `<` to `<=` and watching nothing
 fail either way, which is the same thing that found a flag in the *new* chart
 reader that could never be false. Two branches pretending to be two, in one
 pass, in code written passes apart.
+
+### And the numbers the documents were carrying
+
+The audit's third thread was the prose, and it found the worst-shaped claim in
+the repository. **Ten sentences across three files said the shared digest is 45
+addresses. It holds 59.** That is what leaves a device while two of them are
+sharing a game, and the digest had grown fourteen names over several passes
+with nothing watching — so every one of those sentences was *understating what
+leaves the device*, which is the one direction a claim about what leaves a
+device must never be wrong in.
+
+Four of the six numbers in [the checks
+diagram](DEVELOPING.md#the-checks-that-need-no-rom) were the same story, three
+of them drifted: 31 tracked sections against 39, eighteen groups biting against
+twenty-six, and a coverage headline reading **65%** against a real 57% — from
+before [the pass that made the
+denominator honest](#a-forty-fifth-pass-two-hundred-and-a-button-nobody-could-press).
+Too flattering and unwatched is the worst of the three states a claim can be
+in: nobody goes looking for it.
+
+All fourteen are computed now. And both new counters ask the tool that owns the
+number rather than re-deriving it, because both first drafts show why: a regex
+over the coverage markers came back **42** against `docs-check`'s 39 — the
+three are the examples of the marker format inside fenced code blocks in the
+document that explains the marker format, and `docs-check` skips fences for
+exactly that reason. A second reader, wrong three ways, on its first run, in
+the file that has now twice written down what a second reader costs.
+
+`docs-check` printed its own total only when nothing had drifted, so the number
+could not be asked for *during* a pass — which is the only time a pass asks. It
+answered `-1`, and `tools/renumber` wrote the `-1` into the diagram. Which is
+the tool being honest about a number that cannot be computed, and is why the
+total goes out on every path over there rather than a plausible fallback going
+in here. `renumber`'s patterns take `-?\d+` now as well, so it can heal a claim
+it has itself written wrongly.
 
 That is a habit worth naming, because it is the second pass running that the
 tool has been more useful for what it *deletes* than for what it covers: **a

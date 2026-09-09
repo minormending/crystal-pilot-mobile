@@ -164,9 +164,10 @@ def main(argv):
                 )
             doc.write_text(text)
         if stale:
-            print(f"docs-check: recorded {len(stale)} section(s) as reviewed.")
+            print(f"docs-check: {total} section(s) tracked; recorded "
+                  f"{len(stale)} of them as reviewed.")
         else:
-            print("docs-check: nothing to update.")
+            print(f"docs-check: {total} section(s) tracked; nothing to update.")
         return 1 if broken else 0
 
     if not stale and not broken:
@@ -179,8 +180,14 @@ def main(argv):
         return 0
 
     if stale:
-        print("docs-check: these sections cover code that has changed since they "
-              "were last checked.\n")
+        # The total goes out on every path, not only the clean one. How many
+        # sections are tracked is a fact about the documents rather than about
+        # whether they are current -- and `tools/counts.py` reads that number
+        # off this line, so a tool that only says it when nothing has drifted
+        # is a tool that cannot be asked during a pass. It answered -1 once,
+        # which `renumber` duly wrote into a diagram.
+        print(f"docs-check: {total} section(s) tracked; these cover code that "
+              "has changed since they were last checked.\n")
         for r in stale:
             print(f"  {r['doc'].name}  →  {r['section']}")
             print(f"      covers: {' '.join(r['files'])}")

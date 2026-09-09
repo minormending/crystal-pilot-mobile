@@ -101,11 +101,13 @@ def doc_sections():
     out = subprocess.run([sys.executable, str(ROOT / 'tools' / 'docs-check')],
                          capture_output=True, text=True)
     m = re.search(r'(\d+) section\(s\) tracked', out.stdout)
-    if m:
-        return int(m.group(1))
-    # Drifted sections are reported instead of the total, and that is not a
-    # number this can answer -- so say so rather than guess one.
-    return -1
+    # -1 rather than a plausible fallback, and it earned that: the first draft
+    # of `docs-check` printed its total only on the clean path, so asking this
+    # mid-pass -- when sections had drifted, which is when a pass asks -- gave
+    # nothing to match and `renumber` wrote the -1 straight into a diagram.
+    # Which is the tool being honest, and is why the total now goes out on
+    # every path over there instead of a guess going in here.
+    return int(m.group(1)) if m else -1
 
 
 def line_coverage():
@@ -203,9 +205,34 @@ CLAIMS = [
     ('docs/DEVELOPING.md', r'`tools/check-app` is ([a-z-]+) groups',
      lambda: word(check_groups())),
     ('docs/CODE.md', r'<br/>(\d+) entries, ~1KB', shared_symbols),
-    ('docs/DEVELOPING.md', r'docs-check<br/>(\d+) tracked sections', doc_sections),
+    # Ten more sentences about the same number, in three files, every one of
+    # them typed by hand and every one of them stale: the digest has grown
+    # fourteen names since somebody last counted, so each of these has been
+    # quietly understating what leaves the device. Which is the one direction
+    # a privacy claim must never be wrong in.
+    ('gen2/symbols.js', r'(\d+) lines is about a kilobyte', shared_symbols),
+    ('docs/DEVICES.md', r'the (\d+) addresses out of the symbol file',
+     shared_symbols),
+    ('docs/DEVICES.md', r'the app reads (\d+) symbols in it', shared_symbols),
+    ('docs/DEVICES.md', r'the room carries those (\d+) addresses',
+     shared_symbols),
+    ('docs/DEVICES.md', r'\| (\d+) addresses out of it \|', shared_symbols),
+    ('docs/DEVICES.md', r'A\["(\d+) addresses<br/>~1KB"\]', shared_symbols),
+    ('docs/DEVICES.md', r'only the (\d+) it reads', shared_symbols),
+    ('docs/CODE.md', r'the (\d+) addresses out of the symbol', shared_symbols),
+    ('docs/CODE.md', r'looks up \*\*(\d+) symbols in it\*\*', shared_symbols),
+    ('docs/CODE.md', r'carries those (\d+) lines', shared_symbols),
+    ('docs/CODE.md', r'it reports (\d+) because that is how many symbols',
+     shared_symbols),
+    # `-?\d+` and not `\d+`, so `renumber` can heal a claim it has itself
+    # written wrongly. It wrote `-1` into this very diagram when the counter
+    # behind it could not answer, and then could not put it back -- a pattern
+    # that only matches well-formed claims leaves a malformed one for a person
+    # to find, which is the state a check gets edited around in.
+    ('docs/DEVELOPING.md', r'docs-check<br/>(-?\d+) tracked sections',
+     doc_sections),
     ('docs/DEVELOPING.md', r'"(\d+) of \d+ bite"', sharp_groups),
-    ('docs/DEVELOPING.md', r'"(\d+)%, and where"', line_coverage),
+    ('docs/DEVELOPING.md', r'"(-?\d+)%, and where"', line_coverage),
     ('docs/DEVELOPING.md', r'"\d+ of (\d+) bite"', check_groups),
     ('docs/PROVEN.md', r'and found \*\*(\d+)\*\*', audit_rows),
     ('docs/PROVEN.md', r'\*\*([a-z-]+)\*\*\npasses went looking',
