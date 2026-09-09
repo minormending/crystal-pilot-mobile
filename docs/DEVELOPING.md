@@ -17,7 +17,7 @@ flowchart LR
     E[an edit] --> H{{".githooks/pre-commit"}}
     H --> T["./run-tests<br/>710 behaviour tests"]
     H --> C["tools/check-app<br/>26 groups"]
-    H --> D["tools/docs-check<br/>25 tracked sections"]
+    H --> D["tools/docs-check<br/>39 tracked sections"]
     T --> OK[commit]
     C --> OK
     D --> OK
@@ -128,14 +128,14 @@ section gives. Everything by hand runs against a local build.
 flowchart BT
     C["the app"] --> T["./run-tests<br/>710 behaviour tests"]
     C --> A["tools/check-app<br/>26 groups"]
-    C --> D["tools/docs-check<br/>31 tracked sections"]
+    C --> D["tools/docs-check<br/>39 tracked sections"]
     C --> V["tools/coverage<br/>what the suite never runs"]
     T --> M["tools/mutate<br/>break a line, see who notices"]
     A --> K["tools/check-checks<br/>break each group's own subject"]
     T -.-> V
     M -.->|"survivors, by file"| R(["the suite is load-bearing"])
-    K -.->|"18 of 18 bite"| R2(["the groups are awake"])
-    V -.->|"65%, and where"| R3(["the gaps are known"])
+    K -.->|"26 of 26 bite"| R2(["the groups are awake"])
+    V -.->|"57%, and where"| R3(["the gaps are known"])
 ```
 
 The two on the right are the same idea pointed at different subjects, and the
@@ -161,8 +161,14 @@ is a correction rather than a feature. `app/` used to be excluded by a comment
 reading *main.js needs a DOM* — true, and the wrong conclusion: it also
 excluded `app/rows.js`, the most heavily tested module here, and a file the
 suite never *loads* appeared in neither the numerator nor the denominator. The
-headline was a percentage over a subset. Counting the rest puts it at **54%**,
-and the first thing that fell out was `gen2/nav.js` at 0 of 130 lines — the
+headline was a percentage over a subset. Counting the rest put it at **54%**
+at the time, and it is a tracked number now rather than a remembered one —
+the diagram above said 65% for two passes after the correction, which is the
+worst of the three states a claim can be in: too flattering, and unwatched, so
+nobody goes looking for it and every argument resting on it is weaker than it
+reads. Four of the numbers in that diagram were being typed by hand.
+
+The first thing the correction turned up was `gen2/nav.js` at 0 of 130 lines — the
 module that walks the player, untested because every test fakes it, and
 *untestable* because the harness's fake symbol table was missing the two
 symbols `Nav`'s constructor asks for.

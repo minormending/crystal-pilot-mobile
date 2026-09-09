@@ -22,6 +22,8 @@ once in prose.
 """
 import pathlib
 import re
+import subprocess
+import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
@@ -85,6 +87,66 @@ def shared_symbols():
     return len(re.findall(r"'[^']+'", block))
 
 
+def doc_sections():
+    """How many documentation sections opt into the drift check.
+
+    **Asked of `docs-check` rather than counted here**, and the first draft
+    did count here -- a regex over the markers, which came back 42 against
+    that tool's 39. The three are the examples of the marker format inside
+    fenced code blocks in the document that explains the marker format, and
+    `docs-check` skips fences for exactly that reason. So a second scanner
+    was already wrong three ways on its first run, in the same repository
+    that has now twice written down what a second reader costs.
+    """
+    out = subprocess.run([sys.executable, str(ROOT / 'tools' / 'docs-check')],
+                         capture_output=True, text=True)
+    m = re.search(r'(\d+) section\(s\) tracked', out.stdout)
+    if m:
+        return int(m.group(1))
+    # Drifted sections are reported instead of the total, and that is not a
+    # number this can answer -- so say so rather than guess one.
+    return -1
+
+
+def line_coverage():
+    """The one headline percentage in the prose, asked of the tool that owns it.
+
+    It had drifted eight points and in the wrong direction, which is the
+    interesting part: the diagram said 65% from before [the honest
+    denominator] and the tool says 57%. A number that is *too flattering* and
+    unwatched is the worst of the three states a claim can be in -- nobody
+    goes looking for it, and every argument built on it is weaker than it
+    reads.
+    """
+    # `node`, not `sys.executable`: this one is JavaScript, because it reads
+    # the same modules the app does. The first draft ran it under Python,
+    # which failed silently into the -1 below -- and `renumber` wrote the -1
+    # into the diagram, which is the tool doing exactly what it should with a
+    # number that cannot be computed.
+    out = subprocess.run(['node', str(ROOT / 'tools' / 'coverage')],
+                         capture_output=True, text=True)
+    m = re.search(r'run by the suite — (\d+)%', out.stdout)
+    return int(m.group(1)) if m else -1
+
+
+def sharp_groups():
+    """How many check groups `check-checks` has a mutation for.
+
+    The diagram in DEVELOPING.md draws this beside the group count, and the
+    two are only equal while every group has one -- which is the claim the
+    pairing is making. Counting them separately is what makes it a claim.
+    """
+    src = (ROOT / 'tools' / 'check-checks').read_text()
+    # The keys of the mutation table, the way `check_groups` counts the keys of
+    # CHECKS -- and not the `edit(` calls, which was the first draft and came
+    # back one short: `gamefiles` mutates by *adding a tracked file* rather
+    # than by editing one, so it is the one group whose mutation is not an
+    # edit. A count of the wrong thing that is nearly right is the shape of
+    # error this whole file exists to catch.
+    block = src.split('    return {')[1].split('\n    }')[0]
+    return len(re.findall(r'^\s*"[\w-]+":', block, re.M))
+
+
 AUDIT_ROW = re.compile(r'^\| (\d+) \| .* \| .* \| .*\|$', re.M)
 # The same row, with its columns kept apart, so the "Found by" column can be
 # counted. One pattern would do for both and would have to be read twice to
@@ -141,6 +203,10 @@ CLAIMS = [
     ('docs/DEVELOPING.md', r'`tools/check-app` is ([a-z-]+) groups',
      lambda: word(check_groups())),
     ('docs/CODE.md', r'<br/>(\d+) entries, ~1KB', shared_symbols),
+    ('docs/DEVELOPING.md', r'docs-check<br/>(\d+) tracked sections', doc_sections),
+    ('docs/DEVELOPING.md', r'"(\d+) of \d+ bite"', sharp_groups),
+    ('docs/DEVELOPING.md', r'"(\d+)%, and where"', line_coverage),
+    ('docs/DEVELOPING.md', r'"\d+ of (\d+) bite"', check_groups),
     ('docs/PROVEN.md', r'and found \*\*(\d+)\*\*', audit_rows),
     ('docs/PROVEN.md', r'\*\*([a-z-]+)\*\*\npasses went looking',
      lambda: word(audit_passes())),
