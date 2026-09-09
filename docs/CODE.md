@@ -112,7 +112,7 @@ of the subtleties in sections 6 and 7.
 
 ## 2. The shape of it
 
-<!-- covers-api: app/main.js gen2/journey.js titles/crystal.js gen2/tasks.js gen2/nav.js gen2/world.js gen2/collision.js gen2/state.js gen2/romdata.js gen2/symbols.js gbcore/gb.js @ ba2dfbf87d95 -->
+<!-- covers-api: app/main.js gen2/journey.js titles/crystal.js gen2/tasks.js gen2/nav.js gen2/world.js gen2/collision.js gen2/state.js gen2/romdata.js gen2/symbols.js gbcore/gb.js @ 991be5a25b0d -->
 
 Twenty-nine modules, in four directories, and the directories are the design:
 **an import may point down this list and never up.**
@@ -434,7 +434,7 @@ watching.
 
 ### `symbols.js` — where things live
 
-<!-- covers: gen2/symbols.js @ e4554993fa19 -->
+<!-- covers: gen2/symbols.js @ 6e97544a7fd5 -->
 
 Parses the `.sym` file into `name → { bank, addr }`. First definition wins;
 later duplicates are aliases and locals.
@@ -472,13 +472,67 @@ enforces it, so it is a fact about the build rather than a habit.
 
 ### `state.js` — what the game is doing right now
 
-<!-- covers: gen2/state.js @ 34882f985145 -->
+<!-- covers: gen2/state.js @ 580cec46c6b8 -->
 
 One snapshot, many answers: `inBattle`, `party`, `pos`, `onGrass`,
 `worldLoaded`, `menu`, `balls`, `items`, each party member's `status`, the
 enemy's HP and **types**, the field Pokémon's own types, and `badges`. Events are read on demand rather than in `read()`,
 because a snapshot is taken several times a second and nothing wants the whole
 flag table that often — a gate asks about one bit when it is asked about.
+
+**A party entry is read twice, at two different depths, and that is deliberate
+rather than untidy.** The struct is 0x30 bytes and the pilot flies on five of
+its fields: who it is, its level, its HP, its moves and their PP. Those come
+out six times per poll for the whole life of a session. Everything else — the
+DVs, the five stat-experience counters, the five stats the game has already
+worked out, the happiness, the held item, the experience, where it was caught —
+is `monDetail(wram, slot)`, read when somebody opens a card, which is when they
+are being looked at. `_mon` is the shared half so the two cannot disagree about
+the cheap fields.
+
+`dex(wram)` is off `read()` for the same reason `screen()` is: two 32-byte bit
+arrays walked 251 times each is not a thing to do eight times a second, and
+nothing but the dex card wants it.
+
+<details>
+<summary><b>Advanced detail:</b> three list lengths, a stat that is not stored,
+and a bound that is not written down</summary>
+
+**Three lists, three lengths, and every one of them is Gen 2's.** A reader that
+assumes they match is wrong in a way that still produces numbers:
+
+- **six** stats the game has worked out and stored — HP, attack, defence,
+  speed, special attack, special defence;
+- **five** stat-experience counters, Gen 2's "EVs", because Special is *one*
+  counter spent on both special stats. A reader expecting six walks two bytes
+  into the DVs;
+- **four** DV nibbles, Gen 2's "IVs" — and **the HP DV is not stored at all.**
+  It is assembled from the low bit of each of the other four, most significant
+  first. A reader that expects five nibbles finds four; one that expects four
+  stats reports every Pokémon in the game as having no HP potential.
+
+`engine.js` holds the three name lists and nothing else decides the order.
+`dvsOf` sits beside `statusOf` because it is the same kind of thing: a pure
+decode of one packed field. Its nibble *order* is the disassembly's rather than
+a measurement — what the symbol file settles is that the field is two bytes at
+0x15 — so it carries the same written-down gap `statusBits` does.
+
+**Where it was caught is answered as "does not say" more readily than most
+readers here would.** The packing is from the disassembly and has never been
+held to a live party, so a level outside 1..100 is `null` rather than printed.
+That is not only caution: a save carried in from Gold or Silver holds zeroes
+here, and a starter handed over by a professor was never caught at all, so
+*does not say* is a real state that a correct reader still has to produce.
+
+**The dex bound is derived from `speciesCount`, not written down**, and the
+reason is next door in work RAM: `wEndPokedexCaught` and `wPokedexSeen` are the
+same address. 251 species is 31 bytes and three bits, so a reader that rounded
+up to a comfortable 256 bits would report the first five species of *seen* as
+caught — a wrong answer made of real data, which is this repository's most
+expensive shape of bug. The fake in the harness lays the two arrays adjacent at
+exactly 32 bytes for that reason; padding between them would hide it.
+
+</details>
 
 **`badges` is a count, not a set**, and that is the whole of what it is for:
 the only question this app asks of a badge is *has anything changed since a
@@ -1416,7 +1470,7 @@ and a Pokémon Center restores PP, so the grind treats it as a trip it already
 knew how to make. See [the tiles that run a
 script](#8g-the-tiles-that-run-a-script-and-saying-hello) for the walk half.
 
-<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ e5825a45295a -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ aa042eb34bc7 -->
 
 ### Which move, and which question
 
@@ -1614,7 +1668,7 @@ mechanism's evidence spans two runs rather than one.
 
 ### The bigger number is not the harder hit
 
-<!-- covers: gen2/romdata.js gen2/engine.js gen2/battle.js @ effadfffe05a -->
+<!-- covers: gen2/romdata.js gen2/engine.js gen2/battle.js @ f70eacf4189e -->
 
 For twenty-three passes the pilot ranked its moves by one number: the `power`
 byte out of the cartridge's move table. `romdata.move()` had been returning the
@@ -1756,7 +1810,7 @@ pilot uses, not a second one beside it. See section 10.
 
 ### Sending out somebody who can touch it
 
-<!-- covers: gen2/battle.js gen2/engine.js @ 9e7ba86f0a95 -->
+<!-- covers: gen2/battle.js gen2/engine.js @ 360c40e120fc -->
 
 The pass before could tell that the Pokémon on the field takes nothing off a
 Ghost, and said so. The remedy it named — *a different Pokémon* — was one the
@@ -2545,7 +2599,7 @@ said *trainer battle: lost* **seven times**. One loss, reported seven ways.
 
 ## 7d. The counter, and the money it takes
 
-<!-- covers: gen2/menus.js gen2/state.js titles/crystal.js @ 42b12f968868 -->
+<!-- covers: gen2/menus.js gen2/state.js titles/crystal.js @ 790cea080cd0 -->
 
 Everything the pilot could do until now used what it found. **Shop** walks to a
 mart and buys, which is the first thing it does that spends rather than
@@ -2654,7 +2708,7 @@ counter and came away with **five potions and ¥1800**, in 49 seconds.
 
 ## 7b. Saving, and getting the save out
 
-<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ e5825a45295a -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ aa042eb34bc7 -->
 
 ```mermaid
 flowchart TD
@@ -3518,7 +3572,7 @@ by, which is the only leg it can measure.
 
 ## 8d. A route the game itself refuses
 
-<!-- covers: gen2/journey.js gen2/state.js @ d7d9bf056d63 -->
+<!-- covers: gen2/journey.js gen2/state.js @ 25964eed8017 -->
 
 The pass before this one taught the walk to *quote* the man who turns it back.
 This is the pilot doing something about it.
@@ -3726,7 +3780,7 @@ costs however long it takes somebody to notice their money is gone.
 
 ## 8f. Going and winning a badge
 
-<!-- covers: gen2/journey.js gen2/state.js titles/crystal.js @ 5e600340e898 -->
+<!-- covers: gen2/journey.js gen2/state.js titles/crystal.js @ b005a1523885 -->
 
 The pilot has been turned back from Route 32 since the pass it learned to find
 Pokémon Centers. `reopen` throws away every written-off road the moment a badge
@@ -3893,7 +3947,7 @@ sent the reader at it.
 
 ## 8h. What a species becomes, and when
 
-<!-- covers: gen2/romdata.js gen2/engine.js @ 7998be676057 -->
+<!-- covers: gen2/romdata.js gen2/engine.js @ 709facfd0832 -->
 
 Two questions a party entry cannot answer: *what will this turn into*, and
 *what is it about to learn*. Both are in one table, because in Gen 2 they are
@@ -4680,7 +4734,7 @@ before a step is taken, so a stopped walk does not move at all.
 
 ### What is behind the Gym door, before you open it
 
-<!-- covers: gen2/romdata.js gen2/engine.js app/rows.js @ 2084414088ed -->
+<!-- covers: gen2/romdata.js gen2/engine.js app/rows.js @ 344e9c5fd3bd -->
 
 The Gym row could say where the Gym is and who is in it. **Whether it is worth
 going** is two facts the cartridge has had all along, and neither of them
@@ -4935,7 +4989,7 @@ reads all seven out of both files and compares them, which is the repair for
 
 ### Gates: asking the cartridge what it wants
 
-<!-- covers: gen2/state.js gen2/journey.js titles/crystal.js @ 5e600340e898 -->
+<!-- covers: gen2/state.js gen2/journey.js titles/crystal.js @ b005a1523885 -->
 
 Two kinds of closed road, and the difference is everything:
 
@@ -5603,7 +5657,7 @@ this needed upstream rather than in the vendored copy.
 The options went through this room first on purpose: the small half, standing up
 the whole path — config, rules, anonymous sign-in, merge, debounce — with a
 slider position at stake rather than a save. Three things travel this way, and
-all three merge: the remembered options, the 65 addresses out of the symbol
+all three merge: the remembered options, the 68 addresses out of the symbol
 file, and the notes two devices use to introduce their screens to each other.
 The save goes over the same room and does *not* merge, which is the next
 section.
@@ -6072,16 +6126,16 @@ and change what a past handover said.
 
 ### The symbol file stops travelling
 
-The `.sym` is 1.8MB and this app looks up **65 symbols in it**. So the room
-carries those 65 lines — about a kilobyte, `{name: [bank, addr]}` — and a
+The `.sym` is 1.8MB and this app looks up **68 symbols in it**. So the room
+carries those 68 lines — about a kilobyte, `{name: [bank, addr]}` — and a
 second device needs the ROM and nothing else. `Symbols.fromDigest` builds a
 table that behaves like the parsed file; `size` is the only honest difference,
-and it reports 65 because that is how many symbols it has.
+and it reports 68 because that is how many symbols it has.
 
 ```mermaid
 flowchart LR
     F["the .sym file<br/>1.8MB, 58,456 symbols"] --> S["Symbols<br/>the parsed table"]
-    S -->|"digest(SHARED_SYMBOLS)"| D["{name: [bank, addr]}<br/>65 entries, ~1KB"]
+    S -->|"digest(SHARED_SYMBOLS)"| D["{name: [bank, addr]}<br/>68 entries, ~1KB"]
     D --> R[["the room"]]
     R --> D2["the same 47 entries"]
     D2 -->|"Symbols.fromDigest"| T["a table that behaves<br/>like the parsed file"]

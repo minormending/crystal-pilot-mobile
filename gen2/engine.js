@@ -110,6 +110,20 @@ export const gen2 = {
   // down, and waiting on a situation rather than on more reading.
   statusBits: { slp: 0x07, psn: 0x08, brn: 0x10, frz: 0x20, par: 0x40 },
 
+  // --- where it was caught, and at what level ------------------------------
+  // wPartyMon1CaughtData, two bytes. The first packs the time of day into the
+  // top two bits and the level it was caught at into the low six; the second
+  // holds the landmark in its low seven, with the OT's gender in the top bit.
+  //
+  // **From the disassembly, not from a cartridge**, exactly like `statusBits`
+  // above, and said plainly for the same reason. Nothing has been read off a
+  // live party here -- so the reader treats a level outside 1..100 as "this
+  // save does not say" rather than printing it, which is the behaviour a guess
+  // has to earn. A save carried in from Gold or Silver genuinely holds zeroes
+  // here, so "does not say" is a real state and not only a hedge.
+  caughtData: { timeShift: 6, levelMask: 0x3f, placeMask: 0x7f },
+  caughtTimes: [null, 'morning', 'day', 'night'],
+
   // --- species -------------------------------------------------------------
   // The highest id PokemonNames has an entry for. Reading past it reads
   // whatever table follows, so a hack that added species has to say so -- and

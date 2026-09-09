@@ -33,6 +33,38 @@ export function statusOf(byte, engine = gen2) {
   return out;
 }
 
+/**
+ * The two DV bytes as four numbers and the fifth that is not stored.
+ *
+ * Gen 2's "IVs". Four nibbles across two bytes -- attack and defence in the
+ * first, speed and special in the second -- and **the HP DV is not written
+ * down anywhere.** It is assembled from the low bit of each of the other four,
+ * most significant first, which is why a reader that expects five nibbles
+ * finds four and a reader that expects four stats reports a Pokemon with no
+ * HP potential at all.
+ *
+ * Beside `statusOf` because it is the same kind of thing: a pure decode of one
+ * packed field, with the layout coming out of the engine profile so a cartridge
+ * that ordered its nibbles differently changes one list rather than this code.
+ *
+ * **The nibble order is the disassembly's, not a measurement.** What can be
+ * said from the cartridge is that the field is two bytes at 0x15, which the
+ * symbol file settles. Which nibble is which needs a party entry whose stats
+ * are known, and none has been read here yet -- so this is the same kind of
+ * gap as `statusBits`, written down rather than glossed.
+ */
+export function dvsOf(word, engine = gen2) {
+  const names = engine.dvNames || [];
+  const out = {};
+  names.forEach((key, i) => {
+    // Nibble `i`, counting down from the top of the word, so the list's order
+    // is the layout and there is no second place to state it.
+    out[key] = (word >> ((names.length - 1 - i) * 4)) & 0x0f;
+  });
+  out.hp = names.reduce((n, key) => (n << 1) | (out[key] & 1), 0);
+  return out;
+}
+
 // Collision values that roll for a wild encounter (COLL_LONG_GRASS $14,
 // COLL_TALL_GRASS $18, and the two unused mirrors the engine still treats
 // as grass).
@@ -132,6 +164,11 @@ export class GameState {
       // 2 is a bit in here, so this is the address that turns "something turned
       // me back" into a question with an answer.
       events: symbols.has('wEventFlags') ? symbols.addr('wEventFlags') : null,
+      // The game's own record of what has been seen and what has been caught,
+      // one bit per species. Optional like the badges: a cartridge whose symbol
+      // file does not name them keeps every job and loses the dex list.
+      caught: symbols.has('wPokedexCaught') ? symbols.addr('wPokedexCaught') : null,
+      seen: symbols.has('wPokedexSeen') ? symbols.addr('wPokedexSeen') : null,
       curPocket: symbols.addr('wCurPocket'),
       curItem: symbols.addr('wCurItem'),
       windowStack: symbols.addr('wWindowStackSize'),
@@ -401,26 +438,132 @@ export class GameState {
     return this._pocket(wram, this.a.numItems, this.a.items);
   }
 
+  /** How many Pokemon the party holds, bounded by what the game allows. */
+  partyCount(wram) {
+    return Math.min(b(wram, this.a.partyCount), this.e.maxParty);
+  }
+
   party(wram) {
-    const { partyStride, mon, maxParty } = this.e;
-    const n = Math.min(b(wram, this.a.partyCount), maxParty);
+    const n = this.partyCount(wram);
     const out = [];
-    for (let i = 0; i < n; i++) {
-      const base = this.a.partyMon1 + i * partyStride;
-      out.push({
-        slot: i,
-        species: b(wram, base + mon.species),
-        level: b(wram, base + mon.level),
-        hp: w(wram, base + mon.hp),
-        maxHp: w(wram, base + mon.maxHp),
-        moves: [0, 1, 2, 3].map((k) => b(wram, base + mon.moves + k)),
-        // Low 6 bits are current PP; the top two are PP Up count.
-        pp: [0, 1, 2, 3].map((k) => b(wram, base + mon.pp + k) & 0x3f),
-        // What is wrong with it besides its HP. The byte was in the engine
-        // profile for ten passes with nothing reading it -- see `statusOf`.
-        status: statusOf(b(wram, base + mon.status), this.e),
-      });
-    }
+    for (let i = 0; i < n; i++) out.push(this._mon(wram, i));
     return out;
+  }
+
+  /**
+   * The four fields the pilot flies on, plus who it is.
+   *
+   * Everything else in the 0x30-byte entry is read by `monDetail` instead, and
+   * the split is deliberate rather than tidy: this runs six times per poll for
+   * the whole life of a session, and the pilot acts on the species, the level,
+   * the HP and the moves. The DVs and the five stat-experience counters have
+   * never changed a decision it makes; they are read when somebody opens a
+   * card, which is when they are being looked at.
+   */
+  _mon(wram, slot) {
+    const { partyStride, mon } = this.e;
+    const base = this.a.partyMon1 + slot * partyStride;
+    return {
+      slot,
+      species: b(wram, base + mon.species),
+      level: b(wram, base + mon.level),
+      hp: w(wram, base + mon.hp),
+      maxHp: w(wram, base + mon.maxHp),
+      moves: [0, 1, 2, 3].map((k) => b(wram, base + mon.moves + k)),
+      // Low 6 bits are current PP; the top two are PP Up count.
+      pp: [0, 1, 2, 3].map((k) => b(wram, base + mon.pp + k) & 0x3f),
+      // What is wrong with it besides its HP. The byte was in the engine
+      // profile for ten passes with nothing reading it -- see `statusOf`.
+      status: statusOf(b(wram, base + mon.status), this.e),
+    };
+  }
+
+  /**
+   * One party member, all of it -- the rest of the entry the pilot never looks
+   * at and a person reading a dex card does.
+   *
+   * Three lists of three different lengths come out of here, and the lengths
+   * are Gen 2's rather than a choice: **six** stats the game has already
+   * worked out, **five** stat-experience counters because Special is one
+   * counter spent on two stats, and **four** DV nibbles because the HP DV is
+   * derived rather than stored. `engine.js` says which five and which four and
+   * in what order; nothing here decides it.
+   *
+   * Null for a slot the party does not hold, which is a different answer from
+   * a slot holding a fainted Pokemon.
+   */
+  monDetail(wram, slot) {
+    if (!(slot >= 0) || slot >= this.partyCount(wram)) return null;
+    const { partyStride, mon, statExpNames, statNames } = this.e;
+    const base = this.a.partyMon1 + slot * partyStride;
+    // The six the game stores: maxHp is the first of them and already read, so
+    // the other five run from `mon.stats`.
+    const stats = { hp: w(wram, base + mon.maxHp) };
+    statNames.slice(1).forEach((key, i) => {
+      stats[key] = w(wram, base + mon.stats + i * 2);
+    });
+    return {
+      ...this._mon(wram, slot),
+      item: b(wram, base + mon.item),
+      // Three bytes, big-endian, the same shape as the money.
+      exp: (b(wram, base + mon.exp) << 16) | (b(wram, base + mon.exp + 1) << 8)
+        | b(wram, base + mon.exp + 2),
+      stats,
+      statExp: Object.fromEntries(statExpNames.map(
+        (key, i) => [key, w(wram, base + mon.statExp + i * 2)])),
+      dvs: dvsOf(w(wram, base + mon.dvs), this.e),
+      happiness: b(wram, base + mon.happiness),
+      caught: this._caughtAt(wram, base),
+    };
+  }
+
+  /**
+   * Where and when a Pokemon was caught, or null where the save does not say.
+   *
+   * Null is a real state and not only caution about a decode that has never
+   * been held to a live cartridge: a save carried in from Gold or Silver holds
+   * zeroes here, and a starter handed over by a professor was never caught at
+   * all. So a level outside 1..100 is answered as *does not say* rather than
+   * printed, which is what an unverified reading has to earn.
+   */
+  _caughtAt(wram, base) {
+    const { caughtData, caughtTimes, mon } = this.e;
+    const first = b(wram, base + mon.caught);
+    const second = b(wram, base + mon.caught + 1);
+    const level = first & caughtData.levelMask;
+    if (!(level >= 1 && level <= 100)) return null;
+    return {
+      level,
+      when: caughtTimes[first >> caughtData.timeShift] || null,
+      place: second & caughtData.placeMask,
+    };
+  }
+
+  /**
+   * What the Pokedex has seen and what it has caught, as two lists of species
+   * ids, or null on a cartridge that will not say.
+   *
+   * Not part of `read()`, and that is the same call `screen()` makes: this is
+   * two 32-byte bit arrays walked 251 times each, asked when somebody opens
+   * the dex rather than eight times a second for the whole session.
+   *
+   * **The length is derived from `speciesCount`, not written down.** The two
+   * arrays are adjacent in work RAM -- `wEndPokedexCaught` and `wPokedexSeen`
+   * are the same address -- so a reader that rounded 251 up to a comfortable
+   * 256 bits would report the first five species of *seen* as caught.
+   */
+  dex(wram) {
+    if (this.a.caught === null && this.a.seen === null) return null;
+    const count = this.e.speciesCount;
+    const list = (at) => {
+      if (at === null) return null;
+      const out = [];
+      for (let id = 1; id <= count; id++) {
+        const bit = id - 1;
+        if (b(wram, at + (bit >> 3)) & (1 << (bit & 7))) out.push(id);
+      }
+      return out;
+    };
+    return { caught: list(this.a.caught), seen: list(this.a.seen) };
   }
 }
