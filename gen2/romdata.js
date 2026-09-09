@@ -111,6 +111,11 @@ export class RomData {
     // Optional the same way `Moves` is: without the chart the pilot ranks
     // moves by raw power, which is what it did before it could read one.
     this.chart = symbols.has('TypeMatchups') ? this.at('TypeMatchups') : null;
+    // Optional for the same reason, and it answers the one question a party
+    // entry cannot: Gen 2 does not store a Pokemon's types in the party
+    // struct at all. They are copied out of here when it is sent out, which
+    // is why `wBattleMonType1` exists and there is no `wPartyMon1Type1`.
+    this.base = symbols.has('BaseData') ? this.at('BaseData') : null;
     this.moveNames = symbols.has('MoveNames') ? this.at('MoveNames') : null;
     // Optional, like the wild tables: a cartridge whose symbol file does not
     // name it keeps every map it was told about and loses the rest.
@@ -294,6 +299,37 @@ export class RomData {
     // it -- NORMAL against NORMAL, immune -- and the pilot would rank every
     // move it owns at nothing rather than falling back to raw power.
     return (this._matchups = null);
+  }
+
+  /**
+   * A species' own two types, out of the cartridge's base stats.
+   *
+   * The only way to know what a party member *is*: Gen 2 does not keep a
+   * Pokemon's types in the party struct -- they are copied out of `BaseData`
+   * when it is sent out, which is why work RAM has `wBattleMonType1` for the
+   * one on the field and nothing at all for the five behind it. So a decision
+   * about *which* Pokemon to send out has to come from the ROM.
+   *
+   * Null where the table cannot be read, which costs the same-type bonus and
+   * nothing else.
+   */
+  speciesTypes(id) {
+    if (!this.base || !id || id > this.e.speciesCount) return null;
+    if (!this._types) this._types = new Map();
+    if (this._types.has(id)) return this._types.get(id);
+    const { bank, addr } = this.base;
+    const entry = addr + (id - 1) * this.e.baseBytes;
+    // The entry says whose it is, and that is the only guard available: there
+    // is no terminator here to run off the end of. A symbol file pointing
+    // somewhere else reads zeroes, and `[0, 0]` is NORMAL/NORMAL -- a real
+    // type pair, so a caller cannot tell it from an answer.
+    const whose = this.gb.romByte(bank, entry + this.e.baseField.id);
+    if (whose !== id) { this._types.set(id, null); return null; }
+    const at = entry + this.e.baseField.types;
+    const pair = [this.gb.romByte(bank, at), this.gb.romByte(bank, at + 1)];
+    const out = pair.some((t) => t === undefined) ? null : pair;
+    this._types.set(id, out);
+    return out;
   }
 
   /**

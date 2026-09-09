@@ -137,11 +137,16 @@ export class GameState {
       windowStack: symbols.addr('wWindowStackSize'),
       menuTop: symbols.addr('wMenuBorderTopCoord'),
       menuRight: symbols.addr('wMenuBorderRightCoord'),
+      // The box's left column, which is the one number that tells the
+      // pilot's battle menu from the Bug-Catching Contest's. Adjacent to the
+      // other two by construction -- the game writes all four border coords
+      // when it draws a box -- so it costs nothing to read.
+      menuLeft: symbols.addr('wMenuBorderLeftCoord'),
     };
     // One small window covering every byte the name-menu check needs, so that
     // check can run after every press without a snapshot behind it.
     const watched = [this.a.menuItems, this.a.menuTop, this.a.menuRight,
-                     this.a.menuY];
+                     this.a.menuLeft, this.a.menuY];
     this.menuWindow = {
       addr: Math.min(...watched),
       len: Math.max(...watched) - Math.min(...watched) + 1,
@@ -232,6 +237,7 @@ export class GameState {
       // thrown ball look like a Pokemon breaking free. Measured: the battle
       // menu is 34 items with its box at row 12, the pack is 5 at row 1.
       menuItems: b(wram, a.menuItems),
+      menuLeft: b(wram, a.menuLeft),
       menuTop: b(wram, a.menuTop),
       badges: this.badgeCount(wram),
     };

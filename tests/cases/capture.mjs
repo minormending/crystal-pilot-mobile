@@ -399,3 +399,21 @@ test('and it still weakens something it can touch', async (t) => {
                                        memory: { biggestHit: 0 } });
   t.gte(tasks.log.filter((x) => x === 'chip').length, 1, 'it swung');
 });
+
+test('a catch in the Bug Contest stops before it opens a pack that is not there',
+     async (t) => {
+  // Three menu headers in the ROM read 34 items at row 12, and in the
+  // Contest's the third item is not the PACK — it is a PARK BALL thrown
+  // directly. So every step of this loop was aimed at a screen that was not
+  // drawn, and the message it gave, "could not find the ball", was true about
+  // the wrong thing.
+  const { tasks } = inBattle({});
+  const base = tasks.snap;
+  tasks.snap = async () => ({ ...(await base()), menuLeft: 2 });
+  const r = await tasks.captureHere(POKE_BALL, { weakenTo: 0.5,
+                                                 memory: { biggestHit: 0 } });
+  t.eq(r.outcome, 'notours', 'it stops on the menu, not on the ball');
+  t.eq(tasks.log.length, 0, 'and nothing was pressed');
+  t.contains(captureOutcome(r.outcome).say(r), 'Bug-Catching Contest',
+             'and the sentence names where it is');
+});

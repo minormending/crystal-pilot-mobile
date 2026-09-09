@@ -15,9 +15,9 @@ what CI checks and what the pre-commit hook blocks on.
 ```mermaid
 flowchart LR
     E[an edit] --> H{{".githooks/pre-commit"}}
-    H --> T["./run-tests<br/>710 behaviour tests"]
-    H --> C["tools/check-app<br/>26 groups"]
-    H --> D["tools/docs-check<br/>39 tracked sections"]
+    H --> T["./run-tests<br/>732 behaviour tests"]
+    H --> C["tools/check-app<br/>27 groups"]
+    H --> D["tools/docs-check<br/>40 tracked sections"]
     T --> OK[commit]
     C --> OK
     D --> OK
@@ -39,22 +39,22 @@ git config core.hooksPath .githooks
 ./run-tests -v         # notes and stack lines
 ```
 
-710 tests in 26 files, and what each file is about says more than the count:
+732 tests in 26 files, and what each file is about says more than the count:
 
 | file | tests | what it pins down |
 | --- | --- | --- |
 | `journey.mjs` | 160 | the walking: routes, doors, shut legs, healers, gyms, and the map graph |
 | `rows.mjs` | 102 | what every row and offer says, when its button works, and what the runner picks |
 | `menus.mjs` | 61 | the order the START menu is driven in, and what is closed between tries |
-| `battle.mjs` | 60 | whose turn it is, which Pokémon is out, and a win from a whiteout |
+| `battle.mjs` | 78 | whose turn it is, which Pokémon is out, and a win from a whiteout |
 | `collision.mjs` | 34 | which tiles can be walked, and which have somebody standing on them |
-| `capture.mjs` | 27 | weakening, ball choice, the party prompt, and the refusals before a throw |
+| `capture.mjs` | 28 | weakening, ball choice, the party prompt, and the refusals before a throw |
 | `grind.mjs` | 22 | what a grind says while it works, and the bounds that make it stop |
 | `world.mjs` | 22 | reading a cartridge's own maps: sizes, warps, objects and triggers |
 | `control.mjs` | 22 | the task lifecycle: stopping, failing, undo points, and loops that must end |
 | `state.mjs` | 21 | reading the party, the map, the badges and the battery out of work RAM |
 | `titles.mjs` | 19 | choosing a profile for a cartridge, and falling back to generic |
-| `romdata.mjs` | 27 | the cartridge's own character encoding and tables, byte by byte |
+| `romdata.mjs` | 30 | the cartridge's own character encoding and tables, byte by byte |
 | `remember.mjs` | 14 | which remembered choices are believed, and which dropped |
 | `worker.mjs` | 14 | the idle loop: one step outstanding, and a lost step recovered |
 | `nav.mjs` | 14 | the walk loop: what it decides between two steps, and every reason it stops |
@@ -126,15 +126,15 @@ section gives. Everything by hand runs against a local build.
 
 ```mermaid
 flowchart BT
-    C["the app"] --> T["./run-tests<br/>710 behaviour tests"]
-    C --> A["tools/check-app<br/>26 groups"]
-    C --> D["tools/docs-check<br/>39 tracked sections"]
+    C["the app"] --> T["./run-tests<br/>732 behaviour tests"]
+    C --> A["tools/check-app<br/>27 groups"]
+    C --> D["tools/docs-check<br/>40 tracked sections"]
     C --> V["tools/coverage<br/>what the suite never runs"]
     T --> M["tools/mutate<br/>break a line, see who notices"]
     A --> K["tools/check-checks<br/>break each group's own subject"]
     T -.-> V
     M -.->|"survivors, by file"| R(["the suite is load-bearing"])
-    K -.->|"26 of 26 bite"| R2(["the groups are awake"])
+    K -.->|"27 of 27 bite"| R2(["the groups are awake"])
     V -.->|"57%, and where"| R3(["the gaps are known"])
 ```
 
@@ -422,7 +422,7 @@ is wrong, not the check. It is not in the pre-commit hook: it runs `check-app`
 about fifty times, which is the wrong price for every commit and the right
 one for the commit that changes a check.
 
-`tools/check-app` is twenty-six groups, each one a class of mistake that parses
+`tools/check-app` is twenty-seven groups, each one a class of mistake that parses
 fine and is wrong at run time:
 
 | group | asserts |
@@ -449,6 +449,7 @@ fine and is wrong at run time:
 | `gates` | every road a title declares shut names an event the ROM actually sets — skipped without a cartridge |
 | `gyms` | every gym a title declares has the right leader on the right tile, as a script object, with a badge bit that is a badge — skipped without a cartridge |
 | `romlayout` | `tools/rom-events` and `gen2/world.js` agree about all seven map-table strides. Three were hand-copied into the tool and three were wrong |
+| `menus` | every box the app tells apart by shape declares that shape in the profile and asks the instance for it — and, with a cartridge, the shape is the one the cartridge's own menu header draws |
 | `types` | every optional symbol the app reads travels in the shared digest, both sides' type addresses are read, and — with a cartridge — the decoded type chart agrees with twenty-two matchups nobody had to look up |
 | `counts` | every number in the prose that the repository can compute is right — the test table, the group count, the digest's size, the audit's rows. Two have shipped wrong: *143 tests in seventeen files* while 576 ran, and a digest drawn as 47 entries carrying 53 |
 
@@ -586,6 +587,7 @@ tools/rom-events --text Route32CooltrainerMText_AideIsWaiting
 tools/rom-events --gates                    every declared gate, against the ROM
 tools/rom-events --gyms                     every declared gym, against the ROM
 tools/rom-events --verify                   the object layout, over all 388 maps
+tools/rom-events --menus                    every box the app drives, by shape
 ```
 
 Every gate in Gen 2 is a script reading one bit of `wEventFlags`, so *why does
@@ -612,6 +614,71 @@ hundred instructions but to stop needing it. What a gate actually asks is
 *which event does this map check?*, and that is the three-byte pattern
 `31 xx xx` inside the map's own script region, which every map bounds exactly
 with a `<Map>_MapScripts` and a `<Map>_MapEvents` symbol. 388 of each.
+
+**`--menus` reads a box's shape out of the cartridge instead of off a screen**,
+which is what made the switch feature possible in an environment with no
+cartridge to look at. A menu header in pokecrystal is `flags, y1, x1, y2, x2`,
+a pointer to `flags, count`, then the strings — so both numbers the app tells
+boxes apart by are in the ROM:
+
+```
+09:4ed4  00 0b 0b 11 13 dc 4e 01       BattleMonMenu: rows 11-17, columns 11-19
+09:4edc  c0 03 "SWITCH@STATS@CANCEL@"  three items, and SWITCH first
+```
+
+**The layout is derived and the derivation is checkable.** Read the same way,
+`BattleMenuHeader` comes out as *34 items at row 12* — which is what
+`gen2/engine.js` has said since somebody measured it on a real cartridge,
+years before this tool existed. A derivation that reproduces a measurement is
+worth more than either on its own, and it is the whole reason the *other*
+headers can be trusted without a screen.
+
+It also lists the boxes that **share** a declared signature, which is the
+hazard the app cannot see for itself — every box here is told apart by two
+numbers, so two boxes with the same pair can only be distinguished by *when*
+they were asked about. Three of those were already documented in the profile,
+found the hard way. The tool found more, and one of them matters:
+
+```
+  shared: battleMenu (3 boxes with its signature)
+      BattleMenuHeader
+      ContestBattleMenuHeader
+      SafariBattleMenuHeader
+```
+
+All three are 34 items at row 12. They differ only in the box's **left**
+column — 8, 2 and 0 — and until this pass the app did not read it.
+
+### A battle menu that is not ours
+
+The Bug-Catching Contest draws its own, and **item 3 is not the PACK**: it is
+a PARK BALL thrown directly. So a catch there opened no pack, walked pockets
+that were not on screen, and reported *could not find the ball* — true, and
+about the wrong thing.
+
+`menuIsLive` is deliberately **left alone**. It is the gate on the whole
+battle loop, and narrowing it on a number no cartridge has confirmed at run
+time would put every battle at risk to fix a case nobody has met. The refusal
+works the other way: `otherBattleMenu` looks for *positive evidence* of a menu
+that is somebody else's, and `fightBattle` and `captureHere` both stop on it
+before pressing anything.
+
+That is safe to act on because of a number the tool checks:
+
+```
+  left column 2 is unique to ContestBattleMenuHeader — so "the Bug-Catching
+  Contest" is safe to act on
+```
+
+**One header out of seventy-three.** The only way to read a 2 there is to
+actually be in one — and if a future build adds a second, `--menus` says so
+before the pilot starts refusing battles it could have fought. That check is
+the reason the third number can be trusted at all; a fingerprint nobody has
+confirmed is unique is not a fingerprint.
+
+The Safari Zone's column 0 is *not* acted on, and that is a separate
+judgement: 0 is the commonest left edge in the ROM — twenty-five headers — so
+it identifies nothing, and Gen 2's Safari Zone is closed anyway.
 
 **`--verify` is there because two maps is not a sample**, and it earned its
 keep on its first run. The object type looked like byte four: in Violet Gym

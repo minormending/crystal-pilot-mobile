@@ -1,7 +1,8 @@
 // Battle decisions. Every test here corresponds to something that was once
 // wrong in a way no static check could see.
 import { FakeGameBoy, fakeRom, romReading, symbols, test, worldRam } from '../harness.mjs';
-import { learnMoveBox, onField } from '../../gen2/battle.js';
+import { learnMoveBox, onField, otherBattleMenu, switchBoxUp }
+  from '../../gen2/battle.js';
 import { GameState } from '../../gen2/state.js';
 import { gen2 } from '../../gen2/engine.js';
 import { Tasks } from '../../gen2/tasks.js';
@@ -1217,4 +1218,273 @@ test('the line about the chart is said for the move in slot one too',
   await tasks.fightBattle(1);
   t.true(said.some((l) => l === 'EMBER — super effective'),
          `slot one's move was named: ${JSON.stringify(said)}`);
+});
+
+// --- sending out somebody who can actually touch it ------------------------
+//
+// The answer `notouch` did not have. The pass before could tell that the
+// Pokémon on the field takes nothing off a GHOST and said so; the remedy it
+// named — *a different Pokémon* — was one the pilot was holding and could not
+// reach for.
+
+/** A party where slot 0 is the one out, and the types come from the ROM. */
+const bench = () => [
+  { slot: 0, species: 19, hp: 20, maxHp: 20, moves: [33, 45, 0, 0], pp: [35, 40, 0, 0] },
+  { slot: 1, species: 155, hp: 18, maxHp: 22, moves: [52, 0, 0, 0], pp: [25, 0, 0, 0] },
+  { slot: 2, species: 152, hp: 0, maxHp: 24, moves: [75, 0, 0, 0], pp: [25, 0, 0, 0] },
+];
+
+test('the one on the bench who can touch it is the one sent out', async (t) => {
+  const { tasks } = pilot({ rom: typedRom() });
+  const party = bench();
+  t.eq(tasks.switchFor(party, [GHOST, GHOST], 0), 1,
+       'slot two has the Ember, which is the only thing here that lands');
+  t.eq(tasks.switchFor(party, [GHOST, GHOST], 1), null,
+       'and if it is already out there is nobody else');
+});
+
+test('a fainted Pokémon is never the answer', async (t) => {
+  // Slot three's Razor Leaf would land, and slot three is at 0 HP. Sending it
+  // out is refused by the game with "There's no will to battle!", so a pilot
+  // that chose it would spend the turn being told no.
+  const { tasks } = pilot({ rom: typedRom() });
+  const party = [bench()[0], { ...bench()[2], hp: 0 }];
+  t.eq(tasks.switchFor(party, [GHOST, GHOST], 0), null, 'nobody standing');
+});
+
+test('among those that can, the one whose best move lands hardest', async (t) => {
+  // A turn is being spent on the switch, so the thing coming in should be the
+  // thing that ends it. Ember on a Grass doubles to 80 with the bonus; Razor
+  // Leaf on a Grass is halved to 27.5 with it.
+  const { tasks } = pilot({ rom: typedRom() });
+  const party = [
+    { slot: 0, species: 19, hp: 20, maxHp: 20, moves: [33, 0, 0, 0], pp: [35, 0, 0, 0] },
+    { slot: 1, species: 152, hp: 20, maxHp: 24, moves: [75, 0, 0, 0], pp: [25, 0, 0, 0] },
+    { slot: 2, species: 155, hp: 20, maxHp: 22, moves: [52, 0, 0, 0], pp: [25, 0, 0, 0] },
+  ];
+  t.eq(tasks.switchFor(party, [GRASS, GRASS], 0), 2, 'the Ember');
+});
+
+test('a matchup nobody can price is not a matchup worth a turn', async (t) => {
+  // A switch costs a turn whether or not it was needed, so it is only ever
+  // offered on evidence. Guessing and handing over a turn is worse than
+  // fighting on.
+  const { tasks } = pilot({ rom: typedRom() });
+  t.eq(tasks.switchFor(bench(), null, 0), null, 'no types, no switch');
+  const { tasks: blind } = pilot({ rom: null });
+  t.eq(blind.switchFor(bench(), [GHOST, GHOST], 0), null, 'no cartridge, none either');
+  t.eq(tasks.switchFor([], [GHOST, GHOST], 0), null, 'and an empty party is nobody');
+});
+
+test('a Pokémon with no PP left on anything is not somebody to send out',
+     async (t) => {
+  const { tasks } = pilot({ rom: typedRom() });
+  const party = [bench()[0],
+                 { slot: 1, species: 155, hp: 18, maxHp: 22,
+                   moves: [52, 0, 0, 0], pp: [0, 0, 0, 0] }];
+  t.eq(tasks.switchFor(party, [GHOST, GHOST], 0), null,
+       'the Ember is spent, so it lands nothing either');
+});
+
+test('the box over a battle party screen is told apart from every other box',
+     async (t) => {
+  // Three items with the border at row 11, read out of the cartridge's own
+  // menu header. Nothing else drawn in a battle shares it: the battle menu is
+  // 34 at row 12, the pack 5 at row 1, learnMove and USE/QUIT 2 at row 7.
+  const box = (items, top, extra = {}) => ({
+    inBattle: true, windowOpen: true, menuItems: items, menuTop: top, ...extra });
+  t.true(switchBoxUp(box(3, 11), gen2), 'three at row 11');
+  t.false(switchBoxUp(box(34, 12), gen2), 'not the battle menu');
+  t.false(switchBoxUp(box(2, 7), gen2), 'nor the delete-a-move box');
+  t.false(switchBoxUp(box(5, 1), gen2), 'nor the pack');
+  t.false(switchBoxUp(box(3, 11, { windowOpen: false }), gen2),
+          'and not with no window open');
+  t.false(switchBoxUp(box(3, 11, { inBattle: false }), gen2),
+          'nor outside a battle, where the field party menu lives');
+  t.false(switchBoxUp(box(3, 11), null), 'nor on a cartridge that will not say');
+});
+
+/**
+ * A battle where the party screen behaves, or misbehaves in one named way.
+ *
+ * `boxAfter` is how many polls it takes for the SWITCH/STATS/CANCEL box to be
+ * drawn — the screen arrives with the turn's text still running, which is the
+ * whole reason the confirm waits for the box rather than counting presses.
+ */
+function switcher({ boxAfter = 1, lands = true, ends = false } = {}) {
+  const party = bench();
+  const { tasks, said } = pilot({ rom: typedRom() });
+  const base = { party, inBattle: true, menuItems: 34, menuTop: 12,
+                 menu: [1, 1], windowOpen: true,
+                 enemy: { species: 92, level: 6, hp: 20, maxHp: 20,
+                          types: [GHOST, GHOST] },
+                 active: { hp: 20, maxHp: 20, types: [NORMAL, NORMAL] } };
+  const log = [];
+  let polls = 0, confirms = 0, out = 0;
+  tasks.step = async () => {};
+  tasks.pump = async () => {};
+  tasks.closeMenus = async () => { log.push('closeMenus'); };
+  tasks.chooseAction = async (a) => { log.push(`action:${a}`); };
+  tasks.push = async (b) => {
+    log.push(b);
+    if (b === 'A') {
+      confirms++;
+      // The second A is the confirm on the box; after it, the field changes.
+      if (confirms >= 2 && lands) out = 1;
+    }
+  };
+  tasks.snap = async () => {
+    polls++;
+    if (ends && polls > 4) return { ...base, inBattle: false };
+    const boxed = confirms >= 1 && polls >= boxAfter + 1 && confirms < 2;
+    const mon = party[out];
+    return { ...base,
+             menuItems: boxed ? 3 : 34, menuTop: boxed ? 11 : 12,
+             active: { hp: mon.hp, maxHp: mon.maxHp, types: [NORMAL, NORMAL] } };
+  };
+  return { tasks, log, said };
+}
+
+test('a switch is PKMN, a walk down the list, and the box behind it',
+     async (t) => {
+  // Two screens rather than one, and the second is why this could not be
+  // guessed at: A on a Pokémon opens SWITCH/STATS/CANCEL, and the *field*
+  // party menu's box begins STATS. Press A on the wrong one and the pilot
+  // reads a stats screen while the trainer takes its turn.
+  const { tasks, log } = switcher();
+  t.eq(await tasks.switchTo(1), 'ok', `switched: ${log.join(' ')}`);
+  t.eq(log[0], `action:${gen2.battleAction.pkmn}`, 'PKMN, not FIGHT');
+  t.eq(log.filter((x) => x === 'DOWN').length, 1, 'one step down to slot two');
+  t.gte(log.filter((x) => x === 'A').length, 2, 'the slot, then the box');
+});
+
+test('the confirm waits for the box rather than counting presses', async (t) => {
+  // The screen arrives with "GASTLY used LICK!" still running, so an A sent
+  // into that is dropped — and a press count that assumed otherwise would put
+  // the confirm on the party list, moving the cursor off the slot it walked to.
+  const { tasks, log } = switcher({ boxAfter: 4 });
+  t.eq(await tasks.switchTo(1), 'ok', 'it still switched');
+  t.eq(log.filter((x) => x === 'DOWN').length, 1,
+       'and the cursor was not walked twice while it waited');
+});
+
+test('a box that never comes is a refusal, not a press into the list',
+     async (t) => {
+  const { tasks, log } = switcher({ boxAfter: 99 });
+  t.eq(await tasks.switchTo(1), 'refused', 'it says so');
+  t.true(log.includes('closeMenus'), 'and it puts the screen back');
+});
+
+test('the evidence for a switch is somebody else standing there', async (t) => {
+  // Not the presses landing, not the box closing. `sendOut` learned this the
+  // hard way: choosing a fainted Pokémon is refused with "There's no will to
+  // battle!" and no reading of a cursor would have predicted it.
+  const { tasks } = switcher({ lands: false });
+  t.eq(await tasks.switchTo(1), 'stuck', 'nobody moved, so nothing happened');
+});
+
+test('a battle that ends mid-switch is a battle that ended', async (t) => {
+  const { tasks } = switcher({ ends: true, lands: false });
+  t.eq(await tasks.switchTo(1), 'ended', 'and not a switch that failed');
+});
+
+test('a fainted slot is refused before a single press', async (t) => {
+  const { tasks, log } = switcher();
+  t.eq(await tasks.switchTo(2), 'refused', 'slot three is at 0 HP');
+  t.eq(log.length, 0, 'and nothing was pressed finding out');
+});
+
+test('fightBattle sends somebody out instead of giving up', async (t) => {
+  // The wiring. Slot one is Normal-only against a GASTLY, which is the dead
+  // end the pass before could only describe; slot two has an Ember.
+  const { tasks, said } = switcher();
+  let switched = 0;
+  tasks.coverFaint = async () => null;
+  tasks.awaitBattleMenu = async () => (await tasks.snap());
+  tasks.switchTo = async (slot) => { switched = slot; return 'ended'; };
+  tasks.chooseMove = async () => 0;
+  const how = await tasks.fightBattle(3);
+  t.eq(switched, 1, `slot two was sent out: ${said.join(' | ')}`);
+  t.ne(how, 'notouch', 'so the battle was not written off');
+  t.true(said.some((l) => l.includes('nothing here can touch it')),
+         `and it said why: ${said.join(' | ')}`);
+});
+
+test('and gives up when there is nobody to send', async (t) => {
+  const { tasks } = pilot({ rom: typedRom() });
+  const alone = [{ slot: 0, species: 19, hp: 20, maxHp: 20,
+                   moves: [33, 45, 0, 0], pp: [35, 40, 0, 0] }];
+  const menu = { party: alone, inBattle: true, menuItems: 34, menuTop: 12,
+                 menu: [1, 1], windowOpen: true,
+                 enemy: { species: 92, level: 6, hp: 20, maxHp: 20,
+                          types: [GHOST, GHOST] },
+                 active: { hp: 20, maxHp: 20, types: [NORMAL, NORMAL] } };
+  tasks.coverFaint = async () => null;
+  tasks.awaitBattleMenu = async () => menu;
+  tasks.snap = async () => menu;
+  tasks.step = async () => {};
+  tasks.pump = async () => {};
+  tasks.push = async () => {};
+  t.eq(await tasks.fightBattle(2), 'notouch', 'the sentence is the fallback now');
+});
+
+// --- a battle menu that is not ours ---------------------------------------
+
+test('the Bug Contest’s battle menu is told from our own', async (t) => {
+  // Three menu headers in the ROM read 34 items at row 12 —
+  // `BattleMenuHeader`, `ContestBattleMenuHeader` and
+  // `SafariBattleMenuHeader` — and they differ only in where the box starts:
+  // 8, 2 and 0. Which matters because item 3 is not the same item: in the
+  // Contest it is a PARK BALL thrown directly, not the pack.
+  const menu = (left) => ({ inBattle: true, menuItems: 34, menuTop: 12,
+                            menuLeft: left, windowOpen: true, menu: [1, 1] });
+  t.eq(otherBattleMenu(menu(8), gen2), null, 'column 8 is ours');
+  t.eq(otherBattleMenu(menu(2), gen2), 'the Bug-Catching Contest',
+       'column 2 is not, and it says whose');
+  t.eq(otherBattleMenu(menu(0), gen2), null,
+       'and column 0 is the Safari Zone, which this cartridge keeps closed');
+});
+
+test('and menuIsLive is deliberately left alone', async (t) => {
+  // It is the gate on the whole battle loop, so narrowing it on a number no
+  // cartridge has confirmed at run time would put every battle at risk. The
+  // refusal works the other way: positive evidence of somebody else's menu.
+  const contest = { inBattle: true, menuItems: 34, menuTop: 12, menuLeft: 2,
+                    windowOpen: true, menu: [1, 1] };
+  t.true(Tasks.menuIsLive(contest), 'it still reads as a battle menu');
+  t.eq(otherBattleMenu(contest, gen2), 'the Bug-Catching Contest',
+       'and the refusal is what knows better');
+});
+
+test('a box that is not a battle menu at all is not somebody else’s',
+     async (t) => {
+  t.eq(otherBattleMenu({ inBattle: true, menuItems: 5, menuTop: 1, menuLeft: 2 },
+                       gen2), null, 'the pack happens to start at column 2');
+  t.eq(otherBattleMenu({ inBattle: false, menuItems: 34, menuTop: 12, menuLeft: 2 },
+                       gen2), null, 'and nothing outside a battle counts');
+  t.eq(otherBattleMenu({ inBattle: true, menuItems: 34, menuTop: 12, menuLeft: 2 },
+                       null), null, 'nor on a cartridge that will not say');
+});
+
+test('fightBattle refuses it before pressing anything', async (t) => {
+  const { tasks, said } = pilot({ rom: typedRom() });
+  const contest = { party: [{ slot: 0, species: 10, hp: 20, maxHp: 20,
+                              moves: [33, 0, 0, 0], pp: [35, 0, 0, 0] }],
+                    inBattle: true, menuItems: 34, menuTop: 12, menuLeft: 2,
+                    menu: [1, 1], windowOpen: true,
+                    enemy: { species: 10, level: 5, hp: 20, maxHp: 20,
+                             types: [BUG, BUG] },
+                    active: { hp: 20, maxHp: 20, types: [BUG, BUG] } };
+  const pressed = [];
+  tasks.coverFaint = async () => null;
+  tasks.awaitBattleMenu = async () => contest;
+  tasks.snap = async () => contest;
+  tasks.step = async () => {};
+  tasks.pump = async () => {};
+  tasks.push = async (b) => { pressed.push(b); };
+  tasks.chooseAction = async () => { pressed.push('action'); };
+  t.eq(await tasks.fightBattle(3), 'notours', 'it says so');
+  t.eq(pressed, [], 'and pressed nothing finding out');
+  t.true(said.some((l) => l.includes('Bug-Catching Contest')),
+         `and names it: ${said.join(' | ')}`);
 });

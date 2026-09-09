@@ -918,9 +918,16 @@ turn instead of the fortieth:
 
 > nothing this Pokémon carries can touch what it is facing
 
-**A grind stops there rather than walking to a Center**, because a Center does
-not teach a move. The remedy is a different move or a different Pokémon in
-front, and those are both yours to choose.
+**If somebody else in the party can touch it, the pilot sends them out.** It
+presses PKMN, walks to the slot, and confirms — and the one it picks is
+whichever of them hits hardest against what is in front of it, because a
+switch costs a turn and the thing coming in should be the thing that ends the
+fight. Twice a battle at most: a switch hands the enemy a free attack, so a
+pilot that switched on every poor matchup would take no turns at all.
+
+**Otherwise a grind stops there rather than walking to a Center**, because a
+Center does not teach a move. The remedy is then a different move or a Pokémon
+that is not in this party, and both of those are yours to choose.
 
 The same reading makes the pilot better at the fights it *can* win: it swings
 the move that will actually land hardest rather than the one with the biggest
@@ -1352,7 +1359,7 @@ deployed, which is not the question you are asking when a bug you saw fixed is
 still in front of you. `tools/check-app` asserts that number matches the service
 worker's cache name, because a version display that lies is worse than none.
 
-<!-- covers: sw.js @ 1ed46b7a8673 -->
+<!-- covers: sw.js @ db7788f4d19a -->
 
 The worker fetches **network first, falling back to the cache**. That is the
 opposite of the usual offline-first advice, on purpose.

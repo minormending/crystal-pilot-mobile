@@ -78,6 +78,24 @@ export const gen2 = {
   // whatever table follows, so a hack that added species has to say so -- and
   // this is the field it is most likely to need.
   speciesCount: 251,
+  // data/pokemon/base_stats/*.asm: the species id, then **six** stats -- hp,
+  // attack, defence, speed, special attack, special defence -- then the two
+  // types, then the catch rate and the rest. 32 bytes an entry.
+  //
+  // Counting five stats instead of six is silent, which is why the number is
+  // here rather than in a reader: CHIKORITA came out as "type 65/GRASS",
+  // where 65 is its special defence. A plausible type number, so it printed
+  // rather than failed, and a Grass move on a Grass/Grass CATERPIE was
+  // priced at a quarter. Measured back into place against three species
+  // whose types nobody needs a table to know.
+  baseBytes: 32,
+  // And the first byte of an entry is the species' own id, which makes the
+  // table self-identifying -- a check worth having because there is no
+  // terminator to run off the end of. A symbol file pointing somewhere else
+  // reads zeroes, and `[0, 0]` is NORMAL/NORMAL: a real type pair, and a
+  // wrong answer that looks like an answer. Verified over all 251 entries on
+  // this cartridge; every one carries its own id.
+  baseField: { id: 0, types: 7 },
 
   // --- names ---------------------------------------------------------------
   // PokemonNames is fixed-width; ItemNames is packed with a terminator between
@@ -251,8 +269,27 @@ export const gen2 = {
   // wBattleMenuCursorPosition, and which menu is *drawn*: measured, the battle
   // menu is 34 items with its box at row 12, the pack is 5 items at row 1, and
   // the pack mid-throw is 2 at row 0. The cursor alone cannot tell them apart.
-  battleAction: { fight: 1, pack: 3, run: 4 },
-  battleMenu: { items: 34, top: 12 },
+  // 1 FIGHT, 2 PKMN, 3 PACK, 4 RUN, in the 2x2 the cursor walks. `pkmn` was
+  // the one nobody needed until the pilot could tell that the thing on the
+  // field cannot touch what it is facing -- before that, the answer to a
+  // hopeless matchup was a sentence, so there was nothing to press.
+  battleAction: { fight: 1, pkmn: 2, pack: 3, run: 4 },
+  // 34 items with the border at row 12, and the box's **left** column at 8.
+  //
+  // The left column is here because `tools/rom-events --menus` found that
+  // three battle menus share the first two numbers exactly:
+  // `BattleMenuHeader`, `ContestBattleMenuHeader` and
+  // `SafariBattleMenuHeader` all read 34 at row 12. They differ only in where
+  // the box starts -- 8, 2 and 0 -- so a signature of two numbers cannot tell
+  // the pilot's own battle menu from the Bug-Catching Contest's, where item 3
+  // is not the PACK but a PARK BALL.
+  battleMenu: { items: 34, top: 12, left: 8 },
+  // The battle menus that are *not* ours, by the one number that tells them
+  // apart. Only the Contest is reachable on this cartridge -- Gen 2's Safari
+  // Zone is closed -- and its column is **unique across all 73 named menu
+  // headers in the ROM**, which is what makes acting on it safe: the only way
+  // to read a 2 here is to actually be in one.
+  otherBattles: [{ left: 2, what: 'the Bug-Catching Contest' }],
   // "<MON> wants to learn <MOVE>. But it already knows four moves. Delete an
   // older move to make room?" -- a two-item YES/NO box, and YES is where the
   // cursor starts. Measured by grinding a Chikorita from Lv5 on Route 29 and
@@ -262,6 +299,28 @@ export const gen2 = {
   // mid-throw is also two items but sits at row 0, and the battle menu is
   // thirty-four at row 12, so the row is what tells them apart.
   learnMove: { items: 2, top: 7 },
+
+  // The box that comes up when a Pokemon is picked in a battle's party
+  // screen: SWITCH, STATS, CANCEL.
+  //
+  // **Read out of the cartridge's own menu header rather than measured on a
+  // screen**, because the two are different orders and guessing costs the
+  // wrong screen. `MonMenuOptionStrings`, which the *field* party menu uses,
+  // begins STATS, SWITCH -- so a press of A on a Pokemon out in the world
+  // opens its stats, and the same press in a battle switches it in. Assume
+  // the order you have seen more often and the pilot pages through a stats
+  // screen while a trainer takes its turn.
+  //
+  // `BattleMonMenu.MenuHeader` at 09:4ed4 is `flags, y1, x1, y2, x2` then a
+  // pointer to `flags, count` then the strings: a box at rows 11-17, columns
+  // 11-19, three items, and the strings behind it read SWITCH, STATS,
+  // CANCEL. That layout is not assumed either -- read the same way,
+  // `BattleMenuHeader` comes out **34 items at row 12**, which is what
+  // `battleMenu` above says after being measured on a real cartridge. A
+  // derivation that reproduces a measurement is worth more than either.
+  //
+  // `tools/rom-events --menus` holds all of this to the cartridge.
+  switchBox: { items: 3, top: 11, choose: 1 },
   ballPocket: 1,
   itemPocket: 0,
 

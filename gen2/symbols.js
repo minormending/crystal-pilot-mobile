@@ -137,7 +137,7 @@ export class Symbols {
  * Every symbol this app reads, by name.
  *
  * It exists so a device with a ROM and no .sym can be handed the addresses
- * instead of the file: 59 lines is about a kilobyte, against 1.8MB, and it
+ * instead of the file: 61 lines is about a kilobyte, against 1.8MB, and it
  * fits in a room with space for a save beside it.
  *
  * Written down rather than discovered, because nothing at run time can know
@@ -148,6 +148,7 @@ export class Symbols {
  * the sort of difference that only shows up on the second phone.
  */
 export const SHARED_SYMBOLS = [
+  'BaseData',
   'CollisionPermissionTable', 'ItemNames', 'JohtoGrassWildMons',
   'KantoGrassWildMons', 'Landmarks', 'MapGroupPointers',
   'MoveNames', 'Moves', 'PokemonNames', 'sCheckValue1', 'sCheckValue2', 'wBalls', 'wBattleMenuCursorPosition',
@@ -157,7 +158,8 @@ export const SHARED_SYMBOLS = [
   'wEnemyMonType1', 'wEnemyMonType2',
   'wEventFlags',
   'wMapGroup', 'wMapHeight', 'wMapNumber', 'wMapObjects', 'wMapStatus',
-  'wMapWidth', 'wMenuBorderRightCoord', 'wMenuBorderTopCoord',
+  'wMapWidth', 'wMenuBorderLeftCoord', 'wMenuBorderRightCoord',
+  'wMenuBorderTopCoord',
   'wItems', 'wJohtoBadges',
   'wMenuCursorX', 'wMenuCursorY', 'wMenuDataItems', 'wMoney',
   'wNumBalls',

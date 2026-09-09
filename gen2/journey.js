@@ -113,6 +113,8 @@ const NAME_TRIES = 12, NAME_SETTLE = 20;
 const BATTLE_STUCK = {
   nopp: 'out of PP on anything that does damage',
   notouch: 'nothing this Pokémon carries can touch what it is facing',
+  notours: 'this is a battle menu I cannot drive — the Bug-Catching Contest '
+           + 'and the Safari Zone draw their own',
 };
 
 const NOTHING_THERE = 'nothing there to take';
@@ -1760,7 +1762,8 @@ export class Journey {
       // 'nopp' is the same to a walk as 'stuck' -- there is nothing to be done
       // from here -- and different to whoever reads the message, which is the
       // whole reason it is its own word.
-      if (how === 'stuck' || how === 'nopp' || how === 'notouch') {
+      if (how === 'stuck' || how === 'nopp' || how === 'notouch'
+          || how === 'notours') {
         this.battleStuck = true;
         this.stuckReason = how;
       }

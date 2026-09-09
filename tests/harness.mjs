@@ -230,7 +230,12 @@ const WRAM_NAMES = [
   ['wObjectStructs', 13 * 0x28],
   // These four sit next to each other on purpose: state.js reads them as one
   // small window, and a layout that scattered them would not exercise that.
-  ['wMenuDataItems', 1], ['wMenuBorderTopCoord', 1], ['wMenuBorderRightCoord', 1],
+  ['wMenuDataItems', 1], ['wMenuBorderTopCoord', 1],
+  // Between the other two, as the cartridge has it: the game writes all four
+  // border coords when it draws a box, and the app's one small menu window
+  // spans them, so a fake that put this outside that span would make the
+  // window's own arithmetic untestable.
+  ['wMenuBorderLeftCoord', 1], ['wMenuBorderRightCoord', 1],
 ];
 
 function buildSymText() {
@@ -254,6 +259,7 @@ function buildSymText() {
   // moved them would be testing a different cartridge.
   lines.push('0d:4bb1 TypeMatchups');
   lines.push('72:5f29 MoveNames');
+  lines.push('14:5424 BaseData');
   lines.push('01:a008 sCheckValue1');
   lines.push('01:ad0f sCheckValue2');
   return lines.join('\n') + '\n';
@@ -363,7 +369,7 @@ export function worldRam(sym, {
   scriptMode = 0, tile = 0, menu = [0, 0], battleCursor = 0, windowStack = 0,
   enemy = null, active = null, balls = [], items = [], money = 0,
   curPocket = 0, curItem = 0,
-  menuItems = 0, menuTop = 0, menuRight = 0,
+  menuItems = 0, menuTop = 0, menuRight = 0, menuLeft = 0,
   // How many badges are in the case, as a count -- the bits are set from the
   // bottom up, because which bit is which badge is not something this app reads.
   badges = 0,
@@ -426,6 +432,7 @@ export function worldRam(sym, {
   w8(wram, sym.addr('wMenuDataItems'), menuItems);
   w8(wram, sym.addr('wMenuBorderTopCoord'), menuTop);
   w8(wram, sym.addr('wMenuBorderRightCoord'), menuRight);
+  w8(wram, sym.addr('wMenuBorderLeftCoord'), menuLeft);
   // A `types` of one value writes both slots, the way the cartridge stores a
   // single-typed Pokemon; a pair writes the pair. Defaulting to NORMAL/NORMAL
   // rather than to zeroes is the same choice: zero *is* NORMAL, so there is
@@ -623,14 +630,36 @@ export function collisionRom(perms = {}) {
  * be read wrongly. Reading $fe as a row eats the row behind it, which is a
  * mistake this made and a test can only catch from the bytes out.
  */
-export function romReading(moveTable, { chart = null, names = null } = {}) {
+export function romReading(moveTable, { chart = null, names = null,
+                                       species = null } = {}) {
   const sym = symbols();
   const { bank, addr } = { bank: sym.bank('Moves'), addr: sym.addr('Moves') };
   const chartAt = { bank: sym.bank('TypeMatchups'), addr: sym.addr('TypeMatchups') };
   const namesAt = { bank: sym.bank('MoveNames'), addr: sym.addr('MoveNames') };
-  const MOVE_BYTES = 7;
+  const baseAt = { bank: sym.bank('BaseData'), addr: sym.addr('BaseData') };
+  const MOVE_BYTES = 7, BASE_BYTES = 32;
   const gb = {
     romByte(b, at) {
+      // `species` is `{id: [type1, type2]}`, laid out at the real stride with
+      // the real field offset -- the *six* stats in front of the types, not
+      // five. Written out here rather than handed over decoded, because
+      // miscounting those stats is the mistake that already happened: it read
+      // CHIKORITA as "type 65/GRASS", where 65 is its special defence.
+      if (species && b === baseAt.bank && at >= baseAt.addr) {
+        const o = at - baseAt.addr, id = Math.floor(o / BASE_BYTES) + 1;
+        const field = o % BASE_BYTES, pair = species[id];
+        if (!pair) return 0;
+        // The entry's own id in byte zero, because that is how the reader
+        // tells a real table from a bank of zeroes -- and a fake that left it
+        // out would make the guard untestable while looking like a table.
+        if (field === 0) return id;
+        if (field === 7) return pair[0];
+        if (field === 8) return pair[1];
+        // The stats in front of them, so a reader counting five instead of
+        // six lands on one and gets a plausible type number back.
+        if (field >= 1 && field <= 6) return 60 + field;
+        return 0;
+      }
       if (chart && b === chartAt.bank && at >= chartAt.addr
           && at < chartAt.addr + chart.length) {
         return chart[at - chartAt.addr];

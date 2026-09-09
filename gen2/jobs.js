@@ -6,7 +6,7 @@
 import { SETTLE_FRAMES } from '../gbcore/taskbase.js';
 // Which party member is on the field. Both mixins need the answer and it is
 // battle.js's to give -- see the note on it for what reading party[0] cost.
-import { onField } from './battle.js';
+import { onField, otherBattleMenu } from './battle.js';
 // Consecutive unresolved battles that mean the pilot has lost the thread.
 const MAX_STUCK_BATTLES = 5;
 // Swings at one target before giving up on weakening it any further.
@@ -61,6 +61,10 @@ const CAPTURE_OUTCOMES = {
                 say: (r) => `the whole party fainted before the ${r.name} `
                             + 'could be caught' },
   stuck:      { stop: true, say: () => 'lost track of the battle' },
+  notours:    { stop: true,
+                say: (r) => `this is ${r.where}, whose battle menu I cannot `
+                            + 'drive — its third item throws a ball rather '
+                            + 'than opening the pack' },
   cancelled:  { stop: true, say: () => 'stopped' },
   budget:     { stop: true,
                 say: (r, balls) => `used ${balls(r.thrown)} without catching it` },
@@ -185,6 +189,12 @@ export function withJobs(Base) {
     if (!s.inBattle) return { outcome: 'nobattle' };
     const e = this.state.e;
     if (s.battleMode === e.trainerBattle) return { outcome: 'trainer' };
+    // A battle menu that is not ours. In the Bug-Catching Contest the third
+    // item is not the PACK but a PARK BALL thrown directly, so every step of
+    // this loop is aimed at a screen that is not there -- and the message it
+    // used to give, "could not find the ball", is true about the wrong thing.
+    const notOurs = otherBattleMenu(s, e);
+    if (notOurs) return { outcome: 'notours', where: notOurs };
     // **A full party does not stop a catch** -- measured with six carried:
     // "Gotcha! PIDGEY was caught!", then "was sent to BILL's PC." So the
     // refusal is only for a cartridge whose title has not said what that
@@ -717,6 +727,18 @@ export function withJobs(Base) {
       // back meets the same wall with a fuller bar. Every other outcome here
       // is something this job can do something about; this one is a sentence
       // for whoever is reading, and the honest move is to stop and say it.
+      // A battle whose menu is somebody else's. Nothing here can be pressed
+      // safely, and no trip anywhere changes that -- it is a fact about where
+      // the player is standing.
+      if (outcome === 'notours') {
+        return {
+          ok: false,
+          message: 'this is a battle menu I cannot drive — the Bug-Catching '
+                   + 'Contest draws its own, and its third item throws a ball '
+                   + 'rather than opening the pack',
+          stats: { ...stats, levels: mon.level - startLevel },
+        };
+      }
       if (outcome === 'notouch') {
         return {
           ok: false,

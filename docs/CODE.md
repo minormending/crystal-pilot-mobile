@@ -433,7 +433,7 @@ watching.
 
 ### `symbols.js` — where things live
 
-<!-- covers: gen2/symbols.js @ ae8db314fa28 -->
+<!-- covers: gen2/symbols.js @ 9d8bdf66c5e0 -->
 
 Parses the `.sym` file into `name → { bank, addr }`. First definition wins;
 later duplicates are aliases and locals.
@@ -471,7 +471,7 @@ enforces it, so it is a fact about the build rather than a habit.
 
 ### `state.js` — what the game is doing right now
 
-<!-- covers: gen2/state.js @ 3311ebf6120a -->
+<!-- covers: gen2/state.js @ 34882f985145 -->
 
 One snapshot, many answers: `inBattle`, `party`, `pos`, `onGrass`,
 `worldLoaded`, `menu`, `balls`, `items`, each party member's `status`, the
@@ -488,6 +488,15 @@ thing no cartridge writes down. Counted in *bits* across both bytes, because
 eight Johto badges live in one byte and anything counting bytes reads a full
 case as one. Optional, like the tilemap: `null` and `0` are kept apart, since a
 cartridge that cannot say is not a cartridge with a new game.
+
+**And the menu window reads four numbers now, not three.** `menuLeft` joins
+the items count, the border's top row and its right column — because three
+battle menus in this ROM share the first two exactly, and only the left edge
+tells the pilot's own from the Bug-Catching Contest's. It costs nothing to
+read: the game writes all four border coords when it draws a box, and they sit
+adjacent, inside the one small window this file already snapshots. See [a
+battle menu that is not
+ours](DEVELOPING.md#a-battle-menu-that-is-not-ours).
 
 **Both sides carry two types, and neither slot is ever empty.** Gen 2 stores a
 single-typed Pokémon as both of its types — RATTATA reads NORMAL/NORMAL — so
@@ -590,7 +599,7 @@ and in `bootstrap.js`, with nothing able to notice if they drifted.
 
 ### `romdata.js` — what the cartridge knows
 
-<!-- covers: gen2/romdata.js @ f4a2e14c1fb4 -->
+<!-- covers: gen2/romdata.js @ 8691cf4d4ae2 -->
 
 Species names, item names, move names, wild-encounter tables, move power and
 the type chart. All read out of the ROM, not shipped as a copy, so they cannot
@@ -608,6 +617,16 @@ drift from the build being driven.
   question marks when no terminator turns up inside twenty-four bytes, because
   `decodeText` will turn any bytes at all into something that reads like a
   name.
+- `BaseData` — 32 bytes an entry: the species' own id, **six** stats, then the
+  two types. It is the only place a party member's types can be read from,
+  because Gen 2 does not keep them in the party struct. Two things about it
+  are worth stating. Counting five stats instead of six is *silent* — it reads
+  the special defence as the first type, which is a plausible type number, so
+  CHIKORITA came out as "type 65/GRASS" and printed rather than failed. And
+  there is no terminator to run off the end of, so the guard is the entry's
+  own id in byte zero: a symbol file pointing elsewhere reads zeroes, and
+  `[0, 0]` is NORMAL/NORMAL — a real type pair and a wrong answer that looks
+  like an answer. Checked over all 251 entries; every one carries its own id.
 - `TypeMatchups` — 110 rows of `attacker, defender, multiplier-in-tenths`, with
   a one-byte separator in the middle and neutral left out entirely. See [the
   bigger number is not the harder
@@ -1145,7 +1164,7 @@ point those coordinates mean somewhere else entirely.
 
 ## 5. Crossing to the next map
 
-<!-- covers: gen2/journey.js gen2/world.js @ f5220cc05f4f -->
+<!-- covers: gen2/journey.js gen2/world.js @ 0d8b690e802e -->
 
 A connection spans only part of a shared edge, so "walk west until something
 happens" does not work. `crossEdge()` closes the distance in stages, then tries
@@ -1362,7 +1381,7 @@ and a Pokémon Center restores PP, so the grind treats it as a trip it already
 knew how to make. See [the tiles that run a
 script](#8g-the-tiles-that-run-a-script-and-saying-hello) for the walk half.
 
-<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ ce12f7617b6c -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ e5825a45295a -->
 
 ### Which move, and which question
 
@@ -1560,7 +1579,7 @@ mechanism's evidence spans two runs rather than one.
 
 ### The bigger number is not the harder hit
 
-<!-- covers: gen2/romdata.js gen2/engine.js gen2/battle.js @ b58d0923faa8 -->
+<!-- covers: gen2/romdata.js gen2/engine.js gen2/battle.js @ 4390601337e5 -->
 
 For twenty-three passes the pilot ranked its moves by one number: the `power`
 byte out of the cartridge's move table. `romdata.move()` had been returning the
@@ -1645,7 +1664,9 @@ each matching row once whichever slot matched it, so `effectiveness` deduplicate
 the types before multiplying. A genuinely dual-typed defender still collects
 both rows — Fire on a Grass/Bug PARAS doubles twice, and ×4 is correct.
 
-**And a battle nothing carried can touch is now its own word.** This is the
+**And a battle nothing carried can touch is now its own word** — though the
+word is the fallback rather than the answer; see [sending out somebody who can
+touch it](#sending-out-somebody-who-can-touch-it). This is the
 same dead end `canStillWin` was written for, reached from the direction it
 cannot see: the move *has* power, so it counts as one that could end a battle,
 and the chart says the swing takes nothing off. `nothingLands` asks the other
@@ -1659,7 +1680,7 @@ apart while whoever reads the message must:
 | word | what happened | what fixes it |
 | --- | --- | --- |
 | `nopp` | nothing with PP left does damage | a Center, which restores PP |
-| `notouch` | full PP, and none of it can touch what is in front of it | a different move, or a different Pokémon |
+| `notouch` | full PP, none of it can touch what is in front of it, **and nobody on the bench can either** | a different move, or a Pokémon that is not in this party |
 | `stuck` | the loop ran out of turns and cannot say why | look at the screen |
 
 So `grind` **stops** on `notouch` rather than walking to a Center: a Center
@@ -1697,6 +1718,95 @@ twenty-two things about Pokémon that were true before this app existed, and
 will rank a moveset for a named matchup showing what power alone would have
 picked beside what the chart picks. It runs `gen2/romdata.js` — the reader the
 pilot uses, not a second one beside it. See section 10.
+
+### Sending out somebody who can touch it
+
+<!-- covers: gen2/battle.js gen2/engine.js @ 506ff891d852 -->
+
+The pass before could tell that the Pokémon on the field takes nothing off a
+Ghost, and said so. The remedy it named — *a different Pokémon* — was one the
+pilot was **holding and could not reach for**: nothing in this app had ever
+pressed PKMN. So `notouch` was the answer; now it is the fallback.
+
+```mermaid
+flowchart TD
+    N["nothing on the field<br/>can touch this"] --> W{"anybody on the bench<br/>whose best move lands?"}
+    W -- no --> S["say so: notouch"]
+    W -- yes --> B{"switched twice already<br/>this battle?"}
+    B -- yes --> S
+    B -- no --> P["PKMN → down to the slot → A"]
+    P --> X{"SWITCH/STATS/CANCEL<br/>drawn?"}
+    X -- no --> R["refused; put the screen back"]
+    R --> S
+    X -- yes --> C["A"]
+    C --> E{"is somebody else<br/>standing there?"}
+    E -- yes --> T["that was the turn;<br/>go round again"]
+    E -- no --> S
+```
+
+**Two screens, and the second is the one that could not be guessed at.** PKMN
+opens the party list; A on a Pokémon opens a box — and *which* box depends on
+where you are:
+
+| | first option | second |
+| --- | --- | --- |
+| the field party menu (`MonMenuOptionStrings`) | **STATS** | SWITCH |
+| the battle party menu (`BattleMonMenu`) | **SWITCH** | STATS |
+
+They are opposite. Assume the order you have seen more often and the press
+that switches a Pokémon in during a fight opens its stats instead, while the
+trainer takes its turn. So the order is **read out of the cartridge**, not
+remembered.
+
+**And so is the box's signature, which is the part with no cartridge behind
+it.** The Browser pane cannot boot a game in this environment, so there was no
+screen to measure — but `BattleMonMenu.MenuHeader` at `09:4ed4` is
+`flags, y1, x1, y2, x2`, then a pointer to `flags, count`, then the strings:
+
+```
+09:4ed4  00 0b 0b 11 13 dc 4e 01      a box at rows 11-17, columns 11-19
+09:4edc  c0 03 "SWITCH@STATS@CANCEL@"  three items, and SWITCH first
+```
+
+That layout is derived, and **the derivation reproduces a measurement**: read
+the same way, `BattleMenuHeader` comes out as *34 items at row 12*, which is
+what `battleMenu` has said since somebody watched it on a real cartridge. A
+derivation that agrees with a measurement taken years earlier is worth more
+than either alone, and it is why the other headers can be trusted without a
+screen. `tools/rom-events --menus` holds all of it, and `check-app menus` runs
+it.
+
+**The evidence for a switch is somebody else standing there.** Not the presses
+landing, not the box closing — the same rule `sendOut` learned the hard way,
+where choosing a fainted Pokémon is refused with *There's no will to battle!*
+and no reading of a cursor would have predicted it. The party list's cursor is
+not in memory at all: `sendOut` diffed all 8KB across a press and found 87
+changed bytes with no index among them, because the arrow is drawn from sprite
+data.
+
+**Two switches a battle, and low on purpose.** A switch *is* the turn — the
+enemy attacks the Pokémon coming in — so a loop that switches whenever a
+matchup is poor hands over every turn and takes none. This is not a strategy
+for playing well, it is an escape from a battle that cannot otherwise end: the
+first switch answers the hopeless matchup, the second answers the one after it
+if the replacement faints, and past that the honest answer is the sentence the
+pilot used to give straight away. A *refusal* is counted against the same
+budget, because that is what stops a screen which will not cooperate becoming
+a loop.
+
+**A party member's types come from the ROM, and they have to.** Gen 2 does not
+keep a Pokémon's types in the party struct — they are copied out of `BaseData`
+when it is sent out, which is why work RAM has `wBattleMonType1` for the one on
+the field and nothing at all for the five behind it. So a decision about
+*which* Pokémon to send has to read the cartridge, and `romdata.speciesTypes`
+is that read. It also retired a second copy of the same reader; see
+[`romdata.js`](#romdatajs--what-the-cartridge-knows).
+
+**The switch is only ever offered on evidence.** `switchFor` answers null
+wherever the chart cannot be read, like everything else built on it — and here
+the reason is sharper than usual: a switch costs a turn *whether or not it was
+needed*, so guessing that a matchup is bad and handing over a turn to fix it is
+worse than fighting on.
 
 ### Is it our turn?
 
@@ -1966,7 +2076,7 @@ fainted.
 
 ## 7. Catching something
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ 837fc8d9700c -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ a82d8d83eaad -->
 
 Catching is the most involved loop, because a Poké Ball's odds turn on how much
 HP is left. Throwing at a full-health target is mostly throwing balls away.
@@ -2120,7 +2230,7 @@ flowchart TD
 
 ## 7a. Five that act on where you already are
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ 0fdc0fbd522a -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ fba0424d7be9 -->
 
 Grind, hunt and catch all go *looking* for something. These five do the obvious
 thing with the situation you are already in, and take no parameters:
@@ -2391,7 +2501,7 @@ said *trainer battle: lost* **seven times**. One loss, reported seven ways.
 
 ## 7d. The counter, and the money it takes
 
-<!-- covers: gen2/menus.js gen2/state.js titles/crystal.js @ 93acf307f8b6 -->
+<!-- covers: gen2/menus.js gen2/state.js titles/crystal.js @ 11a55c633e32 -->
 
 Everything the pilot could do until now used what it found. **Shop** walks to a
 mart and buys, which is the first thing it does that spends rather than
@@ -2500,7 +2610,7 @@ counter and came away with **five potions and ¥1800**, in 49 seconds.
 
 ## 7b. Saving, and getting the save out
 
-<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ ce12f7617b6c -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ e5825a45295a -->
 
 ```mermaid
 flowchart TD
@@ -2756,7 +2866,7 @@ because that failure is only otherwise discovered by reaching for the undo.
 
 ## 8. The errands
 
-<!-- covers: titles/crystal.js gen2/journey.js @ e3e4a7578c54 -->
+<!-- covers: titles/crystal.js gen2/journey.js @ dc59a04f8108 -->
 
 Everything in this section is `crystal.js` — the only file in the app that names
 a Crystal map, a Crystal door or a Crystal NPC. What it stands on is
@@ -3128,7 +3238,7 @@ the bag" rather than "did we gain any".
 
 ## 8a. Finding the Centers and the Marts in the cartridge
 
-<!-- covers: gen2/world.js gen2/journey.js @ f5220cc05f4f -->
+<!-- covers: gen2/world.js gen2/journey.js @ 0d8b690e802e -->
 
 The last thing in this app that had to be written out by hand. A title said
 where the Centers and the Marts were, so the pilot healed in the two towns
@@ -3205,7 +3315,7 @@ after](#8d-a-route-the-game-itself-refuses).
 
 ## 8b. Asking the cartridge what its places are called
 
-<!-- covers: gen2/romdata.js gen2/world.js @ 4898ecf152b9 -->
+<!-- covers: gen2/romdata.js gen2/world.js @ 5db35e99fa1e -->
 
 The one table that **retires** hand-written data rather than adding to it. A map
 used to be called whatever the title profile said, and everything else was
@@ -3364,7 +3474,7 @@ by, which is the only leg it can measure.
 
 ## 8d. A route the game itself refuses
 
-<!-- covers: gen2/journey.js gen2/state.js @ aba5067691b6 -->
+<!-- covers: gen2/journey.js gen2/state.js @ e9924ee64f63 -->
 
 The pass before this one taught the walk to *quote* the man who turns it back.
 This is the pilot doing something about it.
@@ -3471,7 +3581,7 @@ counting bytes reads a full case as one.
 
 ## 8e. Fighting everybody here
 
-<!-- covers: gen2/journey.js @ 55f1bd342eb4 -->
+<!-- covers: gen2/journey.js @ b5fe5ec61afd -->
 
 The primitive a Gym needs. The pilot has been stopped on Route 32 for three
 passes by a man who wants Falkner beaten first, and beating Falkner means
@@ -3572,7 +3682,7 @@ costs however long it takes somebody to notice their money is gone.
 
 ## 8f. Going and winning a badge
 
-<!-- covers: gen2/journey.js gen2/state.js titles/crystal.js @ ace0876b85d8 -->
+<!-- covers: gen2/journey.js gen2/state.js titles/crystal.js @ fe1d844ae5b4 -->
 
 The pilot has been turned back from Route 32 since the pass it learned to find
 Pokémon Centers. `reopen` throws away every written-off road the moment a badge
@@ -3655,7 +3765,7 @@ everybody is a heal whatever it says about itself.
 
 ## 8g. The tiles that run a script, and saying hello
 
-<!-- covers: gen2/world.js gen2/journey.js @ f5220cc05f4f -->
+<!-- covers: gen2/world.js gen2/journey.js @ 0d8b690e802e -->
 
 Four passes of machinery pointed at one sentence a man says, and the reader that
 made it diagnosable is twelve lines.
@@ -4515,7 +4625,7 @@ reads all seven out of both files and compares them, which is the repair for
 
 ### Gates: asking the cartridge what it wants
 
-<!-- covers: gen2/state.js gen2/journey.js titles/crystal.js @ ace0876b85d8 -->
+<!-- covers: gen2/state.js gen2/journey.js titles/crystal.js @ fe1d844ae5b4 -->
 
 Two kinds of closed road, and the difference is everything:
 
@@ -5183,7 +5293,7 @@ this needed upstream rather than in the vendored copy.
 The options went through this room first on purpose: the small half, standing up
 the whole path — config, rules, anonymous sign-in, merge, debounce — with a
 slider position at stake rather than a save. Three things travel this way, and
-all three merge: the remembered options, the 59 addresses out of the symbol
+all three merge: the remembered options, the 61 addresses out of the symbol
 file, and the notes two devices use to introduce their screens to each other.
 The save goes over the same room and does *not* merge, which is the next
 section.
@@ -5652,16 +5762,16 @@ and change what a past handover said.
 
 ### The symbol file stops travelling
 
-The `.sym` is 1.8MB and this app looks up **59 symbols in it**. So the room
-carries those 59 lines — about a kilobyte, `{name: [bank, addr]}` — and a
+The `.sym` is 1.8MB and this app looks up **61 symbols in it**. So the room
+carries those 61 lines — about a kilobyte, `{name: [bank, addr]}` — and a
 second device needs the ROM and nothing else. `Symbols.fromDigest` builds a
 table that behaves like the parsed file; `size` is the only honest difference,
-and it reports 59 because that is how many symbols it has.
+and it reports 61 because that is how many symbols it has.
 
 ```mermaid
 flowchart LR
     F["the .sym file<br/>1.8MB, 58,456 symbols"] --> S["Symbols<br/>the parsed table"]
-    S -->|"digest(SHARED_SYMBOLS)"| D["{name: [bank, addr]}<br/>59 entries, ~1KB"]
+    S -->|"digest(SHARED_SYMBOLS)"| D["{name: [bank, addr]}<br/>61 entries, ~1KB"]
     D --> R[["the room"]]
     R --> D2["the same 47 entries"]
     D2 -->|"Symbols.fromDigest"| T["a table that behaves<br/>like the parsed file"]
@@ -5989,7 +6099,7 @@ about that code did not.
 
 ### The other checks
 
-<!-- covers: tools/check-app @ 66a2636eb80e -->
+<!-- covers: tools/check-app @ f5ab1238b80d -->
 
 `tools/check-app` runs everything that can be verified without a ROM:
 

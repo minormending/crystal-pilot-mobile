@@ -355,3 +355,43 @@ test('twenty-four bytes with no terminator in them is not a name', async (t) => 
   t.eq(romReading(TYPED, { names: [...letters(3), 0x50] }).moveName(1), 'AAA',
        'while a name that does terminate comes back whole');
 });
+
+test('a species knows its own types, six stats along', async (t) => {
+  // The only way to know what a party member *is*: Gen 2 does not keep a
+  // Pokémon's types in the party struct, they are copied out of BaseData when
+  // it is sent out — which is why work RAM has `wBattleMonType1` for the one
+  // on the field and nothing at all for the five behind it.
+  //
+  // Six stats in front of the types, not five. Counting five reads the
+  // special defence as the first type, which is a plausible type number, so
+  // it prints rather than fails: CHIKORITA came out as "type 65/GRASS".
+  const rom = romReading(TYPED, {
+    chart: CHART, species: { 152: [GRASS, GRASS], 155: [FIRE, FIRE], 81: [ELECTRIC, STEEL] },
+  });
+  t.eq(rom.speciesTypes(152), [GRASS, GRASS], 'a single-typed one, in both slots');
+  t.eq(rom.speciesTypes(155), [FIRE, FIRE], 'and the next entry along, at its own stride');
+  t.eq(rom.speciesTypes(81), [ELECTRIC, STEEL], 'and a genuinely dual-typed one');
+  t.ne(rom.speciesTypes(152)[0], 67,
+       'not the special defence, which is what counting five stats reads');
+});
+
+test('a cartridge with no base stats to read says so', async (t) => {
+  // Which costs the same-type bonus for a Pokémon on the bench and nothing
+  // else — the chart still prices every move.
+  const rom = charted();
+  t.eq(rom.speciesTypes(152), null, 'no table, no answer');
+  t.eq(rom.speciesTypes(0), null, 'nor for a species id of nothing');
+  t.eq(rom.speciesTypes(9999), null, 'nor past the end of the Pokédex');
+});
+
+test('an entry that is not whose it should be is not an entry', async (t) => {
+  // There is no terminator here to run off the end of, so the entry's own id
+  // in byte zero is the only guard available — and it is needed, because a
+  // symbol file pointing somewhere else reads zeroes and `[0, 0]` is
+  // NORMAL/NORMAL. A real type pair, and a wrong answer that looks like one.
+  const rom = charted();          // has BaseData in the table, zeroes behind it
+  t.eq(rom.speciesTypes(152), null, 'a bank of zeroes is not the Pokédex');
+  const real = romReading(TYPED, { chart: CHART, species: { 152: [GRASS, GRASS] } });
+  t.eq(real.speciesTypes(152), [GRASS, GRASS], 'and a real entry still reads');
+  t.eq(real.speciesTypes(153), null, 'while its neighbour, which is not there, does not');
+});

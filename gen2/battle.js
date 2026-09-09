@@ -9,12 +9,28 @@ import { SETTLE_FRAMES } from '../gbcore/taskbase.js';
 // the machine's own numbers live.
 const FIGHT = gen2.battleAction.fight;
 const PACK = gen2.battleAction.pack;
+const PKMN = gen2.battleAction.pkmn;
 const RUN = gen2.battleAction.run;
 const BALL_POCKET = gen2.ballPocket;
 // wCurItem while the cursor sits on CANCEL.
 const CANCEL_ITEM = 0xff;
 // Party slots to try when sending out a replacement.
 const MAX_SEND_TRIES = 6;
+// How many deliberate switches one battle may make.
+//
+// Two, and low on purpose. A switch *is* the turn -- the enemy attacks the
+// Pokemon coming in -- so a loop that switches whenever the matchup is poor
+// hands over every turn and takes none. This is not a strategy for playing
+// well, it is an escape from a battle that cannot otherwise end: the first
+// switch answers the hopeless matchup, and the second answers the one after
+// it if the replacement faints. Past that the honest answer is the same
+// sentence the pilot used to give straight away.
+const MAX_SWITCHES = 2;
+// How long to wait for the party screen and its box, and for the switch to
+// actually land. Bounded and evidence-driven for the reason `sendOut` gives
+// at length: the screen arrives with the turn's text still running, so a
+// press sent into it is dropped.
+const SWITCH_TAPS = 40;
 // How long a pack box takes to draw, and how many presses the result of using
 // an item is worth. Both are this app's patience rather than facts about the
 // cartridge, which is why they are here and not in the engine profile.
@@ -80,6 +96,54 @@ export function learnMoveBox(s, engine) {
   const box = engine && engine.learnMove;
   if (!box || !s.windowOpen) return false;
   return s.inBattle && s.menuItems === box.items && s.menuTop === box.top;
+}
+
+/**
+ * Is the SWITCH/STATS/CANCEL box up over a battle's party screen?
+ *
+ * Three items with the border at row 11, which is a signature nothing else
+ * drawn in a battle shares: the battle menu is 34 at row 12, the pack 5 at
+ * row 1, `learnMove` and the pack's USE/QUIT 2 at row 7, and the pack
+ * mid-throw 2 at row 0.
+ *
+ * The numbers come from the cartridge's own menu header rather than from a
+ * screen -- see `switchBox` in engine.js, and `tools/rom-events --menus`,
+ * which holds them to it.
+ */
+export function switchBoxUp(s, engine) {
+  const box = engine && engine.switchBox;
+  if (!box || !s.windowOpen) return false;
+  return s.inBattle && s.menuItems === box.items && s.menuTop === box.top;
+}
+
+/**
+ * A battle menu that is not the pilot's, by name, or null.
+ *
+ * **The hazard `menuIsLive` cannot see.** It tells a battle menu by two
+ * numbers -- 34 items with the border at row 12 -- and
+ * `tools/rom-events --menus` found that *three* menu headers in the ROM read
+ * exactly that: `BattleMenuHeader`, `ContestBattleMenuHeader` and
+ * `SafariBattleMenuHeader`. They differ only in the box's left column.
+ *
+ * Which matters because the items are not the same. In the Bug-Catching
+ * Contest, position 3 is not the PACK, it is a PARK BALL thrown directly --
+ * so a catch there opens no pack, walks pockets that are not on screen, and
+ * reports that it could not find the ball. True, and about the wrong thing.
+ *
+ * `menuIsLive` is deliberately left alone: it is the gate on the whole battle
+ * loop, and narrowing it on a number no cartridge has confirmed at run time
+ * would risk every battle. This is the other direction -- **positive evidence
+ * of a menu that is somebody else's** -- and it is safe to act on because the
+ * Contest's left column is unique across all 73 named menu headers in the
+ * ROM. The only way to read it is to be in one.
+ */
+export function otherBattleMenu(s, engine) {
+  const box = engine && engine.battleMenu;
+  const others = (engine && engine.otherBattles) || [];
+  if (!box || !s || !s.inBattle) return null;
+  if (s.menuItems !== box.items || s.menuTop !== box.top) return null;
+  const found = others.find((o) => o.left === s.menuLeft);
+  return found ? found.what : null;
 }
 
 export function menuIsLive(s) {
@@ -334,6 +398,113 @@ export function withBattle(Base) {
     return priced;
   }
 
+  /**
+   * Somebody in the party who *can* touch what is in front of us, or null.
+   *
+   * This is the answer `notouch` did not have. The pass before could tell
+   * that the Pokemon on the field takes nothing off a GHOST and said so; the
+   * remedy it named -- *a different Pokemon* -- was one the pilot was holding
+   * and could not reach for.
+   *
+   * `already` is the slot standing there now, which is never the answer.
+   * Fainted members are never the answer either. Among the rest, the one
+   * whose best move lands hardest, because if a turn is being spent on a
+   * switch the thing coming in should be the thing that ends it.
+   *
+   * Null wherever the chart cannot be read, the same as everything else built
+   * on it -- **the switch is only ever offered on evidence.** Guessing that a
+   * matchup is bad and handing over a turn to fix it is worse than fighting
+   * on, because a switch costs a turn whether it was needed or not.
+   */
+  switchFor(party, against, already = -1) {
+    if (!this.rom || !party || !party.length || !against) return null;
+    let best = null, bestHit = 0;
+    for (const mon of party) {
+      if (mon.slot === already || !(mon.hp > 0) || !mon.moves) continue;
+      for (let i = 0; i < mon.moves.length; i++) {
+        if (!mon.moves[i] || !(mon.pp[i] > 0)) continue;
+        const info = this.rom.move(mon.moves[i]);
+        if (!info || info.power <= 0) continue;
+        const eff = this.rom.effectiveness(mon.moves[i], against);
+        if (eff === null) return null;      // cannot price it: do not switch
+        // The types of a party member come from the ROM, not from the party
+        // entry -- Gen 2 does not keep them there. Without them the ranking
+        // loses the same-type bonus and keeps the chart, which is the same
+        // trade `hitPower` makes everywhere else.
+        const mine = mon.types || this.rom.speciesTypes(mon.species);
+        const hit = this.rom.hitPower(mon.moves[i], against, mine);
+        if (eff > 0 && hit > bestHit) { best = mon.slot; bestHit = hit; }
+      }
+    }
+    return best;
+  }
+
+  /**
+   * Send out the party member in `slot` from the battle menu.
+   *
+   * Two screens rather than one, and the second is why this could not be
+   * guessed at. PKMN opens the party list; A on a Pokemon opens a box reading
+   * **SWITCH, STATS, CANCEL** -- and the *field* party menu's box reads
+   * STATS, SWITCH. Both are three-ish items over a party list, a snapshot
+   * cannot tell them apart by shape, and pressing A on the wrong one opens a
+   * stats screen while the trainer takes its turn. The order is read out of
+   * the cartridge's own menu data; see `switchBox` in engine.js.
+   *
+   * The cursor on the party list is not in memory -- `sendOut` spent a diff of
+   * all 8KB looking for it and found 87 changed bytes with no index among
+   * them, because the arrow is drawn from sprite data. So this steps down the
+   * count it wants and confirms, exactly as `sendOut` does, and the evidence
+   * is the same: **the Pokemon on the field changed.** Not the presses
+   * landing, not the box closing.
+   *
+   * Returns 'ok' | 'ended' | 'refused' | 'stuck'.
+   */
+  async switchTo(slot) {
+    const before = await this.snap();
+    const out = onField(before);
+    if (!menuIsLive(before)) return 'stuck';
+    const want = before.party[slot];
+    if (!want || !(want.hp > 0)) return 'refused';
+
+    const nudge = async (button, hold = PARTY_HOLD) => {
+      await this.push(button, hold, PARTY_GAP);
+      await this.step(PARTY_SETTLE);
+    };
+    await this.chooseAction(PKMN);
+    await this.step(SETTLE_FRAMES);
+    for (let i = 0; i < slot; i++) await nudge('DOWN');
+    await nudge('A', 8);
+
+    // The box, and only then the confirm. Answering before it is drawn is a
+    // press into the party list, which moves the cursor -- so the slot that
+    // was walked to is not the slot that gets chosen.
+    let boxed = false;
+    for (let i = 0; i < 8 && !boxed; i++) {
+      const s = await this.snap();
+      if (!s.inBattle) return 'ended';
+      if (switchBoxUp(s, this.state && this.state.e)) { boxed = true; break; }
+      await this.step(SETTLE_FRAMES);
+    }
+    if (!boxed) { await this.closeMenus(); return 'refused'; }
+    await nudge('A', 8);
+
+    for (let i = 0; i < SWITCH_TAPS; i++) {
+      const now = await this.snap();
+      if (!now.inBattle) return 'ended';
+      const nowOut = onField(now);
+      // Somebody else is standing there. `onField` matches the field's HP
+      // against the party's, so two party members holding identical HP *and*
+      // identical maxHp cannot be told apart -- and that is reported as
+      // 'stuck' below rather than as a switch that happened, because a switch
+      // nobody can see is not evidence of one.
+      if (nowOut && out && nowOut.slot !== out.slot) return 'ok';
+      if (i > 3 && menuIsLive(now)) break;
+      await this.push('A', 4, 6);
+      await this.pump();
+    }
+    return (await this.snap()).inBattle ? 'stuck' : 'ended';
+  }
+
   canStillWin(mon) {
     if (!this.rom || !mon || !mon.moves) return null;
     for (let i = 0; i < mon.moves.length; i++) {
@@ -418,7 +589,7 @@ export function withBattle(Base) {
 
   /**
    * Play out one wild battle.
-   * -> 'won' | 'lost' | 'ended' | 'stuck' | 'nopp' | 'notouch'
+   * -> 'won' | 'lost' | 'ended' | 'stuck' | 'nopp' | 'notouch' | 'notours'
    */
   /**
    * How a battle that has ended actually ended.
@@ -566,7 +737,7 @@ export function withBattle(Base) {
   }
 
   async fightBattle(maxTurns = 40, { heals = null } = {}) {
-    let potions = 0;
+    let potions = 0, switches = 0;
     for (let turn = 0; turn < maxTurns && !this.cancelled; turn++) {
       await this.pump();
       // Before anything else, because a fainted lead means the game is waiting
@@ -582,6 +753,14 @@ export function withBattle(Base) {
       }
       const menu = await this.awaitBattleMenu();
       if (menu === null) return this._outcome();
+      // **Before pressing anything**, because pressing into a menu that has
+      // been misidentified is the whole failure. Positive evidence only; see
+      // `otherBattleMenu`.
+      const notOurs = otherBattleMenu(menu, this.state && this.state.e);
+      if (notOurs) {
+        this.say(`this is ${notOurs}'s battle menu, not one I can drive`);
+        return 'notours';
+      }
       if (menu.party.length && menu.party.every((m) => m.hp === 0)) {
         return this._whiteOut();
       }
@@ -597,6 +776,26 @@ export function withBattle(Base) {
       // reached with full PP. Asked here for the same reason as the line
       // above: forty turns to arrive at 'stuck' is time nobody gets back.
       if (this.nothingLands(onField(menu), menu.enemy && menu.enemy.types)) {
+        // **And now there is something to press.** The pass before could tell
+        // that the Pokemon on the field takes nothing off what it is facing
+        // and said so; the remedy it named -- a different Pokemon -- was one
+        // the pilot was holding and could not reach for. So the sentence is
+        // the *fallback* now rather than the answer.
+        const out = onField(menu);
+        const swap = this.switchFor(menu.party,
+                                    menu.enemy && menu.enemy.types,
+                                    out ? out.slot : -1);
+        if (swap !== null && switches < MAX_SWITCHES) {
+          switches++;
+          this.say(`nothing here can touch it — sending out slot ${swap + 1}`);
+          const how = await this.switchTo(swap);
+          if (how === 'ended') return this._outcome();
+          // A switch *is* the turn, so whatever happened the next pass round
+          // starts from a fresh menu. A refusal is counted too: the budget is
+          // what stops a screen that will not cooperate becoming a loop.
+          if (how === 'ok') continue;
+          this.say(`the switch did not take (${how})`);
+        }
         return 'notouch';
       }
       // Before the swing, not after the faint. `coverFaint` above is the
