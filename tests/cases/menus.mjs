@@ -1072,3 +1072,68 @@ test('an overshoot by one is walked back rather than given up on', async (t) => 
   t.true(r.ok, `bought after stepping back: ${r.message}`);
   t.eq(r.bought, 1, 'one of them');
 });
+
+// --- three decisions in the save walk, and the wait for the pocket --------
+
+test('a menu too short to hold SAVE is refused rather than guessed at',
+     async (t) => {
+  // The last three rows are always SAVE, OPTION, EXIT, so a menu of two
+  // cannot have a SAVE row at all — and `count - 2` would be row 0, which is
+  // not a row. Three is the smallest that can, and there SAVE is row one.
+  const two = saving({ rows: 2, rowThatWorks: 1 });
+  t.false(await two.tasks._saveOnce(), 'two rows, so nothing was pressed');
+  t.eq(two.log.filter((l) => l.startsWith('row')), [], 'not one row tried');
+
+  const three = saving({ rows: 3, rowThatWorks: 1 });
+  t.true(await three.tasks._saveOnce(), 'three rows can hold it');
+  t.eq(three.log.filter((l) => l.startsWith('row')), ['row 1'],
+       'and SAVE is the first of the last three');
+});
+
+test('the row that says SAVE is asked before any counting', async (t) => {
+  // Reading the word is right whether or not the POKéDEX row exists yet, and
+  // it does not care that the menu grows. The count is the fallback for a
+  // cartridge whose symbol file has no tilemap — so if the name works, no row
+  // is driven at all.
+  const { tasks, log } = saving({ rows: 8, rowThatWorks: 6 });
+  tasks._trySaveByName = async () => { log.push('by name'); return true; };
+  t.true(await tasks._saveOnce(), 'it saved');
+  t.eq(log.filter((l) => l.startsWith('row')), [],
+       'without driving a single row');
+});
+
+test('the pocket is waited for, and the wait is bounded', async (t) => {
+  // `wItems` lags a use: measured, a BERRY healed ten HP and was still listed
+  // forty seconds later. So the question is asked until the count goes
+  // *down* — read as "at or below" and the first poll answers, which is the
+  // read that has not caught up.
+  const { tasks } = pilot();
+  let reads = 0;
+  const bag = (n) => ({ items: n === null ? [] : [[18, n]],
+                        party: [{ hp: 10, maxHp: 40 }] });
+  tasks.step = async () => {};
+  tasks.snap = async () => bag(++reads >= 3 ? 1 : 2);
+  const settled = await tasks._settled(18, 2);
+  t.eq(settled.items[0][1], 1, 'it waited until the pocket had gone down');
+  t.gte(reads, 3, 'which took more than one look');
+
+  reads = 0;
+  tasks.snap = async () => { reads++; return bag(2); };
+  const never = await tasks._settled(18, 2, 4);
+  t.eq(never.items[0][1], 2, 'a pocket that never settles hands back what it has');
+  t.lte(reads, 6, 'rather than looking for ever');
+});
+
+test('an item gone from the bag entirely has settled', async (t) => {
+  // The last one of a kind leaves no entry at all, which is the commonest
+  // case and the one a comparison on the count alone would miss.
+  const { tasks } = pilot();
+  let reads = 0;
+  tasks.step = async () => {};
+  tasks.snap = async () => { reads++;
+    return { items: [], party: [{ hp: 10, maxHp: 40 }] }; };
+  const s = await tasks._settled(18, 1, 8);
+  t.eq(s.items, [], 'the pocket is empty');
+  t.eq(reads, 1, 'and one look was enough — no entry is the strongest '
+                 + 'evidence there is, so there is nothing to wait for');
+});

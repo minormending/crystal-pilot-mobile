@@ -59,6 +59,17 @@ class Check {
     }
   }
 
+  // The mirror of `gte`, and it went in the first time somebody needed to
+  // assert a *bound* rather than a floor -- "it looked no more than six
+  // times" is the shape of every claim about a loop that is allowed to give
+  // up, and writing it as `t.true(n <= 6)` loses the numbers from the
+  // failure.
+  lte(got, ceiling, what = '') {
+    if (!(got <= ceiling)) {
+      throw new Failure(`${what || 'value'}: expected <= ${show(ceiling)}, got ${show(got)}`);
+    }
+  }
+
   contains(haystack, needle, what = '') {
     if (!String(haystack).includes(needle)) {
       throw new Failure(`${what || 'value'}: ${show(needle)} not found in ${show(haystack)}`);
