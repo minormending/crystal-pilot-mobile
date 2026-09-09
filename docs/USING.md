@@ -669,7 +669,7 @@ Under the party sits a second box, and it has two lists:
 
 ```
 24 caught of 251 · 61 seen                        ▾
-  [ Caught ]  [ All ]
+  [ Caught ][ All ]   [ 🔍 name or number ]
 ```
 
 **Caught** is the game's own Pokédex, read out of the same memory the game
@@ -700,9 +700,21 @@ nothing has rolled or earned anything. And you get the *whole* learnset instead
 of "knows" and "next", because those two are facts about a Pokémon you are
 levelling and this is not one.
 
-The list starts folded at twenty-four with a `+227 more` under it, the same way
-the Travel picker does. Two hundred and fifty-one names is a lot to scroll, and
-it is behind a deliberate tap rather than in your way.
+**Or type instead of scrolling.** The box beside the two buttons filters
+whichever list is showing, and the query decides what kind of question it is:
+letters are a name and digits are a Pokédex number. `pid` gives you the three
+Pidgey; `16` gives you Pidgey and the hundred-and-sixties, because a number
+matches on its start so the list closes in as you type rather than jumping to
+one entry and back.
+
+Case does not matter and neither does the accent — `poke` finds `POKé`. The two
+NIDORAN are the one deliberate exception: `nidoran` finds both, because folding
+`♀` and `♂` together is what made them the same name once before and it is not
+being undone. Ask for `nidoran♀` if you want the one.
+
+Without a filter the list starts folded at twenty-four with a `+227 more` under
+it, the same way the Travel picker does. Two hundred and fifty-one names is a
+lot to scroll, and it is behind a deliberate tap rather than in your way.
 
 If your cartridge's symbol file does not name the Pokédex flags, **Caught**
 says so and **All** still works — that half is the ROM's rather than the save's.
@@ -1611,7 +1623,7 @@ deployed, which is not the question you are asking when a bug you saw fixed is
 still in front of you. `tools/check-app` asserts that number matches the service
 worker's cache name, because a version display that lies is worse than none.
 
-<!-- covers: sw.js @ 7566040ca9eb -->
+<!-- covers: sw.js @ 5bfae44cec38 -->
 
 The worker fetches **network first, falling back to the cache**. That is the
 opposite of the usual offline-first advice, on purpose.

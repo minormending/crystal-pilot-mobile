@@ -9,8 +9,8 @@ import { runSequence, sequenceSaid } from './runner.js';
 import {
   describeAuto, describeDex, describeDexTotals, describeHandoff, describeOffers,
   describeParty, describeReplaced, describeRoom, describeRows, describeSaying,
-  describeScreen, describeSlot, describeTitle, describeUndo, hoursLine,
-  joinFailure, otherHour,
+  describeScreen, describeSlot, describeTitle, describeUndo, findSpecies,
+  hoursLine, joinFailure, otherHour,
 } from './rows.js';
 import { VERSION } from '../gbcore/version.js';
 import { adoptable, forgetKept, keepBattery, keepRom, keepSym, keptMeta,
@@ -1806,6 +1806,10 @@ let dexSpecies = null;
 // carrying it -- and without having caught it, or having a game loaded at all,
 // since that half of a Pokedex is the ROM's and not the save's.
 let dexMode = 'caught';
+// What is typed in the filter, or ''. Kept here rather than read off the input
+// so `paintDex` is a function of state like everything else it does -- and so
+// the list does not lose the filter the next time a poll repaints it.
+let dexFind = '';
 // How many chips the caught list shows before it folds. The species picker
 // folds at the same point and for the same reason: past two rows of chips the
 // list stops being scannable and starts being a wall.
@@ -1936,9 +1940,10 @@ function paintDex(s) {
   // whatever the boot left there, so asking for them would produce a number.
   const dex = !every && state && s.wram && s.worldLoaded
     ? state.dex(s.wram) : null;
-  const species = every
+  const all = every
     ? Array.from({ length: state.e.speciesCount }, (_, i) => i + 1)
     : (dex ? (dex.caught || []) : []);
+  const species = findSpecies(all, dexFind, (id) => romdata.speciesName(id));
   $('#dexline').textContent = describeDexTotals(dex, {
     engine: state.e, mode: dexMode, started: s.worldLoaded,
   });
@@ -1956,9 +1961,13 @@ function paintDex(s) {
   if (!species.length) {
     const none = document.createElement('span');
     none.className = 'seen';
-    none.textContent = dex ? 'nothing caught yet'
-      : s.worldLoaded ? 'this cartridge does not keep a Pokédex'
-        : 'no game loaded — try All';
+    // A filter that matches nothing is a different emptiness from a list that
+    // is empty, and saying "nothing caught yet" to somebody who has just
+    // mistyped a name answers a question they did not ask.
+    none.textContent = dexFind ? `nothing here called “${dexFind}”`
+      : dex ? 'nothing caught yet'
+        : s.worldLoaded ? 'this cartridge does not keep a Pokédex'
+          : 'no game loaded — try All';
     list.appendChild(none);
     $('#dexentry').classList.add('hide');
     return;
@@ -2158,6 +2167,17 @@ const NEEDED_SYMBOLS = [
 // lists are different sizes by two orders of magnitude: an expanded list of
 // four caught species should not open as 251 chips the moment somebody looks
 // something up.
+// Typed, not submitted. The list is short enough to filter on every keystroke
+// -- 251 string compares against a folded query -- and a box you have to press
+// Enter in is a box that looks broken until you do.
+$('#dexfind').addEventListener('input', (e) => {
+  dexFind = e.target.value.trim();
+  // Folding is per-list, and a filter makes a new list. Left alone, narrowing
+  // to three names and clearing the box would drop 251 chips on the page.
+  dexFolded = true;
+  refresh();
+});
+
 $('#dexmode').addEventListener('click', (e) => {
   const mode = e.target && e.target.dataset && e.target.dataset.mode;
   if (!mode || mode === dexMode) return;

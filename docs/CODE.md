@@ -492,6 +492,15 @@ is `monDetail(wram, slot)`, read when somebody opens a card, which is when they
 are being looked at. `_mon` is the shared half so the two cannot disagree about
 the cheap fields.
 
+`findSpecies` in `rows.js` is the filter, and it is a pure function over a list
+so it can be held to its own rules: **all digits is a Pokédex number, anything
+else is a name.** A number matches by *prefix* rather than exactly, so the list
+narrows as somebody types instead of jumping to one entry and back on the next
+keystroke. It folds through `normalise` — the same folding the item lookup uses
+rather than a second copy of it — which is also why `nidoran` finds both of
+them: that function deliberately does not fold `♀` and `♂`, because folding
+them is what made the two NIDORAN the same name in the first place.
+
 `dex(wram)` is off `read()` for the same reason `screen()` is: two 32-byte bit
 arrays walked 251 times each is not a thing to do eight times a second, and
 nothing but the dex card wants it.
@@ -4059,7 +4068,7 @@ file says they do.
 
 ## 8i. Reaching an hour
 
-<!-- covers: gen2/jobs.js gen2/engine.js gen2/romdata.js gen2/state.js gbcore/saves.js app/rows.js @ e0872d285d74 -->
+<!-- covers: gen2/jobs.js gen2/engine.js gen2/romdata.js gen2/state.js gbcore/saves.js app/rows.js @ 6de6928832e7 -->
 
 A third of Johto's grass is behind the clock. HOOTHOOT is on Route 29 after
 dark and nowhere on it at noon, and for four versions the usage guide said the
@@ -4230,7 +4239,7 @@ This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ 611a098941a5 -->
+<!-- covers: app/main.js index.html @ 38156555adaa -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -4779,7 +4788,7 @@ seconds by a page whose loop was supposedly running.
 
 ### One thing at a time
 
-<!-- covers: app/main.js @ 2b9317927c6f -->
+<!-- covers: app/main.js @ b26b9c147cdc -->
 
 One Game Boy, one joypad, one canvas — so a great deal of this app is about
 making sure two things are never driving them at once. There are three claims,
@@ -4921,7 +4930,7 @@ before a step is taken, so a stopped walk does not move at all.
 
 ### What is behind the Gym door, before you open it
 
-<!-- covers: gen2/romdata.js gen2/engine.js app/rows.js @ 5e7da3052537 -->
+<!-- covers: gen2/romdata.js gen2/engine.js app/rows.js @ 986638355e88 -->
 
 The Gym row could say where the Gym is and who is in it. **Whether it is worth
 going** is two facts the cartridge has had all along, and neither of them
@@ -5285,7 +5294,7 @@ a conversation.
 
 ### The card behind a party row
 
-<!-- covers: app/rows.js app/main.js index.html @ 477032ddb487 -->
+<!-- covers: app/rows.js app/main.js index.html @ 4c523225279e -->
 
 Two questions the game itself will not answer about a Pokémon you are
 carrying — *what is this made of* and *what is it about to become* — and both
@@ -5374,7 +5383,7 @@ at body size.
 
 ### Running the list
 
-<!-- covers: app/rows.js app/main.js @ ea4a0fb3cae7 -->
+<!-- covers: app/rows.js app/main.js @ 15abe7dba639 -->
 
 The app has spent forty passes learning to answer one question — *what can the
 pilot do here, and which of those is worth most?* — and twenty showing the
@@ -5498,7 +5507,7 @@ to deposit your last Pokémon.
 
 ### The settings and the save card
 
-<!-- covers: index.html app/main.js @ 611a098941a5 -->
+<!-- covers: index.html app/main.js @ 38156555adaa -->
 
 The pilot's own list got a glyph column, shorter names and a slot to fill in
 v165. These two cards did not, and reading them found that they had a different
@@ -6126,7 +6135,7 @@ they have been installed.
 
 ### Watching the other device's screen
 
-<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ 3166637072c7 -->
+<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ d78359a4b197 -->
 
 One device shows its screen; the other watches it, and plays it if the first
 one says so. The picture goes straight between them over WebRTC and never

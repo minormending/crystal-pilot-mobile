@@ -680,7 +680,16 @@
   /* Above the chips rather than in the summary row: a button placed inside a
      disclosure summary opens and closes the box it sits in as well as doing
      its own job, and those are not the same gesture. */
-  .dexseg{margin:0 0 8px}
+  /* The list control and the filter share a line: this box already costs a
+     summary, two segments, a wall of chips and a card, and the sheet it is in
+     does not scroll for free. */
+  .dexrow{display:flex;gap:8px;align-items:center;margin:0 0 8px}
+  .dexseg{margin:0;flex:0 0 auto}
+  .dexrow .find{flex:1 1 0;width:auto;min-width:0;margin:0;
+                font:12px ui-monospace,SFMono-Regular,Menlo,monospace;
+                padding:7px 9px;border-radius:8px;
+                border:1px solid var(--line);background:var(--panel);
+                color:var(--ink)}
   .dexbox .chips{padding-bottom:8px}
   .dexbox .chips button{min-height:32px;padding:5px 10px;font-size:12px}
   /* Open, it needs an edge: the first offer below it wears no top rule, being
@@ -1305,10 +1314,19 @@
            and changes on press tells you neither how many states there are nor
            which way round. These say both at rest, and the second one is the
            whole answer to "let me look something up without carrying it". -->
-      <div class="seg dexseg" id="dexmode" role="group"
-           aria-label="Which Pokémon to list">
-        <button type="button" data-mode="caught" aria-pressed="true">Caught</button>
-        <button type="button" data-mode="all" aria-pressed="false">All</button>
+      <div class="dexrow">
+        <div class="seg dexseg" id="dexmode" role="group"
+             aria-label="Which Pokémon to list">
+          <button type="button" data-mode="caught" aria-pressed="true">Caught</button>
+          <button type="button" data-mode="all" aria-pressed="false">All</button>
+        </div>
+        <!-- Labelled as well as prompted. An unlabelled box whose placeholder
+             could pass for real content reads as a value somebody already
+             entered, which is the mistake the room-code field made for four
+             versions: "name or number" cannot be mistaken for a Pokémon. -->
+        <input type="search" id="dexfind" class="find" autocomplete="off"
+               placeholder="name or number"
+               aria-label="Find a Pokémon by name or number">
       </div>
       <div class="chips" id="dexchips"></div>
       <div class="dexcard hide" id="dexentry"></div>

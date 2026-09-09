@@ -476,7 +476,7 @@ control:
 
 ```
 24 caught of 251 · 61 seen                        ▾
-  [ Caught ]  [ All ]
+  [ Caught ][ All ]   [ 🔍 name or number ]
 ```
 
 Two segments rather than one button that cycles, which is the lesson the Colour
@@ -503,6 +503,20 @@ where the answer goes.
 On a cartridge whose symbol file does not name the Pokédex flags, **Caught**
 says so and **All** still works. The box no longer disappears, because the two
 halves are read by different means and only one of them was ever missing.
+
+**The filter shares the line with the segments**, because this box already
+costs a summary, two buttons, a wall of chips and a card, and the sheet it sits
+in does not scroll for free. It is labelled as well as prompted: an unlabelled
+box whose placeholder could pass for real content reads as a value somebody has
+already entered, which is exactly what the room-code field did for four
+versions with `K7M2P` sitting in it. *name or number* cannot be mistaken for a
+Pokémon.
+
+It filters as you type rather than on Enter — the list is 251 string compares
+against a folded query, and a box you have to submit looks broken until you do.
+A query that matches nothing says so in its own words, because *nothing caught
+yet* is an answer to a question somebody who has just mistyped a name did not
+ask.
 
 ### The row that is about the hour rather than the map
 
@@ -1208,4 +1222,4 @@ So this page carries a marker naming the files it describes and the hash they
 had when it was last read against them. `tools/docs-check` reports it when they
 move, and the pre-commit hook blocks on that report.
 
-<!-- covers: index.html app/main.js app/rows.js @ 477032ddb487 -->
+<!-- covers: index.html app/main.js app/rows.js @ 4c523225279e -->

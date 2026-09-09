@@ -9,6 +9,11 @@
 // main.js applies what comes back. That division is worth keeping: a wrong
 // string here is a wrong string, but a wrong string tangled up with the DOM is
 // a bug you can only find by loading a phone and squinting at it.
+//
+// The one import, and it is a pure function rather than a reader: `normalise`
+// folds a name the way the item lookup folds one, and a second copy of that
+// folding here is exactly the kind of drift this file is otherwise free of.
+import { normalise } from '../gen2/romdata.js';
 
 /**
  * `ctx` is everything outside the game that changes what a row says:
@@ -1512,6 +1517,33 @@ function describeOrigin(caught, ctx = {}) {
   if (place) bits.push(`in ${place}`);
   if (caught.when) bits.push(`at ${caught.when}`);
   return bits.join(' ');
+}
+
+/**
+ * The species in `ids` that match what somebody typed.
+ *
+ * One box, two kinds of query, and the rule between them is the query itself:
+ * **all digits is a Pokédex number, anything else is a name.** Typing `16`
+ * asks for PIDGEY and typing `pid` asks for the three of them, which is how a
+ * person uses a Pokédex either way round.
+ *
+ * A number matches by *prefix* rather than exactly, so the list narrows as you
+ * type rather than jumping to one entry and back — `1` is the hundred and
+ * eleven species whose number starts with a one, and `16` is two of them.
+ *
+ * Folded through `normalise`, which is the same folding the item lookup uses,
+ * so `poke` finds `POKé` and case never matters. It deliberately does **not**
+ * fold `♀` and `♂` — that was measured once and undone once, because folding
+ * them makes the two NIDORAN the same name again. Typing `nidoran` finds both,
+ * which is the right answer to an ambiguous question.
+ *
+ * `nameOf` rather than a RomData, so this stays a pure function over a list.
+ */
+export function findSpecies(ids, query, nameOf) {
+  const want = normalise(String(query == null ? '' : query));
+  if (!want) return ids;
+  if (/^\d+$/.test(want)) return ids.filter((id) => String(id).startsWith(want));
+  return ids.filter((id) => normalise(nameOf(id) || '').includes(want));
 }
 
 /**
