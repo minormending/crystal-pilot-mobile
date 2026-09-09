@@ -119,6 +119,11 @@ def mutations(root):
         # table came to claim 143 while 576 ran.
         "counts": lambda: edit("tests/cases/input.mjs", append(
             "\ntest('probe', async (t) => { t.true(true); });\n")),
+        # A phrase the cartridge does not say, which never matches and never
+        # fails -- for `boxed` that is a successful catch reported as a
+        # getaway.
+        "phrases": lambda: edit("titles/crystal.js", sub(
+            "boxed: 'sent to BILL',", "boxed: 'sent to BILLY',")),
         # The switch box moved one row, which is what a signature copied off
         # the wrong screen looks like -- and it would make the pilot press A
         # into a party list it thought was a confirmation box.

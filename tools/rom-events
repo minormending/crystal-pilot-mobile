@@ -34,6 +34,26 @@ So it is a tool.
         check the object layout against all 388 maps: the type field and the
         script's own name have to agree about which objects are trainers
 
+    tools/rom-events --find SWITCH
+        every place the cartridge writes a phrase, by nearest symbol. The step
+        that unlocked the forty-eighth pass, which was done by hand: encode
+        the word in the cartridge's own alphabet, search the file, and ask the
+        symbol table whose data the bytes landed in. It answered "which order
+        does the battle party menu list its options in?" in one command --
+        `MonMenuOptionStrings` begins STATS, `BattleMonMenu` begins SWITCH,
+        and they are opposite.
+
+    tools/rom-events --phrases
+        every phrase the app matches against the screen, against the cartridge
+        that says them. A phrase that is not in the ROM never matches and
+        nothing says so -- for `boxed` that is a successful catch reported as
+        a getaway, which is the outcome the branch exists to prevent.
+
+    tools/rom-events --menus
+        every box the app tells apart by shape, against the cartridge's own
+        menu header -- and the boxes that *share* a signature, which is the
+        hazard the app cannot see for itself
+
     tools/rom-events --objects AzaleaGym
         the map's warps and objects, with each object's script named -- which
         is where a gym leader stands, answered without a running game
@@ -524,6 +544,122 @@ APP_BOXES = [
 ]
 
 
+def find_text(cart, phrase, limit=12):
+    """Where in the ROM the cartridge writes this phrase, by nearest symbol.
+
+    **The step that unlocked the forty-eighth pass, done by hand.** The
+    question was which order the battle party menu's options come in, and the
+    way to answer it was to encode "SWITCH" in the cartridge's own alphabet,
+    search the file for those bytes, and ask the symbol table whose data they
+    landed in. That took a throwaway script, which is the shape of thing this
+    tool exists to stop being thrown away -- *what does the game call this,
+    and where does it keep it* is a question every pass asks.
+
+    Encoded rather than searched as ASCII, because Gen 2's alphabet is its
+    own: A is $80, a is $a0, a space is $7f. `Cart.text` decodes; this is the
+    other direction, and it is deliberately narrow -- letters, digits, spaces
+    and a full stop -- because a phrase with a line break or a ligature in it
+    is not a phrase you can search for as one run of bytes.
+    """
+    # **Case matters, and uppercasing was this tool's first bug.** Gen 2 gives
+    # capitals and lower case separate blocks -- A is $80 and a is $a0 -- so
+    # folding the query to upper case looks for bytes the cartridge does not
+    # have there. "sent to BILL" came back "not in this ROM" while sitting in
+    # it, which is exactly the confident wrong answer this file keeps warning
+    # about, committed by a tool written to prevent it.
+    out = bytearray()
+    for ch in phrase:
+        if 'A' <= ch <= 'Z':
+            out.append(0x80 + ord(ch) - 65)
+        elif 'a' <= ch <= 'z':
+            out.append(0xa0 + ord(ch) - 97)
+        elif '0' <= ch <= '9':
+            out.append(0xf6 + ord(ch) - 48)
+        elif ch == ' ':
+            out.append(SPACE)
+        elif ch == '.':
+            out.append(0xe8)
+        else:
+            return None, f'"{ch}" is not a byte this can search for'
+    hits, at = [], cart.rom.find(bytes(out))
+    while at >= 0 and len(hits) < limit:
+        hits.append(at)
+        at = cart.rom.find(bytes(out), at + 1)
+    return hits, None
+
+
+def where(cart, phrase):
+    """Print every place the cartridge writes a phrase, with its label."""
+    hits, why = find_text(cart, phrase)
+    if hits is None:
+        print(f'  {why}')
+        return 1
+    if not hits:
+        print(f'  "{phrase}" is not in this ROM, in this alphabet')
+        return 1
+    print(f'"{phrase}": {len(hits)} place(s)')
+    for off in hits:
+        bank, addr = off // 0x4000, 0x4000 + off % 0x4000
+        # A generous bound: a string is usually a long way past the symbol
+        # that names the table it is in, which is exactly what the caller
+        # wants to know -- "inside MonMenuOptionStrings" is the answer.
+        print(f'  {bank:02x}:{addr:04x}  {cart.label(off, bound=4096)}')
+    return 0
+
+
+def app_phrases():
+    """Every phrase the app matches against the screen, out of the source.
+
+    Three kinds, and all three are words the *game* says: the title's `boxed`
+    phrase, which is how a catch that went to the box is told from a getaway;
+    and the words `_driveToSaying` walks a menu looking for.
+
+    Read from the source rather than listed here, for the reason every other
+    number in these tools is: a list of literals maintained by hand beside the
+    literals themselves is the thing that goes stale.
+    """
+    out = []
+    title = (ROOT / 'titles' / 'crystal.js').read_text()
+    for m in re.finditer(r"boxed:\s*'([^']+)'", title):
+        out.append((m.group(1), 'titles/crystal.js', 'a boxed catch'))
+    menus = (ROOT / 'gen2' / 'menus.js').read_text()
+    for m in re.finditer(r"_driveToSaying\('([^']+)'", menus):
+        out.append((m.group(1), 'gen2/menus.js', 'a menu row it drives to'))
+    return out
+
+
+def phrases(cart):
+    """Every phrase the app looks for, against the cartridge that says them.
+
+    **A phrase that is not in the ROM never matches, and nothing says so.**
+    The screen is read as tiles and compared as folded text, so a typo does
+    not fail -- it just never fires, and the feature resting on it quietly
+    stops working. For `boxed` that means a *successful* catch reported as a
+    getaway, which is the outcome the branch was written to prevent.
+
+    Case matters here in a way it does not in the app: Gen 2 gives capitals
+    and lower case separate blocks, so this searches for exactly what was
+    written down. The app folds case when it compares, so a phrase that is
+    right apart from its case still works -- and is still worth reporting,
+    because it means nobody checked.
+    """
+    bad = 0
+    for phrase, where_, why in app_phrases():
+        hits, note = find_text(cart, phrase)
+        if hits is None:
+            print(f'  ??  {where_}  "{phrase}": {note}')
+            bad += 1
+        elif not hits:
+            print(f'  !!  {where_}  "{phrase}" is not in this ROM — '
+                  f'{why} will never be recognised')
+            bad += 1
+        else:
+            off = hits[0]
+            print(f'  "{phrase}" — {cart.label(off, bound=4096)}'
+                  f'{"" if len(hits) == 1 else f" and {len(hits) - 1} more"}')
+    return bad
+
+
 def menu_header(cart, name):
     """`{items, top, first}` for a named menu header, or None."""
     if name not in cart.by_name:
@@ -849,6 +985,10 @@ def main(argv):
         return 1 if gyms(cart, map_symbol(cart)) else 0
     if '--verify' in argv:
         return 1 if verify(cart) else 0
+    if '--phrases' in argv:
+        return 1 if phrases(cart) else 0
+    if '--find' in argv:
+        return where(cart, ' '.join(argv[argv.index('--find') + 1:]))
     if '--menus' in argv:
         bad = menus(cart)
         # The third number, and whether it is still worth trusting.

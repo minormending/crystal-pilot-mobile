@@ -1742,6 +1742,61 @@ def check_menus():
               f"and {len(shared)} signature(s) are shared by more than one box")
 
 
+def check_phrases():
+    """The words the app looks for on screen are words the cartridge says.
+
+    **A phrase that is not in the ROM never matches, and nothing says so.**
+    The screen is read as tiles and compared as folded text, so a typo does
+    not fail -- it never fires, and the feature resting on it quietly stops
+    working. For the title's `boxed` phrase that means a *successful* catch
+    reported as a getaway, which is the one outcome that branch exists to
+    prevent.
+
+    **Static:** a phrase is *content*, so no engine module may compare a
+    literal one. `sc.says(boxed)` takes the title's word; `sc.says('sent to
+    BILL')` would put a fact about one cartridge's English inside the engine,
+    where a hack cannot change it and `check_layers` cannot see it.
+
+    **With a cartridge:** `tools/rom-events --phrases` looks each one up. All
+    three currently land on the symbol that names them --
+    `_WasSentToBillsPCText`, `StartMenu.PackString`, `StartMenu.SaveString`.
+    """
+    problems = []
+    for name in sorted((ROOT / "gen2").glob("*.js")):
+        src = name.read_text()
+        # Matched against the masked source and read out of the real one.
+        # `_code_only` blanks a string's *contents* while keeping its length,
+        # so the quote after the bracket is still there to find and the
+        # offsets still line up -- which is the only way to spot a literal
+        # argument without also matching the prose that describes it. Three
+        # comments in this repository contain `sc.says('...')` as an example.
+        masked = _code_only(src)
+        for m in re.finditer(r"\.(?:says|selectedSays)\(\s*['\"]", masked):
+            end = src.find(src[m.end() - 1], m.end())
+            said = src[m.end():end] if end > 0 else "?"
+            problems.append(f"gen2/{name.name}  compares the literal "
+                            f'"{said}" against the screen, and a phrase is '
+                            f"the title's to say")
+    for p in problems:
+        print(f"        {p}")
+    if problems:
+        return fail(f"{len(problems)} screen phrase(s) written into the engine")
+
+    if not (ROOT / "dev" / "pokecrystal.gbc").exists():
+        return ok("no screen phrase is written into the engine; no cartridge "
+                  "here, so the phrases are not looked up")
+    out = subprocess.run([sys.executable, str(HERE / "rom-events"), "--phrases"],
+                         capture_output=True, text=True)
+    bad = [l for l in out.stdout.splitlines() if "!!" in l or "??" in l]
+    for l in bad:
+        print(f"        {l.strip()}")
+    if out.returncode or bad:
+        return fail(f"{len(bad) or 1} phrase(s) this cartridge never says")
+    found = [l for l in out.stdout.splitlines() if l.strip().startswith('"')]
+    return ok(f"all {len(found)} phrase(s) the app looks for are ones this "
+              f"cartridge says")
+
+
 CHECKS = {
     "syntax": check_syntax,
     "layers": check_layers,
@@ -1770,6 +1825,7 @@ CHECKS = {
     "gyms": check_gyms,
     "types": check_types,
     "menus": check_menus,
+    "phrases": check_phrases,
 }
 
 

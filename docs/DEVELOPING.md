@@ -16,7 +16,7 @@ what CI checks and what the pre-commit hook blocks on.
 flowchart LR
     E[an edit] --> H{{".githooks/pre-commit"}}
     H --> T["./run-tests<br/>751 behaviour tests"]
-    H --> C["tools/check-app<br/>27 groups"]
+    H --> C["tools/check-app<br/>28 groups"]
     H --> D["tools/docs-check<br/>40 tracked sections"]
     T --> OK[commit]
     C --> OK
@@ -127,14 +127,14 @@ section gives. Everything by hand runs against a local build.
 ```mermaid
 flowchart BT
     C["the app"] --> T["./run-tests<br/>751 behaviour tests"]
-    C --> A["tools/check-app<br/>27 groups"]
+    C --> A["tools/check-app<br/>28 groups"]
     C --> D["tools/docs-check<br/>40 tracked sections"]
     C --> V["tools/coverage<br/>what the suite never runs"]
     T --> M["tools/mutate<br/>break a line, see who notices"]
     A --> K["tools/check-checks<br/>break each group's own subject"]
     T -.-> V
     M -.->|"survivors, by file"| R(["the suite is load-bearing"])
-    K -.->|"27 of 27 bite"| R2(["the groups are awake"])
+    K -.->|"28 of 28 bite"| R2(["the groups are awake"])
     V -.->|"58%, and where"| R3(["the gaps are known"])
 ```
 
@@ -434,7 +434,7 @@ is wrong, not the check. It is not in the pre-commit hook: it runs `check-app`
 about fifty times, which is the wrong price for every commit and the right
 one for the commit that changes a check.
 
-`tools/check-app` is twenty-seven groups, each one a class of mistake that parses
+`tools/check-app` is twenty-eight groups, each one a class of mistake that parses
 fine and is wrong at run time:
 
 | group | asserts |
@@ -461,6 +461,7 @@ fine and is wrong at run time:
 | `gates` | every road a title declares shut names an event the ROM actually sets — skipped without a cartridge |
 | `gyms` | every gym a title declares has the right leader on the right tile, as a script object, with a badge bit that is a badge — skipped without a cartridge |
 | `romlayout` | `tools/rom-events` and `gen2/world.js` agree about all seven map-table strides. Three were hand-copied into the tool and three were wrong |
+| `phrases` | no engine module compares a screen phrase written into it — a phrase is content, so it is the title's to say — and, with a cartridge, every phrase the app looks for is one the cartridge actually says |
 | `menus` | every box the app tells apart by shape declares that shape in the profile and asks the instance for it — and, with a cartridge, the shape is the one the cartridge's own menu header draws |
 | `types` | every optional symbol the app reads travels in the shared digest, both sides' type addresses are read, and — with a cartridge — the decoded type chart agrees with twenty-two matchups nobody had to look up |
 | `counts` | every number in the prose that the repository can compute is right — the test table, the group count, the digest's size, the audit's rows. Two have shipped wrong: *143 tests in seventeen files* while 576 ran, and a digest drawn as 47 entries carrying 53 |
@@ -600,6 +601,8 @@ tools/rom-events --gates                    every declared gate, against the ROM
 tools/rom-events --gyms                     every declared gym, against the ROM
 tools/rom-events --verify                   the object layout, over all 388 maps
 tools/rom-events --menus                    every box the app drives, by shape
+tools/rom-events --phrases                  every phrase it looks for, in the ROM
+tools/rom-events --find SWITCH              where the cartridge writes a word
 ```
 
 Every gate in Gen 2 is a script reading one bit of `wEventFlags`, so *why does
@@ -626,6 +629,45 @@ hundred instructions but to stop needing it. What a gate actually asks is
 *which event does this map check?*, and that is the three-byte pattern
 `31 xx xx` inside the map's own script region, which every map bounds exactly
 with a `<Map>_MapScripts` and a `<Map>_MapEvents` symbol. 388 of each.
+
+**`--find` is the step that unlocked the forty-eighth pass, and it was done by
+hand.** The question was which order the battle party menu lists its options
+in. The way to answer it was to encode the word in the cartridge's own
+alphabet, search the file for those bytes, and ask the symbol table whose data
+they landed in — a throwaway script, which is the shape of thing this tool
+exists to stop being thrown away. *What does the game call this, and where does
+it keep it* is a question every pass asks:
+
+```
+$ tools/rom-events --find SWITCH
+  09:4cb5  MonMenuOptionStrings+6
+  09:4ede  BattleMonMenu.MenuData+2
+```
+
+Six characters into one table and two into the other, which is the whole
+answer: the field menu begins STATS, the battle one begins SWITCH.
+
+**Case matters, and folding it was this tool's first bug.** Gen 2 gives
+capitals and lower case separate blocks — `A` is `$80`, `a` is `$a0` — so
+searching for an upper-cased query looks for bytes the cartridge does not have
+there. `sent to BILL` came back *not in this ROM* while sitting in it, which is
+exactly the confident wrong answer this file keeps warning about, committed by
+a tool written to prevent it.
+
+**`--phrases` is what that made possible.** Every phrase the app matches
+against the screen is a word the *game* says, and a phrase that is not in the
+ROM **never matches and never fails** — the screen is read as tiles and
+compared as folded text, so a typo does not error, it just never fires and the
+feature resting on it quietly stops working. For the title's `boxed` phrase
+that means a *successful* catch reported as a getaway, which is the one
+outcome that branch exists to prevent. All three currently land on the symbol
+that names them:
+
+```
+  "sent to BILL" — _WasSentToBillsPCText+9 and 1 more
+  "PACK" — StartMenu.PackString and 11 more
+  "SAVE" — StartMenu.SaveString and 11 more
+```
 
 **`--menus` reads a box's shape out of the cartridge instead of off a screen**,
 which is what made the switch feature possible in an environment with no

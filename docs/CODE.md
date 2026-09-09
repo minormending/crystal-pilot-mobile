@@ -6108,7 +6108,7 @@ about that code did not.
 
 ### The other checks
 
-<!-- covers: tools/check-app @ f5ab1238b80d -->
+<!-- covers: tools/check-app @ c10068bd8e43 -->
 
 `tools/check-app` runs everything that can be verified without a ROM:
 
@@ -6145,6 +6145,8 @@ tools/check-app contrast     # or one group
 | `gyms` | a declared gym's leader, tile, kind and badge bit are what the cartridge says — skipped without a cartridge |
 | `romlayout` | `tools/rom-events` and `gen2/world.js` agree about the map-events strides |
 | `types` | the optional symbols the app reads travel to another device, and — with a cartridge — the decoded type chart agrees with twenty-two matchups nobody had to look up |
+| `menus` | every box the app tells apart by shape declares that shape, asks the instance for it, and — with a cartridge — is the shape the cartridge's own menu header draws |
+| `phrases` | no engine module compares a screen phrase written into it, and every phrase the app looks for is one the cartridge says. A phrase that is not in the ROM never matches and never fails |
 
 Half of that table was missing until the marker above was added: six groups had
 been written and never listed, so the document described five checks while
