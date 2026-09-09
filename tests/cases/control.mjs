@@ -306,3 +306,81 @@ test('a species that does not change is not announced every battle', async (t) =
   t.false(said.some((m) => /evolved/.test(m)), 'nothing evolved, so nothing is said');
   t.eq(r.stats.evolved, 0, 'and the count stays at zero');
 });
+
+// --- the method the Stop button actually calls -------------------------------
+//
+// Every test above sets `tasks.cancelled = true` by hand, which is the state a
+// Stop produces and not the thing a Stop *does*. So `cancel()` -- the one line
+// the button is wired to -- had nothing asserting it, and `tools/mutate` proved
+// it: setting `this.cancelled = false` in there passed the whole suite. Stop
+// would have been a button that did nothing, with eighteen tests about
+// stopping.
+//
+// The same shape as the ring fake that never called `escapeBattle` and the
+// healer fake with one map: a test that reaches around the thing it is testing
+// cannot fail.
+
+test('the method the Stop button calls is the one that stops a task',
+     async (t) => {
+  const { tasks } = pilot({ world: { mapStatus: 1, scriptMode: 1, map: [24, 3] } });
+  t.false(tasks.cancelled, 'nothing pressed yet');
+  tasks.cancel();
+  t.true(tasks.cancelled, 'and the press lands');
+  const e = await t.rejects(() => tasks.awaitQuiet(), 'a primitive refuses now');
+  t.true(e instanceof Cancelled, 'unwinding as Cancelled');
+});
+
+test('a window that asks a question is declined, not pressed through',
+     async (t) => {
+  // `keepDefaultName` presses A through a text box and B at a *question*, and
+  // which of the two a window is decides between answering something nobody
+  // asked and getting stuck in it. Both halves of that condition could be
+  // flipped with the suite green.
+  //
+  // This is the same rule that cost a wallet ¥2900: A answers a question and B
+  // declines it, and a job has no business answering anything.
+  const sym = symbols();
+  const state = new GameState(sym);
+  // A screen with YES and NO on it, which is what a question looks like.
+  state.screen = () => ({ says: (w) => w === 'YES' || w === 'NO' });
+  const gb = new FakeGameBoy({ wram: worldRam(sym, { windowStack: 1 }) });
+  const tasks = new Tasks(gb, state, () => {}, fakeRom());
+  const pressed = [];
+  tasks.push = async (btn) => { pressed.push(btn); };
+  tasks.step = async () => {};
+  t.true(await tasks.keepDefaultName(), 'it answers the question');
+  t.eq(pressed, ['B'], 'by declining it');
+});
+
+test('a window with no question in it is pressed through', async (t) => {
+  const sym = symbols();
+  const state = new GameState(sym);
+  // On screen, but no YES and no NO: an ordinary text box.
+  state.screen = () => ({ says: () => false });
+  const gb = new FakeGameBoy({ wram: worldRam(sym, { windowStack: 1 }) });
+  const tasks = new Tasks(gb, state, () => {}, fakeRom());
+  const pressed = [];
+  tasks.push = async (btn) => { pressed.push(btn); };
+  tasks.step = async () => {};
+  t.false(await tasks.keepDefaultName(2), 'it never finds a question');
+  t.true(pressed.every((p) => p === 'A'), 'having pressed on through with A');
+  t.true(pressed.length > 0, 'rather than doing nothing');
+});
+
+test('with no screen reader at all, an open window is taken as the question',
+     async (t) => {
+  // `!sc` is the lenient half: a cartridge whose symbol file has no tilemap
+  // cannot be asked what the window says, and the window being open is then
+  // the best evidence there is. Worth pinning because it is the branch a hack
+  // takes, and the one nobody runs.
+  const sym = symbols();
+  const state = new GameState(sym);
+  state.screen = null;
+  const gb = new FakeGameBoy({ wram: worldRam(sym, { windowStack: 1 }) });
+  const tasks = new Tasks(gb, state, () => {}, fakeRom());
+  const pressed = [];
+  tasks.push = async (btn) => { pressed.push(btn); };
+  tasks.step = async () => {};
+  t.true(await tasks.keepDefaultName(), 'the open window is the question');
+  t.eq(pressed, ['B'], 'and it declines');
+});
