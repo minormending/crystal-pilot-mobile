@@ -11,3 +11,4 @@ node_modules/
 
 # Python bytecode from the tools in tools/, which import each other.
 __pycache__/
+.claude/
