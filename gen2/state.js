@@ -344,7 +344,7 @@ export class GameState {
   badgeCount(wram) {
     if (this.a.badges === null) return null;
     let n = 0;
-    for (let i = 0; i < (this.e.badgeBytes || 2); i++) {
+    for (let i = 0; i < this.e.badgeBytes; i++) {
       let byte = b(wram, this.a.badges + i);
       while (byte) { n += byte & 1; byte >>= 1; }
     }
@@ -393,7 +393,7 @@ export class GameState {
 
   money(wram) {
     let out = 0;
-    for (let i = 0; i < (this.e.moneyBytes || 3); i++) {
+    for (let i = 0; i < this.e.moneyBytes; i++) {
       out = (out << 8) | b(wram, this.a.money + i);
     }
     return out;
@@ -530,8 +530,13 @@ export class GameState {
     const { caughtData, caughtTimes, mon } = this.e;
     const first = b(wram, base + mon.caught);
     const second = b(wram, base + mon.caught + 1);
+    // **The mask is the upper bound, so there is not a second one here.** Six
+    // bits hold 0 to 63 and Gen 2 clamps a catch above that, so a `<= 100`
+    // beside this would be a comparison with no path to being false --
+    // `tools/mutate` widened it to `< 100` and nothing could fail either way,
+    // which is the tell. Zero is the only value that means *does not say*.
     const level = first & caughtData.levelMask;
-    if (!(level >= 1 && level <= 100)) return null;
+    if (level === 0) return null;
     return {
       level,
       when: caughtTimes[first >> caughtData.timeShift] || null,

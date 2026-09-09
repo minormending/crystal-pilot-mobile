@@ -1836,7 +1836,8 @@ function dexCard(mon) {
       + `<b>${st.value ?? '—'}</b>`
       + `<span>${st.dv ?? '—'}</span>`
       + meter('dv', st.dv === null ? 0 : st.dv / dvMax)
-      + meter('ev', st.effortPart));
+      + meter('ev', st.effortPart)
+      + '</div>');
   }
   const lines = [];
   if (d.knows.length) {
