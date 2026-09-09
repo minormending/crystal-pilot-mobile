@@ -473,7 +473,7 @@ enforces it, so it is a fact about the build rather than a habit.
 
 ### `state.js` — what the game is doing right now
 
-<!-- covers: gen2/state.js @ 580cec46c6b8 -->
+<!-- covers: gen2/state.js @ e5cea1c597ac -->
 
 One snapshot, many answers: `inBattle`, `party`, `pos`, `onGrass`,
 `worldLoaded`, `menu`, `balls`, `items`, each party member's `status`, the
@@ -1471,7 +1471,7 @@ and a Pokémon Center restores PP, so the grind treats it as a trip it already
 knew how to make. See [the tiles that run a
 script](#8g-the-tiles-that-run-a-script-and-saying-hello) for the walk half.
 
-<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ aa042eb34bc7 -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ a78753f8cc6a -->
 
 ### Which move, and which question
 
@@ -2600,7 +2600,7 @@ said *trainer battle: lost* **seven times**. One loss, reported seven ways.
 
 ## 7d. The counter, and the money it takes
 
-<!-- covers: gen2/menus.js gen2/state.js titles/crystal.js @ 790cea080cd0 -->
+<!-- covers: gen2/menus.js gen2/state.js titles/crystal.js @ 26bae0262750 -->
 
 Everything the pilot could do until now used what it found. **Shop** walks to a
 mart and buys, which is the first thing it does that spends rather than
@@ -2709,7 +2709,7 @@ counter and came away with **five potions and ¥1800**, in 49 seconds.
 
 ## 7b. Saving, and getting the save out
 
-<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ aa042eb34bc7 -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ a78753f8cc6a -->
 
 ```mermaid
 flowchart TD
@@ -3573,7 +3573,7 @@ by, which is the only leg it can measure.
 
 ## 8d. A route the game itself refuses
 
-<!-- covers: gen2/journey.js gen2/state.js @ 25964eed8017 -->
+<!-- covers: gen2/journey.js gen2/state.js @ e186ca3a92ea -->
 
 The pass before this one taught the walk to *quote* the man who turns it back.
 This is the pilot doing something about it.
@@ -3781,7 +3781,7 @@ costs however long it takes somebody to notice their money is gone.
 
 ## 8f. Going and winning a badge
 
-<!-- covers: gen2/journey.js gen2/state.js titles/crystal.js @ b005a1523885 -->
+<!-- covers: gen2/journey.js gen2/state.js titles/crystal.js @ 39054261fe9a -->
 
 The pilot has been turned back from Route 32 since the pass it learned to find
 Pokémon Centers. `reopen` throws away every written-off road the moment a badge
@@ -4044,7 +4044,7 @@ This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ 2d8968831675 -->
+<!-- covers: app/main.js index.html @ 50408bf97a43 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -4593,7 +4593,7 @@ seconds by a page whose loop was supposedly running.
 
 ### One thing at a time
 
-<!-- covers: app/main.js @ 5d0455ae5df6 -->
+<!-- covers: app/main.js @ 8a587059ca79 -->
 
 One Game Boy, one joypad, one canvas — so a great deal of this app is about
 making sure two things are never driving them at once. There are three claims,
@@ -4990,7 +4990,7 @@ reads all seven out of both files and compares them, which is the repair for
 
 ### Gates: asking the cartridge what it wants
 
-<!-- covers: gen2/state.js gen2/journey.js titles/crystal.js @ b005a1523885 -->
+<!-- covers: gen2/state.js gen2/journey.js titles/crystal.js @ 39054261fe9a -->
 
 Two kinds of closed road, and the difference is everything:
 
@@ -5099,7 +5099,7 @@ a conversation.
 
 ### The card behind a party row
 
-<!-- covers: app/rows.js app/main.js index.html @ 93978f2f5c1a -->
+<!-- covers: app/rows.js app/main.js index.html @ 424a8de3097c -->
 
 Two questions the game itself will not answer about a Pokémon you are
 carrying — *what is this made of* and *what is it about to become* — and both
@@ -5171,7 +5171,7 @@ at body size.
 
 ### Running the list
 
-<!-- covers: app/rows.js app/main.js @ 4ee61fb875b4 -->
+<!-- covers: app/rows.js app/main.js @ 52a1333b6820 -->
 
 The app has spent forty passes learning to answer one question — *what can the
 pilot do here, and which of those is worth most?* — and twenty showing the
@@ -5295,7 +5295,7 @@ to deposit your last Pokémon.
 
 ### The settings and the save card
 
-<!-- covers: index.html app/main.js @ 2d8968831675 -->
+<!-- covers: index.html app/main.js @ 50408bf97a43 -->
 
 The pilot's own list got a glyph column, shorter names and a slot to fill in
 v165. These two cards did not, and reading them found that they had a different
@@ -5923,7 +5923,7 @@ they have been installed.
 
 ### Watching the other device's screen
 
-<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ c7d5d87025b8 -->
+<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ 89ec9b3aea94 -->
 
 One device shows its screen; the other watches it, and plays it if the first
 one says so. The picture goes straight between them over WebRTC and never
@@ -6536,7 +6536,7 @@ about that code did not.
 
 ### The other checks
 
-<!-- covers: tools/check-app @ 50f76709dc8c -->
+<!-- covers: tools/check-app @ 6884f91c1bca -->
 
 `tools/check-app` runs everything that can be verified without a ROM:
 
@@ -6550,6 +6550,7 @@ tools/check-app contrast     # or one group
 | `syntax` | every module parses |
 | `shell` | the service worker's cached list matches what is on disk, both ways |
 | `markup` | `index.html` tags and CSS braces balance |
+| `builtmarkup` | tags built in a JavaScript template close in the function that opens them |
 | `contrast` | the palette still meets contrast, in both themes |
 | `gamefiles` | no ROM, save or symbol file has been committed |
 | `buttons` | every button name handed to `press`/`hold`/`release` is one the core knows |

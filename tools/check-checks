@@ -88,6 +88,12 @@ def mutations(root):
             "  async travelTo() { return null; }\n  async healAtElm() {")),
         "shell": lambda: edit("sw.js", sub("'./gen2/battle.js', ", "")),
         "markup": lambda: edit("index.html", sub("</main>", "<div></main>")),
+        # The bug this group was written for, put back: a row built in a
+        # loop with no closing tag, which the browser nests instead of
+        # rejecting -- so it renders, and looking at it does not find it.
+        "builtmarkup": lambda: edit("app/main.js", sub(
+            "      + meter('ev', st.effortPart)\n      + '</div>');",
+            "      + meter('ev', st.effortPart));")),
         # A token inside the :root block the group actually parses, set to the
         # background so the pair it is measured against cannot pass.
         "contrast": lambda: edit("index.html", sub("--ink:", "--ink:var(--bg);--was-ink:")),

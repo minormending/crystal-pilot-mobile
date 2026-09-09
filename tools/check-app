@@ -1854,6 +1854,172 @@ def check_phrases():
               f"cartridge says")
 
 
+
+# --- markup that is built in JavaScript --------------------------------------
+# Tags with no closing form, so an opening one is not an imbalance.
+VOID_TAGS = {"br", "hr", "img", "input", "meta", "link", "source", "track",
+             "area", "base", "col", "embed", "param", "wbr", "use", "path",
+             "circle", "rect", "line", "polygon", "polyline", "ellipse", "stop"}
+TAG = re.compile(r"<(/?)([a-zA-Z][\w-]*)(?:\s[^<>]*?)?(/?)>")
+
+
+def _string_contents(src):
+    """Every string and template-literal body in a JS source, with its line.
+
+    A character scanner rather than a regex, because the thing being looked for
+    lives *inside* strings and a regex over the whole file cannot tell a `<div>`
+    in a template from one in a comment. `${...}` inside a template drops back
+    to code, so an interpolated expression's own quotes are not markup and a
+    nested template inside one still is.
+    """
+    out, i, n, line = [], 0, len(src), 1
+    # A stack of what we are inside: "tpl" for a template literal, "code" for a
+    # ${...} inside one. Anything else is handled without a stack.
+    stack = []
+    while i < n:
+        c = src[i]
+        if c == "\n":
+            line += 1
+            i += 1
+            continue
+        if not stack and src.startswith("//", i):
+            i = src.find("\n", i)
+            if i < 0:
+                break
+            continue
+        if not stack and src.startswith("/*", i):
+            end = src.find("*/", i + 2)
+            line += src.count("\n", i, end if end > 0 else n)
+            i = n if end < 0 else end + 2
+            continue
+        if c in "'\"":
+            j, buf = i + 1, []
+            while j < n and src[j] != c:
+                if src[j] == "\\":
+                    j += 2
+                    continue
+                if src[j] == "\n":
+                    break
+                buf.append(src[j])
+                j += 1
+            out.append((line, "".join(buf)))
+            line += src.count("\n", i, j)
+            i = j + 1
+            continue
+        if c == "`":
+            if stack and stack[-1] == "tpl":
+                stack.pop()
+                i += 1
+                continue
+            stack.append("tpl")
+            i += 1
+            continue
+        if stack and stack[-1] == "tpl":
+            if src.startswith("${", i):
+                stack.append("code")
+                i += 2
+                continue
+            j = i
+            buf = []
+            while j < n and src[j] not in "`$" and src[j] != "\n":
+                if src[j] == "\\":
+                    j += 2
+                    continue
+                buf.append(src[j])
+                j += 1
+            if buf:
+                out.append((line, "".join(buf)))
+            if j == i:
+                j += 1
+            i = j
+            continue
+        if stack and stack[-1] == "code":
+            if c == "}":
+                stack.pop()
+            elif c == "{":
+                stack.append("code")
+            i += 1
+            continue
+        i += 1
+    return out
+
+
+def _regions(src):
+    """The source split at top-level function and method boundaries.
+
+    Markup is built across several statements inside one function -- a header
+    string, a loop pushing rows, a join at the end -- so balance is only a
+    question that can be asked of a whole function. Split any finer and every
+    loop body looks unbalanced; split any coarser and two functions cancel each
+    other's mistakes out.
+    """
+    starts = [(m.start(), m.group(1)) for m in
+              re.finditer(r"^(?:async )?function (\w+)", src, re.M)]
+    starts += [(m.start(), m.group(1)) for m in
+               re.finditer(r"^  (?:async )?(\w+)\s*\(", src, re.M)]
+    starts.sort()
+    if not starts:
+        return [("(top level)", src)]
+    out = [("(top level)", src[: starts[0][0]])]
+    for k, (at, name) in enumerate(starts):
+        end = starts[k + 1][0] if k + 1 < len(starts) else len(src)
+        out.append((name, src[at:end]))
+    return out
+
+
+def check_built_markup():
+    """Markup built in JavaScript closes every tag it opens.
+
+    `check_markup` reads `index.html`, which is most of the interface and not
+    all of it: the party list, the offers and the dex card are template
+    literals in `app/*.js`, and nothing looked at those at all.
+
+    What that cost, on the pass this check was written in. `dexCard` built six
+    stat rows as `<div class="statrow">…` with no `</div>` on any of them, so
+    the browser nested them six deep. Every one of them still *rendered* -- a
+    grid row inside a grid row inside a grid row -- which is why it survived
+    being looked at on a phone-sized window and being screenshotted. It was
+    found by re-reading the function, which is not a method that scales.
+
+    Asked per function rather than per string, because markup is built across
+    several statements: a header, a loop pushing rows, a join at the end.
+    """
+    problems = []
+    for path in sorted(APP) + [ROOT / "sw.js"]:
+        if not path.exists():
+            continue
+        src = path.read_text()
+        for name, region in _regions(src):
+            # Joined, not scanned one fragment at a time, because `${...}`
+            # splits a template in the middle of a tag:
+            # `<summary data-slot="${slot}">` arrives as two pieces and matches
+            # nothing. The joiner is a character an attribute may hold and a
+            # tag name may not, so two fragments cannot be glued into a tag
+            # that was not written.
+            text = "\x01".join(t for _, t in _string_contents(region))
+            opened = []
+            for m in TAG.finditer(text):
+                closing, tag, selfclose = m.group(1), m.group(2).lower(), m.group(3)
+                if tag in VOID_TAGS or selfclose:
+                    continue
+                if closing:
+                    if opened and opened[-1] == tag:
+                        opened.pop()
+                    else:
+                        was = f"<{opened[-1]}> open" if opened else "nothing open"
+                        problems.append(
+                            f"{rel(path)}  {name}() closes <{tag}> with {was}")
+                else:
+                    opened.append(tag)
+            for tag in opened:
+                problems.append(
+                    f"{rel(path)}  {name}() opens <{tag}> and never closes it")
+    for p in problems:
+        print(f"        {p}")
+    return fail(f"{len(problems)} unbalanced tag(s) built in JavaScript") if problems \
+        else ok("every tag built in JavaScript is closed by the function that opens it")
+
+
 CHECKS = {
     "syntax": check_syntax,
     "layers": check_layers,
@@ -1863,6 +2029,7 @@ CHECKS = {
     "titles": check_title_adds,
     "shell": check_shell,
     "markup": check_markup,
+    "builtmarkup": check_built_markup,
     "contrast": check_contrast,
     "gamefiles": check_no_game_files,
     "buttons": check_buttons,
