@@ -4,8 +4,9 @@
 // copied from a table, because copying a table hopefully is how the gaps got
 // there. `decodeText` is exported for exactly this and had no test until the
 // gaps were measured.
-import { fakeRom, romReading, test } from '../harness.mjs';
+import { fakeRom, romReading, symbols, test } from '../harness.mjs';
 import { decodeText, normalise, RomData } from '../../gen2/romdata.js';
+import { gen2 } from '../../gen2/engine.js';
 
 test('the two NIDORAN are two different names', async (t) => {
   // The one that matters. Both came back "NIDORAN?", so the species picker drew
@@ -848,4 +849,233 @@ test('summing the room and taking its hardest hit are different answers',
   ];
   t.eq(rom.bestLead(party, rom.trainer('MORTY').party), 1,
        'the one that can hurt all three, not the one that flattens one');
+});
+
+// --- what a species turns into, and what it learns on the way ---------------
+// Laid out as *bytes*, pointer table and all, for the reason the type chart is:
+// the one mistake this table invites is reading a record at the wrong width,
+// and a fake that handed over decoded evolutions could not make it.
+
+/**
+ * An `EvosAttacks` region: a `dw` per species, then the records behind them.
+ *
+ * The pointers are built so the first one lands exactly where the table ends,
+ * because that is the property the reader uses to tell a pointer from a
+ * pointer-shaped byte, and a fake that did not have it would make the guard
+ * untestable.
+ */
+function evosRegion(entries, sym) {
+  const base = sym.addr('EvosAttacksPointers');
+  const head = gen2.speciesCount * 2;
+  const body = [], ptrs = [];
+  for (let id = 1; id <= gen2.speciesCount; id++) {
+    ptrs.push(base + head + body.length);
+    const e = entries[id] || {};
+    for (const rec of e.evolves || []) body.push(...rec);
+    body.push(0);
+    for (const [level, move] of e.learns || []) body.push(level, move);
+    body.push(0);
+  }
+  const out = [];
+  for (const p of ptrs) out.push(p & 0xff, (p >> 8) & 0xff);
+  return out.concat(body);
+}
+
+/** A `TypeNames` region: a `dw` per type id, then terminated names. */
+function typeNameRegion(names, sym) {
+  const base = sym.addr('TypeNames');
+  const ids = Object.keys(names).map(Number);
+  const head = (Math.max(...ids) + 1) * 2;
+  const body = [], ptrs = [];
+  for (let id = 0; id <= Math.max(...ids); id++) {
+    ptrs.push(base + head + body.length);
+    for (const ch of names[id] || '') body.push(0x80 + ch.charCodeAt(0) - 65);
+    body.push(0x50);
+  }
+  const out = [];
+  for (const p of ptrs) out.push(p & 0xff, (p >> 8) & 0xff);
+  return out.concat(body);
+}
+
+/** A `BaseData` region wide enough to hold `n` entries. */
+function baseRegion(entries, n = 260) {
+  const out = new Array(n * gen2.baseBytes).fill(0);
+  for (const [id, e] of Object.entries(entries)) {
+    const at = (Number(id) - 1) * gen2.baseBytes;
+    const f = gen2.baseField;
+    out[at + f.id] = Number(id);
+    (e.stats || []).forEach((v, i) => { out[at + f.stats + i] = v; });
+    out[at + f.types] = (e.types || [0, 0])[0];
+    out[at + f.types + 1] = (e.types || [0, 0])[1];
+    out[at + f.catchRate] = e.catchRate ?? 0;
+    out[at + f.baseExp] = e.baseExp ?? 0;
+    out[at + f.hatch] = e.hatch ?? 0;
+    out[at + f.growth] = e.growth ?? 0;
+  }
+  return out;
+}
+
+const EVO = gen2.evo.kind;
+
+test('an evolution and a learnset come out of one run of bytes', async (t) => {
+  const sym = symbols();
+  // CYNDAQUIL as the cartridge has it: one level evolution, then the moves.
+  const rom = romReading({}, {
+    evos: evosRegion({
+      155: { evolves: [[EVO.level, 14, 156]],
+             learns: [[1, 33], [6, 108], [12, 52], [19, 98]] },
+    }, sym),
+  });
+  const got = rom.evosAttacks(155);
+  t.eq(got.evolves, [{ kind: 'level', into: 156, level: 14 }],
+       'the evolution, with the species it becomes');
+  t.eq(got.learns.length, 4, 'and every move behind it');
+  t.eq(got.learns[0], { level: 1, move: 33 }, 'the first pair');
+  t.eq(got.learns[3], { level: 19, move: 98 }, 'and the last');
+});
+
+test('EVOLVE_STAT is four bytes, and the learnset behind it proves it',
+     async (t) => {
+  const sym = symbols();
+  // TYROGUE's three branches, which are the only four-byte records in the
+  // game. Read at three bytes they still decode -- into nonsense -- so the
+  // assertion that matters is the *learnset*, which is what the shift eats.
+  const rom = romReading({}, {
+    evos: evosRegion({
+      236: {
+        evolves: [[EVO.stat, 20, gen2.evo.compare.atkUnderDef, 107],
+                  [EVO.stat, 20, gen2.evo.compare.atkOverDef, 106],
+                  [EVO.stat, 20, gen2.evo.compare.atkEqualsDef, 237]],
+        learns: [[1, 33]],
+      },
+    }, sym),
+  });
+  const got = rom.evosAttacks(236);
+  t.eq(got.evolves.length, 3, 'three branches');
+  t.eq(got.evolves[0], { kind: 'stat', into: 107, level: 20,
+                         compare: 'atkUnderDef' }, 'each with its comparison');
+  t.eq(got.evolves[2].compare, 'atkEqualsDef', 'and they are not all the same');
+  t.eq(got.learns, [{ level: 1, move: 33 }],
+       'and TACKLE is still behind them, which a three-byte read loses');
+});
+
+test('the other four conditions each keep their own parameter', async (t) => {
+  const sym = symbols();
+  const rom = romReading({}, {
+    evos: evosRegion({
+      133: { evolves: [[EVO.item, 24, 134],
+                       [EVO.happiness, gen2.evo.when.night, 197],
+                       [EVO.trade, 82, 186],
+                       [EVO.trade, 0, 93]] },
+    }, sym),
+  });
+  const [stone, friend, held, plain] = rom.evosAttacks(133).evolves;
+  t.eq(stone, { kind: 'item', into: 134, item: 24 }, 'a stone names the stone');
+  t.eq(friend, { kind: 'happiness', into: 197, when: 'night' },
+       'friendship names the time of day');
+  t.eq(held, { kind: 'trade', into: 186, item: 82 }, 'a trade names what it holds');
+  t.eq(plain.item, 0, 'and a plain trade holds nothing, which is not "no item"');
+});
+
+test('a species that evolves into nothing is not the same as one that cannot '
+     + 'be read', async (t) => {
+  const sym = symbols();
+  const rom = romReading({}, {
+    evos: evosRegion({ 154: { learns: [[1, 33]] } }, sym),
+  });
+  const got = rom.evosAttacks(154);
+  t.eq(got.evolves, [], 'an empty list is a real answer');
+  t.eq(got.learns.length, 1, 'and the moves behind it still read');
+  t.eq(rom.evosAttacks(300), null, 'a species the cartridge does not have is null');
+});
+
+test('a pointer that lands inside the pointer table is not a pointer',
+     async (t) => {
+  const sym = symbols();
+  const bytes = evosRegion({ 3: { learns: [[1, 33]] } }, sym);
+  // Aim species three back at the table itself, which is the shape a symbol
+  // file pointing somewhere else produces -- and the shape that used to be
+  // the *only* accepted one, because the comparison was written the way the
+  // trainer table wants it and this table keeps its data the other side.
+  bytes[4] = sym.addr('EvosAttacksPointers') & 0xff;
+  bytes[5] = (sym.addr('EvosAttacksPointers') >> 8) & 0xff;
+  const rom = romReading({}, { evos: bytes });
+  t.eq(rom.evosAttacks(3), null, 'refused rather than decoded');
+  t.ne(rom.evosAttacks(2), null, 'and its neighbours are unharmed');
+});
+
+test('a first pointer that is not past the table condemns the whole table',
+     async (t) => {
+  const sym = symbols();
+  const bytes = evosRegion({ 1: { learns: [[1, 33]] } }, sym);
+  bytes[0] = 0; bytes[1] = 0;
+  const rom = romReading({}, { evos: bytes });
+  // Deliberately all-or-nothing, and the same rule `trainerIndex` follows: the
+  // table's end is derived from its first pointer, so a first pointer that is
+  // not one means there is no table here to read -- not one species missing.
+  t.eq(rom.evosAttacks(1), null, 'the species whose pointer is wrong');
+  t.eq(rom.evosAttacks(2), null, 'and every other one, because the end is gone');
+});
+
+test('a record kind the profile has never heard of stops the read', async (t) => {
+  const sym = symbols();
+  const rom = romReading({}, {
+    evos: evosRegion({ 1: { evolves: [[9, 1, 2]], learns: [[1, 33]] } }, sym),
+  });
+  t.eq(rom.evosAttacks(1), null,
+       'nine is not a kind, so this is not an evolution run');
+});
+
+test('a cartridge with no evolution table says so rather than guessing',
+     async (t) => {
+  const rom = romReading({}, {});
+  t.eq(rom.evosAttacks(155), null, 'null, and no exception on the way');
+});
+
+test('a base-stats entry is six named stats and a growth rate', async (t) => {
+  const sym = symbols();
+  const rom = romReading({}, {
+    base: baseRegion({
+      155: { stats: [39, 52, 43, 65, 60, 50], types: [0x14, 0x14],
+             catchRate: 45, baseExp: 65, hatch: 20, growth: 3 },
+    }),
+  });
+  const got = rom.baseStats(155);
+  t.eq(got.stats, { hp: 39, atk: 52, def: 43, spd: 65, satk: 60, sdef: 50 },
+       'named, so a reader cannot take the fifth for the sixth');
+  t.eq(got.growth, 'mediumSlow', 'the curve as a key, not a number');
+  t.eq(got.catchRate, 45, 'the catch rate');
+  t.eq(got.types, [0x14, 0x14], 'and the types, which is what this used to be');
+  t.eq(rom.speciesTypes(155), [0x14, 0x14],
+       'and speciesTypes still answers, through the same read');
+});
+
+test('a growth rate the profile has no name for stays a number', async (t) => {
+  const rom = romReading({}, { base: baseRegion({ 1: { stats: [1, 1, 1, 1, 1, 1],
+                                                       growth: 40 } }) });
+  t.eq(rom.baseStats(1).growth, 40, 'rather than becoming a wrong word');
+});
+
+test('an entry that does not carry its own id is not an entry', async (t) => {
+  const bytes = baseRegion({ 1: { stats: [1, 2, 3, 4, 5, 6] } });
+  bytes[gen2.baseField.id] = 7;
+  const rom = romReading({}, { base: bytes });
+  t.eq(rom.baseStats(1), null, 'the only guard this table has');
+  t.eq(rom.speciesTypes(1), null, 'and it reaches the caller that had it before');
+});
+
+test('a type says its own name, out of the cartridge', async (t) => {
+  const sym = symbols();
+  const rom = romReading({}, {
+    typeNames: typeNameRegion({ 0: 'NORMAL', 1: 'FIGHTING', 20: 'FIRE' }, sym),
+  });
+  t.eq(rom.typeName(0), 'NORMAL', 'id zero is a real id, not an absence');
+  t.eq(rom.typeName(20), 'FIRE', 'and the special types are the same table');
+  t.eq(rom.typeName(1), 'FIGHTING', 'the longest one still fits');
+});
+
+test('a cartridge that will not name its types says nothing, not "type 20"',
+     async (t) => {
+  const rom = romReading({}, {});
+  t.eq(rom.typeName(20), '', 'empty, so the caller decides what to show instead');
 });

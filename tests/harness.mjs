@@ -271,6 +271,11 @@ function buildSymText() {
   lines.push('0d:4bb1 TypeMatchups');
   lines.push('72:5f29 MoveNames');
   lines.push('14:5424 BaseData');
+  // Where the real cartridge keeps them, for the same reason the two above are
+  // real: `tools/dex --verify` reads these names out of the same symbol file,
+  // and a fake that moved them would be testing a different cartridge.
+  lines.push('10:65b1 EvosAttacksPointers');
+  lines.push('14:497b TypeNames');
   lines.push('0e:5999 TrainerGroups');
   lines.push('0b:41ef TrainerClassNames');
   lines.push('01:a008 sCheckValue1');
@@ -654,7 +659,8 @@ export function collisionRom(perms = {}) {
  */
 export function romReading(moveTable, { chart = null, names = null,
                                        species = null, trainers = null,
-                                       classes = null } = {}) {
+                                       classes = null, evos = null,
+                                       typeNames = null, base = null } = {}) {
   const sym = symbols();
   const { bank, addr } = { bank: sym.bank('Moves'), addr: sym.addr('Moves') };
   const chartAt = { bank: sym.bank('TypeMatchups'), addr: sym.addr('TypeMatchups') };
@@ -663,6 +669,9 @@ export function romReading(moveTable, { chart = null, names = null,
   const trAt = { bank: sym.bank('TrainerGroups'), addr: sym.addr('TrainerGroups') };
   const clAt = { bank: sym.bank('TrainerClassNames'),
                  addr: sym.addr('TrainerClassNames') };
+  const evoAt = { bank: sym.bank('EvosAttacksPointers'),
+                  addr: sym.addr('EvosAttacksPointers') };
+  const tnAt = { bank: sym.bank('TypeNames'), addr: sym.addr('TypeNames') };
   const MOVE_BYTES = 7, BASE_BYTES = 32;
   const gb = {
     romByte(b, at) {
@@ -685,6 +694,28 @@ export function romReading(moveTable, { chart = null, names = null,
         // six lands on one and gets a plausible type number back.
         if (field >= 1 && field <= 6) return 60 + field;
         return 0;
+      }
+      // `evos` and `typeNames` are byte windows laid at the real addresses,
+      // pointer table and all, for the reason the chart is: the pointer table
+      // and the records behind it are the thing under test. A fake handing
+      // over decoded evolutions could not be read at the wrong width, which is
+      // the one mistake this table invites -- EVOLVE_STAT is four bytes and
+      // every other kind is three.
+      if (evos && b === evoAt.bank && at >= evoAt.addr
+          && at < evoAt.addr + evos.length) {
+        return evos[at - evoAt.addr];
+      }
+      if (typeNames && b === tnAt.bank && at >= tnAt.addr
+          && at < tnAt.addr + typeNames.length) {
+        return typeNames[at - tnAt.addr];
+      }
+      // A whole base-stats window, for the fields `species` does not lay out.
+      // `species` stays because forty-odd tests use it and only want types;
+      // this is for a dex entry, which wants the six stats and the growth
+      // rate as bytes so the offsets are the thing being read.
+      if (base && b === baseAt.bank && at >= baseAt.addr
+          && at < baseAt.addr + base.length) {
+        return base[at - baseAt.addr];
       }
       if (chart && b === chartAt.bank && at >= chartAt.addr
           && at < chartAt.addr + chart.length) {
