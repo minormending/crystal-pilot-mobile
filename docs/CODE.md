@@ -1027,7 +1027,7 @@ noticing at all.
 
 ### `collision.js` — what you can walk on
 
-<!-- covers: gen2/collision.js @ 63ca6a9f7713 -->
+<!-- covers: gen2/collision.js @ 9797d99f76a9 -->
 
 Decodes the loaded map into "can I stand on this tile", and does breadth-first
 pathfinding over the result. This is what turns walking from trial and error
@@ -1287,7 +1287,7 @@ Route 30's door to it at `(17,5)`.
 
 ## 4. Taking one step, and planning a walk
 
-<!-- covers: gen2/nav.js gen2/collision.js @ d849bfc8f52b -->
+<!-- covers: gen2/nav.js gen2/collision.js @ 3017fcbddabf -->
 
 ### One step
 

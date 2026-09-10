@@ -35,7 +35,7 @@ So it is a tool.
         badge bit is a badge
 
     tools/rom-events --verify
-        check the object layout against all 388 maps: the type field and the
+        check the object layout against every map the app can read: the type field and the
         script's own name have to agree about which objects are trainers
 
     tools/rom-events --find SWITCH
@@ -455,6 +455,48 @@ def gym_objects(cart, name):
     return found
 
 
+# What a cartridge calls the symbol its map scripts begin at. Crystal writes
+# `<Map>_MapScripts` and puts the warps behind a separate `<Map>_MapEvents`
+# pointer; Polished Crystal writes `<Map>_MapScriptHeader` and keeps the
+# warps inside it. Either way it is where the map's own scripts start.
+SCRIPT_SUFFIXES = ('_MapScripts', '_MapScriptHeader')
+
+
+def script_region(cart, name):
+    """`(start, end)` file offsets of one map's own scripts, or None.
+
+    **The region is exact rather than guessed, and what makes it exact is
+    different on each cartridge.** Crystal bounds it perfectly: the scripts
+    sit between `<Map>_MapScripts` and that map's own `<Map>_MapEvents`, and
+    there are 361 of each. Polished Crystal has no `_MapEvents` at all --
+    its warps live inside the script header -- so its scripts run from
+    `<Map>_MapScriptHeader` to **the next map's**, which is a real bound and
+    a looser one: it includes the map's text as well as its scripts.
+
+    Looser is the right way for this to be wrong. A region that is too big
+    finds events a map does not check, and every one of those is then held to
+    the cross-reference underneath -- an event nothing sets is a coincidence,
+    and one something sets is worth looking at whichever map it turned up on.
+    A region that is too *small* misses the gate you are looking for and says
+    nothing.
+    """
+    start = None
+    for suffix in SCRIPT_SUFFIXES:
+        if f'{name}{suffix}' in cart.by_name:
+            start = cart.by_name[f'{name}{suffix}']
+            break
+    if start is None:
+        return None
+    if f'{name}_MapEvents' in cart.by_name:
+        end = cart.by_name[f'{name}_MapEvents']
+        return offset(*start), offset(*end)
+    # The next map's script symbol, in address order across the whole file.
+    here = offset(*start)
+    after = [offset(b, a) for n, (b, a) in cart.by_name.items()
+             if n.endswith(SCRIPT_SUFFIXES) and offset(b, a) > here]
+    return (here, min(after)) if after else None
+
+
 def map_events(cart, name):
     """Every event a map's own scripts ask about, and who sets each.
 
@@ -465,9 +507,7 @@ def map_events(cart, name):
     tool met used seven it did not know. Reading three bytes at a time does not
     need any of that.
 
-    The region is exact rather than guessed. Every map in the game has both a
-    `<Map>_MapScripts` and a `<Map>_MapEvents` symbol -- 388 of each -- and the
-    scripts are laid out between them.
+    Where the region is and why it is exact is `script_region` above.
 
     False positives are possible, since the same three bytes also occur in
     whatever data shares the region, and the cross-reference is what sorts
@@ -480,11 +520,10 @@ def map_events(cart, name):
     if check is None:
         return [f'{name}: this cartridge\u2019s script command table could not '
                 f'be found, so its opcodes are unknown']
-    first, last = f'{name}_MapScripts', f'{name}_MapEvents'
-    if first not in cart.by_name or last not in cart.by_name:
-        return [f'{name}: no _MapScripts/_MapEvents pair in the symbol file']
-    start = offset(*cart.by_name[first])
-    end = offset(*cart.by_name[last])
+    region = script_region(cart, name)
+    if not region:
+        return [f'{name}: the symbol file does not say where its scripts are']
+    start, end = region
     if end <= start:
         return [f'{name}: its events come before its scripts, which cannot be read']
     out, seen = [f'{name}: {end - start} bytes of script'], {}
@@ -1271,8 +1310,9 @@ def find_gyms(cart, name_of=None):
     order = badge_names(cart)
     where = order and 'its own BadgeNames table' or 'the classic badge order'
     print(f'badge bits from {where}')
-    # Every map's objects, once. 388 maps is two seconds and the alternative
-    # is 388 scans per leader.
+    # Every map's objects, once, out of the app's own reader -- which is
+    # 361 maps on Crystal and 488 on Polished Crystal, two seconds either
+    # way, and the alternative is one scan per leader per map.
     where = {}
     for key, name in name_of.items():
         for sym, (x, y, kind) in gym_objects(cart, name).items():

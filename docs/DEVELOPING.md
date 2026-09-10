@@ -1004,7 +1004,15 @@ pointed at used seven — and the honest response was not to grow the table to a
 hundred instructions but to stop needing it. What a gate actually asks is
 *which event does this map check?*, and that is `checkevent` and two bytes
 inside the map's own script region, which every map bounds exactly with a
-`<Map>_MapScripts` and a `<Map>_MapEvents` symbol. 388 of each.
+`<Map>_MapScripts` and a `<Map>_MapEvents` symbol — 361 of each.
+
+On a cartridge with no `_MapEvents` at all, because its warps live inside the
+script header, the region runs from one map's `<Map>_MapScriptHeader` to the
+next map's. Looser: it takes in the map's text as well as its scripts. That is
+the right way for it to be wrong, because the cross-reference underneath
+sorts out what it catches — an event nothing sets is a coincidence — where a
+region that is too *small* misses the gate you are looking for and says
+nothing at all.
 
 **`--find` is the step that unlocked the forty-eighth pass, and it was done by
 hand.** The question was which order the battle party menu lists its options
@@ -1152,7 +1160,7 @@ warp table now: a warp at that tile whose destination is that room.
 keep on its first run. The object type looked like byte four: in Violet Gym
 that field reads 00, 02, 02, 00 against Falkner, two Bird Keepers and the
 guide, which is four for four and wrong. It is the low nibble of byte seven.
-Checking the rule against all 388 maps — an object whose script symbol is named
+Checking the rule against every map the app can read — an object whose script symbol is named
 `Trainer…` is a trainer, and one that is not, is not — reports 1396 objects and
 twelve disagreements, all explicable: some trainers are *talked to* rather than
 seen.

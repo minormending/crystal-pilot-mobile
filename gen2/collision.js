@@ -321,13 +321,15 @@ export class CollisionMap {
    */
   takeables(wram = this.wram) {
     const kinds = new Map((this.e.takeable || []).map((t) => [t.sprite, t.what]));
-    const ball = (this.e.objectTypes || {}).itemball;
-    if (!kinds.size && ball === undefined) return [];
+    // A list, like every other kind -- see `kindsOf`. One number here on both
+    // cartridges, and asked the same way so a third with two of them needs no
+    // change but its profile.
+    const ball = kindsOf(this.e, 'itemball');
+    if (!kinds.size && !ball.size) return [];
     const out = [];
     for (const o of this.placedObjects(wram)) {
       if (o.index === 0) continue;
-      const what = kinds.get(o.sprite)
-        || (ball !== undefined && o.type === ball ? 'ball' : null);
+      const what = kinds.get(o.sprite) || (ball.has(o.type) ? 'ball' : null);
       if (!what) continue;
       out.push({ x: o.x, y: o.y, what });
     }
