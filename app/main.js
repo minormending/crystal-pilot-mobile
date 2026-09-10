@@ -2436,7 +2436,11 @@ async function refreshSpecies(s) {
   speciesKey = key;
   const here = romdata.wildOn(s.map[0], s.map[1], tod);
   huntable = here.length;
-  wilds = romdata.wildLevels(s.map[0], s.map[1], tod);
+  // The snapshot, because a cartridge can scale its wild levels to the badge
+  // case and the base for that is in work RAM. Without it the levels come
+  // back null, which reads as "this grass says nothing about levels" -- true,
+  // and much better than the sentinel, which is 179.
+  wilds = romdata.wildLevels(s.map[0], s.map[1], tod, s.wram);
   hours = romdata.wildHours(s.map[0], s.map[1]);
   hourNow = tod;
   const list = $('#species');
@@ -2556,7 +2560,8 @@ async function refreshPlaces(s) {
   if (romdata) {
     const tod = s.timeOfDay;
     for (const place of travelPlaces) {
-      place.wilds = romdata.wildLevels(place.key >> 8, place.key & 0xff, tod);
+      place.wilds = romdata.wildLevels(place.key >> 8, place.key & 0xff, tod,
+                                       s.wram);
     }
   }
   const list = $('#places');

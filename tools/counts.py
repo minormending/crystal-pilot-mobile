@@ -81,10 +81,19 @@ def check_groups():
 
 
 def shared_symbols():
-    """How many names travel in the digest a second device boots from."""
+    """How many names travel in the digest a second device boots from.
+
+    **The comments are stripped first, and that is not tidiness.** This
+    counted every quoted run in the block, and the block is half prose: the
+    apostrophe in "a badge-scaled wild level's base" opened a quote that
+    closed on the next symbol's own, so one added name read as two. A count
+    that goes up by two when one name is added is a count nobody can check
+    the documentation against, which is the whole job of this file.
+    """
     src = (ROOT / 'gen2' / 'symbols.js').read_text()
     block = src.split('export const SHARED_SYMBOLS = [')[1].split('];')[0]
-    return len(re.findall(r"'[^']+'", block))
+    bare = '\n'.join(re.sub(r'//.*', '', line) for line in block.splitlines())
+    return len(re.findall(r"'[^']+'", bare))
 
 
 def doc_sections():

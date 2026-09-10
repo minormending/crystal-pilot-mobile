@@ -461,7 +461,21 @@ export const gen2 = {
                // is the identity and is left null. A cartridge with more
                // times than blocks -- Polished Crystal has four and three --
                // says which shares which.
-               blockOf: null },
+               blockOf: null,
+               // **A level byte over `levelMax` is not a level.** Polished
+               // Crystal scales its wild encounters to how many badges you
+               // have: `LEVEL_FROM_BADGES` is 178, and a slot writes
+               // `LEVEL_FROM_BADGES + 1` or `- 3` for one above or three
+               // below whatever `wBadgeBaseLevel` currently is. Its
+               // `AdjustLevelForBadges` subtracts the constant, adds the
+               // base, and clamps to 2..99.
+               //
+               // Null here, because Crystal's levels are levels. Read
+               // literally on a cartridge that does this, Route 47 offers a
+               // Lv179 Ditto -- a number that is not wrong by a little, and
+               // one that would make the Hunt row refuse a patch of grass
+               // the pilot could clear.
+               levelFromBadges: null, },
   // --- a map's header, in `MapGroupPointers` ------------------------------
   // Crystal writes nine bytes and puts the attributes' **bank** in front:
   // `db BANK(attributes), tileset, environment` then `dw attributes`.
@@ -562,6 +576,10 @@ export const gen2 = {
   // Hours in a day. Here because the clock arithmetic below wraps on it and a
   // bare 24 in three places is the shape that drifts.
   hoursInDay: 24,
+  // The highest level a Pokemon can be. Here because two readers bound
+  // against it -- what a caught-at level may be, and what a wild slot may be
+  // -- and a bare 100 in two places is the shape that drifts.
+  levelMax: 100,
   // Frames the game counts its own time at. Not the emulator's speed -- the
   // *game's*, which advances one frame per frame however fast those frames are
   // produced, and that is the whole reason an hour of game time can go by in

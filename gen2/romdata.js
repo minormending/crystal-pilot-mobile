@@ -23,6 +23,10 @@ const NAME_TERMINATOR = 0x50;
 // table rather than a size in it, and a cartridge that used a different one
 // would need a different scan, not a different number.
 const TABLE_END = 0xff;
+// Where a badge-scaled wild level's base is kept, and the floor its own
+// arithmetic clamps to. The symbol is the test as well as the address: a
+// cartridge that does not scale its levels does not have it.
+const BADGE_BASE = 'wBadgeBaseLevel', LEVEL_FLOOR = 2;
 // How far to scan the item table when asked for an id by name. Crystal has 250
 // items; the scan stops early at the first entry with no name, which is what
 // reading past the table gives. A bound rather than a count, so it is here
@@ -91,6 +95,7 @@ export function normalise(name) {
 }
 
 import { gen2 } from './engine.js';
+import { GameBoy } from '../gbcore/gb.js';
 
 export class RomData {
   /**
@@ -122,6 +127,12 @@ export class RomData {
     // struct at all. They are copied out of here when it is sent out, which
     // is why `wBattleMonType1` exists and there is no `wPartyMon1Type1`.
     this.base = symbols.has('BaseData') ? this.at('BaseData') : null;
+    // Where a badge-scaled wild level's base is kept. Optional, and the
+    // symbol *is* the test: a cartridge that does not scale its wild levels
+    // does not have this address at all. Resolved once here rather than
+    // looked up per slot, the same as every other name in this constructor.
+    this.badgeBase = symbols.has(BADGE_BASE)
+      ? symbols.addr(BADGE_BASE) : null;
     // What every trainer in the game is carrying. Optional like the rest: a
     // cartridge whose symbol file does not name them keeps every job and
     // loses the ability to say what is waiting in a Gym.
@@ -1401,6 +1412,33 @@ export class RomData {
   }
 
   /**
+   * The level a slot's byte means, or null where the cartridge will not say.
+   *
+   * **A level byte is not always a level.** Polished Crystal scales its wild
+   * encounters to the badge case: `LEVEL_FROM_BADGES` is 178, a slot writes
+   * `LEVEL_FROM_BADGES + 1` for one above the current base, and
+   * `AdjustLevelForBadges` subtracts the constant, adds `wBadgeBaseLevel` and
+   * clamps to 2..99. 357 of its slots are written that way, so read
+   * literally, Route 47 offers a Lv179 Ditto — and the Hunt row would write
+   * off a patch of grass the pilot could clear.
+   *
+   * The base lives in work RAM, so a caller with a snapshot gets a number and
+   * a caller without one gets **null**, which every reader above already
+   * treats as "this slot says nothing about levels". Null rather than the
+   * sentinel, because 179 is not wrong by a little.
+   */
+  _levelOf(raw, wram) {
+    const relative = this.e.encounter.levelFromBadges;
+    if (!relative || raw <= this.e.levelMax) return raw;
+    if (!wram || this.badgeBase === null) return null;
+    const base = GameBoy.byteAt(wram, this.badgeBase);
+    if (base === undefined) return null;
+    // The cartridge's own clamp, in the cartridge's own order.
+    return Math.max(LEVEL_FLOOR,
+                    Math.min(this.e.levelMax - 1, base + raw - relative));
+  }
+
+  /**
    * One block of an entry as `[{ level, name }]`, padding dropped.
    *
    * A slot with no species is padding, and its level byte means nothing.
@@ -1408,7 +1446,7 @@ export class RomData {
    * block came to offer a species called `#0`: dropping it in one place is the
    * fix for both.
    */
-  _slots({ table, addr }, block) {
+  _slots({ table, addr }, block, wram = null) {
     const spec = this.e.encounter;
     const { slotsPerBlock, headerBytes, slotBytes } = spec;
     const out = [];
@@ -1416,7 +1454,8 @@ export class RomData {
       const at = addr + headerBytes + (block * slotsPerBlock + s) * slotBytes;
       const id = this.gb.romByte(table.bank, at + spec.species);
       if (!id) continue;
-      out.push({ level: this.gb.romByte(table.bank, at + spec.level),
+      out.push({ level: this._levelOf(
+                   this.gb.romByte(table.bank, at + spec.level), wram),
                  name: this.speciesName(id) });
     }
     return out;
@@ -1480,14 +1519,16 @@ export class RomData {
    *
    * Null rather than a guess when the map has no table, because "no wild
    * Pokemon appear here" and "they are Lv2 to Lv4" are different answers and
-   * only one of them is about levels.
+   * only one of them is about levels. And null too where every slot's level
+   * is relative to the badge case and no work RAM was handed in to resolve it
+   * against -- see `_levelOf`.
    */
-  wildLevels(group, number, timeOfDay = null) {
+  wildLevels(group, number, timeOfDay = null, wram = null) {
     const entry = this._grassAt(group, number);
     if (!entry) return null;
     let low = Infinity, high = 0;
     for (const block of this._blocksFor(timeOfDay)) {
-      for (const { level } of this._slots(entry, block)) {
+      for (const { level } of this._slots(entry, block, wram)) {
         if (!level) continue;
         if (level < low) low = level;
         if (level > high) high = level;

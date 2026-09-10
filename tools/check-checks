@@ -200,6 +200,11 @@ def mutations(root):
         # press A at an empty floor. The *door* is checked the same way now,
         # against the town's warp table, so either coordinate biting proves
         # the group.
+        # The stride a grass entry is read at. One byte narrower and the
+        # walk lands inside the previous entry's slots, and answers.
+        "wilds": lambda: edit("gen2/engine.js", sub(
+            "encounter: { blocks: 3, slotsPerBlock: 7, headerBytes: 5, slotBytes: 2,",
+            "encounter: { blocks: 3, slotsPerBlock: 7, headerBytes: 4, slotBytes: 2,")),
         # The one number a mart declaration cannot derive: a counter is a
         # wall, so the pilot stands two tiles off and looks at it. Turned
         # the other way it presses A at empty floor.

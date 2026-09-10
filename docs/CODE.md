@@ -114,7 +114,7 @@ of the subtleties in sections 6 and 7.
 
 ## 2. The shape of it
 
-<!-- covers-api: app/main.js gen2/journey.js titles/crystal.js gen2/tasks.js gen2/nav.js gen2/world.js gen2/collision.js gen2/state.js gen2/romdata.js gen2/symbols.js gbcore/gb.js @ e946c70d643b -->
+<!-- covers-api: app/main.js gen2/journey.js titles/crystal.js gen2/tasks.js gen2/nav.js gen2/world.js gen2/collision.js gen2/state.js gen2/romdata.js gen2/symbols.js gbcore/gb.js @ 705b5fbff6b6 -->
 
 Thirty modules, in four directories, and the directories are the design:
 **an import may point down this list and never up.**
@@ -438,7 +438,7 @@ watching.
 
 ### `symbols.js` — where things live
 
-<!-- covers: gen2/symbols.js @ 33599c9aa036 -->
+<!-- covers: gen2/symbols.js @ 67f1ed385e65 -->
 
 Parses the `.sym` file into `name → { bank, addr }`. First definition wins;
 later duplicates are aliases and locals.
@@ -730,7 +730,7 @@ and in `bootstrap.js`, with nothing able to notice if they drifted.
 
 ### `romdata.js` — what the cartridge knows
 
-<!-- covers: gen2/romdata.js @ 6520e6291abc -->
+<!-- covers: gen2/romdata.js @ 5cf79573b158 -->
 
 Species names, item names, move names, wild-encounter tables, move power, the
 type chart, and what a species turns into. All read out of the ROM, not shipped
@@ -1807,7 +1807,7 @@ mechanism's evidence spans two runs rather than one.
 
 ### The bigger number is not the harder hit
 
-<!-- covers: gen2/romdata.js gen2/engine.js gen2/battle.js @ ed136ee551ea -->
+<!-- covers: gen2/romdata.js gen2/engine.js gen2/battle.js @ 33911abdf9da -->
 
 For twenty-three passes the pilot ranked its moves by one number: the `power`
 byte out of the cartridge's move table. `romdata.move()` had been returning the
@@ -1961,7 +1961,7 @@ pilot uses, not a second one beside it. See section 10.
 
 ### Sending out somebody who can touch it
 
-<!-- covers: gen2/battle.js gen2/engine.js @ 4f09d82dcb89 -->
+<!-- covers: gen2/battle.js gen2/engine.js @ 154109e08367 -->
 
 The pass before could tell that the Pokémon on the field takes nothing off a
 Ghost, and said so. The remedy it named — *a different Pokémon* — was one the
@@ -2316,7 +2316,7 @@ fainted.
 
 ## 7. Catching something
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ 62210408b68a -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ 54034e71f226 -->
 
 Catching is the most involved loop, because a Poké Ball's odds turn on how much
 HP is left. Throwing at a full-health target is mostly throwing balls away.
@@ -3578,7 +3578,7 @@ after](#8d-a-route-the-game-itself-refuses).
 
 ## 8b. Asking the cartridge what its places are called
 
-<!-- covers: gen2/romdata.js gen2/world.js @ 100af45ae27a -->
+<!-- covers: gen2/romdata.js gen2/world.js @ d68e8303e802 -->
 
 The one table that **retires** hand-written data rather than adding to it. A map
 used to be called whatever the title profile said, and everything else was
@@ -4118,7 +4118,7 @@ sent the reader at it.
 
 ## 8h. What a species becomes, and when
 
-<!-- covers: gen2/romdata.js gen2/engine.js @ dfd14fdf6310 -->
+<!-- covers: gen2/romdata.js gen2/engine.js @ 92b1406d19b5 -->
 
 Two questions a party entry cannot answer: *what will this turn into*, and
 *what is it about to learn*. Both are in one table, because in Gen 2 they are
@@ -4210,7 +4210,7 @@ file says they do.
 
 ## 8i. Reaching an hour
 
-<!-- covers: gen2/jobs.js gen2/engine.js gen2/romdata.js gen2/state.js gbcore/saves.js app/rows.js @ 15982c05c07e -->
+<!-- covers: gen2/jobs.js gen2/engine.js gen2/romdata.js gen2/state.js gbcore/saves.js app/rows.js @ e384a8846e2d -->
 
 A third of Johto's grass is behind the clock. HOOTHOOT is on Route 29 after
 dark and nowhere on it at noon, and for four versions the usage guide said the
@@ -4377,7 +4377,7 @@ cartridge will not say which hours are which.
 
 ## 8j. A cartridge that changed everything it could
 
-<!-- covers: titles/polished.js gen2/engine.js gen2/romdata.js gen2/state.js gen2/menus.js @ 58096f5c226c -->
+<!-- covers: titles/polished.js gen2/engine.js gen2/romdata.js gen2/state.js gen2/menus.js @ 4d861d703db3 -->
 
 Polished Crystal is the profile in `docs/DEVELOPING.md`'s hack table described
 as "the generic fallback, and the hardest thing to support properly". It is
@@ -4533,6 +4533,23 @@ where a profile says the mapping a table would have given, and without it the
 app kept "wait for morning" and lost "skip to it" — the documented
 degradation for a cartridge with no table, on one that has the hours and just
 not where a reader can reach them.
+
+**Its wild levels are not levels.** `LEVEL_FROM_BADGES` is 178, and a slot
+writes `LEVEL_FROM_BADGES + 1` for one above whatever `wBadgeBaseLevel`
+currently is; `AdjustLevelForBadges` subtracts the constant, adds the base and
+clamps to 2..99. **357 of its 3171 filled slots are written that way** — Route
+47, Route 48, most of Kanto — so read literally the app offers a Lv179 Ditto
+and the Hunt row writes off a patch of grass the pilot could clear.
+
+The base is in work RAM, so `wildLevels` takes the snapshot and a caller
+without one gets **null**, which every reader already treats as "this grass
+says nothing about levels". Null rather than the sentinel, because 179 is not
+wrong by a little. Crystal's `levelFromBadges` is null and its levels are
+levels.
+
+Found by `tools/dex --wilds`, which was written to check the *stride* — and
+the stride was right. 357 sentinels came back as levels between 172 and 183 in
+a walk that was looking for something else entirely.
 
 **Its grass entry is a different stride**, which is the kind of difference
 that reads a neighbouring map's block rather than failing. Crystal writes a
@@ -4732,7 +4749,7 @@ This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ 471061d03867 -->
+<!-- covers: app/main.js index.html @ 9a3d50cbf618 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -5281,7 +5298,7 @@ seconds by a page whose loop was supposedly running.
 
 ### One thing at a time
 
-<!-- covers: app/main.js @ a7cccb5db75a -->
+<!-- covers: app/main.js @ d99320335879 -->
 
 One Game Boy, one joypad, one canvas — so a great deal of this app is about
 making sure two things are never driving them at once. There are three claims,
@@ -5423,7 +5440,7 @@ before a step is taken, so a stopped walk does not move at all.
 
 ### What is behind the Gym door, before you open it
 
-<!-- covers: gen2/romdata.js gen2/engine.js app/rows.js @ be8410ff49df -->
+<!-- covers: gen2/romdata.js gen2/engine.js app/rows.js @ 851965b807c1 -->
 
 The Gym row could say where the Gym is and who is in it. **Whether it is worth
 going** is two facts the cartridge has had all along, and neither of them
@@ -5536,7 +5553,7 @@ is the noise this list exists to replace.
 
 ### Leading with the one that can answer the room
 
-<!-- covers: gen2/romdata.js gen2/menus.js gen2/journey.js @ 335c439e3971 -->
+<!-- covers: gen2/romdata.js gen2/menus.js gen2/journey.js @ f9cf60afce30 -->
 
 **Gen 2 sends out slot one and asks nobody.** So the party's order decides the
 first battle of a Gym — and since the pass before, the pilot has known exactly
@@ -5835,7 +5852,7 @@ a conversation.
 
 ### The card behind a party row
 
-<!-- covers: app/rows.js app/main.js index.html @ 65d2b86d352a -->
+<!-- covers: app/rows.js app/main.js index.html @ fa8954634fd0 -->
 
 Two questions the game itself will not answer about a Pokémon you are
 carrying — *what is this made of* and *what is it about to become* — and both
@@ -5924,7 +5941,7 @@ at body size.
 
 ### Running the list
 
-<!-- covers: app/rows.js app/main.js @ 70ace65b2137 -->
+<!-- covers: app/rows.js app/main.js @ cbd27dc7b848 -->
 
 The app has spent forty passes learning to answer one question — *what can the
 pilot do here, and which of those is worth most?* — and twenty showing the
@@ -6048,7 +6065,7 @@ to deposit your last Pokémon.
 
 ### The settings and the save card
 
-<!-- covers: index.html app/main.js @ 471061d03867 -->
+<!-- covers: index.html app/main.js @ 9a3d50cbf618 -->
 
 The pilot's own list got a glyph column, shorter names and a slot to fill in
 v165. These two cards did not, and reading them found that they had a different
@@ -6483,7 +6500,7 @@ this needed upstream rather than in the vendored copy.
 The options went through this room first on purpose: the small half, standing up
 the whole path — config, rules, anonymous sign-in, merge, debounce — with a
 slider position at stake rather than a save. Three things travel this way, and
-all three merge: the remembered options, the 101 addresses out of the symbol
+all three merge: the remembered options, the 100 addresses out of the symbol
 file, and the notes two devices use to introduce their screens to each other.
 The save goes over the same room and does *not* merge, which is the next
 section.
@@ -6676,7 +6693,7 @@ they have been installed.
 
 ### Watching the other device's screen
 
-<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ 8c40f56cfadb -->
+<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ 69a3342e622d -->
 
 One device shows its screen; the other watches it, and plays it if the first
 one says so. The picture goes straight between them over WebRTC and never
@@ -6952,16 +6969,16 @@ and change what a past handover said.
 
 ### The symbol file stops travelling
 
-The `.sym` is 1.8MB and this app looks up **101 symbols in it**. So the room
-carries those 101 lines — about a kilobyte, `{name: [bank, addr]}` — and a
+The `.sym` is 1.8MB and this app looks up **100 symbols in it**. So the room
+carries those 100 lines — about a kilobyte, `{name: [bank, addr]}` — and a
 second device needs the ROM and nothing else. `Symbols.fromDigest` builds a
 table that behaves like the parsed file; `size` is the only honest difference,
-and it reports 101 because that is how many symbols it has.
+and it reports 100 because that is how many symbols it has.
 
 ```mermaid
 flowchart LR
     F["the .sym file<br/>1.8MB, 58,456 symbols"] --> S["Symbols<br/>the parsed table"]
-    S -->|"digest(SHARED_SYMBOLS)"| D["{name: [bank, addr]}<br/>101 entries, ~1KB"]
+    S -->|"digest(SHARED_SYMBOLS)"| D["{name: [bank, addr]}<br/>100 entries, ~1KB"]
     D --> R[["the room"]]
     R --> D2["the same 47 entries"]
     D2 -->|"Symbols.fromDigest"| T["a table that behaves<br/>like the parsed file"]
@@ -7289,7 +7306,7 @@ about that code did not.
 
 ### The other checks
 
-<!-- covers: tools/check-app @ a9ee1cc032fc -->
+<!-- covers: tools/check-app @ e64c870bb146 -->
 
 `tools/check-app` runs everything that can be verified without a ROM:
 
@@ -7327,6 +7344,7 @@ tools/check-app contrast     # or one group
 | `gates` | a declared errand names a real method; and, with a cartridge, its event is one the ROM sets and its tile holds whoever sets it |
 | `gyms` | a declared gym's leader, tile, kind and badge bit are what the cartridge says — skipped without a cartridge |
 | `marts` | a declared mart's door is one its town warps through, and the tile the pilot is sent to faces somebody — the counter geometry is what a mart cannot derive |
+| `wilds` | every grass table walks end to end at this cartridge's own stride, and every slot is a species it has at a level it allows |
 | `romlayout` | the map-events block is read at *this* cartridge's strides: the objects behind a trigger tile resolve like the objects in front of one |
 | `types` | the optional symbols the app reads travel to another device, and — with a cartridge — the decoded type chart agrees with twenty-two matchups nobody had to look up |
 | `menus` | every box the app tells apart by shape declares that shape, asks the instance for it, and — with a cartridge — is the shape the cartridge's own menu header draws |

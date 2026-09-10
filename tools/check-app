@@ -1717,6 +1717,45 @@ def check_marts():
               f"through and a counter the pilot can reach")
 
 
+def check_wilds():
+    """Every wild table walks end to end at this cartridge's own stride.
+
+    Skipped without a cartridge, like `gyms` and `marts`.
+
+    **The stride the profile's own comment warns about and nothing checked.**
+    A grass entry is a header plus one slot per Pokemon per block, and every
+    number in that is a title's: Crystal writes a five-byte header and
+    two-byte slots, Polished Crystal three and three, because a species there
+    can be past 255. Get it wrong and `_grassAt` "reads a neighbouring map's
+    block without failing" -- the app's own words for it.
+
+    Self-calibrating, like `romlayout`. A right stride lands on a map id at
+    the top of every entry and the app's `World` says which maps exist, so
+    the test is not a threshold: it is *every entry, or this is not the
+    table*. Levels and species are the second half, and they catch what a
+    map-id check alone would miss -- a misread slot inside a correctly-found
+    entry.
+
+    It earned itself on the first run. Polished Crystal came back with 357
+    levels between 172 and 183, which is not a stride problem: it scales its
+    wild encounters to the badge case, writing `LEVEL_FROM_BADGES ± n` and
+    resolving it at battle time. The app was reading those literally and
+    would have offered a Lv179 Ditto. The reading lives in
+    `tools/dex --wilds`.
+    """
+    if not cartridge.has_cartridge(ROOT):
+        return ok("no cartridge here, so the wild tables are not walked")
+    out = subprocess.run(["node", str(HERE / "dex"), "--wilds"],
+                         capture_output=True, text=True)
+    bad = [l for l in out.stdout.splitlines() if "!!" in l]
+    for l in bad[:10]:
+        print(f"        {l.strip()}")
+    if out.returncode or bad:
+        return fail(f"{len(bad) or 1} problem(s) walking the wild tables")
+    last = [l for l in out.stdout.splitlines() if "filled slot" in l]
+    return ok(last[-1] if last else "the wild tables walk end to end")
+
+
 def check_types():
     """The decoded type chart agrees with things about Pokemon nobody looked up.
 
@@ -2209,6 +2248,7 @@ CHECKS = {
     "romlayout": check_rom_layout,
     "gyms": check_gyms,
     "marts": check_marts,
+    "wilds": check_wilds,
     "types": check_types,
     "menus": check_menus,
     "phrases": check_phrases,

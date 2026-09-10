@@ -9,6 +9,8 @@
 //     tools/dex --evolves 20          every species that evolves at Lv20
 //     tools/dex --verify              the whole table against things that were
 //                                     true about Pokemon before this app was
+//     tools/dex --wilds               every wild table walked end to end, at
+//                                     the stride this cartridge's profile says
 //     tools/dex --party               the party out of a .sav in dev/, as the
 //                                     app's own card would say it
 //     tools/dex --party --check       and hold the DV nibble order to the
@@ -57,6 +59,7 @@ import { engineOf, findSave, openCartridge } from './cartridge.mjs';
 import { GameState } from '../gen2/state.js';
 import { describeDex } from '../app/rows.js';
 import { gen2 } from '../gen2/engine.js';
+import { World } from '../gen2/world.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DEV = join(HERE, '..', 'dev');
@@ -77,6 +80,10 @@ const data = new RomData(symbols, gb, title ? title.encounters : [], engine);
 // five bytes where Crystal's are three and four, so an extent check using
 // Crystal's widths called 176 correct records wrong.
 const COUNT = engine.speciesCount;
+// Bounds for the wild-table walk. A table that never ends is a wrong stride
+// stepping over its own terminator, and a level over 100 is not a level --
+// both are what a misread entry looks like from the inside.
+const MAX_WILD_ENTRIES = 512, MAX_LEVEL = 100;
 // Case-folded, because a cartridge's own capitalisation is not a fact about
 // Pokemon: Polished Crystal writes Quilava where Crystal writes QUILAVA, and
 // a check comparing the strings said Cyndaquil does not evolve into it.
@@ -612,7 +619,101 @@ function party({ check = false } = {}) {
   return 1;
 }
 
+/**
+ * Every wild table walked end to end, against the cartridge.
+ *
+ * **The stride nothing checked, and the one the profile's own comment warns
+ * about**: an entry is a header plus one slot per Pokemon per block, and
+ * getting that arithmetic wrong "reads a neighbouring map's block without
+ * failing". Every number in it is a title's — Crystal writes a five-byte
+ * header and two-byte slots, Polished Crystal a three-byte header and three-
+ * byte slots, because a species there can be past 255 — and until now the
+ * only thing that would have caught a wrong one is somebody noticing that
+ * Route 30 offers Magikarp.
+ *
+ * Self-calibrating, the way `rom-events --layout` is. A right stride lands on
+ * a map id at the top of every entry, and a map id is checkable: the app's
+ * own `World` says which maps this cartridge has. A wrong one walks into the
+ * middle of the previous entry's slots and answers with levels for groups —
+ * so the test is not a threshold, it is *every entry, or this is not the
+ * table*.
+ *
+ * Levels and species are the second half. A level over 100 is not a level and
+ * a species past the end of the table is not a species; both are what a
+ * misread slot looks like from inside a correctly-found entry, which is the
+ * failure a map-id check alone would miss.
+ */
+function wilds() {
+  const { blocks, slotsPerBlock, headerBytes, slotBytes } = engine.encounter;
+  const entryBytes = headerBytes + slotsPerBlock * blocks * slotBytes;
+  const tables = (title && title.encounters) || [];
+  if (!tables.length) {
+    console.log('this profile names no wild tables, so there are none to walk');
+    return 0;
+  }
+  const world = new World(symbols, gb, engine);
+  let problems = 0, entries = 0, slots = 0, relative = 0;
+  for (const name of tables) {
+    if (!symbols.has(name)) {
+      console.log(`  ${name}: not in the symbol file`);
+      continue;
+    }
+    const bank = symbols.bank(name);
+    let addr = symbols.addr(name), n = 0;
+    for (; n < MAX_WILD_ENTRIES; n++) {
+      const g = gb.romByte(bank, addr);
+      if (g === 0xff) break;
+      const number = gb.romByte(bank, addr + 1);
+      entries++;
+      if (!world.hasMap(g, number)) {
+        console.log(`  !! ${name} entry ${n + 1} is for map ${g}.${number}, `
+                    + 'which this cartridge does not have');
+        problems++;
+      }
+      for (let s = 0; s < slotsPerBlock * blocks; s++) {
+        const at = addr + headerBytes + s * slotBytes;
+        const id = gb.romByte(at === undefined ? 0 : bank, at + engine.encounter.species);
+        const level = gb.romByte(bank, at + engine.encounter.level);
+        if (!id) continue;                    // padding: its level means nothing
+        slots++;
+        if (id > engine.speciesCount) {
+          console.log(`  !! ${name} entry ${n + 1} slot ${s + 1}: species `
+                      + `${id}, and this cartridge has ${engine.speciesCount}`);
+          problems++;
+        }
+        // A level over the cap is a sentinel where the cartridge says so
+        // -- Polished Crystal writes `LEVEL_FROM_BADGES ± n`, which is 178
+        // plus an offset, and resolves it against the badge case at battle
+        // time. Counted rather than complained about: the point of the walk
+        // is the stride, and *these are the slots the app cannot name a
+        // level for without a running game*.
+        const scaled = engine.encounter.levelFromBadges;
+        if (scaled && level > MAX_LEVEL) {
+          relative++;
+        } else if (level < 1 || level > MAX_LEVEL) {
+          console.log(`  !! ${name} entry ${n + 1} slot ${s + 1}: level `
+                      + `${level}`);
+          problems++;
+        }
+      }
+      addr += entryBytes;
+    }
+    console.log(`  ${name}: ${n} entr${n === 1 ? 'y' : 'ies'}`
+                + (n >= MAX_WILD_ENTRIES ? ' — and it never ended' : ''));
+    if (n >= MAX_WILD_ENTRIES) problems++;
+  }
+  console.log(`${entries} entr${entries === 1 ? 'y' : 'ies'} of `
+              + `${entryBytes} bytes, ${slots} filled slot(s)`
+              + (relative ? `, ${relative} of them scaled to the badge case`
+                          : '')
+              + `, ${problems} problem(s)`);
+  return problems ? 1 : 0;
+}
+
 const args = process.argv.slice(2);
+if (args.includes('--wilds')) {
+  process.exit(wilds());
+}
 if (args.includes('--verify')) {
   process.exit(verify());
 }

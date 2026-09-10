@@ -146,3 +146,74 @@ test('the hours agree with the two readers that take an hour', async (t) => {
     t.eq(hours[tod].levels, rd.wildLevels(26, 1, tod), `hour ${tod}: same levels`);
   }
 });
+
+
+// --- a cartridge whose wild levels are not levels ---------------------------
+//
+// Polished Crystal scales its wild encounters to the badge case:
+// `LEVEL_FROM_BADGES` is 178 and a slot writes `LEVEL_FROM_BADGES + 1` for one
+// above whatever `wBadgeBaseLevel` currently is. 357 of its slots are written
+// that way, so a reader that takes the byte at face value offers a Lv179
+// Ditto on Route 47.
+
+const BADGE_BASE_ADDR = 0xc769, WRAM_START = 0xc000;
+
+/** The same fixture, with a badge-scaling profile and a work RAM to read. */
+function scaled(base) {
+  const rd = cartridge(
+    { 132: 'DITTO' },
+    [{ group: 26, number: 1,
+       blocks: [[[178 + 1, 132], [178 - 3, 132], [12, 132]], [], []] }],
+  );
+  rd.e = { ...rd.e,
+           encounter: { ...rd.e.encounter, levelFromBadges: 178 } };
+  rd.badgeBase = BADGE_BASE_ADDR;
+  if (base === null) return { rd, wram: null };
+  const wram = new Uint8Array(0x2000);
+  wram[BADGE_BASE_ADDR - WRAM_START] = base;
+  return { rd, wram };
+}
+
+test('a level relative to the badge case is resolved against work RAM',
+     async (t) => {
+  // `AdjustLevelForBadges` subtracts the constant, adds the base and clamps
+  // to 2..99. With three badges the base is 20 here, so `+1` is 21 and `-3`
+  // is 17 -- and the literal 12 beside them is still 12, because a byte
+  // inside the cap is a level and means itself.
+  const { rd, wram } = scaled(20);
+  t.eq(rd.wildLevels(26, 1, 0, wram), { low: 12, high: 21 },
+       'the scaled pair resolved and the plain one left alone');
+});
+
+test('a badge-scaled level with no work RAM says nothing, not 179',
+     async (t) => {
+  // The sentinel is not wrong by a little. Null is what every reader here
+  // already treats as "this slot says nothing about levels", and the Hunt row
+  // reads it as a patch of grass it cannot price rather than one to write
+  // off.
+  const { rd } = scaled(null);
+  t.eq(rd.wildLevels(26, 1, 0), { low: 12, high: 12 },
+       'only the level that is a level');
+  t.eq(rd.wildOn(26, 1, 0), ['DITTO'],
+       'and what appears there is unaffected — a species is a species');
+});
+
+test('the clamp is the cartridge’s own, at both ends', async (t) => {
+  // 2 at the bottom and 99 at the top, which is `MAX_LEVEL - 1` in its
+  // source. A base of 1 would put `-3` below zero and a base of 99 would put
+  // `+1` past the cap.
+  t.eq(scaled(1).rd.wildLevels(26, 1, 0, scaled(1).wram).low, 2,
+       'nothing under two');
+  const high = scaled(99);
+  t.eq(high.rd.wildLevels(26, 1, 0, high.wram).high, 99, 'and none over 99');
+});
+
+test('a cartridge that does not scale reads its levels as written',
+     async (t) => {
+  // Crystal's `levelFromBadges` is null, so 178 there would be a level of
+  // 178 -- which is a bad read rather than a sentinel, and not this
+  // reader's to fix.
+  const rd = cartridge({ 132: 'DITTO' },
+    [{ group: 26, number: 1, blocks: [[[7, 132]], [], []] }]);
+  t.eq(rd.wildLevels(26, 1, 0), { low: 7, high: 7 }, 'as written');
+});

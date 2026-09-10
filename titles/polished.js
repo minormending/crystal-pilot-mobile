@@ -239,7 +239,22 @@ export const polished = {
     // both and not either alone.
     encounter: { blocks: 3, slotsPerBlock: 7, headerBytes: 3, slotBytes: 3,
                  level: 0, species: 1,
-                 blockOf: { 0: 0, 1: 1, 2: 2, 3: [1, 2] } },
+                 blockOf: { 0: 0, 1: 1, 2: 2, 3: [1, 2] },
+                 // **Its wild levels scale with the badge case**, and
+                 // nothing about the byte says so. A slot writes
+                 // `LEVEL_FROM_BADGES + 1` or `- 3`, which assembles to 179
+                 // or 175, and `AdjustLevelForBadges` subtracts 178, adds
+                 // `wBadgeBaseLevel` and clamps to 2..99. 357 slots across
+                 // 32 of its 151 grass entries are written this way --
+                 // Route 47, Route 48, most of Kanto.
+                 //
+                 // Read literally that is a Lv179 Ditto, and the Hunt row
+                 // would write off a patch of grass the pilot could clear.
+                 // Found by walking the table with `tools/dex --wilds`,
+                 // which was written to check the *stride* and found this
+                 // instead: the stride was right and every level over 100
+                 // was a sentinel.
+                 levelFromBadges: 178 },
     // **The one row its chart deliberately does not have.** Its source
     // comments out `db GROUND, FLYING, NO_EFFECT` with `; checks airborne
     // state instead`, because it decides airborne-ness at battle time from

@@ -172,7 +172,7 @@ export class Symbols {
  * Every symbol this app reads, by name.
  *
  * It exists so a device with a ROM and no .sym can be handed the addresses
- * instead of the file: 101 lines is about a kilobyte, against 1.8MB, and it
+ * instead of the file: 100 lines is about a kilobyte, against 1.8MB, and it
  * fits in a room with space for a save beside it.
  *
  * Written down rather than discovered, because nothing at run time can know
@@ -216,6 +216,11 @@ export const SHARED_SYMBOLS = [
   'wMapWidth', 'wMenuBorderLeftCoord', 'wMenuBorderRightCoord',
   'wMenuBorderTopCoord',
   'wItems', 'wJohtoBadges',
+  // Where a badge-scaled wild level's base is kept. Only a cartridge
+  // that scales them has it -- `digest()` skips a name a cartridge does
+  // not use -- and without it in the digest a second device reads the
+  // sentinel and offers a Lv179 Ditto.
+  'wBadgeBaseLevel',
   'wMenuCursorX', 'wMenuCursorY', 'wMenuDataItems', 'wMoney',
   'wNumBalls',
   'wNumItems',
