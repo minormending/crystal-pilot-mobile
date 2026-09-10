@@ -254,12 +254,22 @@ function verify() {
     bad++;
     console.log(`  WRONG  ${rows} rows, and this cartridge's table has 110`);
   }
-  const mults = new Set(chart.values());
-  const expected = new Set([0, 5, 20]);
-  for (const m of mults) {
+  // Three values and no more: nothing, a half and a double. Which *bytes*
+  // those are is the cartridge's business -- Crystal writes tenths, 05 and
+  // 20, and Polished Crystal writes Q4 fixed point, $08 and $20 -- so the
+  // scale comes from the reader, which measures it, rather than from a set
+  // written here. Asserted as tenths, that cartridge's correct chart drew
+  // two WRONG lines about multipliers of "8" and "32".
+  //
+  // It still catches the failure this is for: a decode shifted by a byte
+  // reads type ids as multipliers, and there are nineteen of those.
+  const unit = data.chartUnit();
+  const expected = new Set([0, unit / 2, unit * 2]);
+  for (const m of new Set(chart.values())) {
     if (!expected.has(m)) {
       bad++;
-      console.log(`  WRONG  a multiplier of ${m} tenths, and Gen 2 has only 0, 5 and 20`);
+      console.log(`  WRONG  a multiplier of ${m}, and this chart's own scale`
+                  + ` has only 0, ${unit / 2} and ${unit * 2}`);
     }
   }
   console.log(`${RULES.length} rules over ${rows} rows: `

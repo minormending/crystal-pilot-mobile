@@ -15,7 +15,7 @@ what CI checks and what the pre-commit hook blocks on.
 ```mermaid
 flowchart LR
     E[an edit] --> H{{".githooks/pre-commit"}}
-    H --> T["./run-tests<br/>918 behaviour tests"]
+    H --> T["./run-tests<br/>922 behaviour tests"]
     H --> C["tools/check-app<br/>31 groups"]
     H --> D["tools/docs-check<br/>45 tracked sections"]
     T --> OK[commit]
@@ -39,7 +39,7 @@ git config core.hooksPath .githooks
 ./run-tests -v         # notes and stack lines
 ```
 
-918 tests in 27 files, and what each file is about says more than the count:
+922 tests in 27 files, and what each file is about says more than the count:
 
 | file | tests | what it pins down |
 | --- | --- | --- |
@@ -55,7 +55,7 @@ git config core.hooksPath .githooks
 | `control.mjs` | 30 | the task lifecycle: stopping, failing, undo points, and loops that must end |
 | `state.mjs` | 39 | reading the party, the map, the badges and the battery out of work RAM |
 | `titles.mjs` | 19 | choosing a profile for a cartridge, and falling back to generic |
-| `romdata.mjs` | 81 | the cartridge's own character encoding and tables, byte by byte |
+| `romdata.mjs` | 85 | the cartridge's own character encoding and tables, byte by byte |
 | `remember.mjs` | 14 | which remembered choices are believed, and which dropped |
 | `worker.mjs` | 14 | the idle loop: one step outstanding, and a lost step recovered |
 | `nav.mjs` | 14 | the walk loop: what it decides between two steps, and every reason it stops |
@@ -127,7 +127,7 @@ section gives. Everything by hand runs against a local build.
 
 ```mermaid
 flowchart BT
-    C["the app"] --> T["./run-tests<br/>918 behaviour tests"]
+    C["the app"] --> T["./run-tests<br/>922 behaviour tests"]
     C --> A["tools/check-app<br/>31 groups"]
     C --> D["tools/docs-check<br/>45 tracked sections"]
     C --> V["tools/coverage<br/>what the suite never runs"]
@@ -570,19 +570,39 @@ Which makes some hacks much more informative than others:
 | --- | --- | --- | --- |
 | [patched-crystal](https://github.com/UberMedic7/patched-crystal) | `PM_CRYSTAL` | 251 | the control — bug fixes only, so anything that differs is this app's fault |
 | [pokecrystal16](https://github.com/fellowship-of-the-roms/pokecrystal16) | `PM_CRYSTAL` | 251 | **16-bit species ids, content otherwise vanilla** — built and run: **31/31**, once the trainer pointer width was derived rather than assumed |
-| [PokemonAmbrosia](https://github.com/AndrewC101/PokemonAmbrosia) | `PM_CRYSTAL` | 254 | species past `speciesCount`, *while* being claimed as Crystal |
+| [PokemonAmbrosia](https://github.com/AndrewC101/PokemonAmbrosia) | `PM_CRYSTAL` | 254 | species past `speciesCount`, *while* being claimed as Crystal — built and run: **25/31**, and its menus are the reason (`Switch`, not `SWITCH`) |
 | [pokecrystal-speedchoice](https://github.com/Dabomstew/pokecrystal-speedchoice) | `PM_CRYSTAL` | 251 | changed flow and menus, vanilla species |
 | [Majora-Crystal](https://github.com/WasabiRaptor/Majora-Crystal) | `PM_CRYSTAL` | 255 | built around a time limit — the adversary for the clock reading |
 | [pokecrystal-nl](https://github.com/wfowler1/pokecrystal-nl) · [-es](https://github.com/erosunica/pokecrystal-es) · [_cn](https://github.com/SnDream/pokecrystal_cn) | `PM_CRYSTAL` | 251 | the charmap and the English phrases. Dutch built and run: **29/31**, and both failures are true — `sent to BILL`, `PACK` and `SWITCH` are not in that ROM, and its switch box begins `WISSEL` |
-| [polishedcrystal](https://github.com/Rangi42/polishedcrystal) | `PKPCRYSTAL` | 334 | the generic fallback, and the hardest thing to support properly |
+| [polishedcrystal](https://github.com/Rangi42/polishedcrystal) | `PKPCRYSTAL` | 334 | the generic fallback, and the hardest thing to support properly — built and run: **24/31**, and it earns the description |
 
-Two are built and run. **A word about the ones that are not**: most Crystal
-hacks pin an old rgbds and will not assemble with a current one.
-`patched-crystal` wants **0.5.2**, a 2021 release whose syntax predates
-`DEF x EQU`, and every one of its seven branches is on it. `PokemonAmbrosia`
-targets 1.0.0 and still fails to link (`JR target must be between -128 and 127
-bytes away`). Budget for building an old assembler, or pick from the ones that
-say 1.0.0 and mean it.
+Four are built and run. **A word about the assembler**, because it is the
+thing that decides whether a hack can be tested at all: `polishedcrystal` and
+`PokemonAmbrosia` both failed to *link* under rgbds 1.0.2 with the same error,
+`JR target must be between -128 and 127 bytes away, not 65449`. It is one
+gate, not two, and it is not their bug: the instruction is `jr
+hLCDInterruptFunction`, a jump into HRAM that works because the CPU wraps PC
+at 16 bits — an offset of −87 from `$004a` lands at `$fff3`. **rgbds 1.0.3
+permits the wrap and 1.0.2 rejects it**, so both built on the upgrade and
+neither needed a patch.
+
+The other direction is the real obstacle. `patched-crystal` pins **0.5.2**, a
+2021 release whose syntax predates `DEF x EQU`, and every one of its seven
+branches is on it — that one needs an old assembler built from source, not a
+newer one. Check the pin before cloning: a hack that asks for 1.0.0 or later
+is an afternoon, and one that asks for 0.5 or 0.6 is a detour.
+
+**What the four say about the app** divides cleanly. pokecrystal16 changes a
+*structure* and passes everything once the structure is derived. The Dutch
+build changes a *language*, and its two failures are true — the app drives
+menus by their English words. Ambrosia and Polished Crystal change *content*
+and menu text, and their failures name exactly which: `Switch` where the app
+looks for `SWITCH`, a switch box with four rows where the profile says three,
+`sent to BILL` in neither ROM. Polished Crystal goes furthest — nineteen
+renumbered types including FAIRY, a `TypeNames` table of one-byte relative
+offsets rather than `dw` addresses, a chart on a different numeric scale, and
+trainer parties in far banks and in WRAM. Its 24 is not a near miss; it is a
+different cartridge that happens to be Gen 2 shaped.
 
 None of that is a promise that any of them work. It is a list of the questions
 each one asks, and the checks above are how the answers arrive.
