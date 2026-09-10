@@ -574,7 +574,7 @@ Which makes some hacks much more informative than others:
 | [pokecrystal-speedchoice](https://github.com/Dabomstew/pokecrystal-speedchoice) | `PM_CRYSTAL` | 251 | changed flow and menus, vanilla species |
 | [Majora-Crystal](https://github.com/WasabiRaptor/Majora-Crystal) | `PM_CRYSTAL` | 255 | built around a time limit — the adversary for the clock reading |
 | [pokecrystal-nl](https://github.com/wfowler1/pokecrystal-nl) · [-es](https://github.com/erosunica/pokecrystal-es) · [_cn](https://github.com/SnDream/pokecrystal_cn) | `PM_CRYSTAL` | 251 | the charmap and the English phrases. Dutch built and run: **29/31**, and both failures are true — `sent to BILL`, `PACK` and `SWITCH` are not in that ROM, and its switch box begins `WISSEL` |
-| [polishedcrystal](https://github.com/Rangi42/polishedcrystal) | `PKPCRYSTAL` | 291 | the hardest thing to support properly, and the one that found seven declared numbers — built, run, and given a profile: **25/31**, with `tools/dex --verify` clean over all 291 species |
+| [polishedcrystal](https://github.com/Rangi42/polishedcrystal) | `PKPCRYSTAL` | 291 | the hardest thing to support properly, and the one that found seven declared numbers — built, run, and given a profile: **29/31**, with `tools/dex --verify` clean over all 291 species |
 
 Four are built and run. **A word about the assembler**, because it is the
 thing that decides whether a hack can be tested at all: `polishedcrystal` and

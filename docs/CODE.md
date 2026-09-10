@@ -4330,7 +4330,7 @@ cartridge will not say which hours are which.
 
 ## 8j. A cartridge that changed everything it could
 
-<!-- covers: titles/polished.js gen2/engine.js gen2/romdata.js gen2/state.js gen2/menus.js @ 56fe0bdda254 -->
+<!-- covers: titles/polished.js gen2/engine.js gen2/romdata.js gen2/state.js gen2/menus.js @ 8d8b7188e168 -->
 
 Polished Crystal is the profile in `docs/DEVELOPING.md`'s hack table described
 as "the generic fallback, and the hardest thing to support properly". It is
@@ -4383,10 +4383,22 @@ rather than a description of a game.
 `$c90f`, which is `wInverGroup` — a party built in WRAM at run time. There is
 no bound to derive; see the trainer-table bullets in section 9.
 
-**Its move effect numbers are its own**, so the pilot's "is this move worth
-swinging" ranking is priced off a table that renumbered underneath it. That
-one is a profile away and the profile has not been written, because it wants a
-map of 250 effects rather than a measurement.
+**Its move table is eight bytes an entry**, not seven — it adds a category
+byte, the physical/special split Gen 2 does by type — and read at seven every
+move past the first drifts, which is how COUNTER came back with effect 10 and
+MIRROR COAT with a power of 213. Its fixed-damage effects are three numbers
+rather than Crystal's six, because it has no one-hit-KO moves and no Psywave
+at all. Both are in the profile.
+
+That check was misreading the table twice over and asserting the wrong thing
+besides. It read move *order* out of `~/projects/pokecrystal`'s `moves.asm`
+and indexed another cartridge's ROM with it, and it asserted that GUILLOTINE
+is effect 38 — which is a fact about Crystal. It asks the ROM's own
+`MoveNames` now, and asserts what the app actually needs: that every move
+whose damage ignores the power byte is in `lethalEffects`, whatever this
+cartridge numbers it, and that a move the cartridge does not have is not a
+failure. On Crystal it had been quietly checking four of its nine moves,
+because the ROM says "HORN DRILL" and the list said `HORN_DRILL`.
 
 **Ground does not miss Flying**, and this is the interesting one. That row is
 *deliberately absent* from its chart — the source says
@@ -4396,6 +4408,19 @@ Telekinesis together. So the app reads the chart correctly and still prices a
 Ground move against a Flying Pokémon as neutral when the game will do nothing
 at all. `tools/types --verify` reports it, and reporting it is right: it is a
 true thing about how the pilot will behave there.
+
+**A check that cannot run has not failed**, and three of them could not run
+here. The gym and gate checks read *every* `titles/*.js` and held each one's
+declarations to whatever cartridge was loaded, so Polished Crystal was asked
+whether Crystal's Goldenrod Gym is where Crystal says; they read the picked
+profile now, and this one declares no gyms. The box-shape check holds the
+app's declared menu shapes to the cartridge's own headers, and this cartridge
+has no `BattleMenuHeader` — unverified, which is worth saying and is not the
+same as wrong. And the third-number discriminator that tells the Bug Contest's
+battle menu from an ordinary one is claimed by *no* header here, which is not
+the ambiguity that check exists to catch: two headers answering to it would
+have the pilot refuse a battle it could fight, and none at all means the
+discriminator never fires.
 
 **And its dialogue is compressed.** `macros/scripts/text.asm` compresses a
 string whenever compression saves space, so "was" is nowhere in that ROM while
@@ -6960,7 +6985,7 @@ about that code did not.
 
 ### The other checks
 
-<!-- covers: tools/check-app @ 4a97cc15fe39 -->
+<!-- covers: tools/check-app @ 597cf9ba257e -->
 
 `tools/check-app` runs everything that can be verified without a ROM:
 

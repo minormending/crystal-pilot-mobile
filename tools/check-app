@@ -327,88 +327,100 @@ def check_no_game_files():
 # GUILLOTINE. Effect ids read out of the ROM's own move table, not counted from
 # the disassembly's const_def order.
 UNGENTLE = {
-    "GUILLOTINE": 38, "HORN_DRILL": 38, "FISSURE": 38, "SUPER_FANG": 40,
-    "SEISMIC_TOSS": 87, "NIGHT_SHADE": 87, "PSYWAVE": 88, "COUNTER": 89,
-    "MIRROR_COAT": 144,
+    "GUILLOTINE", "HORN_DRILL", "FISSURE", "SUPER_FANG",
+    "SEISMIC_TOSS", "NIGHT_SHADE", "PSYWAVE", "COUNTER", "MIRROR_COAT",
 }
 # Real fixed damage, which does encode itself as power and so ranks correctly.
 GENTLE_ENOUGH = {"TACKLE", "SCRATCH", "EMBER", "DRAGON_RAGE", "SONICBOOM"}
-MOVE_BYTES = 7
 
 
 def check_moves():
-    """Drive the app's own isChipMove against a real cartridge, if one is here.
+    """Drive the app's own lethal-effect list against a real cartridge.
 
     Skipped without a ROM, which is the case on CI and on a clean checkout --
     the point of the skip is that this check can exist at all without anything
     game-derived entering the repo. It matters because the alternative is
     trusting a hand-written table of effect ids, and getting one wrong picks a
     one-hit KO as the gentlest move available.
+
+    **Asked of the cartridge, not of a source tree.** This used to read move
+    *order* out of `~/projects/pokecrystal/data/moves/moves.asm` and index a
+    hack's ROM with it, which is Crystal's ordering against another
+    cartridge's table -- and it read every entry at seven bytes, where
+    Polished Crystal's move struct is eight, having added a category byte. It
+    reported nineteen problems about a table it was misreading twice over.
+    The ROM names its own moves; `MoveNames` is right there.
+
+    **And it no longer asserts the effect *number*.** "GUILLOTINE is effect
+    38" is a fact about Crystal. What the app actually needs is that every
+    move whose damage ignores the power byte is in `lethalEffects`, whatever
+    that cartridge numbers it -- and that a move the cartridge does not have
+    is not a failure. Polished Crystal has no one-hit-KO moves at all.
     """
     rom_path, sym_path = cartridge.cartridge_paths(ROOT)
-    src = pathlib.Path(
-        os.environ.get("POKECRYSTAL_SOURCE", pathlib.Path.home()
-                       / "projects" / "pokecrystal"))
-    moves_asm = src / "data" / "moves" / "moves.asm"
-    # `cartridge_paths` answers None where there is nothing to pair, which is
-    # the case this check is *written* for and was the one place that assumed a
-    # Path came back. It only fails on a machine with no cartridge -- CI and a
-    # clean checkout, and never the machine it was changed on.
-    if not rom_path or not sym_path or not moves_asm.exists():
-        print("  skip  move ranking (no cartridge in dev/, or no source)")
+    if not rom_path or not sym_path:
+        print("  skip  move ranking (no cartridge in dev/)")
         return 0
 
-    rom = rom_path.read_bytes()
-    sym = {}
-    for line in sym_path.read_text().splitlines():
-        m = re.match(r"^([0-9a-fA-F]{2}):([0-9a-fA-F]{4})\s+(\S+)", line)
-        if m:
-            sym[m.group(3)] = (int(m.group(1), 16), int(m.group(2), 16))
-    if "Moves" not in sym:
-        return fail("the .sym has no Moves symbol")
-    bank, addr = sym["Moves"]
-    base = addr if bank == 0 else bank * 0x4000 + (addr - 0x4000)
+    script = (
+        "import('%s/tools/cartridge.mjs').then(async (c) => {"
+        "  const { RomData } = await import('%s/gen2/romdata.js');"
+        "  const cart = c.openCartridge('%s/dev');"
+        "  const { engine } = c.engineOf(cart);"
+        "  const rom = new RomData(cart.symbols, cart.gb, [], engine);"
+        "  const out = {};"
+        "  for (let i = 1; i <= engine.moveCount; i++) {"
+        "    const n = rom.moveName(i), m = rom.move(i);"
+        "    if (n && m) out[n.toUpperCase().replace(/[^A-Z0-9]/g, '')] ="
+        "      [m.effect, m.power];"
+        "  }"
+        "  process.stdout.write('\\n@@' + JSON.stringify("
+        "    { moves: out, lethal: engine.lethalEffects }));"
+        "});" % (ROOT, ROOT, ROOT)
+    )
+    try:
+        got = subprocess.run(["node", "-e", script], capture_output=True,
+                             text=True, timeout=120)
+        line = [l for l in got.stdout.splitlines() if l.startswith("@@")]
+        found = json.loads(line[-1][2:]) if line else None
+    except Exception as e:
+        return fail(f"could not read the move table: {e}")
+    if not found:
+        return fail("could not read the move table from this cartridge")
+    moves, declared = found["moves"], set(found["lethal"])
 
-    order = [ln.split()[1].rstrip(",") for ln in moves_asm.read_text().splitlines()
-             if ln.strip().startswith("move ")]
-
-    # Whatever the app decided, read from the app rather than restated here.
-    # The list moved from romdata.js to the engine profile when the machine's
-    # numbers were gathered in one place; reading it from the wrong file would
-    # not fail, it would stop checking, so the name is matched rather than the
-    # location.
-    text = module("engine.js").read_text()
-    m = re.search(r"lethalEffects: \[([0-9,\s]*)\]", text)
-    if not m:
-        return fail("could not find lethalEffects in gen2/engine.js")
-    declared = {int(x) for x in m.group(1).replace(" ", "").split(",") if x}
-
-    problems = []
-    for name, want_effect in UNGENTLE.items():
-        if name not in order:
-            problems.append(f"{name} is not in moves.asm")
+    # The names here are written the disassembly's way, with underscores;
+    # the ROM says "HORN DRILL". Both sides are stripped to letters and
+    # digits, which is also what makes a cartridge that writes "Horn Drill"
+    # answer -- five of these read as absent from Crystal itself until this.
+    flat = lambda n: re.sub(r"[^A-Z0-9]", "", n.upper())
+    problems, seen, absent = [], 0, 0
+    for raw in UNGENTLE:
+        name = flat(raw)
+        if name not in moves:
+            # A move this cartridge does not have. Not a failure: Polished
+            # Crystal removed the one-hit-KO moves outright.
+            absent += 1
             continue
-        off = base + order.index(name) * MOVE_BYTES
-        effect, power = rom[off + 1], rom[off + 2]
-        if effect != want_effect:
-            problems.append(f"{name}: ROM says effect {effect}, "
-                            f"this check expected {want_effect}")
+        effect, power = moves[name]
+        seen += 1
         if effect not in declared:
             problems.append(f"{name} (effect {effect}, power {power}) would be "
                             f"picked as a gentle move")
-    for name in GENTLE_ENOUGH:
-        if name not in order:
+    for raw in GENTLE_ENOUGH:
+        name = flat(raw)
+        if name not in moves:
             continue
-        off = base + order.index(name) * MOVE_BYTES
-        effect, power = rom[off + 1], rom[off + 2]
+        effect, power = moves[name]
         if power <= 0 or effect in declared:
             problems.append(f"{name} (effect {effect}, power {power}) is "
                             f"excluded, leaving nothing to weaken with")
     for p in problems:
         print(f"        {p}")
     return fail(f"{len(problems)} move-ranking problem(s)") if problems \
-        else ok(f"{len(UNGENTLE)} lethal moves excluded from weakening, "
-                f"{len(GENTLE_ENOUGH)} kept")
+        else ok(f"{seen} lethal moves excluded from weakening, "
+                f"{len(GENTLE_ENOUGH)} kept"
+                + (f", {absent} not in this cartridge" if absent else ""))
 
 
 # The only names the core's setJoypadState understands. A name it does not know
@@ -1820,7 +1832,10 @@ def check_menus():
     out = subprocess.run([sys.executable, str(HERE / "rom-events"), "--menus"],
                          capture_output=True, text=True)
     bad = [l for l in out.stdout.splitlines() if "!!" in l or "??" in l]
-    for l in bad:
+    # A `note` is a box this cartridge does not name, so its shape could not
+    # be checked. Shown and not counted -- see `check_phrases`.
+    notes = [l for l in out.stdout.splitlines() if l.strip().startswith("note")]
+    for l in bad + notes:
         print(f"        {l.strip()}")
     if out.returncode or bad:
         return fail(f"{len(bad) or 1} box(es) the cartridge does not agree with")

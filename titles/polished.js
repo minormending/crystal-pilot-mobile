@@ -72,6 +72,18 @@ export const polished = {
     growthRates: ['mediumFast', 'mediumSlow', 'fast', 'slow'],
     // $ff moves, against Crystal's 251.
     moveCount: 255,
+    // **Eight bytes an entry, not seven**: it adds a category byte --
+    // physical, special or status, the split Gen 2 does by type. Read at
+    // seven, every move past the first drifts, which is how COUNTER came
+    // back with effect 10 and MIRROR COAT with a power of 213.
+    moveBytes: 8,
+    // The effects whose damage ignores the power byte, in this cartridge's
+    // numbering: EFFECT_LEVEL_DAMAGE 26 (Seismic Toss, Night Shade),
+    // EFFECT_SUPER_FANG 84, EFFECT_COUNTER 93 (Counter and Mirror Coat
+    // both). Three rather than Crystal's six, because it has no one-hit-KO
+    // moves and no Psywave at all -- so the pilot has fewer ways to end a
+    // battle it meant to weaken, not more.
+    lethalEffects: [26, 84, 93],
     // **Its start menu is its own.** `#dex`, `#mon`, Bag, Save, Options,
     // Exit, Pokégear, Quit -- so a pilot looking for PACK walked the whole
     // menu and gave up, and one looking for SAVE never saved. The battle

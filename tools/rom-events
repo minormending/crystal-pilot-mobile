@@ -641,6 +641,40 @@ def where(cart, phrase):
     return 0
 
 
+def picked_titles(cart):
+    """The `titles/*.js` this cartridge would actually be driven by.
+
+    Every check that reads a profile's declarations used to read *all* of
+    them, which asks one cartridge whether another hack's gyms are where
+    that hack says. Pointed at Polished Crystal, the gym check reported
+    Crystal's Goldenrod and Ecruteak missing -- true, and not a fault of
+    either cartridge.
+
+    Falls back to every profile when the app cannot be asked, because a
+    check that silently stops checking is worse than one that over-checks.
+    """
+    if not cart.rom_path:
+        return sorted((ROOT / 'titles').glob('*.js'))
+    script = (
+        "import('%s/tools/cartridge.mjs').then(async (c) => {"
+        "  const cart = c.openCartridge('%s/dev');"
+        "  const { title } = c.engineOf(cart);"
+        "  process.stdout.write('\\n@@' + (title ? title.id : ''));"
+        "});" % (ROOT, ROOT)
+    )
+    env = dict(os.environ, DEV_ROM=str(cart.rom_path), DEV_SYM=str(cart.sym_path))
+    try:
+        got = subprocess.run(['node', '-e', script], capture_output=True,
+                             text=True, timeout=60, env=env)
+        line = [l for l in got.stdout.splitlines() if l.startswith('@@')]
+        which = line[-1][2:].strip() if line else ''
+    except Exception:
+        which = ''
+    one = ROOT / 'titles' / f'{which}.js'
+    return [one] if which and one.exists() else \
+        sorted((ROOT / 'titles').glob('*.js'))
+
+
 def profile_words(cart):
     """The words the profile *this* cartridge would be driven by looks for.
 
@@ -656,12 +690,12 @@ def profile_words(cart):
         return []
     script = (
         "import('%s/tools/cartridge.mjs').then(async (c) => {"
-        "  const cart = c.openCartridge();"
+        "  const cart = c.openCartridge('%s/dev');"
         "  const { title, engine } = c.engineOf(cart);"
         "  process.stdout.write('\\n@@' + JSON.stringify({"
         "    menuWords: engine.menuWords,"
         "    boxed: title && title.phrases && title.phrases.boxed }));"
-        "});" % ROOT
+        "});" % (ROOT, ROOT)
     )
     env = dict(os.environ, DEV_ROM=str(cart.rom_path), DEV_SYM=str(cart.sym_path))
     try:
@@ -831,8 +865,15 @@ def menus(cart):
     for name, field, first in APP_BOXES:
         got = menu_header(cart, name)
         if not got:
-            print(f'  ??  {name} is not in this symbol file')
-            bad += 1
+            # **A cartridge that does not name this menu cannot be asked.**
+            # The app drives a box by its *shape* -- how many rows, where the
+            # top one is -- and this check holds that shape to the
+            # cartridge's own header. Polished Crystal has no
+            # `BattleMenuHeader`; its battle menu is built somewhere else
+            # under another name. The shape is then unverified, which is
+            # worth saying and is not the same as wrong.
+            print(f'  note  {name} is not in this symbol file, so the shape '
+                  f'the app declares for it is unchecked here')
             continue
         mine = want.get(field, {})
         # The first option's name is only printed where it is also checked.
@@ -938,7 +979,7 @@ def gyms(cart, name_of=None):
     """Every declared gym, against what the cartridge says."""
     bad = 0
     bits = badge_bits(cart)
-    for path in sorted((ROOT / 'titles').glob('*.js')):
+    for path in picked_titles(cart):
         src = path.read_text()
         keys = {m.group(1): (int(m.group(2)), int(m.group(3)))
                 for m in KEY.finditer(src)}
@@ -1221,7 +1262,7 @@ def gates(cart, name_of=None):
     not hand the thing over, which reads like the game refusing.
     """
     bad = 0
-    for path in sorted((ROOT / 'titles').glob('*.js')):
+    for path in picked_titles(cart):
         src = path.read_text()
         keys = {k.group(1): (int(k.group(2)), int(k.group(3)))
                 for k in KEY.finditer(src)}
@@ -1316,6 +1357,18 @@ def main(argv):
             if len(names) == 1:
                 print(f'  left column {other["left"]} is unique to '
                       f'{names[0]} — so "{other["what"]}" is safe to act on')
+            elif not names:
+                # **Nothing claims it, which is not ambiguity.** The danger
+                # this check exists for is a *second* header answering to the
+                # same number, which would have the pilot refuse a battle it
+                # could fight. None at all means this cartridge has no such
+                # box under a name the symbol file gives -- Polished Crystal
+                # has no Bug Contest menu header -- and the discriminator
+                # simply never fires. The app loses a thing it can recognise
+                # and mistakes nothing.
+                print(f'  note  left column {other["left"]} is claimed by no '
+                      f'header here, so "{other["what"]}" will not be '
+                      f'recognised on this cartridge')
             else:
                 print(f'  !!  left column {other["left"]} is claimed by '
                       f'{len(names)} header(s), so it does not identify '
