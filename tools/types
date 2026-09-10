@@ -175,6 +175,8 @@ const LEADERS = [
 
 function verifyTrainers() {
   let bad = 0;
+  // Whether this is the cartridge the written-down parties are about.
+  const isCrystal = title && title.id === 'crystal';
   const index = data.trainerIndex();
   if (!index) {
     console.log('  WRONG  no readable trainer table');
@@ -187,17 +189,67 @@ function verifyTrainers() {
       console.log(`  WRONG  ${name} is not in the trainer table`);
       continue;
     }
-    if (got.group !== group) {
-      bad++;
-      console.log(`  WRONG  ${name} reads as class ${got.group}, not ${group}`
-                  + ' — a class boundary is being lost');
+    // **Crystal's own numbers and parties, held to Crystal.** Which class
+    // Falkner is and what he carries are facts about *that* cartridge, not
+    // about Pokemon: Polished Crystal numbers him 5 and gives him a Natu,
+    // and asserting Crystal's answers reported seventeen disagreements
+    // about a table that had just been read correctly for the first time.
+    // The structural checks below run everywhere; these run where they mean
+    // something.
+    if (isCrystal) {
+      if (got.group !== group) {
+        bad++;
+        console.log(`  WRONG  ${name} reads as class ${got.group}, not ${group}`
+                    + ' — a class boundary is being lost');
+      }
+      const mine = got.party.map((m) => [m.level, data.speciesName(m.species)]);
+      if (JSON.stringify(mine) !== JSON.stringify(party)) {
+        bad++;
+        console.log(`  WRONG  ${name} reads ${JSON.stringify(mine)}, `
+                    + `should be ${JSON.stringify(party)}`);
+      }
     }
-    const mine = got.party.map((m) => [m.level, data.speciesName(m.species)]);
-    if (JSON.stringify(mine) !== JSON.stringify(party)) {
+    // And what is true of a gym leader on any cartridge: somebody to fight,
+    // at levels a Pokemon can be, of species this ROM can name.
+    if (!got.party.length) {
       bad++;
-      console.log(`  WRONG  ${name} reads ${JSON.stringify(mine)}, `
-                  + `should be ${JSON.stringify(party)}`);
+      console.log(`  WRONG  ${name} has no Pokemon at all`);
     }
+    for (const m of got.party) {
+      if (!(m.level >= 1 && m.level <= 100)) {
+        bad++;
+        console.log(`  WRONG  ${name} has one at level ${m.level}`);
+        break;
+      }
+      if (data.speciesName(m.species).startsWith('#')) {
+        bad++;
+        console.log(`  WRONG  ${name} has species ${m.species}, which this `
+                    + 'cartridge does not name');
+        break;
+      }
+    }
+  }
+  // **Eight leaders, eight classes.** A decode that loses a boundary reads
+  // two of them out of one class, which is the failure the exact class
+  // numbers used to catch and this catches on any cartridge.
+  const groups = LEADERS.map(([name]) => (data.trainer(name) || {}).group);
+  if (new Set(groups.filter((g) => g !== undefined)).size !== LEADERS.length) {
+    bad++;
+    console.log(`  WRONG  the eight leaders read as classes `
+                + `${JSON.stringify(groups)}, which is not eight of them`);
+  }
+  // And the badges are fought in an order, so the levels climb. A shifted
+  // read scrambles that long before it produces anything else implausible.
+  const tops = LEADERS.map(([name]) => {
+    const got = data.trainer(name);
+    return got && got.party.length
+      ? Math.max(...got.party.map((m) => m.level)) : null;
+  });
+  if (tops.every((t) => t !== null)
+      && Math.max(...tops) !== tops[tops.length - 1]) {
+    bad++;
+    console.log(`  WRONG  the last leader is not the highest-levelled: `
+                + `${JSON.stringify(tops)}`);
   }
   // Every leader shares one class name, which is a second reading of the same
   // rows through a different table.

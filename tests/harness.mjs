@@ -778,6 +778,12 @@ export function romReading(moveTable, { chart = null, names = null,
                                        species = null, trainers = null,
                                        classes = null, evos = null,
                                        typeNames = null, base = null,
+                                       // A cartridge whose *shape* differs,
+                                       // not just its bytes -- a trainer
+                                       // record that says its own length, a
+                                       // map header without an attributes
+                                       // bank. The stock profile otherwise.
+                                       engine = null,
                                        times = null } = {}) {
   const sym = symbols();
   const { bank, addr } = { bank: sym.bank('Moves'), addr: sym.addr('Moves') };
@@ -877,5 +883,6 @@ export function romReading(moveTable, { chart = null, names = null,
       return 0;
     },
   };
-  return new RomData(sym, gb, ['JohtoGrassWildMons', 'KantoGrassWildMons']);
+  return new RomData(sym, gb, ['JohtoGrassWildMons', 'KantoGrassWildMons'],
+                     engine);
 }

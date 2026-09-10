@@ -170,8 +170,7 @@ def mutations(root):
         # class appears to contain every gym leader in Johto, because nothing
         # between two trainers says a class ended.
         "trainers": lambda: edit("gen2/romdata.js", sub(
-            "const stop = next && next.bank === ptr[g].bank ? next.addr : null;",
-            "const stop = null;")),
+            "      const stop = bounds(g);", "      const stop = null;")),
         # A phrase the cartridge does not say, which never matches and never
         # fails -- for `boxed` that is a successful catch reported as a
         # getaway.

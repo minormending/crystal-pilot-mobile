@@ -337,6 +337,17 @@ export const gen2 = {
     PSYCHIC: 0x18, ICE: 0x19, DRAGON: 0x1a, DARK: 0x1b,
   },
   damage: {
+    // Rows a cartridge decides somewhere other than its chart, as
+    // `[attacker, defender, multiplier]` and a plain multiplier. Empty here,
+    // because Crystal's chart is the whole story.
+    //
+    // Polished Crystal's is not: it comments out `db GROUND, FLYING,
+    // NO_EFFECT` and says `; checks airborne state instead`, deciding it at
+    // battle time from Flying, Levitate and Telekinesis together. The chart
+    // read correctly then says a Ground move is neutral on a Flying
+    // Pokemon, and the pilot swings it for nothing. What can be said
+    // without a battle is the type half, which is the common case.
+    extra: [],
     matchupBytes: 3, neutral: 10, chartEnd: 0xff, chartForesight: 0xfe,
     chartScan: 256, stab: 1.5,
   },
@@ -374,6 +385,34 @@ export const gen2 = {
   // cross-check -- pokecrystal16 did not add trainer classes, it widened the
   // pointers to them.
   trainerPointerBytes: [2, 3],
+  // --- how one trainer's record is laid out --------------------------------
+  // Crystal writes a terminated name, a **type** byte saying how wide each
+  // of its Pokemon is, that many Pokemon, and `$ff`. Polished Crystal
+  // writes its own **length** in front instead -- `db _tr_size` -- then the
+  // name, then a flags byte, and no terminator at all: the size bounds the
+  // record. Its Pokemon are three bytes plus one for each flag that is set,
+  // with the moves counting four.
+  //
+  // `sized: false` is Crystal's shape. The rest of this block is only read
+  // when a profile turns that on, and describes where the flags are: which
+  // bit means what, and how many bytes each one adds.
+  trainer: {
+    sized: false,
+    // Level, then `dp species, form` -- two bytes, the second carrying the
+    // form in its low bits and the species' ninth bit above them.
+    monBase: 3,
+    formSpeciesBit: 0x20,
+    // The optional fields **in the order they are written**, as
+    // `[flag bit, bytes]`, where null bytes mean a terminated string. The
+    // order matters as much as the sizes: the nickname sits in the middle
+    // of a Pokemon, between its personality and its EVs, so a reader that
+    // took a fixed width and then walked a string found Whitney's Miltank
+    // where her EVs are and answered that her class was empty.
+    //
+    // Bits are ITEM 0, EVS 1, DVS 2, PERSONALITY 3, NICKNAME 4, MOVES 5;
+    // the written order is item, DVs, personality, nickname, EVs, moves.
+    monFields: [[0, 1], [2, 1], [3, 1], [4, null], [1, 1], [5, 4]],
+  },
   trainerEnd: 0xff,
   // A bound on a terminated name, not a size. "COOLTRAINER♀" is the longest
   // class name; a trainer's own name is shorter still.

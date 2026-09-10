@@ -730,7 +730,7 @@ and in `bootstrap.js`, with nothing able to notice if they drifted.
 
 ### `romdata.js` — what the cartridge knows
 
-<!-- covers: gen2/romdata.js @ 954bc15f7dbc -->
+<!-- covers: gen2/romdata.js @ 08e7803888fa -->
 
 Species names, item names, move names, wild-encounter tables, move power, the
 type chart, and what a species turns into. All read out of the ROM, not shipped
@@ -1780,7 +1780,7 @@ mechanism's evidence spans two runs rather than one.
 
 ### The bigger number is not the harder hit
 
-<!-- covers: gen2/romdata.js gen2/engine.js gen2/battle.js @ 7ab5e0ccafaa -->
+<!-- covers: gen2/romdata.js gen2/engine.js gen2/battle.js @ 87019a4e3334 -->
 
 For twenty-three passes the pilot ranked its moves by one number: the `power`
 byte out of the cartridge's move table. `romdata.move()` had been returning the
@@ -1934,7 +1934,7 @@ pilot uses, not a second one beside it. See section 10.
 
 ### Sending out somebody who can touch it
 
-<!-- covers: gen2/battle.js gen2/engine.js @ c88871ccde7c -->
+<!-- covers: gen2/battle.js gen2/engine.js @ b094f5df2e6e -->
 
 The pass before could tell that the Pokémon on the field takes nothing off a
 Ghost, and said so. The remedy it named — *a different Pokémon* — was one the
@@ -2289,7 +2289,7 @@ fainted.
 
 ## 7. Catching something
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ ff6c610171be -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ ab78b27c285b -->
 
 Catching is the most involved loop, because a Poké Ball's odds turn on how much
 HP is left. Throwing at a full-health target is mostly throwing balls away.
@@ -3537,7 +3537,7 @@ after](#8d-a-route-the-game-itself-refuses).
 
 ## 8b. Asking the cartridge what its places are called
 
-<!-- covers: gen2/romdata.js gen2/world.js @ 35b2e0971591 -->
+<!-- covers: gen2/romdata.js gen2/world.js @ 7cc1bf76bec6 -->
 
 The one table that **retires** hand-written data rather than adding to it. A map
 used to be called whatever the title profile said, and everything else was
@@ -4071,7 +4071,7 @@ sent the reader at it.
 
 ## 8h. What a species becomes, and when
 
-<!-- covers: gen2/romdata.js gen2/engine.js @ 8fbb5c3c7182 -->
+<!-- covers: gen2/romdata.js gen2/engine.js @ d20a1670bf6f -->
 
 Two questions a party entry cannot answer: *what will this turn into*, and
 *what is it about to learn*. Both are in one table, because in Gen 2 they are
@@ -4163,7 +4163,7 @@ file says they do.
 
 ## 8i. Reaching an hour
 
-<!-- covers: gen2/jobs.js gen2/engine.js gen2/romdata.js gen2/state.js gbcore/saves.js app/rows.js @ 192a73945e0b -->
+<!-- covers: gen2/jobs.js gen2/engine.js gen2/romdata.js gen2/state.js gbcore/saves.js app/rows.js @ b3a09fcf0076 -->
 
 A third of Johto's grass is behind the clock. HOOTHOOT is on Route 29 after
 dark and nowhere on it at noon, and for four versions the usage guide said the
@@ -4330,7 +4330,7 @@ cartridge will not say which hours are which.
 
 ## 8j. A cartridge that changed everything it could
 
-<!-- covers: titles/polished.js gen2/engine.js gen2/romdata.js gen2/state.js gen2/menus.js @ b5d4003c90a4 -->
+<!-- covers: titles/polished.js gen2/engine.js gen2/romdata.js gen2/state.js gen2/menus.js @ 1f3d05d704f0 -->
 
 Polished Crystal is the profile in `docs/DEVELOPING.md`'s hack table described
 as "the generic fallback, and the hardest thing to support properly". It is
@@ -4400,10 +4400,38 @@ rather than a description of a game.
 
 ### What it still cannot do, and why
 
-**Its trainers are unreadable and the reader says so.** `TrainerGroups` is
-`dba` into banks `$7d` and `$79`, and one of its 148 classes points at
-`$c90f`, which is `wInverGroup` — a party built in WRAM at run time. There is
-no bound to derive; see the trainer-table bullets in section 9.
+**Its trainers read now**, and getting there took three separate things.
+`TrainerGroups` is `dba` into banks `$7d` and `$79`, so the first pointer is
+not the table's end and the gap arithmetic gave 404 classes: the table is
+**walked** instead, stopping at the first triple that is not a pointer. Work
+RAM counts as a pointer, because its 123rd class points at `$c90f` —
+`wInverGroup`, a party built at run time — and a scan insisting on ROM lost
+the twenty-six classes behind it. The walk overshoots by one on that
+cartridge, 149 against 148, and that costs nothing: a class whose bytes are
+not a trainer decodes to no trainers.
+
+**What bounds a class is the next record, not the next class.** On Crystal
+those are the same thing and this was written as `ptr[g + 1]`. Polished
+Crystal's groups are wherever the linker put them — Bugsy's sits *below*
+Falkner's in the same bank — so the bound came out behind the start and
+forty-two classes read as empty.
+
+**And its records say their own length.** Crystal writes a terminated name, a
+type byte saying how wide each Pokémon is, that many Pokémon, and `$ff`.
+Polished Crystal writes `db _tr_size` in front, then the name, then a *flags*
+byte, and no terminator: the size is the end. Each Pokémon is a level and a
+`dp species, form`, plus one byte for each of item, EVs, DVs and personality
+the flags claim, four for the moves, and a whole terminated string for a
+nickname — **in that written order**, which is the part that matters. A
+reader taking a fixed width and then walking the string found Whitney's
+Miltank where her EVs are and answered that her class was empty.
+
+Falkner's record says 39 and holds "Falkner", flags `$2b`, and three Pokémon
+of ten bytes each: 8 + 1 + 30. That arithmetic is the check the `$ff` used to
+be — a record whose Pokémon do not fill it exactly is refused, so a wrong
+width answers nothing rather than a party of plausible numbers. 713 trainers
+over 137 classes, and the eight leaders read the parties its source gives
+them.
 
 **Its move table is eight bytes an entry**, not seven — it adds a category
 byte, the physical/special split Gen 2 does by type — and read at seven every
@@ -4422,14 +4450,19 @@ cartridge numbers it, and that a move the cartridge does not have is not a
 failure. On Crystal it had been quietly checking four of its nine moves,
 because the ROM says "HORN DRILL" and the list said `HORN_DRILL`.
 
-**Ground does not miss Flying**, and this is the interesting one. That row is
-*deliberately absent* from its chart — the source says
-`; db GROUND, FLYING, NO_EFFECT -- checks airborne state instead` — because
-the cartridge decides airborne-ness at battle time from Flying, Levitate and
-Telekinesis together. So the app reads the chart correctly and still prices a
-Ground move against a Flying Pokémon as neutral when the game will do nothing
-at all. `tools/types --verify` reports it, and reporting it is right: it is a
-true thing about how the pilot will behave there.
+**Ground missing Flying is a row its chart deliberately does not have.** The
+source says `; db GROUND, FLYING, NO_EFFECT -- checks airborne state
+instead`, because the cartridge decides airborne-ness at battle time from
+Flying, Levitate and Telekinesis together. Read faithfully, the chart then
+prices a Ground move against a Flying Pokémon as neutral when the game will
+do nothing at all.
+
+`damage.extra` is where a profile says what a chart leaves out — a list of
+`[attacker, defender, multiplier]` consulted ahead of the table, because
+there is no row there to disagree with. The type half is what can be said
+without being in the battle, and it is the common case: a Flying-type is
+airborne. A Levitating Ground-type still reads neutral and takes nothing,
+which is the same class of thing as an ability this app has never modelled.
 
 **A check that cannot run has not failed**, and three of them could not run
 here. The gym and gate checks read *every* `titles/*.js` and held each one's
@@ -5151,7 +5184,7 @@ before a step is taken, so a stopped walk does not move at all.
 
 ### What is behind the Gym door, before you open it
 
-<!-- covers: gen2/romdata.js gen2/engine.js app/rows.js @ d9cf825c7b2f -->
+<!-- covers: gen2/romdata.js gen2/engine.js app/rows.js @ 70dadaeeb0f5 -->
 
 The Gym row could say where the Gym is and who is in it. **Whether it is worth
 going** is two facts the cartridge has had all along, and neither of them
@@ -5264,7 +5297,7 @@ is the noise this list exists to replace.
 
 ### Leading with the one that can answer the room
 
-<!-- covers: gen2/romdata.js gen2/menus.js gen2/journey.js @ e0fd3c101bd4 -->
+<!-- covers: gen2/romdata.js gen2/menus.js gen2/journey.js @ 7d8326503f00 -->
 
 **Gen 2 sends out slot one and asks nobody.** So the party's order decides the
 first battle of a Gym — and since the pass before, the pilot has known exactly

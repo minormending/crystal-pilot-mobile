@@ -428,13 +428,39 @@ export class RomData {
       return { bank: wide > 2 ? this.gb.romByte(bank, at) : bank,
                addr: word(at + wide - 2) };
     };
-    const count = (entry(0).addr - addr) / wide;
+    // In-bank: the table ends where its own first pointer lands. Cross-bank:
+    // that pointer is somewhere the table cannot see, so it is walked.
+    const count = wide > 2 && this.gb.romByte(bank, addr) !== bank
+      ? this._scanCount(bank, addr, wide)
+      : (entry(0).addr - addr) / wide;
     // Built from the length rather than counted up to it: reading one
     // pointer too many puts the first trainer's *name* in the list as a
     // word, which is a plausible address and bounds the last class with
     // whatever it happens to be. There is no comparison here to get wrong
     // now, which is the better answer than a test for one.
     const ptr = Array.from({ length: count }, (_, i) => entry(i));
+    // **What bounds a class is the next record, not the next class.** On
+    // Crystal those are the same thing, because its groups are written in
+    // order and this was `ptr[g + 1]`. Polished Crystal's are laid out
+    // wherever the linker put them: Bugsy's group is *below* Falkner's in
+    // the same bank, so the bound came out behind the start and his class
+    // read as empty -- forty-two of them did.
+    //
+    // Only within a bank, because two addresses in different banks do not
+    // compare. A class with nothing above it in its own bank is unbounded,
+    // the way the last one always was, and reads until the bytes stop being
+    // a trainer.
+    const perBank = new Map();
+    for (const e of ptr) {
+      if (!perBank.has(e.bank)) perBank.set(e.bank, []);
+      perBank.get(e.bank).push(e.addr);
+    }
+    for (const list of perBank.values()) list.sort((a, b) => a - b);
+    const bounds = (g) => {
+      const here = ptr[g];
+      const next = perBank.get(here.bank).find((a) => a > here.addr);
+      return next === undefined ? null : next;
+    };
     const out = new Map();
     for (let g = 0; g < count; g++) {
       // The next class's pointer, or nothing for the last one -- which is
@@ -450,8 +476,7 @@ export class RomData {
       // successor lives elsewhere is as unbounded as the last one, and
       // pretending otherwise would cut it short at an address that means
       // nothing to it.
-      const next = ptr[g + 1];
-      const stop = next && next.bank === ptr[g].bank ? next.addr : null;
+      const stop = bounds(g);
       let at = ptr[g].addr;
       for (let guard = 0; guard < 64; guard++) {
         if (stop !== null && at >= stop) break;
@@ -460,9 +485,14 @@ export class RomData {
         // First definition wins, the same rule the symbol table uses: a name
         // shared by two trainers -- and dozens are -- is asked about by
         // whoever asks first, and answering with the last is no better.
-        if (!out.has(read.name)) {
-          out.set(read.name, { name: read.name, group: g + 1,
-                               party: read.party });
+        // Keyed **folded**, because a cartridge's capitalisation is its own
+        // business: Crystal writes FALKNER and Polished Crystal writes
+        // Falkner, and a caller asking for either should get the same
+        // answer on either. The name is kept as the cartridge spells it, so
+        // what gets shown is still the cartridge's word.
+        const key = normalise(read.name);
+        if (!out.has(key)) {
+          out.set(key, { name: read.name, group: g + 1, party: read.party });
         }
         at = read.next;
       }
@@ -507,13 +537,54 @@ export class RomData {
       // pokecrystal16 gave 404 on it -- none of which held a trainer, since
       // that cartridge's party records are a different shape as well. So a
       // cross-bank table is refused rather than counted.
-      if (wide > 2 && this.gb.romByte(bank, addr) !== bank) continue;
+      const crossBank = wide > 2 && this.gb.romByte(bank, addr) !== bank;
+      if (crossBank) {
+        // The gap says nothing here, so the table is counted by walking it
+        // -- see `_scanCount`. A width that walks nowhere is not the width.
+        if (this._scanCount(bank, addr, wide) > 0) return wide;
+        continue;
+      }
       if (gap > 0 && gap % wide === 0
           && (first & 0xc000) === (addr & 0xc000)) {
         return wide;
       }
     }
     return null;
+  }
+
+  /**
+   * How many entries a cross-bank pointer table has, by walking it.
+   *
+   * A `dba` table whose targets are in other banks cannot be measured the
+   * way an in-bank one is: its first pointer is an address somewhere the
+   * table cannot see, so the gap to it is not a number of entries. This
+   * walks instead, and stops at the first triple that is not a pointer --
+   * a bank past the end of the ROM, or an address in neither the banked
+   * window nor work RAM.
+   *
+   * **Work RAM counts**, and that is not a loose end being tidied. Polished
+   * Crystal's 123rd trainer class points at `$c90f`, which its symbol file
+   * calls `wInverGroup` -- a party built at run time. A scan that insisted
+   * on ROM stopped there and lost the twenty-six classes behind it.
+   *
+   * It can overshoot by one, and does on that cartridge: 149 walked against
+   * 148 written, because the three bytes after the table happen to read as
+   * an entry. That costs nothing. A class whose bytes are not a trainer
+   * decodes to no trainers, which is what `_trainerAt` already answers, and
+   * an empty class at the end of the list is one nobody can look up.
+   */
+  _scanCount(bank, addr, wide) {
+    const banks = this.gb.romBanks || 0x80;
+    for (let n = 0; n < 512; n++) {
+      const at = addr + n * wide;
+      const eb = this.gb.romByte(bank, at);
+      const ea = this.gb.romByte(bank, at + wide - 2)
+        | (this.gb.romByte(bank, at + wide - 1) << 8);
+      const rom = (ea & 0xc000) === 0x4000;
+      const ram = ea >= 0xc000 && ea <= 0xdfff;
+      if (eb === undefined || eb >= banks || !(rom || ram)) return n;
+    }
+    return 512;
   }
 
   /**
@@ -525,6 +596,9 @@ export class RomData {
    * a table of 541 entries becomes a table of nonsense.
    */
   _trainerAt(bank, at) {
+    if (this.e.trainer && this.e.trainer.sized) {
+      return this._sizedTrainerAt(bank, at);
+    }
     const end = this.terminator();
     const bytes = [];
     let i = at;
@@ -549,12 +623,79 @@ export class RomData {
     return { name: decodeText(bytes, end, this.e.alphabet), party, next: cur + 1 };
   }
 
+  /**
+   * One trainer from a record that says its own length, or null.
+   *
+   * Polished Crystal writes `db _tr_size` in front of every trainer -- the
+   * bytes after that byte -- then the name, then a flags byte, then the
+   * Pokemon. There is no `$ff` at the end; the size is the end.
+   *
+   * **Which means the party's width is not one number but six.** Each
+   * Pokemon is a level and a `dp species, form`, and then one more byte for
+   * each of item, EVs, DVs and personality that the flags claim, plus four
+   * for the moves and a whole terminated string for a nickname. Falkner's
+   * record says 39 and holds "Falkner", flags `$2b`, and three Pokemon of
+   * ten bytes each -- 8 + 1 + 30, which is the arithmetic that proves the
+   * reading rather than a comment claiming it.
+   *
+   * A record whose Pokemon do not fill it exactly is not a record. That is
+   * the check the `$ff` used to be: reading at the wrong width overshoots or
+   * undershoots the size byte, and either way this answers null instead of a
+   * party of plausible nonsense.
+   */
+  _sizedTrainerAt(bank, at) {
+    const spec = this.e.trainer;
+    const end = this.terminator();
+    const size = this.gb.romByte(bank, at);
+    if (!size || size === undefined) return null;
+    const stop = at + 1 + size;
+    const bytes = [];
+    let i = at + 1;
+    for (; i < at + 1 + this.e.trainerNameMax && i < stop; i++) {
+      const b = this.gb.romByte(bank, i);
+      if (b === end) break;
+      bytes.push(b);
+    }
+    if (this.gb.romByte(bank, i) !== end || !bytes.length) return null;
+    const flags = this.gb.romByte(bank, i + 1);
+    if (flags === undefined) return undefined === flags ? null : null;
+    const party = [];
+    let cur = i + 2;
+    while (cur < stop && party.length <= this.e.maxParty) {
+      const level = this.gb.romByte(bank, cur);
+      const low = this.gb.romByte(bank, cur + 1);
+      const form = this.gb.romByte(bank, cur + 2);
+      if (level === undefined || low === undefined) return null;
+      party.push({
+        level,
+        // The ninth bit of the species rides in the form byte, which is how
+        // a cartridge with more than 255 of them fits one in a byte.
+        species: low | ((form & spec.formSpeciesBit) ? 0x100 : 0),
+      });
+      cur += spec.monBase;
+      // Then whichever optional fields the flags claim, **in the order the
+      // cartridge writes them** -- one of which is a string.
+      for (const [bit, size] of spec.monFields) {
+        if (!(flags & (1 << bit))) continue;
+        if (size === null) {
+          let n = 0;
+          while (cur < stop && this.gb.romByte(bank, cur) !== end
+                 && n < this.e.trainerNameMax) { cur++; n++; }
+          cur++;
+        } else {
+          cur += size;
+        }
+      }
+    }
+    if (cur !== stop || !party.length) return null;
+    return { name: decodeText(bytes, end, this.e.alphabet), party, next: stop };
+  }
+
   /** What one named trainer is carrying, or null. */
   trainer(name) {
     const index = this.trainerIndex();
     if (!index) return null;
-    return index.get(normalise(name).toUpperCase())
-      || index.get(name) || null;
+    return index.get(normalise(name)) || null;
   }
 
   /** A trainer class's name, out of the packed table. */
@@ -1027,6 +1168,12 @@ export class RomData {
     if (!table) return null;
     if (attack === null || attack === undefined) return null;
     if (defend === null || defend === undefined) return null;
+    // A row this cartridge keeps outside its chart, if it has any. Ahead of
+    // the table because that is what it is for: the chart does not have the
+    // row, so there is nothing here to disagree with.
+    for (const [a, d, m] of this.e.damage.extra) {
+      if (a === attack && d === defend) return m;
+    }
     const unit = this.chartUnit();
     const found = table.get((attack << 8) | defend);
     const raw = found === undefined ? unit : found;

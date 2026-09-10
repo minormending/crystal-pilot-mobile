@@ -21,6 +21,7 @@
 // own — a start menu reading Bag, Save, Options, Quit — its move effects are
 // renumbered, and its trainer parties are in banks the reader refuses to
 // guess at. See `docs/DEVELOPING.md` for what passes and what does not.
+import { gen2 } from '../gen2/engine.js';
 import { Journey } from '../gen2/journey.js';
 
 export const polished = {
@@ -70,6 +71,18 @@ export const polished = {
     // Crystal's list — a wrong word rather than a missing one, which is the
     // kind of mistake a profile exists to stop.
     growthRates: ['mediumFast', 'mediumSlow', 'fast', 'slow'],
+    // **Its trainer records say their own length.** `db _tr_size`, then the
+    // name, then a flags byte, then the Pokemon -- and no `$ff` at the end,
+    // because the size is the end. Each Pokemon is a level and a
+    // `dp species, form`, plus a byte for each of item, EVs, DVs and
+    // personality the flags claim, four for the moves, and a whole
+    // terminated string for a nickname.
+    trainer: {
+      sized: true,
+      monBase: 3,
+      formSpeciesBit: 0x20,
+      monFields: [[0, 1], [2, 1], [3, 1], [4, null], [1, 1], [5, 4]],
+    },
     // Seven bytes a map header, not nine, and no attributes bank in it:
     // `db tileset`, `dn sign, environment`, `dw attributes`, `db location,
     // music`, `dn phone, palette`. Read at Crystal's offsets its headers
@@ -96,6 +109,18 @@ export const polished = {
     // moves and no Psywave at all -- so the pilot has fewer ways to end a
     // battle it meant to weaken, not more.
     lethalEffects: [26, 84, 93],
+    // **The one row its chart deliberately does not have.** Its source
+    // comments out `db GROUND, FLYING, NO_EFFECT` with `; checks airborne
+    // state instead`, because it decides airborne-ness at battle time from
+    // Flying, Levitate and Telekinesis together. Read faithfully the chart
+    // then prices a Ground move at neutral on a Flying Pokemon and the
+    // pilot swings it for nothing.
+    //
+    // The type half is what can be said without being in the battle, and it
+    // is the common case: a Flying-type is airborne. A Levitating
+    // ground-type still reads neutral here and takes nothing, which is the
+    // same class of thing as an ability this app has never modelled.
+    damage: { ...gen2.damage, extra: [[0x04, 0x02, 0]] },
     // **Its start menu is its own.** `#dex`, `#mon`, Bag, Save, Options,
     // Exit, Pokégear, Quit -- so a pilot looking for PACK walked the whole
     // menu and gave up, and one looking for SAVE never saved. The battle

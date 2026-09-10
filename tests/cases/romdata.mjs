@@ -461,7 +461,7 @@ const TRAINER_BASE = 0x5999;
  * The bytes come out in the cartridge's own shape: a `dw` per class, then a
  * terminated name, a type byte, the Pokémon, and `$ff`.
  */
-function trainerBytes(classes, { wide = 2, bank = 0x0e } = {}) {
+function trainerBytes(classes, { wide = 2, bank = 0x0e, order = null } = {}) {
   const enc = (t) => [...t].map((c) => (c === ' ' ? 0x7f : 0x80 + c.charCodeAt(0) - 65));
   const bodies = classes.map((trainers) => {
     const out = [];
@@ -486,11 +486,18 @@ function trainerBytes(classes, { wide = 2, bank = 0x0e } = {}) {
   // read at the wrong one.
   const head = classes.length * wide;
   const bytes = [];
-  let at = TRAINER_BASE + head;
-  for (const body of bodies) {
+  // Where each body ends up, in the order they are written.
+  const at = [];
+  let cur = TRAINER_BASE + head;
+  for (const body of bodies) { at.push(cur); cur += body.length; }
+  // `order[i]` is which body class `i` points at. The default is the
+  // obvious one; a permutation is how a cartridge whose linker scattered
+  // its groups is written -- Polished Crystal's Bugsy sits below its
+  // Falkner in the same bank.
+  const which = order || bodies.map((_, i) => i);
+  for (const i of which) {
     if (wide > 2) bytes.push(bank);
-    bytes.push(at & 0xff, at >> 8);
-    at += body.length;
+    bytes.push(at[i] & 0xff, at[i] >> 8);
   }
   for (const body of bodies) bytes.push(...body);
   return bytes;
@@ -1316,18 +1323,74 @@ test('the width is derived, so the two-byte table still reads at two',
   t.eq(rom.trainerIndex().size, 3, 'three trainers over three classes');
 });
 
-test('a three-byte table pointing into another bank is refused', async (t) => {
-  // Polished Crystal's `TrainerGroups` is `dba` too, and its entries name
-  // banks $7d and $79 -- so its first pointer is not the end of the table,
-  // it is an address in a bank the table cannot see. The arithmetic that
-  // gives 67 classes on pokecrystal16 gave 404 on it. A pointer whose bank
-  // is not the table's own cannot bound the table, so the width is refused
-  // rather than used to count.
+test('classes written out of order are still bounded correctly', async (t) => {
+  // **What bounds a class is the next record, not the next class.** On
+  // Crystal those are the same thing, because its groups are written in
+  // order. Polished Crystal's are wherever the linker put them -- Bugsy's
+  // group sits *below* Falkner's in the same bank -- so a bound taken from
+  // the next class came out behind the start, and forty-two of its classes
+  // read as empty.
   const rom = romReading(TYPED, {
-    chart: CHART, trainers: trainerBytes(LEADERS, { wide: 3, bank: 0x7d }),
-    classes: CLASS_NAMES,
+    chart: CHART, classes: CLASS_NAMES,
+    // Class 1 points at the third body, class 2 at the first, class 3 at
+    // the second: every pointer valid, none of them in order.
+    trainers: trainerBytes(LEADERS, { order: [2, 0, 1] }),
+    species: { 16: [N, 0x02], 17: [N, 0x02], 11: [BUG, BUG], 14: [BUG, 0x03],
+               123: [BUG, 0x02], 35: [N, N], 241: [N, N] },
   });
-  t.eq(rom.trainerIndex(), null, 'refused rather than miscounted');
+  t.eq(rom.trainerIndex().size, 3, 'all three classes read');
+  t.eq(rom.trainer('BUGSY').group, 1, 'the one class one points at');
+  t.eq(rom.trainer('FALKNER').group, 2, 'and class two');
+  t.eq(rom.trainer('FALKNER').party.map((m) => m.level), [7, 9],
+       'each bounded by the record above it, not the class after it');
+});
+
+test('a record that says its own length is read that way', async (t) => {
+  // Polished Crystal writes `db size`, the name, a flags byte, and the
+  // Pokemon -- with no terminator, because the size is the end. Each
+  // Pokemon is a level and a `dp species, form`, plus a byte for each flag
+  // the record claims and four for the moves.
+  const sym = symbols();
+  const base = sym.addr('TrainerGroups');
+  const enc = (t2) => [...t2].map((c) => 0x80 + c.charCodeAt(0) - 65);
+  // Flags $29: item (bit 0), personality (bit 3), moves (bit 5). So each
+  // Pokemon is 3 + 1 + 1 + 4 = 9 bytes.
+  const mon = (level, species) =>
+    [level, species, 0, 0, 0, 33, 0, 0, 0];
+  const body = [...enc('FALKNER'), 0x50, 0x29, ...mon(7, 16), ...mon(9, 17)];
+  const bytes = [base + 2, 0, body.length, ...body];
+  const sized = {
+    ...gen2,
+    trainer: { sized: true, monBase: 3, formSpeciesBit: 0x20,
+               monFields: [[0, 1], [2, 1], [3, 1], [4, null], [1, 1], [5, 4]] },
+  };
+  const rom = romReading(TYPED, { chart: CHART, trainers: bytes,
+                                  classes: CLASS_NAMES, engine: sized });
+  const falkner = rom.trainer('FALKNER');
+  t.ne(falkner, null, 'found');
+  t.eq(falkner.party.map((m) => [m.level, m.species]), [[7, 16], [9, 17]],
+       'both of them, at the width the flags imply');
+});
+
+test('a sized record whose Pokemon do not fill it is not a record',
+     async (t) => {
+  // The check the `$ff` used to be. Reading at the wrong width overshoots
+  // or undershoots the size byte, and either way the answer is nothing
+  // rather than a party of plausible numbers.
+  const sym = symbols();
+  const base = sym.addr('TrainerGroups');
+  const enc = (t2) => [...t2].map((c) => 0x80 + c.charCodeAt(0) - 65);
+  const body = [...enc('FALKNER'), 0x50, 0x29,
+                7, 16, 0, 0, 0, 33, 0, 0, 0, 0];   // one byte too many
+  const bytes = [base + 2, 0, body.length, ...body];
+  const sized = {
+    ...gen2,
+    trainer: { sized: true, monBase: 3, formSpeciesBit: 0x20,
+               monFields: [[0, 1], [2, 1], [3, 1], [4, null], [1, 1], [5, 4]] },
+  };
+  const rom = romReading(TYPED, { chart: CHART, trainers: bytes,
+                                  classes: CLASS_NAMES, engine: sized });
+  t.eq(rom.trainerIndex(), null, 'refused rather than half-decoded');
 });
 
 test('one unreadable class does not throw away the ones that read',
