@@ -994,6 +994,11 @@ export class RomData {
    */
   hourBlocks() {
     if (this._hours !== undefined) return this._hours;
+    // A cartridge that keeps its hours in code rather than in a table says
+    // so in its profile; see `engine.hours`. Checked for length, because a
+    // list of the wrong size would silently call some hour undefined.
+    const said = this.e.hours;
+    if (said && said.length === this.e.hoursInDay) return (this._hours = said);
     if (!this.times) return (this._hours = null);
     const { bytes, end, scan } = this.e.timeTable;
     const { bank, addr } = this.times;
@@ -1378,8 +1383,8 @@ export class RomData {
    * is.
    */
   _grassAt(group, number) {
-    const { blocks, slotsPerBlock, headerBytes } = this.e.encounter;
-    const entryBytes = headerBytes + slotsPerBlock * blocks * 2;
+    const { blocks, slotsPerBlock, headerBytes, slotBytes } = this.e.encounter;
+    const entryBytes = headerBytes + slotsPerBlock * blocks * slotBytes;
     for (const table of this.grass) {
       let addr = table.addr;
       // Scan the table; each map's block is a fixed size, ending at $FF.
@@ -1404,22 +1409,35 @@ export class RomData {
    * fix for both.
    */
   _slots({ table, addr }, block) {
-    const { slotsPerBlock, headerBytes } = this.e.encounter;
+    const spec = this.e.encounter;
+    const { slotsPerBlock, headerBytes, slotBytes } = spec;
     const out = [];
     for (let s = 0; s < slotsPerBlock; s++) {
-      const at = addr + headerBytes + (block * slotsPerBlock + s) * 2;
-      const id = this.gb.romByte(table.bank, at + 1);
+      const at = addr + headerBytes + (block * slotsPerBlock + s) * slotBytes;
+      const id = this.gb.romByte(table.bank, at + spec.species);
       if (!id) continue;
-      out.push({ level: this.gb.romByte(table.bank, at), name: this.speciesName(id) });
+      out.push({ level: this.gb.romByte(table.bank, at + spec.level),
+                 name: this.speciesName(id) });
     }
     return out;
   }
 
   /** Which blocks a time of day asks for: one, clamped, or all of them. */
   _blocksFor(timeOfDay) {
-    const { blocks } = this.e.encounter;
+    const { blocks, blockOf } = this.e.encounter;
     if (timeOfDay === null || timeOfDay === undefined) {
       return [...Array(blocks).keys()];
+    }
+    // A cartridge with more times of day than encounter blocks says which
+    // shares which -- Polished Crystal has four times and three blocks, and
+    // its evening draws from the day's.
+    if (blockOf) {
+      const which = blockOf[timeOfDay];
+      if (which === undefined) return [];
+      // One block or several: Polished Crystal's evening rolls the day's
+      // table 60% of the time and the night's the other 40%, so what is in
+      // the grass then is the union of the two and not either alone.
+      return Array.isArray(which) ? which : [which];
     }
     return [Math.max(0, Math.min(blocks - 1, timeOfDay))];
   }

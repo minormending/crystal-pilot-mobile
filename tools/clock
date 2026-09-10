@@ -65,11 +65,11 @@ function showBlocks() {
     console.log('this cartridge does not name its time-of-day table');
     return 1;
   }
-  for (let block = 0; block < gen2.timeNames.length; block++) {
+  for (let block = 0; block < engine.timeNames.length; block++) {
     const run = data.hoursOf(block);
-    if (!run) { console.log(`  ${gen2.timeNames[block]}: no hours at all`); continue; }
+    if (!run) { console.log(`  ${engine.timeNames[block]}: no hours at all`); continue; }
     const wraps = run.to < run.from ? '  (wraps midnight)' : '';
-    console.log(`  ${gen2.timeNames[block].padEnd(8)} ${hhmm(run.from)}`
+    console.log(`  ${engine.timeNames[block].padEnd(8)} ${hhmm(run.from)}`
       + ` to ${hhmm(run.to)}   ${String(run.hours).padStart(2)} hours${wraps}`);
   }
   return 0;
@@ -78,7 +78,7 @@ function showBlocks() {
 /** The clock offset a battery is carrying. */
 function showSave(sram, file) {
   const at = (name) => state.savedAt(symbols.addr(name));
-  const c = gen2.clock;
+  const c = engine.clock;
   console.log(`${file}`);
   console.log(`  save markers   ${state.saveIsPresent(sram) ? 'present' : 'MISSING'}`);
   const made = state.checksum(sram), held = state.storedChecksum(sram);
@@ -109,7 +109,7 @@ function shift(sram, file, hours) {
     console.log('this cartridge does not keep its clock where the profile says');
     return 1;
   }
-  const c = gen2.clock;
+  const c = engine.clock;
   const at = (name) => state.savedAt(symbols.addr(name));
   console.log(`  hour offset  ${sram[at(c.startHour)]} -> ${out[at(c.startHour)]}`);
   console.log(`  day offset   ${sram[at(c.startDay)]} -> ${out[at(c.startDay)]}`);
@@ -137,30 +137,57 @@ function verify() {
   const bad = [];
   const map = data.hourBlocks();
   if (!map) return (console.log('  ✗ no readable time-of-day table'), 1);
-  if (map.length !== gen2.hoursInDay) bad.push(`${map.length} hours in a day`);
+  if (map.length !== engine.hoursInDay) bad.push(`${map.length} hours in a day`);
+  // **Crystal's own boundaries, held to Crystal.** Which hour morning starts
+  // at is a fact about a cartridge, not about Gen 2: Polished Crystal runs
+  // 5-8, 9-16, 17-20 evening, 21-4, and asserting Crystal's answers drew
+  // four crosses under a reading that was exactly right.
   const KNOWN = [[4, 'morning'], [9, 'morning'], [10, 'day'], [17, 'day'],
                  [18, 'night'], [23, 'night'], [0, 'night'], [3, 'night']];
-  for (const [hour, want] of KNOWN) {
-    const got = gen2.timeNames[map[hour]];
-    if (got !== want) bad.push(`${hhmm(hour)} reads ${got} and is ${want}`);
+  if (title && title.id === 'crystal') {
+    for (const [hour, want] of KNOWN) {
+      const got = engine.timeNames[map[hour]];
+      if (got !== want) bad.push(`${hhmm(hour)} reads ${got} and is ${want}`);
+    }
+  }
+  // What is true of any day: the blocks are *runs*. A table read as starts
+  // rather than upper bounds, or one pair short, scatters an hour of one
+  // block into the middle of another -- so every block is required to be one
+  // unbroken stretch, allowing exactly one of them to wrap midnight.
+  const wrapped = [];
+  for (let block = 0; block < engine.timeNames.length; block++) {
+    const mine = map.map((b, h) => (b === block ? h : -1)).filter((h) => h >= 0);
+    if (!mine.length) continue;
+    let breaks = 0;
+    for (const h of mine) {
+      if (!mine.includes((h + map.length - 1) % map.length)) breaks++;
+    }
+    if (breaks > 1) {
+      bad.push(`${engine.timeNames[block]} is in ${breaks} pieces, not one run`);
+    }
+    if (mine.includes(0) && mine.includes(map.length - 1)) wrapped.push(block);
+  }
+  if (wrapped.length !== 1) {
+    bad.push(`${wrapped.length} blocks wrap midnight, and a day has one`);
   }
   // Every block used, and none of them the whole day -- which is what a table
   // read as one pair decodes into.
   const used = new Set(map);
-  if (used.size !== gen2.timeNames.length) {
-    bad.push(`${used.size} of ${gen2.timeNames.length} blocks are used`);
+  if (used.size !== engine.timeNames.length) {
+    bad.push(`${used.size} of ${engine.timeNames.length} blocks are used`);
   }
   // Night is the one that wraps, and a reader that normalised the range away
   // would report it as one run from 3 to 18, which is the daytime.
-  const night = data.hoursOf(2);
+  const night = data.hoursOf(wrapped[0]);
   if (!night || night.to >= night.from) {
-    bad.push('night does not wrap midnight, which on this cartridge it does');
+    bad.push('the block that wraps midnight does not read as wrapping');
   }
   for (const b of bad) console.log(`  ✗ ${b}`);
   if (bad.length) return 1;
-  console.log(`  ok  ${gen2.hoursInDay} hours across ${used.size} blocks, and the`
-    + ' eight boundary hours everybody already knew');
-  console.log('  ok  night wraps midnight, so the range is not an interval');
+  console.log(`  ok  ${engine.hoursInDay} hours across ${used.size} blocks, `
+    + 'each one an unbroken run');
+  console.log(`  ok  ${engine.timeNames[wrapped[0]]} wraps midnight, so the `
+    + 'range is not an interval');
   console.log('  ok  the clock offset is inside the saved block:'
     + ` wStartHour -> flat ${state.savedAt(symbols.addr('wStartHour'))}`);
   return 0;

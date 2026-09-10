@@ -15,7 +15,7 @@ what CI checks and what the pre-commit hook blocks on.
 ```mermaid
 flowchart LR
     E[an edit] --> H{{".githooks/pre-commit"}}
-    H --> T["./run-tests<br/>937 behaviour tests"]
+    H --> T["./run-tests<br/>938 behaviour tests"]
     H --> C["tools/check-app<br/>31 groups"]
     H --> D["tools/docs-check<br/>46 tracked sections"]
     T --> OK[commit]
@@ -39,7 +39,7 @@ git config core.hooksPath .githooks
 ./run-tests -v         # notes and stack lines
 ```
 
-937 tests in 27 files, and what each file is about says more than the count:
+938 tests in 27 files, and what each file is about says more than the count:
 
 | file | tests | what it pins down |
 | --- | --- | --- |
@@ -55,7 +55,7 @@ git config core.hooksPath .githooks
 | `control.mjs` | 30 | the task lifecycle: stopping, failing, undo points, and loops that must end |
 | `state.mjs` | 44 | reading the party, the map, the badges and the battery out of work RAM |
 | `titles.mjs` | 19 | choosing a profile for a cartridge, and falling back to generic |
-| `romdata.mjs` | 90 | the cartridge's own character encoding and tables, byte by byte |
+| `romdata.mjs` | 91 | the cartridge's own character encoding and tables, byte by byte |
 | `remember.mjs` | 14 | which remembered choices are believed, and which dropped |
 | `worker.mjs` | 14 | the idle loop: one step outstanding, and a lost step recovered |
 | `nav.mjs` | 14 | the walk loop: what it decides between two steps, and every reason it stops |
@@ -127,7 +127,7 @@ section gives. Everything by hand runs against a local build.
 
 ```mermaid
 flowchart BT
-    C["the app"] --> T["./run-tests<br/>937 behaviour tests"]
+    C["the app"] --> T["./run-tests<br/>938 behaviour tests"]
     C --> A["tools/check-app<br/>31 groups"]
     C --> D["tools/docs-check<br/>46 tracked sections"]
     C --> V["tools/coverage<br/>what the suite never runs"]
@@ -574,7 +574,7 @@ Which makes some hacks much more informative than others:
 | [pokecrystal-speedchoice](https://github.com/Dabomstew/pokecrystal-speedchoice) | `PM_CRYSTAL` | 251 | changed flow and menus, vanilla species |
 | [Majora-Crystal](https://github.com/WasabiRaptor/Majora-Crystal) | `PM_CRYSTAL` | 255 | built around a time limit — the adversary for the clock reading |
 | [pokecrystal-nl](https://github.com/wfowler1/pokecrystal-nl) · [-es](https://github.com/erosunica/pokecrystal-es) · [_cn](https://github.com/SnDream/pokecrystal_cn) | `PM_CRYSTAL` | 251 | the charmap and the English phrases. Dutch built and run: **29/31**, and both failures are true — `sent to BILL`, `PACK` and `SWITCH` are not in that ROM, and its switch box begins `WISSEL` |
-| [polishedcrystal](https://github.com/Rangi42/polishedcrystal) | `PKPCRYSTAL` | 291 | the hardest thing to support properly, and the one that found seven declared numbers — built, run, and given a profile: **29/31**, with `tools/dex --verify` clean over all 291 species |
+| [polishedcrystal](https://github.com/Rangi42/polishedcrystal) | `PKPCRYSTAL` | 291 | the hardest thing to support properly, and the one that found seven declared numbers — built, run, and given a profile: **31/31**, with `tools/dex --verify` clean over all 291 species |
 
 Four are built and run. **A word about the assembler**, because it is the
 thing that decides whether a hack can be tested at all: `polishedcrystal` and

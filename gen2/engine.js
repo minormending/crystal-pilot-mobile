@@ -421,7 +421,24 @@ export const gen2 = {
   // --- wild encounters -----------------------------------------------------
   // A grass entry is: map group, map number, three rates, then three blocks of
   // seven (level, species) -- morning, day, night.
-  encounter: { blocks: 3, slotsPerBlock: 7, headerBytes: 5 },
+  // A grass entry: a header, then one slot per Pokemon per block. Crystal's
+  // header is `db group, number` and three encounter rates, and its slot is
+  // `db level, species`. Polished Crystal writes a two-byte map id and one
+  // rate, and its slot is three bytes -- `db level` then `dp species,
+  // form`, because a species there can be past 255.
+  //
+  // `slotBytes` is why this is a block and not four numbers: the stride is
+  // the product of all of them, and reading it wrong finds a neighbouring
+  // map's block without failing.
+  encounter: { blocks: 3, slotsPerBlock: 7, headerBytes: 5, slotBytes: 2,
+               // Where in a slot the level and the species sit.
+               level: 0, species: 1,
+               // Which encounter block a time of day asks for, as a block
+               // or a list of them. Crystal has one time per block, so this
+               // is the identity and is left null. A cartridge with more
+               // times than blocks -- Polished Crystal has four and three --
+               // says which shares which.
+               blockOf: null },
   // --- a map's header, in `MapGroupPointers` ------------------------------
   // Crystal writes nine bytes and puts the attributes' **bank** in front:
   // `db BANK(attributes), tileset, environment` then `dw attributes`.
@@ -450,6 +467,17 @@ export const gen2 = {
   // Two bytes a pair, and a bound rather than a count -- the table is five
   // pairs on this cartridge and a hack could write more.
   timeTable: { bytes: 2, end: 0xff, scan: 16 },
+  // Which block each hour belongs to, where the cartridge has no table to
+  // read it from. Null here, because Crystal has one and reading it is
+  // better than being told.
+  //
+  // Polished Crystal does not: its `GetValueByTimeOfDay` compares the hour
+  // against `MORN_HOUR`, `DAY_HOUR`, `EVE_HOUR` and `NITE_HOUR`, which are
+  // assembled into the *code* as `cp` operands. There is nothing to read,
+  // so a profile says it -- twenty-four entries rather than four
+  // boundaries, because that is the shape every caller wants and the shape
+  // `hourBlocks` already produces.
+  hours: null,
   // Hours in a day. Here because the clock arithmetic below wraps on it and a
   // bare 24 in three places is the shape that drifts.
   hoursInDay: 24,

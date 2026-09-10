@@ -299,6 +299,10 @@ function buildSymText() {
   lines.push('14:497b TypeNames');
   lines.push('0e:5999 TrainerGroups');
   lines.push('0b:41ef TrainerClassNames');
+  // The wild tables, so a test can lay bytes at them. Where the real
+  // cartridge keeps them, for the same reason the tables above are real.
+  lines.push('04:4d0d JohtoGrassWildMons');
+  lines.push('04:6b0e KantoGrassWildMons');
   lines.push('01:a008 sCheckValue1');
   lines.push('01:ad0f sCheckValue2');
   // The saved block and its checksum, at the addresses the real cartridge

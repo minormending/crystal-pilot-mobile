@@ -6,6 +6,7 @@
 // gaps were measured.
 import { fakeRom, romReading, symbols, test } from '../harness.mjs';
 import { decodeText, normalise, RomData } from '../../gen2/romdata.js';
+import { Symbols } from '../../gen2/symbols.js';
 import { gen2 } from '../../gen2/engine.js';
 
 test('the two NIDORAN are two different names', async (t) => {
@@ -1343,6 +1344,43 @@ test('classes written out of order are still bounded correctly', async (t) => {
   t.eq(rom.trainer('FALKNER').group, 2, 'and class two');
   t.eq(rom.trainer('FALKNER').party.map((m) => m.level), [7, 9],
        'each bounded by the record above it, not the class after it');
+});
+
+test('a grass entry is read at the stride the profile declares', async (t) => {
+  // Crystal writes a five-byte header and two-byte slots. Polished Crystal
+  // writes a two-byte map id and one rate, then three-byte slots -- `db
+  // level` and `dp species, form`, because a species there can be past 255.
+  // Read at Crystal's stride it finds a neighbouring map's block without
+  // failing, which is the whole reason this is one block of numbers.
+  // The harness's symbol table has no wild-mon table, so one is added --
+  // the reading is what is under test, not where the table is.
+  const sym = symbols();
+  const at = { bank: sym.bank('JohtoGrassWildMons'),
+               addr: sym.addr('JohtoGrassWildMons') };
+  const wide = { ...gen2,
+    encounter: { blocks: 2, slotsPerBlock: 2, headerBytes: 3, slotBytes: 3,
+                 level: 0, species: 1, blockOf: { 0: 0, 1: 1, 2: [0, 1] } } };
+  // map 26.1, one rate, then two blocks of two three-byte slots.
+  const bytes = [26, 1, 10,
+                 5, 16, 0, 6, 17, 0,
+                 7, 19, 0, 8, 21, 0,
+                 0xff];
+  const gb = { romByte: (b, a) => (b === at.bank && a >= at.addr
+    && a < at.addr + bytes.length ? bytes[a - at.addr] : 0xff) };
+  const rom = new RomData(sym, gb, ['JohtoGrassWildMons'], wide);
+  // Levels rather than names, because this fake gives every species the
+  // same one -- what is being read here is the *stride*, and the levels are
+  // what tell one slot from the next.
+  t.eq(rom.wildLevels(26, 1, 0), { low: 5, high: 6 }, 'the first block');
+  t.eq(rom.wildLevels(26, 1, 1), { low: 7, high: 8 }, 'and the second');
+  // A time of day that draws from more than one block is the union.
+  t.eq(rom.wildLevels(26, 1, 2), { low: 5, high: 8 },
+       'a time that shares two blocks sees both');
+  // At Crystal's stride the same bytes give something, and not this.
+  const narrow = new RomData(sym, gb, ['JohtoGrassWildMons'],
+    { ...wide, encounter: { ...wide.encounter, slotBytes: 2, headerBytes: 5 } });
+  t.ne(narrow.wildLevels(26, 1, 0), { low: 5, high: 6 },
+       'and the wrong stride does not read it by accident');
 });
 
 test('a record that says its own length is read that way', async (t) => {

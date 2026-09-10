@@ -109,6 +109,33 @@ export const polished = {
     // moves and no Psywave at all -- so the pilot has fewer ways to end a
     // battle it meant to weaken, not more.
     lethalEffects: [26, 84, 93],
+    // **Its day has four parts, and they are not in a table.**
+    // `GetValueByTimeOfDay` compares the hour against `MORN_HOUR` 5,
+    // `DAY_HOUR` 9, `EVE_HOUR` 17 and `NITE_HOUR` 21 -- `cp` operands in
+    // the code, with nothing to read. The block *ids* are readable, at
+    // `GetTimeOfDay.TimesOfDay`: `00 01 03 02`, so morning is 0, day 1,
+    // evening 3 and night 2. Which is why the names below are in that
+    // order and not the obvious one.
+    //
+    // Without this the app kept "wait for morning" and lost "skip to it",
+    // which is the documented degradation for a cartridge with no table --
+    // and this one has the hours, just not where a reader can reach them.
+    timeNames: ['morning', 'day', 'night', 'evening'],
+    hours: [2, 2, 2, 2, 2, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1,
+            3, 3, 3, 3, 2, 2, 2],
+    // Its grass entry is a two-byte map id and one encounter rate, then
+    // seven slots of *three* bytes -- `db level` and `dp species, form` --
+    // for each of three blocks. Crystal's is a five-byte header and
+    // two-byte slots, and read at that stride this cartridge finds a
+    // neighbouring map's block without failing.
+    //
+    // Three blocks against four times of day, and `GetTimeOfDayNotEve`
+    // says how: **evening rolls the day's table 60% of the time and the
+    // night's the other 40%**, so what is in the grass then is the union of
+    // both and not either alone.
+    encounter: { blocks: 3, slotsPerBlock: 7, headerBytes: 3, slotBytes: 3,
+                 level: 0, species: 1,
+                 blockOf: { 0: 0, 1: 1, 2: 2, 3: [1, 2] } },
     // **The one row its chart deliberately does not have.** Its source
     // comments out `db GROUND, FLYING, NO_EFFECT` with `; checks airborne
     // state instead`, because it decides airborne-ness at battle time from
