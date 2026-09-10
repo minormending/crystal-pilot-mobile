@@ -172,7 +172,7 @@ export class Symbols {
  * Every symbol this app reads, by name.
  *
  * It exists so a device with a ROM and no .sym can be handed the addresses
- * instead of the file: 100 lines is about a kilobyte, against 1.8MB, and it
+ * instead of the file: 101 lines is about a kilobyte, against 1.8MB, and it
  * fits in a room with space for a save beside it.
  *
  * Written down rather than discovered, because nothing at run time can know
@@ -240,6 +240,11 @@ export const SHARED_SYMBOLS = [
   'wPlayerBGMapOffsetY', 'wPlayerTileCollision', 'wScriptMode',
   'wTilemap',
   'wTilesetCollisionAddress', 'wTilesetCollisionBank', 'wTilesetDataBank',
+  // The table a cartridge unpacked into work RAM, where it has one. Shared
+  // because a device with a digest and no .sym reads the collision map
+  // through it -- and without it that device would silently fall back to a
+  // ROM pointer at compressed bytes.
+  'wDecompressedCollisions',
   'wTimeOfDay',
   'wWindowStackSize', 'wXCoord', 'wYCoord',
 ];

@@ -12,8 +12,11 @@
 // mutations caught, in the file that decides where the pilot may walk. Line
 // coverage had said fifty-one, which sounds like a gap and reads as a plateau;
 // what it was measuring is that the lines *ran*.
-import { blindTo, collisionRom, symbols, test, worldRam } from '../harness.mjs';
+import { blindTo, collisionRom, symbols, test, withSymbol,
+         worldRam } from '../harness.mjs';
 import { CollisionMap } from '../../gen2/collision.js';
+import { gen2 } from '../../gen2/engine.js';
+import { readFileSync } from 'node:fs';
 
 // Route 30 in blocks, because the tiles below are its real ones and the default
 // map here is a room. Ten by twenty-seven blocks is twenty by fifty-four tiles,
@@ -24,7 +27,12 @@ const ROUTE_30 = [10, 27];
 function mapWith({ mapBlocks = [5, 6], objects = [], spawned = null,
                    pos = [7, 4], engine = undefined } = {}) {
   const sym = symbols();
-  const cm = new CollisionMap(sym, { romByte: () => 0 }, engine);
+  // Merged onto the stock profile, not substituted for it: a test that
+  // says `{ takeable: [] }` means "Crystal, but with no takeables", and a
+  // bare object would leave every other field -- the object strides among
+  // them -- undefined.
+  const cm = new CollisionMap(sym, { romByte: () => 0 },
+                              engine ? { ...gen2, ...engine } : undefined);
   return cm.use(worldRam(sym, { mapBlocks, objects, spawned, pos }));
 }
 
@@ -228,7 +236,11 @@ test('a cartridge whose profile names no object types offers no trainers',
   // silence rather than a guess that walks the pilot up to a shopkeeper.
   const cm = mapWith({
     mapBlocks: ROUTE_30,
-    engine: { takeable: [] },
+    // The field this is about, emptied on purpose. It used to be the whole
+    // profile -- `{ takeable: [] }` substituted for gen2 -- which left
+    // `objectTypes` undefined by accident rather than by saying so, and
+    // every other number in the profile with it.
+    engine: { takeable: [], objectTypes: {} },
     objects: [{ sprite: 1, x: 8, y: 15 }, { sprite: 39, x: 9, y: 27, type: 2 }],
     spawned: [{ placed: 1, sprite: 39, x: 9, y: 27 }],
   });
@@ -545,4 +557,72 @@ test('a search that runs out of room gives up rather than running for ever',
   const cm = painted(['.....', '.....', '.....', '.....', '.....']);
   t.eq(cm.pathTo([0, 0], [4, 4], { maxNodes: 2 }), null, 'no plan on two nodes');
   t.true((cm.pathTo([0, 0], [4, 4]) || []).length === 8, 'and eight with room');
+});
+
+
+// --- a cartridge that unpacks its collision table into work RAM -----------
+
+test('a wall is whatever number this cartridge calls a wall', async (t) => {
+  // `WALL_TILE` is $0f on Crystal and %10 -- two -- on Polished Crystal, so
+  // the permission table was read perfectly and compared against the wrong
+  // constant. Every wall in the game came back walkable, and a lab full of
+  // bookshelves read as open floor.
+  const perms = { 0x07: 0x02, 0x00: 0x00 };
+  const sym = symbols();
+  const two = new CollisionMap(sym, collisionRom(perms),
+                               { ...gen2, permissions: { land: 0, water: 1, wall: 0x02 } });
+  const fifteen = new CollisionMap(sym, collisionRom(perms), gen2);
+  t.true(two.isWall(0x07), 'two is this cartridge\'s wall');
+  t.false(fifteen.isWall(0x07), 'and $0f is not, on the same bytes');
+  t.false(two.isWall(0x00), 'floor is still floor');
+});
+
+test('the collision table is read from work RAM where a cartridge unpacks it',
+     async (t) => {
+  // Polished Crystal LZ-compresses its tileset collision -- 79 bytes for 248
+  // -- and unpacks it at map load into `wDecompressedCollisions`, a work-RAM
+  // bank it does not keep mapped. Following the ROM pointer reads the
+  // *compressed* bytes, and the walkable grid came out an alternating
+  // checkerboard.
+  //
+  // Derived rather than declared: a cartridge that names the buffer has one.
+  // Crystal's table has no such name, so the test cartridge is given one --
+  // at the bank and address the real one uses.
+  const sym = withSymbol(symbols(), 'wDecompressedCollisions', 5, 0xd000);
+  // Four collision values per block, and block 1's second quadrant is a wall.
+  const unpacked = new Uint8Array(64);
+  unpacked[1 * 4 + 1] = 0x07;
+  const gb = {
+    romByte: () => 0xff,                 // the ROM would answer nonsense
+    async readWramBank() { return unpacked; },
+  };
+  const cm = new CollisionMap(sym, gb, gen2);
+  t.ne(cm.unpacked, null, 'the symbol file says there is one');
+  t.eq(cm.unpacked.bank, sym.bank('wDecompressedCollisions'),
+       'in the bank the symbol file gives it');
+  const wram = worldRam(sym, { mapBlocks: [5, 6], pos: [0, 0] });
+  await cm.calibrate(wram);
+  t.eq(cm.unpackedBytes, unpacked, 'and the table came from work RAM');
+});
+
+test('a cartridge that does not unpack one still reads the ROM', async (t) => {
+  // The other half: Crystal keeps its table in the ROM and names no buffer,
+  // so nothing changes for it.
+  const cm = new CollisionMap(symbols(), collisionRom({}), gen2);
+  t.eq(cm.unpacked, null, 'no buffer named, so none looked for');
+});
+
+test('the object strides are the cartridge\'s own', async (t) => {
+  // Polished Crystal writes 21 map objects of 14 bytes and a spawned struct
+  // of 34, where Crystal writes 16 of 16 and 40. At Crystal's stride nothing
+  // read at all, so the walker could not see a person to walk around.
+  const narrow = { ...gen2,
+    mapObjects: { ...gen2.mapObjects, count: 21, bytes: 0x0e },
+    objectStructs: { ...gen2.objectStructs, bytes: 0x22 } };
+  t.eq(narrow.mapObjects.bytes, 0x0e, 'fourteen bytes a map object');
+  t.eq(narrow.objectStructs.bytes, 0x22, 'thirty-four a spawned one');
+  // And the reader takes them from the profile rather than a constant.
+  const src = readFileSync(new URL('../../gen2/collision.js', import.meta.url), 'utf8');
+  t.false(src.includes('MAP_OBJECT_BYTES ='), 'no module constant left behind');
+  t.false(src.includes('STRUCT_BYTES ='), 'nor for the spawned structs');
 });

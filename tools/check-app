@@ -1013,6 +1013,51 @@ def check_title_adds():
 CORE_REACH = re.compile(r"\.core\b|window\.WasmBoy\b")
 
 
+# Methods that became async, whose result is a *decision*. An un-awaited
+# call to one of these returns a Promise, and a Promise is always truthy.
+AWAITED = ("calibrate",)
+# The receiver may be a chain -- `this.collision.calibrate(...)` -- so the
+# whole of it is consumed before the lookbehind checks for `await`.
+# The receiver may be a chain -- `this.collision.calibrate(...)` -- so the
+# whole of it is consumed, and the start of that chain is anchored: without
+# `(?<![\w.])` the engine simply backtracks to `.collision` and reports an
+# awaited call as un-awaited, which is a checker crying wolf at the one line
+# that is already right.
+AWAIT_CALL = re.compile(
+    r"(?<!await )(?<![\w.])[\w.]+\.(" + "|".join(AWAITED) + r")\s*\(")
+
+
+def check_awaited():
+    """Every async method whose answer is a condition is awaited.
+
+    **A Promise is truthy.** `calibrate` reads the collision table, and it had
+    to become async the day a cartridge turned up that keeps that table in a
+    work-RAM bank nobody has mapped -- Polished Crystal decompresses it into
+    bank 5. The three callers all say `if (collision.calibrate(wram))`, and
+    without `await` every one of them would have read "yes, calibrated" from a
+    pending Promise and then pathed through walls with a stale decode.
+
+    That is a failure with no symptom at the call site: it parses, it runs, and
+    it is confidently wrong. The tests would not have caught it either, because
+    their fakes return a plain boolean and `await true` is `true`.
+
+    Matched on the method name rather than on a list of files, so a fourth
+    caller written next year is held to the same rule.
+    """
+    problems = []
+    for path in APP:
+        src = _code_only(path.read_text())
+        for m in AWAIT_CALL.finditer(src):
+            line = src[:m.start()].count("\n") + 1
+            problems.append(f"{path.relative_to(ROOT)}:{line}  "
+                            f"{m.group(1)}() is async and this call does not "
+                            f"await it — a Promise is always truthy")
+    for p_ in problems:
+        print(f"        {p_}")
+    return fail(f"{len(problems)} un-awaited decision(s)") if problems \
+        else ok(f"every call to {len(AWAITED)} async decision(s) is awaited")
+
+
 def check_emulator_seam():
     """Only gb.js touches the emulator core.
 
@@ -2140,6 +2185,7 @@ CHECKS = {
     "cartridge": check_cartridge,
     "layers": check_layers,
     "seam": check_emulator_seam,
+    "awaited": check_awaited,
     "listeners": check_listeners,
     "exports": check_exports,
     "titles": check_title_adds,

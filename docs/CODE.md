@@ -348,7 +348,7 @@ count comes back in `stats.knockouts`, since each one costs half your money.
 
 ### `gb.js` — the emulator
 
-<!-- covers: gbcore/gb.js @ 26ab5d81e9ea -->
+<!-- covers: gbcore/gb.js @ 475b1b909095 -->
 
 Wraps WasmBoy. Runs frames, reads work RAM, holds and releases buttons.
 
@@ -438,7 +438,7 @@ watching.
 
 ### `symbols.js` — where things live
 
-<!-- covers: gen2/symbols.js @ 40601e43676d -->
+<!-- covers: gen2/symbols.js @ 33599c9aa036 -->
 
 Parses the `.sym` file into `name → { bank, addr }`. First definition wins;
 later duplicates are aliases and locals.
@@ -1027,7 +1027,7 @@ noticing at all.
 
 ### `collision.js` — what you can walk on
 
-<!-- covers: gen2/collision.js @ 688cb36fac59 -->
+<!-- covers: gen2/collision.js @ aafdf85d9589 -->
 
 Decodes the loaded map into "can I stand on this tile", and does breadth-first
 pathfinding over the result. This is what turns walking from trial and error
@@ -1173,7 +1173,7 @@ Two more things the map alone will not tell you:
 
 ### `nav.js` — walking
 
-<!-- covers: gen2/nav.js @ 5bda9405ee92 -->
+<!-- covers: gen2/nav.js @ 95172f0962ea -->
 
 `step()` takes one tile. `walkTo()` gets to a tile, re-planning every step.
 
@@ -1260,7 +1260,7 @@ Route 30's door to it at `(17,5)`.
 
 ## 4. Taking one step, and planning a walk
 
-<!-- covers: gen2/nav.js gen2/collision.js @ 98427e03f6bb -->
+<!-- covers: gen2/nav.js gen2/collision.js @ f6579756db3a -->
 
 ### One step
 
@@ -1365,7 +1365,7 @@ point those coordinates mean somewhere else entirely.
 
 ## 5. Crossing to the next map
 
-<!-- covers: gen2/journey.js gen2/world.js @ 368bdf354ecc -->
+<!-- covers: gen2/journey.js gen2/world.js @ 25999973b60b -->
 
 A connection spans only part of a shared edge, so "walk west until something
 happens" does not work. `crossEdge()` closes the distance in stages, then tries
@@ -1780,7 +1780,7 @@ mechanism's evidence spans two runs rather than one.
 
 ### The bigger number is not the harder hit
 
-<!-- covers: gen2/romdata.js gen2/engine.js gen2/battle.js @ bb326c240c6a -->
+<!-- covers: gen2/romdata.js gen2/engine.js gen2/battle.js @ f89439225cad -->
 
 For twenty-three passes the pilot ranked its moves by one number: the `power`
 byte out of the cartridge's move table. `romdata.move()` had been returning the
@@ -1934,7 +1934,7 @@ pilot uses, not a second one beside it. See section 10.
 
 ### Sending out somebody who can touch it
 
-<!-- covers: gen2/battle.js gen2/engine.js @ 3c8b104b7502 -->
+<!-- covers: gen2/battle.js gen2/engine.js @ 22585206f6f1 -->
 
 The pass before could tell that the Pokémon on the field takes nothing off a
 Ghost, and said so. The remedy it named — *a different Pokémon* — was one the
@@ -2452,7 +2452,7 @@ flowchart TD
 
 ## 7a. Five that act on where you already are
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ cb45802d4c33 -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ 4ea649616864 -->
 
 Grind, hunt and catch all go *looking* for something. These five do the obvious
 thing with the situation you are already in, and take no parameters:
@@ -3088,7 +3088,7 @@ because that failure is only otherwise discovered by reaching for the undo.
 
 ## 8. The errands
 
-<!-- covers: titles/crystal.js gen2/journey.js @ 56cfd416b5a2 -->
+<!-- covers: titles/crystal.js gen2/journey.js @ ba766255323c -->
 
 Everything in this section is `crystal.js` — the only file in the app that names
 a Crystal map, a Crystal door or a Crystal NPC. What it stands on is
@@ -3460,7 +3460,7 @@ the bag" rather than "did we gain any".
 
 ## 8a. Finding the Centers and the Marts in the cartridge
 
-<!-- covers: gen2/world.js gen2/journey.js @ 368bdf354ecc -->
+<!-- covers: gen2/world.js gen2/journey.js @ 25999973b60b -->
 
 The last thing in this app that had to be written out by hand. A title said
 where the Centers and the Marts were, so the pilot healed in the two towns
@@ -3696,7 +3696,7 @@ by, which is the only leg it can measure.
 
 ## 8d. A route the game itself refuses
 
-<!-- covers: gen2/journey.js gen2/state.js @ 8b5b429a4cdd -->
+<!-- covers: gen2/journey.js gen2/state.js @ 54fad737c979 -->
 
 The pass before this one taught the walk to *quote* the man who turns it back.
 This is the pilot doing something about it.
@@ -3803,7 +3803,7 @@ counting bytes reads a full case as one.
 
 ## 8e. Fighting everybody here
 
-<!-- covers: gen2/journey.js @ 24b30fb03d29 -->
+<!-- covers: gen2/journey.js @ 8ce59e74ecb0 -->
 
 The primitive a Gym needs. The pilot has been stopped on Route 32 for three
 passes by a man who wants Falkner beaten first, and beating Falkner means
@@ -3904,7 +3904,7 @@ costs however long it takes somebody to notice their money is gone.
 
 ## 8f. Going and winning a badge
 
-<!-- covers: gen2/journey.js gen2/state.js titles/crystal.js @ 1150175428a0 -->
+<!-- covers: gen2/journey.js gen2/state.js titles/crystal.js @ a28846b76908 -->
 
 The pilot has been turned back from Route 32 since the pass it learned to find
 Pokémon Centers. `reopen` throws away every written-off road the moment a badge
@@ -3987,7 +3987,7 @@ everybody is a heal whatever it says about itself.
 
 ## 8g. The tiles that run a script, and saying hello
 
-<!-- covers: gen2/world.js gen2/journey.js @ 368bdf354ecc -->
+<!-- covers: gen2/world.js gen2/journey.js @ 25999973b60b -->
 
 Four passes of machinery pointed at one sentence a man says, and the reader that
 made it diagnosable is twelve lines.
@@ -4071,7 +4071,7 @@ sent the reader at it.
 
 ## 8h. What a species becomes, and when
 
-<!-- covers: gen2/romdata.js gen2/engine.js @ 1e11dbfae804 -->
+<!-- covers: gen2/romdata.js gen2/engine.js @ ad510371185e -->
 
 Two questions a party entry cannot answer: *what will this turn into*, and
 *what is it about to learn*. Both are in one table, because in Gen 2 they are
@@ -4163,7 +4163,7 @@ file says they do.
 
 ## 8i. Reaching an hour
 
-<!-- covers: gen2/jobs.js gen2/engine.js gen2/romdata.js gen2/state.js gbcore/saves.js app/rows.js @ 41d93d790468 -->
+<!-- covers: gen2/jobs.js gen2/engine.js gen2/romdata.js gen2/state.js gbcore/saves.js app/rows.js @ b68c7187b441 -->
 
 A third of Johto's grass is behind the clock. HOOTHOOT is on Route 29 after
 dark and nowhere on it at noon, and for four versions the usage guide said the
@@ -4330,7 +4330,7 @@ cartridge will not say which hours are which.
 
 ## 8j. A cartridge that changed everything it could
 
-<!-- covers: titles/polished.js gen2/engine.js gen2/romdata.js gen2/state.js gen2/menus.js @ 67532119e8af -->
+<!-- covers: titles/polished.js gen2/engine.js gen2/romdata.js gen2/state.js gen2/menus.js @ 14d97861243e -->
 
 Polished Crystal is the profile in `docs/DEVELOPING.md`'s hack table described
 as "the generic fallback, and the hardest thing to support properly". It is
@@ -4545,6 +4545,36 @@ start menu reads `#dex`, `#mon`, **Bag**, **Save**, Options, Exit — decoded
 through its own alphabet those come back as themselves, and `menuWords` lists
 them beside Crystal's so the first one the selected row says wins.
 
+**Its collision table is compressed, and unpacked where nothing was
+looking.** `lab_collision.bin.lzp` is 79 bytes for 248, and the game
+decompresses it at map load into `wDecompressedCollisions` at **WRAM bank
+5**. `readWram` takes the Game Boy's *view* — bank 0 and whichever of 1-7 is
+switched in at `$D000`, which during play is bank 1 — so the table is
+somewhere the snapshot cannot see, and following the ROM pointer reads the
+compressed bytes. The walkable grid came out an alternating checkerboard.
+
+`readWramBank` reads one bank straight out of the core's linear memory,
+where all eight sit end to end. **Which bank is the symbol file's answer**:
+a cartridge that names the buffer has one, and a cartridge that does not is
+reading from the ROM, so nothing is declared anywhere.
+
+That made `calibrate` async, and a Promise is truthy — all three callers ask
+`if (collision.calibrate(wram))`, so without `await` every one would read
+"yes" and path through walls with a stale decode. `check-app awaited` holds
+every call to an async *decision* to an await, and the tests could not have
+caught it: their fakes return a plain boolean, and `await true` is `true`.
+
+**A wall is `2` here, not `$0f`.** With the table finally readable the grid
+was still a room with no walls in it, because `WALL_TILE` is `%10` where
+Crystal's is `$0f` — the permission table read perfectly and compared
+against the wrong number.
+
+**And its object arrays are 14 and 34 bytes** where Crystal's are 16 and 40,
+with 21 map objects rather than 16. Measured on the running game: with the
+player at (4,6), the spawned struct 34 bytes × 2 in reads (5,6), which is
+the girl standing next to them. At Crystal's stride nothing read at all, so
+the walker had no one to walk around.
+
 **And its dialogue is compressed.** `macros/scripts/text.asm` compresses a
 string whenever compression saves space, so "was" is nowhere in that ROM while
 being on half its screens. That costs the app nothing — it matches the
@@ -4561,7 +4591,7 @@ This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ 9406f5cea3d0 -->
+<!-- covers: app/main.js index.html @ c929fa075c7d -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -5110,7 +5140,7 @@ seconds by a page whose loop was supposedly running.
 
 ### One thing at a time
 
-<!-- covers: app/main.js @ 4528c02be0fe -->
+<!-- covers: app/main.js @ 89188a25e673 -->
 
 One Game Boy, one joypad, one canvas — so a great deal of this app is about
 making sure two things are never driving them at once. There are three claims,
@@ -5252,7 +5282,7 @@ before a step is taken, so a stopped walk does not move at all.
 
 ### What is behind the Gym door, before you open it
 
-<!-- covers: gen2/romdata.js gen2/engine.js app/rows.js @ 981581dd74d7 -->
+<!-- covers: gen2/romdata.js gen2/engine.js app/rows.js @ b0b363b62c89 -->
 
 The Gym row could say where the Gym is and who is in it. **Whether it is worth
 going** is two facts the cartridge has had all along, and neither of them
@@ -5365,7 +5395,7 @@ is the noise this list exists to replace.
 
 ### Leading with the one that can answer the room
 
-<!-- covers: gen2/romdata.js gen2/menus.js gen2/journey.js @ 9c09cc64f31e -->
+<!-- covers: gen2/romdata.js gen2/menus.js gen2/journey.js @ c41b10fe918d -->
 
 **Gen 2 sends out slot one and asks nobody.** So the party's order decides the
 first battle of a Gym — and since the pass before, the pilot has known exactly
@@ -5545,7 +5575,7 @@ reads all seven out of both files and compares them, which is the repair for
 
 ### Gates: asking the cartridge what it wants
 
-<!-- covers: gen2/state.js gen2/journey.js titles/crystal.js @ 1150175428a0 -->
+<!-- covers: gen2/state.js gen2/journey.js titles/crystal.js @ a28846b76908 -->
 
 Two kinds of closed road, and the difference is everything:
 
@@ -5654,7 +5684,7 @@ a conversation.
 
 ### The card behind a party row
 
-<!-- covers: app/rows.js app/main.js index.html @ ff4820acbe66 -->
+<!-- covers: app/rows.js app/main.js index.html @ abc0a6462f50 -->
 
 Two questions the game itself will not answer about a Pokémon you are
 carrying — *what is this made of* and *what is it about to become* — and both
@@ -5743,7 +5773,7 @@ at body size.
 
 ### Running the list
 
-<!-- covers: app/rows.js app/main.js @ ffa68b898757 -->
+<!-- covers: app/rows.js app/main.js @ bf96c4ff1b0e -->
 
 The app has spent forty passes learning to answer one question — *what can the
 pilot do here, and which of those is worth most?* — and twenty showing the
@@ -5867,7 +5897,7 @@ to deposit your last Pokémon.
 
 ### The settings and the save card
 
-<!-- covers: index.html app/main.js @ 9406f5cea3d0 -->
+<!-- covers: index.html app/main.js @ c929fa075c7d -->
 
 The pilot's own list got a glyph column, shorter names and a slot to fill in
 v165. These two cards did not, and reading them found that they had a different
@@ -6302,7 +6332,7 @@ this needed upstream rather than in the vendored copy.
 The options went through this room first on purpose: the small half, standing up
 the whole path — config, rules, anonymous sign-in, merge, debounce — with a
 slider position at stake rather than a save. Three things travel this way, and
-all three merge: the remembered options, the 100 addresses out of the symbol
+all three merge: the remembered options, the 101 addresses out of the symbol
 file, and the notes two devices use to introduce their screens to each other.
 The save goes over the same room and does *not* merge, which is the next
 section.
@@ -6495,7 +6525,7 @@ they have been installed.
 
 ### Watching the other device's screen
 
-<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ c028b044b38d -->
+<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ 9ad87d2de8f3 -->
 
 One device shows its screen; the other watches it, and plays it if the first
 one says so. The picture goes straight between them over WebRTC and never
@@ -6771,16 +6801,16 @@ and change what a past handover said.
 
 ### The symbol file stops travelling
 
-The `.sym` is 1.8MB and this app looks up **100 symbols in it**. So the room
-carries those 100 lines — about a kilobyte, `{name: [bank, addr]}` — and a
+The `.sym` is 1.8MB and this app looks up **101 symbols in it**. So the room
+carries those 101 lines — about a kilobyte, `{name: [bank, addr]}` — and a
 second device needs the ROM and nothing else. `Symbols.fromDigest` builds a
 table that behaves like the parsed file; `size` is the only honest difference,
-and it reports 100 because that is how many symbols it has.
+and it reports 101 because that is how many symbols it has.
 
 ```mermaid
 flowchart LR
     F["the .sym file<br/>1.8MB, 58,456 symbols"] --> S["Symbols<br/>the parsed table"]
-    S -->|"digest(SHARED_SYMBOLS)"| D["{name: [bank, addr]}<br/>100 entries, ~1KB"]
+    S -->|"digest(SHARED_SYMBOLS)"| D["{name: [bank, addr]}<br/>101 entries, ~1KB"]
     D --> R[["the room"]]
     R --> D2["the same 47 entries"]
     D2 -->|"Symbols.fromDigest"| T["a table that behaves<br/>like the parsed file"]
@@ -7108,7 +7138,7 @@ about that code did not.
 
 ### The other checks
 
-<!-- covers: tools/check-app @ 53c6fb352b78 -->
+<!-- covers: tools/check-app @ 9d1f327e4f39 -->
 
 `tools/check-app` runs everything that can be verified without a ROM:
 

@@ -15,8 +15,8 @@ what CI checks and what the pre-commit hook blocks on.
 ```mermaid
 flowchart LR
     E[an edit] --> H{{".githooks/pre-commit"}}
-    H --> T["./run-tests<br/>941 behaviour tests"]
-    H --> C["tools/check-app<br/>31 groups"]
+    H --> T["./run-tests<br/>945 behaviour tests"]
+    H --> C["tools/check-app<br/>32 groups"]
     H --> D["tools/docs-check<br/>46 tracked sections"]
     T --> OK[commit]
     C --> OK
@@ -39,7 +39,7 @@ git config core.hooksPath .githooks
 ./run-tests -v         # notes and stack lines
 ```
 
-941 tests in 27 files, and what each file is about says more than the count:
+945 tests in 27 files, and what each file is about says more than the count:
 
 | file | tests | what it pins down |
 | --- | --- | --- |
@@ -47,7 +47,7 @@ git config core.hooksPath .githooks
 | `rows.mjs` | 147 | what every row and offer says, when its button works, and what the runner picks |
 | `menus.mjs` | 73 | the order the START menu is driven in, and what is closed between tries |
 | `battle.mjs` | 84 | whose turn it is, which Pokémon is out, and a win from a whiteout |
-| `collision.mjs` | 34 | which tiles can be walked, and which have somebody standing on them |
+| `collision.mjs` | 38 | which tiles can be walked, and which have somebody standing on them |
 | `capture.mjs` | 41 | weakening, ball choice, the party prompt, and the refusals before a throw |
 | `grind.mjs` | 22 | what a grind says while it works, and the bounds that make it stop |
 | `clock.mjs` | 22 | waiting for an hour, and telling a clock that will not move from a game that is not running |
@@ -127,15 +127,15 @@ section gives. Everything by hand runs against a local build.
 
 ```mermaid
 flowchart BT
-    C["the app"] --> T["./run-tests<br/>941 behaviour tests"]
-    C --> A["tools/check-app<br/>31 groups"]
+    C["the app"] --> T["./run-tests<br/>945 behaviour tests"]
+    C --> A["tools/check-app<br/>32 groups"]
     C --> D["tools/docs-check<br/>46 tracked sections"]
     C --> V["tools/coverage<br/>what the suite never runs"]
     T --> M["tools/mutate<br/>break a line, see who notices"]
     A --> K["tools/check-checks<br/>break each group's own subject"]
     T -.-> V
     M -.->|"survivors, by file"| R(["the suite is load-bearing"])
-    K -.->|"31 of 31 bite"| R2(["the groups are awake"])
+    K -.->|"32 of 32 bite"| R2(["the groups are awake"])
     V -.->|"62%, and where"| R3(["the gaps are known"])
 ```
 
@@ -464,7 +464,7 @@ is wrong, not the check. It is not in the pre-commit hook: it runs `check-app`
 about fifty times, which is the wrong price for every commit and the right
 one for the commit that changes a check.
 
-`tools/check-app` is thirty-one groups, each one a class of mistake that parses
+`tools/check-app` is thirty-two groups, each one a class of mistake that parses
 fine and is wrong at run time:
 
 | group | asserts |

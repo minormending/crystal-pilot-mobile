@@ -686,6 +686,30 @@ export const gen2 = {
   // COLL_LONG_GRASS $14, COLL_TALL_GRASS $18, and the two unused mirrors the
   // engine still treats as grass.
   grassTiles: [0x10, 0x14, 0x18, 0x1c],
+  // What `CollisionPermissionTable` answers, from
+  // constants/collision_constants.asm. Land and water are 0 and 1 on every
+  // cartridge measured; **a wall is `$0f` on Crystal and `%10` -- two -- on
+  // Polished Crystal**, which is one number and the whole difference
+  // between a map with walls in it and a room the pilot thinks is open
+  // floor. It read the table correctly and compared it against the wrong
+  // constant, so every wall came back walkable.
+  permissions: { land: 0x00, water: 0x01, wall: 0x0f },
+  // --- who is standing where -----------------------------------------------
+  // `wMapObjects` is the map's plan -- one fixed-size entry per object it
+  // places -- and `wObjectStructs` is the game's present tense, one per
+  // object it has actually spawned, the player's first. Both strides are the
+  // cartridge's: Polished Crystal writes 21 map objects of 14 bytes where
+  // Crystal writes 16 of 16, and its spawned struct is 34 bytes where
+  // Crystal's is 40.
+  //
+  // Measured against the running game rather than counted off the macro:
+  // with the player at (4,6) the struct at 0x22 × 2 reads (5,6), which is
+  // the girl standing next to them.
+  mapObjects: { count: 16, bytes: 0x10, sprite: 1, y: 2, x: 3, type: 8,
+                // Both arrays put the map's origin four tiles in.
+                origin: 4 },
+  objectStructs: { count: 13, bytes: 0x28, sprite: 0, placed: 1,
+                   x: 0x10, y: 0x11 },
 
   // --- battles -------------------------------------------------------------
   // wBattleMode: 0 none, 1 wild, 2 trainer.

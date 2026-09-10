@@ -114,6 +114,12 @@ def mutations(root):
         "layers": lambda: edit("gen2/state.js", sub(
             "import", "import { describeRows } from '../app/rows.js';\nimport")),
         "seam": lambda: edit("gen2/state.js", append("\n// probe: gb.core.thing()\n")),
+        # An async decision used as a condition without `await`. A Promise is
+        # truthy, so this reads "yes, calibrated" every single time and then
+        # paths through walls with a stale decode.
+        "awaited": lambda: edit("gen2/nav.js", sub(
+            "if (await collision.calibrate(wram)) break;",
+            "if (collision.calibrate(wram)) break;")),
         # Indented, so inside something, and an inline arrow that nothing can
         # take off again -- exactly the shape startLoop had.
         # An export with no reader anywhere -- the shape saves.restore had.

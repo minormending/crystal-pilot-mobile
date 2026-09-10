@@ -177,7 +177,7 @@ export class Nav {
       let wram = null;
       for (let attempt = 0; attempt < 3; attempt++) {
         wram = await this.gb.readWram();
-        if (collision.calibrate(wram)) break;
+        if (await collision.calibrate(wram)) break;
         wram = null;
         await this.gb.run(8);
       }

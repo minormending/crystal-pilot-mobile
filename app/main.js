@@ -2952,7 +2952,7 @@ async function walkToTap(tx, ty) {
     // Checked against the game's own wPlayerTileCollision every time rather
     // than once at startup: a wrong decode does not throw, it paths through
     // walls, and the tileset changes with the map.
-    if (!collision.calibrate(wram)) {
+    if (!await collision.calibrate(wram)) {
       setStatus('could not read the map — the collision decode did not check out',
                 'bad');
       return;

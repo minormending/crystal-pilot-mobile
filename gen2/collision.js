@@ -23,8 +23,8 @@ import { gen2 } from './engine.js';
 
 const b = GameBoy.byteAt;
 
-// data/collision/collision_permissions.asm, via CollisionPermissionTable.
-const LAND = 0x00, WATER = 0x01, WALL = 0x0f;
+// What the permission table's answers *mean* is `engine.permissions` -- a
+// wall is $0f on Crystal and 2 on Polished Crystal.
 // High-nybble groups from constants/collision_constants.asm.
 const WARP_LO = 0x70, WARP_HI = 0x7f;
 const LEDGE_LO = 0xa0, LEDGE_HI = 0xbf;
@@ -60,10 +60,9 @@ export const DELTA = {
 // written out rather than looked up because a .sym need only carry the labels
 // the app asks for by name, and this is layout: the same numbers for every
 // cartridge built from the same engine.
-const MAP_OBJECT_COUNT = 16, MAP_OBJECT_BYTES = 0x10;
-const MAP_OBJECT_SPRITE = 1, MAP_OBJECT_Y = 2, MAP_OBJECT_X = 3;
-const MAP_OBJECT_TYPE = 8;
-const MAP_OBJECT_ORIGIN = 4;
+// The strides and field offsets of both object arrays are
+// `engine.mapObjects` and `engine.objectStructs` -- Polished Crystal's are
+// 14 and 34 bytes where Crystal's are 16 and 40.
 
 // wObjectStructs: thirteen 40-byte structs, the player's first, one per object
 // the game has actually *spawned*. Same +4 origin, and the proof is the player:
@@ -73,10 +72,14 @@ const MAP_OBJECT_ORIGIN = 4;
 // `PLACED` is the link back to wMapObjects -- wObject1MapObjectIndex -- and it
 // is what makes the two arrays answerable together: the struct says where
 // something *is*, and the entry it points at says what it *is*.
-const STRUCT_COUNT = 13, STRUCT_BYTES = 0x28;
-const STRUCT_SPRITE = 0, STRUCT_PLACED = 1, STRUCT_X = 0x10, STRUCT_Y = 0x11;
+
 
 const CANDIDATE_OFFSETS = [[4, 4], [0, 0], [4, 0], [0, 4], [2, 2], [6, 6], [5, 5], [3, 3]];
+
+// The name a cartridge gives the collision table it unpacked into work RAM.
+// Its *bank* comes from the symbol file, so this is a name and not an
+// address -- see the constructor.
+const UNPACKED_COLLISION = 'wDecompressedCollisions';
 
 export class CollisionMap {
   constructor(symbols, gb, engine = null) {
@@ -100,6 +103,23 @@ export class CollisionMap {
       structs: symbols.has('wObjectStructs')
         ? symbols.addr('wObjectStructs') : null,
     };
+    // **Where the tileset's collision table actually is.** Crystal keeps it
+    // in the ROM and points at it with `wTilesetCollisionAddress`, so that
+    // pointer is the answer. Polished Crystal LZ-compresses the same table
+    // -- `lab_collision.bin.lzp`, 79 bytes for 248 -- and unpacks it at map
+    // load into `wDecompressedCollisions`, a work-RAM bank it does not keep
+    // mapped. Following its ROM pointer reads the compressed bytes, and the
+    // walkable grid came out an alternating checkerboard.
+    //
+    // **Derived, not declared**: a cartridge that names the buffer has one,
+    // and one that does not is reading from the ROM. Nothing in a profile
+    // says which, and the bank is the symbol file's rather than a number
+    // that is true of one release.
+    this.unpacked = symbols.has(UNPACKED_COLLISION)
+      ? { bank: symbols.bank(UNPACKED_COLLISION),
+          addr: symbols.addr(UNPACKED_COLLISION) }
+      : null;
+    this.unpackedBytes = null;
     this.permTable = symbols.addr('CollisionPermissionTable');
     this.permBank = symbols.bank('CollisionPermissionTable');
     this.off = [4, 4];
@@ -131,6 +151,11 @@ export class CollisionMap {
   collisionAt(tx, ty, off = this.off) {
     const block = this.blockAt(tx, ty, off);
     const quadrant = ((ty + off[1]) & 1) * 2 + ((tx + off[0]) & 1);
+    const at = block * 4 + quadrant;
+    // The unpacked table when this cartridge has one, and it is indexed from
+    // its own start rather than through the ROM pointer -- the pointer names
+    // where the *compressed* copy is.
+    if (this.unpackedBytes) return this.unpackedBytes[at] ?? 0;
     const bank = b(this.wram, this.a.tilesetBank);
     const addr = GameBoy.wordLeAt(this.wram, this.a.tilesetAddr);
     return this.gb.romByte(bank, (addr + block * 4 + quadrant) & 0xffff);
@@ -175,14 +200,15 @@ export class CollisionMap {
     const out = [];
     if (this.a.objects === null) return out;
     const w = b(wram, this.a.mapWidth) * 2, h = b(wram, this.a.mapHeight) * 2;
-    for (let i = 0; i < MAP_OBJECT_COUNT; i++) {
-      const at = this.a.objects + i * MAP_OBJECT_BYTES;
-      const sprite = b(wram, at + MAP_OBJECT_SPRITE);
+    const mo = this.e.mapObjects;
+    for (let i = 0; i < mo.count; i++) {
+      const at = this.a.objects + i * mo.bytes;
+      const sprite = b(wram, at + mo.sprite);
       if (!sprite) continue;
-      const x = b(wram, at + MAP_OBJECT_X) - MAP_OBJECT_ORIGIN;
-      const y = b(wram, at + MAP_OBJECT_Y) - MAP_OBJECT_ORIGIN;
+      const x = b(wram, at + mo.x) - mo.origin;
+      const y = b(wram, at + mo.y) - mo.origin;
       if (x < 0 || y < 0 || x >= w || y >= h) continue;
-      out.push({ index: i, sprite, type: b(wram, at + MAP_OBJECT_TYPE) & 0x0f,
+      out.push({ index: i, sprite, type: b(wram, at + mo.type) & 0x0f,
                  x, y });
     }
     return out;
@@ -216,20 +242,21 @@ export class CollisionMap {
     if (this.a.structs === null || this.a.objects === null) return null;
     const out = [];
     const w = b(wram, this.a.mapWidth) * 2, h = b(wram, this.a.mapHeight) * 2;
-    for (let i = 1; i < STRUCT_COUNT; i++) {
-      const at = this.a.structs + i * STRUCT_BYTES;
-      const sprite = b(wram, at + STRUCT_SPRITE);
+    const mo = this.e.mapObjects, st = this.e.objectStructs;
+    for (let i = 1; i < st.count; i++) {
+      const at = this.a.structs + i * st.bytes;
+      const sprite = b(wram, at + st.sprite);
       if (!sprite) continue;
-      const index = b(wram, at + STRUCT_PLACED);
-      const x = b(wram, at + STRUCT_X) - MAP_OBJECT_ORIGIN;
-      const y = b(wram, at + STRUCT_Y) - MAP_OBJECT_ORIGIN;
+      const index = b(wram, at + st.placed);
+      const x = b(wram, at + st.x) - mo.origin;
+      const y = b(wram, at + st.y) - mo.origin;
       if (x < 0 || y < 0 || x >= w || y >= h) continue;
       // The type comes from the placement it points at, because a struct does
       // not carry one. A struct pointing outside the array is not trusted for
       // its type and is still trusted for its tile: something is standing
       // there whatever it turns out to be.
-      const type = index < MAP_OBJECT_COUNT
-        ? b(wram, this.a.objects + index * MAP_OBJECT_BYTES + MAP_OBJECT_TYPE)
+      const type = index < mo.count
+        ? b(wram, this.a.objects + index * mo.bytes + mo.type)
           & 0x0f
         : null;
       out.push({ index, sprite, type, x, y });
@@ -339,8 +366,13 @@ export class CollisionMap {
    * If the derived offset does not match the game's own value, try the others
    * rather than pathfinding against garbage.
    */
-  calibrate(wram) {
+  async calibrate(wram) {
     this.use(wram);
+    // Re-read every time rather than once: the table is per *tileset*, and
+    // the tileset changes with the map. 4KB off the core's own memory.
+    if (this.unpacked) {
+      this.unpackedBytes = await this.gb.readWramBank(this.unpacked.bank);
+    }
     const px = b(wram, this.a.x), py = b(wram, this.a.y);
     const truth = b(wram, this.a.playerTile);
     for (const off of CANDIDATE_OFFSETS) {
@@ -358,8 +390,8 @@ export class CollisionMap {
 
 
   // --- classification --------------------------------------------------------
-  isWall(coll) { return this.permission(coll) === WALL; }
-  isWater(coll) { return this.permission(coll) === WATER; }
+  isWall(coll) { return this.permission(coll) === this.e.permissions.wall; }
+  isWater(coll) { return this.permission(coll) === this.e.permissions.water; }
   static isLedge(coll) { return coll >= LEDGE_LO && coll <= LEDGE_HI; }
   static isWarp(coll) { return coll >= WARP_LO && coll <= WARP_HI; }
 

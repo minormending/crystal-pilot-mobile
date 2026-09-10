@@ -343,6 +343,20 @@ export function symbols() {
  * A copy of an interface has to be maintained; a narrower instance of it does
  * not.
  */
+/**
+ * The same symbol table with one more name in it.
+ *
+ * The counterpart of `blindTo`, and it exists for the same reason: a
+ * cartridge that names something Crystal does not -- a collision table it
+ * unpacked into work RAM, say -- is a state worth testing, and building one
+ * by hand is how a fake comes to answer differently from the real class.
+ */
+export function withSymbol(sym, name, bank, addr) {
+  const out = Object.create(Symbols.prototype);
+  out.map = new Map([...sym.map, [name, { bank, addr }]]);
+  return out;
+}
+
 export function blindTo(sym, ...names) {
   const gone = new Set(names);
   const out = Object.create(Symbols.prototype);

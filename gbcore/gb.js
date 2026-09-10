@@ -22,6 +22,12 @@ const GB_WRAM_START = 0xc000;   // where work RAM begins in the Game Boy's map
 // this window is not a value byteAt can read -- it indexes the snapshot, so an
 // address past the end reads `undefined` rather than failing.
 const GB_WRAM_BYTES = 0x2000;
+// One switchable work-RAM bank. A Game Boy Color has eight of them and only
+// two are in the Game Boy's address space at once -- bank 0 at $C000 and one
+// of banks 1-7 at $D000 -- but the core keeps all eight laid end to end, so
+// bank N begins N of these into `workRam`. Which is what makes a table the
+// game parked in a bank nobody has mapped readable at all.
+const GB_WRAM_BANK_BYTES = 0x1000;
 
 // The smallest call worth timing. Below this the per-call overhead on a
 // visible page is most of what is measured; at this size it is a few per cent.
@@ -196,6 +202,26 @@ export class GameBoy {
       return section.subarray(this.workRam, this.workRam + bytes);
     }
     return section;
+  }
+
+  /**
+   * One work-RAM bank, whichever bank is currently mapped.
+   *
+   * `readWram` takes the Game Boy's *view*: bank 0, then whichever of 1-7 is
+   * switched in at $D000. A table the game decompressed into a bank it does
+   * not keep mapped is invisible from there, and Polished Crystal's tileset
+   * collision is exactly that -- LZ-compressed in the ROM and unpacked into
+   * `wDecompressedCollisions` at bank 5, which is never the mapped bank
+   * during play. Read at the ROM pointer it comes back as compressed bytes
+   * and every tile decodes to nonsense.
+   *
+   * The core's linear memory has all eight banks in order, so this is the
+   * same normalisation `readWram` does at a different offset.
+   */
+  async readWramBank(bank, bytes = GB_WRAM_BANK_BYTES) {
+    const at = this.workRam + bank * GB_WRAM_BANK_BYTES;
+    const section = await this.core._getWasmMemorySection(at, at + bytes);
+    return section.length > bytes ? section.subarray(at, at + bytes) : section;
   }
 
   /**

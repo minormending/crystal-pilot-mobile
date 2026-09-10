@@ -570,7 +570,7 @@ export class Journey {
     let last = null;
     for (let i = 0; i < tries; i++) {
       const wram = await this.gb.readWram();
-      if (this.collision.calibrate(wram)) {
+      if (await this.collision.calibrate(wram)) {
         const at = this.collision.playerPos(wram);
         const seen = `${this.collision.off}|${at}`;
         if (last === seen) return wram;

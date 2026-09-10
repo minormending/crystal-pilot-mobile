@@ -83,6 +83,20 @@ export const polished = {
       formSpeciesBit: 0x20,
       monFields: [[0, 1], [2, 1], [3, 1], [4, null], [1, 1], [5, 4]],
     },
+    // 21 map objects of 14 bytes, and a spawned struct of 34 -- against
+    // Crystal's 16 of 16 and 40. Measured on the running game: with the
+    // player at (4,6) the struct 34 × 2 bytes in reads (5,6), which is the
+    // girl standing beside them. At Crystal's stride nothing read at all,
+    // so the walker could not see a person to walk around.
+    mapObjects: { count: 21, bytes: 0x0e, sprite: 1, y: 2, x: 3, type: 8,
+                  origin: 4 },
+    objectStructs: { count: 13, bytes: 0x22, sprite: 0, placed: 1,
+                     x: 0x10, y: 0x11 },
+    // **A wall is 2 here, not `$0f`.** Its `WALL_TILE` is `%10` where
+    // Crystal's is `$0f`, so the permission table was read perfectly and
+    // compared against the wrong number -- every wall in the game came back
+    // walkable, and a lab full of bookshelves read as open floor.
+    permissions: { land: 0x00, water: 0x01, wall: 0x02 },
     // Its attributes block stops after the scripts: `db border, height,
     // width`, `dba BlockData, MapScriptHeader`, `db connections`. So the
     // connections mask is at 9 where Crystal keeps an events pointer, and
