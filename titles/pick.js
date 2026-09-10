@@ -20,6 +20,7 @@ import { validateTitle } from './contract.js';
 import { Crystal, crystal } from './crystal.js';
 import { CrystalEarly, crystalEarly } from './crystal-early.js';
 import { Generic, generic } from './generic.js';
+import { Polished, polished } from './polished.js';
 
 /**
  * Every profile, most specific first. The last one must match anything.
@@ -28,6 +29,11 @@ export const TITLES = [
   { ...crystal, drive: Crystal,
     matches: ({ header, symbols }) =>
       header.title === 'PM_CRYSTAL' && symbols.has('JohtoGrassWildMons') },
+  // `PKPCRYSTAL` is this cartridge's own header string rather than a
+  // pokecrystal hack keeping Crystal's, so the name alone identifies it --
+  // there is no second condition to add that would say more.
+  { ...polished, drive: Polished,
+    matches: ({ header }) => header.title === 'PKPCRYSTAL' },
   // Never wins a selection; reached with ?title=crystal-early. An instrument
   // for seeing what a partly described cartridge looks like.
   { ...crystalEarly, drive: CrystalEarly, matches: () => false },

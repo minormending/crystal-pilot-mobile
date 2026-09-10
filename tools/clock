@@ -29,7 +29,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 import { RomData } from '../gen2/romdata.js';
-import { openCartridge } from './cartridge.mjs';
+import { engineOf, openCartridge } from './cartridge.mjs';
 import { GameState } from '../gen2/state.js';
 import { gen2 } from '../gen2/engine.js';
 
@@ -41,7 +41,10 @@ const DEV = join(HERE, '..', 'dev');
 const cart = openCartridge(DEV);
 if (!cart) process.exit(0);
 const { rom, symbols, gb } = cart;
-const data = new RomData(symbols, gb, []);
+// The profile the app would pick for this cartridge, so a tool and the app
+// read it the same way rather than two ways.
+const { title, engine } = engineOf(cart);
+const data = new RomData(symbols, gb, [], engine);
 const state = new GameState(symbols, gen2);
 
 const args = process.argv.slice(2);

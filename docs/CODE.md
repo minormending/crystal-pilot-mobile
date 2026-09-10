@@ -114,9 +114,9 @@ of the subtleties in sections 6 and 7.
 
 ## 2. The shape of it
 
-<!-- covers-api: app/main.js gen2/journey.js titles/crystal.js gen2/tasks.js gen2/nav.js gen2/world.js gen2/collision.js gen2/state.js gen2/romdata.js gen2/symbols.js gbcore/gb.js @ 13c90560ce4c -->
+<!-- covers-api: app/main.js gen2/journey.js titles/crystal.js gen2/tasks.js gen2/nav.js gen2/world.js gen2/collision.js gen2/state.js gen2/romdata.js gen2/symbols.js gbcore/gb.js @ 5d8607f4ab1c -->
 
-Twenty-nine modules, in four directories, and the directories are the design:
+Thirty modules, in four directories, and the directories are the design:
 **an import may point down this list and never up.**
 
 | | holds | may import from |
@@ -182,6 +182,7 @@ flowchart LR
         contract["contract.js<br/>what a profile has to be"]
         title["crystal.js<br/>Crystal's maps and errands"]
         early["crystal-early.js<br/>one half described"]
+        pol["polished.js<br/>the one that broke the assumptions"]
         gener["generic.js<br/>one nobody has described"]
     end
     subgraph gen2["gen2/ — any Gen 2 cartridge"]
@@ -275,6 +276,7 @@ flowchart LR
 | `contract.js` | "is this profile usable, and what are its engine numbers?" |
 | `crystal.js` | "start a new game", "fetch Poké Balls", "what is map 26.1 called?" |
 | `crystal-early.js` | the same questions, answered for two maps out of ten |
+| `polished.js` | one table's layout and two lists of words, for the hack that changed everything else |
 | `generic.js` | the same questions, answered "I was not told" |
 | `saves.js` | "keep this in slot 2", "put that .sav into the cartridge" |
 | `rows.js` | "why is that button greyed out?" |
@@ -728,7 +730,7 @@ and in `bootstrap.js`, with nothing able to notice if they drifted.
 
 ### `romdata.js` — what the cartridge knows
 
-<!-- covers: gen2/romdata.js @ 7b54b6213b56 -->
+<!-- covers: gen2/romdata.js @ d8930093503f -->
 
 Species names, item names, move names, wild-encounter tables, move power, the
 type chart, and what a species turns into. All read out of the ROM, not shipped
@@ -1778,7 +1780,7 @@ mechanism's evidence spans two runs rather than one.
 
 ### The bigger number is not the harder hit
 
-<!-- covers: gen2/romdata.js gen2/engine.js gen2/battle.js @ 6997d626a2fb -->
+<!-- covers: gen2/romdata.js gen2/engine.js gen2/battle.js @ 396451ddcc94 -->
 
 For twenty-three passes the pilot ranked its moves by one number: the `power`
 byte out of the cartridge's move table. `romdata.move()` had been returning the
@@ -1932,7 +1934,7 @@ pilot uses, not a second one beside it. See section 10.
 
 ### Sending out somebody who can touch it
 
-<!-- covers: gen2/battle.js gen2/engine.js @ 7c07951907f7 -->
+<!-- covers: gen2/battle.js gen2/engine.js @ c4c264835e3e -->
 
 The pass before could tell that the Pokémon on the field takes nothing off a
 Ghost, and said so. The remedy it named — *a different Pokémon* — was one the
@@ -2287,7 +2289,7 @@ fainted.
 
 ## 7. Catching something
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ 361181b2fe4e -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ 9a5f0709a931 -->
 
 Catching is the most involved loop, because a Poké Ball's odds turn on how much
 HP is left. Throwing at a full-health target is mostly throwing balls away.
@@ -2450,7 +2452,7 @@ flowchart TD
 
 ## 7a. Five that act on where you already are
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ 21684f3dd208 -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ cb45802d4c33 -->
 
 Grind, hunt and catch all go *looking* for something. These five do the obvious
 thing with the situation you are already in, and take no parameters:
@@ -2721,7 +2723,7 @@ said *trainer battle: lost* **seven times**. One loss, reported seven ways.
 
 ## 7d. The counter, and the money it takes
 
-<!-- covers: gen2/menus.js gen2/state.js titles/crystal.js @ 60ee75b18150 -->
+<!-- covers: gen2/menus.js gen2/state.js titles/crystal.js @ 48901f76e022 -->
 
 Everything the pilot could do until now used what it found. **Shop** walks to a
 mart and buys, which is the first thing it does that spends rather than
@@ -3535,7 +3537,7 @@ after](#8d-a-route-the-game-itself-refuses).
 
 ## 8b. Asking the cartridge what its places are called
 
-<!-- covers: gen2/romdata.js gen2/world.js @ 6065958a0339 -->
+<!-- covers: gen2/romdata.js gen2/world.js @ 284f83a3fa10 -->
 
 The one table that **retires** hand-written data rather than adding to it. A map
 used to be called whatever the title profile said, and everything else was
@@ -4069,7 +4071,7 @@ sent the reader at it.
 
 ## 8h. What a species becomes, and when
 
-<!-- covers: gen2/romdata.js gen2/engine.js @ 1f228942952b -->
+<!-- covers: gen2/romdata.js gen2/engine.js @ c50f72a2630e -->
 
 Two questions a party entry cannot answer: *what will this turn into*, and
 *what is it about to learn*. Both are in one table, because in Gen 2 they are
@@ -4161,7 +4163,7 @@ file says they do.
 
 ## 8i. Reaching an hour
 
-<!-- covers: gen2/jobs.js gen2/engine.js gen2/romdata.js gen2/state.js gbcore/saves.js app/rows.js @ 7a8312aed1e7 -->
+<!-- covers: gen2/jobs.js gen2/engine.js gen2/romdata.js gen2/state.js gbcore/saves.js app/rows.js @ 972d6dc581b0 -->
 
 A third of Johto's grass is behind the clock. HOOTHOOT is on Route 29 after
 dark and nowhere on it at noon, and for four versions the usage guide said the
@@ -4325,6 +4327,85 @@ here — which is precisely what being last means, and it is why the runner may
 take it without that being a way to lose an hour. Skip rides on the same row,
 the way Clear rides on Duel, and is hidden rather than greyed where the
 cartridge will not say which hours are which.
+
+## 8j. A cartridge that changed everything it could
+
+<!-- covers: titles/polished.js gen2/engine.js gen2/romdata.js gen2/state.js gen2/menus.js @ 56fe0bdda254 -->
+
+Polished Crystal is the profile in `docs/DEVELOPING.md`'s hack table described
+as "the generic fallback, and the hardest thing to support properly". It is
+the one that says which of this app's numbers were facts about *Gen 2* and
+which were facts about *Crystal*, because it changed every one of the second
+kind. Working through it moved seven things out of the code and into the
+cartridge, and the last two into a profile.
+
+**It could not be opened at all.** `GameState`'s constructor reads
+`wBattleMenuCursorPosition`, which this cartridge calls
+`wBattleMenuCursorBuffer` — same four values, 1 FIGHT, 2 PKMN, 3 PACK, 4 RUN
+— and `symbols.addr` throws on a name that is not there. One renamed variable
+and the app would not start. `symbols.pick(...names)` is one thing a
+cartridge might call more than one word; `wTilesetCollisionBank`, which this
+one folds into a single `wTilesetDataBank` in front of the whole tileset
+struct, is the other.
+
+**Six things are now read off the cartridge that used to be written here:**
+
+| what | Crystal | Polished Crystal | how it is settled |
+| --- | --- | --- | --- |
+| chart scale | tenths, 05 and 20 | Q4, `$08` and `$20` | the two non-zero values are a half and a double, and must agree |
+| type-name pointers | `dw`, an address | `dr`, `X - @` in one byte | entry 0 and entry 1 both decode, in order |
+| string terminator | `$50` | `$53` | the byte before the second entry's target |
+| party field offsets | DVs at 0x15 | DVs at 0x11 | `wPartyMon1DVs` minus `wPartyMon1` |
+| DV packing | 2 bytes, HP derived | 3 bytes, a nibble a stat | the width of the field |
+| species-name index | entry `id - 1` | entry `id` | a name starts with a letter; `?000?` does not |
+
+None of those needed a profile, and that is the point of each of them: a
+derivation costs one reading of the ROM and covers every hack, where a
+declaration covers the one hack somebody wrote it for.
+
+**Two things could not be derived, and they are `titles/polished.js`.**
+`BaseData` has no species id in front of each entry and no self-describing
+field at all — its 34-byte entry starts with six stats where Crystal's 32-byte
+one starts with an id — so nothing in the ROM says how wide it is or where its
+growth-rate byte sits. And the cartridge's own words are its own: its start
+menu reads Bag, Save, Options, Quit, its berries are Oran and Cheri rather
+than BERRY and PRZCUREBERRY, its ♂ is `$be`, and its type numbering runs end
+to end through nineteen types with FAIRY on the end.
+
+Which makes the profile a short and specific document — a table layout, an
+alphabet, a type numbering, an evolution format, and two lists of item names —
+rather than a description of a game.
+
+### What it still cannot do, and why
+
+**Its trainers are unreadable and the reader says so.** `TrainerGroups` is
+`dba` into banks `$7d` and `$79`, and one of its 148 classes points at
+`$c90f`, which is `wInverGroup` — a party built in WRAM at run time. There is
+no bound to derive; see the trainer-table bullets in section 9.
+
+**Its move effect numbers are its own**, so the pilot's "is this move worth
+swinging" ranking is priced off a table that renumbered underneath it. That
+one is a profile away and the profile has not been written, because it wants a
+map of 250 effects rather than a measurement.
+
+**Ground does not miss Flying**, and this is the interesting one. That row is
+*deliberately absent* from its chart — the source says
+`; db GROUND, FLYING, NO_EFFECT -- checks airborne state instead` — because
+the cartridge decides airborne-ness at battle time from Flying, Levitate and
+Telekinesis together. So the app reads the chart correctly and still prices a
+Ground move against a Flying Pokémon as neutral when the game will do nothing
+at all. `tools/types --verify` reports it, and reporting it is right: it is a
+true thing about how the pilot will behave there.
+
+**And its dialogue is compressed.** `macros/scripts/text.asm` compresses a
+string whenever compression saves space, so "was" is nowhere in that ROM while
+being on half its screens. That costs the app nothing — it matches the
+*tilemap*, which is decompressed by the time it is drawn — and it costs
+`check-app phrases` its whole method, which is looking for bytes. The check
+says so rather than reporting every phrase missing. What tells a compressed
+cartridge from a plain one is measured and not in English: **runs of ten or
+more letter bytes**, of which Crystal has 13180, the Dutch build 14798,
+PokemonAmbrosia 23182 — and Polished Crystal 174.
 
 ## 9. The interface
 
@@ -5023,7 +5104,7 @@ before a step is taken, so a stopped walk does not move at all.
 
 ### What is behind the Gym door, before you open it
 
-<!-- covers: gen2/romdata.js gen2/engine.js app/rows.js @ 7823045fdb6d -->
+<!-- covers: gen2/romdata.js gen2/engine.js app/rows.js @ dbf3e8fd18d0 -->
 
 The Gym row could say where the Gym is and who is in it. **Whether it is worth
 going** is two facts the cartridge has had all along, and neither of them
@@ -5136,7 +5217,7 @@ is the noise this list exists to replace.
 
 ### Leading with the one that can answer the room
 
-<!-- covers: gen2/romdata.js gen2/menus.js gen2/journey.js @ 744777408d87 -->
+<!-- covers: gen2/romdata.js gen2/menus.js gen2/journey.js @ 4bb3415918a1 -->
 
 **Gen 2 sends out slot one and asks nobody.** So the party's order decides the
 first battle of a Gym — and since the pass before, the pilot has known exactly
@@ -6879,7 +6960,7 @@ about that code did not.
 
 ### The other checks
 
-<!-- covers: tools/check-app @ 1ceb6877bede -->
+<!-- covers: tools/check-app @ 4a97cc15fe39 -->
 
 `tools/check-app` runs everything that can be verified without a ROM:
 

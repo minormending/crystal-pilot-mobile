@@ -13,36 +13,16 @@
 // one after another, each ended by "@" -- and reading them at a fixed stride
 // drifts a character further out with every entry: ULTRA BALL came back as
 // "LTRA BALL", GREAT BALL as "AT BALL".
+// The fallback, for a cartridge with no name table to measure one off. What
+// this cartridge actually ends a name with is `terminator()`, and everything
+// else about its alphabet -- the letter blocks, the ligature, the line
+// breaks, the punctuation -- is `engine.alphabet`, so a hack that moved them
+// says so in one place. Polished Crystal moved all of them.
 const NAME_TERMINATOR = 0x50;
-// The charmap's one ligature that shows up in item names.
-const POKE_LIGATURE = 0x54;
-// The rest of charmap.asm that turns up in a name. Without these, every byte
-// here decoded as "?" -- and five of them are in species names, which is not a
-// cosmetic problem: NIDORAN-female and NIDORAN-male both came back "NIDORAN?",
-// so the species picker drew two identical chips and hunting for one of them
-// stopped at the other. Route 35 and Route 36 both carry the pair.
-//
-// Measured out of the cartridge rather than copied hopefully: 0xe0 in
-// FARFETCH'D and KING'S ROCK, 0xe3 in HO-OH, 0xe8 in MR.MIME, GUARD SPEC.,
-// EXP.SHARE and S.S.TICKET, 0xef and 0xf5 in the two NIDORAN. The others are
-// here because they are in the same block of the charmap and a name that uses
-// one would have had the same silent fate.
-const PUNCTUATION = {
-  0xe0: "'", 0xe3: '-', 0xe6: '?', 0xe7: '!', 0xe8: '.',
-  0xe9: '&', 0xea: 'é', 0xef: '\u2642', 0xf1: '×', 0xf3: '/',
-  0xf4: ',', 0xf5: '\u2640',
-};
 // The list ends at $FF. Not an engine field: a terminator is the shape of the
 // table rather than a size in it, and a cartridge that used a different one
 // would need a different scan, not a different number.
 const TABLE_END = 0xff;
-// The bytes Gen 2 uses to break a line, which inside a *name* mean a space: a
-// landmark name is written to fit a two-line sign. $1f is the one landmark
-// names use -- read off "NEW BARK TOWN", whose bytes are
-// `8d 84 96 7f 81 80 91 8a 1f 93 8e 96 8d 50`, so the break sits exactly where
-// the sign wraps. $4e and $4f are the ones ordinary text uses; they are here
-// because a name is text and one of them will turn up in a hack.
-const LINE_BREAKS = new Set([0x1f, 0x4e, 0x4f]);
 // How far to scan the item table when asked for an id by name. Crystal has 250
 // items; the scan stops early at the first entry with no name, which is what
 // reading past the table gives. A bound rather than a count, so it is here
@@ -69,32 +49,38 @@ const LANDMARK_BYTES = 4, LANDMARK_NAME = 2, LANDMARK_NAME_MAX = 24;
  * Not exported: the only caller is `_nameRun` two hundred lines down, and an
  * export nothing outside the module reads is a wider surface for nothing.
  */
-function isNameByte(b) {
-  return (b >= 0x80 && b <= 0xb9) || b === 0x7f || LINE_BREAKS.has(b)
-    || b === POKE_LIGATURE || PUNCTUATION[b] !== undefined
-    || (b >= 0xf6 && b <= 0xff && b !== TABLE_END);
+function isNameByte(b, a) {
+  return (b >= a.upper[0] && b <= a.lower[1]) || b === a.space
+    || a.breaks.includes(b) || b === a.ligature
+    || a.punctuation[b] !== undefined
+    || (b >= a.digits[0] && b <= a.digits[1] && b !== TABLE_END);
 }
 
 /** The game's own character encoding, as far as names use it. */
-export function decodeText(bytes, end = NAME_TERMINATOR) {
+export function decodeText(bytes, end = NAME_TERMINATOR, alphabet = null) {
+  const a = alphabet || gen2.alphabet;
+  const breaks = new Set(a.breaks);
   let out = '';
   for (const b of bytes) {
     // "@" terminates -- $50 on Crystal, and whatever this cartridge measured
     // (see `terminator`). Crystal's is honoured either way, because a
     // cartridge that moved the terminator did not put a letter at $50.
     if (b === end || b === NAME_TERMINATOR) break;
-    if (b === POKE_LIGATURE) out += 'POKé';      // one byte, four letters
-    else if (b === 0x7f) out += ' ';
+    if (b === a.ligature) out += 'POKé';         // one byte, four letters
+    else if (b === a.space) out += ' ';
     // A line break inside a *name* is a space. Landmark names are written to
     // fit a two-line sign -- "NEW BARK<line>TOWN" -- and reading the break as
     // an unknown byte put a question mark in the middle of half the towns in
     // Johto.
-    else if (LINE_BREAKS.has(b)) out += ' ';
-    else if (PUNCTUATION[b] !== undefined) out += PUNCTUATION[b];
-    else if (b >= 0x80 && b <= 0x99) out += String.fromCharCode(65 + b - 0x80);
-    else if (b >= 0xa0 && b <= 0xb9) out += String.fromCharCode(97 + b - 0xa0);
-    else if (b >= 0xf6 && b <= 0xff) out += String.fromCharCode(48 + b - 0xf6);
-    else out += '?';
+    else if (breaks.has(b)) out += ' ';
+    else if (a.punctuation[b] !== undefined) out += a.punctuation[b];
+    else if (b >= a.upper[0] && b <= a.upper[1]) {
+      out += String.fromCharCode(65 + b - a.upper[0]);
+    } else if (b >= a.lower[0] && b <= a.lower[1]) {
+      out += String.fromCharCode(97 + b - a.lower[0]);
+    } else if (b >= a.digits[0] && b <= a.digits[1]) {
+      out += String.fromCharCode(48 + b - a.digits[0]);
+    } else out += '?';
   }
   return out.trim();
 }
@@ -176,7 +162,7 @@ export class RomData {
     const { bank, addr } = this.names;
     const at = addr + (id - 1 + this._nameShift()) * this.e.nameLength;
     const name = decodeText(this._read(bank, at, this.e.nameLength),
-                            this.terminator());
+                            this.terminator(), this.e.alphabet);
     this._species.set(id, name);
     return name;
   }
@@ -257,7 +243,7 @@ export class RomData {
     // file is pointing somewhere that is not a name table -- and `decodeText`
     // will happily turn any bytes at all into a string of question marks,
     // which reads like an answer.
-    return ended ? decodeText(bytes) : '';
+    return ended ? decodeText(bytes, end, this.e.alphabet) : '';
   }
 
   /**
@@ -296,7 +282,9 @@ export class RomData {
     const end = this.terminator();
     for (let i = 0; i < max; i++) {
       const b = this.gb.romByte(bank, ptr + i);
-      if (b === end || b === NAME_TERMINATOR) return decodeText(bytes, end);
+      if (b === end || b === NAME_TERMINATOR) {
+        return decodeText(bytes, end, this.e.alphabet);
+      }
       if (b === undefined) return '';
       bytes.push(b);
     }
@@ -558,7 +546,7 @@ export class RomData {
       cur += wide;
     }
     if (this.gb.romByte(bank, cur) !== this.e.trainerEnd) return null;
-    return { name: decodeText(bytes), party, next: cur + 1 };
+    return { name: decodeText(bytes, end, this.e.alphabet), party, next: cur + 1 };
   }
 
   /** What one named trainer is carrying, or null. */
@@ -713,9 +701,24 @@ export class RomData {
     const entry = addr + (id - 1) * this.e.baseBytes;
     const at = (o) => this.gb.romByte(bank, entry + o);
     const miss = () => { this._base.set(id, null); return null; };
-    if (at(f.id) !== id) return miss();
     const types = [at(f.types), at(f.types + 1)];
     if (types.some((t) => t === undefined)) return miss();
+    // **The entry says which species it is, where there is a byte for it.**
+    // Crystal writes the id in front of every entry, which is the cheapest
+    // possible proof that the stride and the base agree. Polished Crystal
+    // does not -- its entry begins with the stats -- so a profile that says
+    // `id: null` is asking to be checked another way, and the other way is
+    // that a species has non-zero base stats and types this cartridge can
+    // name. A misaligned read lands in another entry's TM list, which is a
+    // bitfield: zeroes where the stats should be, and type bytes past the
+    // end of the type table.
+    if (f.id === null || f.id === undefined) {
+      const stats = this.e.statNames.map((k, i) => at(f.stats + i));
+      if (stats.some((v) => !v)) return miss();
+      if (types.some((t) => !this.typeName(t))) return miss();
+    } else if (at(f.id) !== id) {
+      return miss();
+    }
     const growth = at(f.growth);
     const out = {
       id,
@@ -728,7 +731,10 @@ export class RomData {
         this.e.statNames.map((k, i) => [k, at(f.stats + i)])),
       catchRate: at(f.catchRate),
       baseExp: at(f.baseExp),
-      hatch: at(f.hatch),
+      // Null where a cartridge packs it somewhere this cannot read it as a
+      // byte: Polished Crystal puts the hatch cycles in a nibble beside the
+      // gender ratio, and half a byte read as a whole one is a number.
+      hatch: f.hatch === null || f.hatch === undefined ? null : at(f.hatch),
       // A key, not a curve. Which experience curve a species is on is a fact
       // about the cartridge; what to call it is the interface's business, and
       // an id the profile has no name for stays a number rather than becoming
@@ -807,7 +813,7 @@ export class RomData {
       // run, and reading on past it is how a table becomes nonsense -- the
       // same refusal `_trainerAt` makes about an unknown party type byte.
       if (!wide) { this._evos.set(id, null); return null; }
-      const into = byte(at + wide - 1);
+      const into = byte(at + wide - spec.intoBack);
       const kind = kindOf[tag];
       const rec = { kind, into };
       if (kind === 'level' || kind === 'stat') rec.level = byte(at + 1);
@@ -986,7 +992,7 @@ export class RomData {
     if (len <= 0 || len >= this.e.typeNameMax) return null;
     for (let i = 0; i < len; i++) {
       const b = this.gb.romByte(bank, from + i);
-      if (b === undefined || !isNameByte(b)) return null;
+      if (b === undefined || !isNameByte(b, this.e.alphabet)) return null;
     }
     return { terminator: this.gb.romByte(bank, to - 1) };
   }

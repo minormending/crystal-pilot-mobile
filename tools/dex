@@ -53,7 +53,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 import { RomData } from '../gen2/romdata.js';
-import { openCartridge } from './cartridge.mjs';
+import { engineOf, openCartridge } from './cartridge.mjs';
 import { GameState } from '../gen2/state.js';
 import { describeDex } from '../app/rows.js';
 import { gen2 } from '../gen2/engine.js';
@@ -66,9 +66,21 @@ const DEV = join(HERE, '..', 'dev');
 const cart = openCartridge(DEV);
 if (!cart) process.exit(0);
 const { rom, symbols, gb } = cart;
-const data = new RomData(symbols, gb, ['JohtoGrassWildMons', 'KantoGrassWildMons']);
+// The profile the app would pick for this cartridge, so a tool and the app
+// read it the same way rather than two ways.
+const { title, engine } = engineOf(cart);
+const data = new RomData(symbols, gb, title ? title.encounters : [], engine);
 
-const COUNT = gen2.speciesCount;
+// This cartridge's numbers, not Crystal's. The tool read every ROM as
+// Crystal until the profile was picked above, and the arithmetic below is
+// the other half of that: Polished Crystal's evolution records are four and
+// five bytes where Crystal's are three and four, so an extent check using
+// Crystal's widths called 176 correct records wrong.
+const COUNT = engine.speciesCount;
+// Case-folded, because a cartridge's own capitalisation is not a fact about
+// Pokemon: Polished Crystal writes Quilava where Crystal writes QUILAVA, and
+// a check comparing the strings said Cyndaquil does not evolve into it.
+const same = (a, b) => String(a).toUpperCase() === String(b).toUpperCase();
 
 /** A species id from a name or a number, or null. */
 function speciesId(text) {
@@ -119,7 +131,11 @@ function show(id, { at = null } = {}) {
   console.log(`     HP ${s.hp}  Atk ${s.atk}  Def ${s.def}  Spd ${s.spd}`
     + `  SpA ${s.satk}  SpD ${s.sdef}   (total ${Object.values(s).reduce((a, b) => a + b, 0)})`);
   console.log(`     catch rate ${base.catchRate} · base exp ${base.baseExp}`
-    + ` · ${base.growth} · hatches in ${base.hatch} cycles`);
+    // The hatch cycles are null on a cartridge that packs them in a nibble
+    // beside the gender ratio, which Polished Crystal does. Left out rather
+    // than printed as "null cycles".
+    + ` · ${base.growth}`
+    + (base.hatch === null ? '' : ` · hatches in ${base.hatch} cycles`));
   if (!ea) {
     console.log('     no readable evolution/learnset entry');
     return;
@@ -145,6 +161,40 @@ function show(id, { at = null } = {}) {
 }
 
 /** One raw pointer out of `EvosAttacksPointers`, for the structural check. */
+/**
+ * How far it is to the next record after this address, or null.
+ *
+ * Every pointer in the table, sorted, so "the next record" is the next
+ * *address* rather than the next species -- see the extent check. Null where
+ * nothing follows, which is the last record in a bank and has no gap to
+ * measure against.
+ */
+let sortedPointers = null;
+function nextRecord(from) {
+  if (!sortedPointers) {
+    // **Every entry in the table, not every species.** The table ends where
+    // its own first pointer lands -- the same self-description the reader
+    // uses -- which on Crystal is 251 entries and on Polished Crystal is
+    // 337: its 291 species and the 46 regional variants that also have
+    // records. Counting only species left the variants' pointers out of
+    // this list, and then "the next record" was the next *species*, with a
+    // variant's whole entry inside the gap.
+    const addr = symbols.addr('EvosAttacksPointers');
+    const entries = Math.max(COUNT, (pointer(1) - addr) / 2);
+    const all = new Set();
+    for (let i = 1; i <= entries; i++) all.add(pointer(i));
+    sortedPointers = [...all].sort((a, b) => a - b);
+  }
+  const next = sortedPointers.find((p) => p > from);
+  return next === undefined ? null : next - from;
+}
+
+/** Whether any entry of the table points exactly here. */
+function isPointer(at) {
+  nextRecord(0);                               // builds the sorted list
+  return sortedPointers.includes(at);
+}
+
 function pointer(id) {
   const bank = symbols.bank('EvosAttacksPointers');
   const addr = symbols.addr('EvosAttacksPointers');
@@ -165,6 +215,14 @@ function verify() {
   let evolveCount = 0, learnCount = 0;
   const growths = new Set();
   const jumbled = new Set();
+  // Records with nothing behind them to measure against -- the last one in a
+  // bank. Counted rather than passed over silently: a check that quietly
+  // stops applying is a check that stopped.
+  let skipped = 0;
+  // Records another entry points into the middle of -- a learnset shared
+  // rather than copied. Counted and named, because it is a real property of
+  // the table and not a thing to pass over.
+  const shared_tails = new Set();
 
   for (let id = 1; id <= COUNT; id++) {
     const name = data.speciesName(id);
@@ -193,7 +251,7 @@ function verify() {
     let last = 0;
     for (const m of ea.learns) {
       if (!(m.level >= 1 && m.level <= 100)) say(`${name}: learns at Lv${m.level}`);
-      if (!(m.move >= 1 && m.move <= gen2.moveCount)) {
+      if (!(m.move >= 1 && m.move <= engine.moveCount)) {
         say(`${name}: learns move #${m.move}, which is not a move`);
       } else if (!data.moveName(m.move)) {
         say(`${name}: learns move #${m.move}, which has no name`);
@@ -219,11 +277,39 @@ function verify() {
     // looks plausible.
     if (id < COUNT) {
       const width = ea.evolves.reduce(
-        (n, e) => n + gen2.evo.bytes[gen2.evo.kind[e.kind]], 0);
-      const got = width + 1 + ea.learns.length * 2 + 1;
-      const want = pointer(id + 1) - pointer(id);
-      if (got !== want) {
-        say(`${name}: decoded ${got} bytes and the next entry starts ${want} on`);
+        (n, e) => n + engine.evo.bytes[engine.evo.kind[e.kind]], 0);
+      // **The next record in address order, not the next species.** On
+      // Crystal those are the same thing and this was written as
+      // `pointer(id + 1)`. Polished Crystal indexes this table by species
+      // *and non-cosmetic variant*, so Alolan Rattata's record sits between
+      // Rattata's and Raichu's -- and the gap to the next species came out
+      // at almost exactly twice the record, for all thirty-four species with
+      // a regional form. The records sit end to end; they are just not in
+      // the order the pointer list is.
+      const want = nextRecord(pointer(id));
+      // Everything but the trailing terminator, which is the part that can
+      // be counted without knowing anything about what follows.
+      const bare = width + 1 + ea.learns.length * 2;
+      // Whether that terminator belongs to this record or the next one --
+      // see `evo.sharedEnd`. Decided by where the *records* are rather than
+      // by reading the byte: if another entry starts exactly where these
+      // moves stop, the terminator sitting there is its "no evolutions"
+      // marker doing double duty, and it is counted there. Reading the byte
+      // instead said Girafarig shared one, because the byte four in is a
+      // terminator and Farigiraf's entry points at it.
+      const got = engine.evo.sharedEnd && isPointer(pointer(id) + bare)
+        ? bare : bare + 1;
+      if (want === null) {
+        skipped++;
+      } else if (got !== want) {
+        // **A pointer inside a record is a shared tail, not a short read.**
+        // Polished Crystal writes `FarigirafEvosAttacks:` four bytes into
+        // Girafarig's entry, so Farigiraf has Girafarig's learnset without a
+        // copy of it. Told apart from a misread by where this record *ends*:
+        // a shared tail leaves the end landing exactly on another pointer,
+        // and a record read at the wrong width does not.
+        if (want < got && isPointer(pointer(id) + got)) shared_tails.add(name);
+        else say(`${name}: decoded ${got} bytes and the next entry starts ${want} on`);
       }
     }
   }
@@ -263,20 +349,24 @@ function verify() {
   // Facts that predate this repository.
   const KNOWN = [
     ['CYNDAQUIL', (ea) => ea.evolves.length === 1 && ea.evolves[0].kind === 'level'
-      && ea.evolves[0].level === 14 && data.speciesName(ea.evolves[0].into) === 'QUILAVA',
+      && ea.evolves[0].level === 14 && same(data.speciesName(ea.evolves[0].into), 'QUILAVA'),
       'evolves into QUILAVA at Lv14'],
     ['TYROGUE', (ea) => ea.evolves.length === 3
       && ea.evolves.every((e) => e.kind === 'stat' && e.level === 20)
       && new Set(ea.evolves.map((e) => e.compare)).size === 3,
       'has three EVOLVE_STAT branches at Lv20'],
-    ['EEVEE', (ea) => ea.evolves.length === 5
-      && ea.evolves.filter((e) => e.kind === 'item').length === 3
-      && ea.evolves.filter((e) => e.kind === 'happiness').length === 2,
-      'has three stone evolutions and two friendship ones'],
+    // Written as "three stones and two friendships", which is Crystal's
+    // Eevee rather than Pokemon's: Polished Crystal gives it eight stones, a
+    // location and the friendship pair, and the check called a correct
+    // decode wrong. What survives every version of the species is that it
+    // has several evolutions and not one of them is by level.
+    ['EEVEE', (ea) => ea.evolves.length >= 5
+      && ea.evolves.every((e) => e.kind !== 'level'),
+      'evolves several ways and never by level'],
     ['POLIWHIRL', (ea) => ea.evolves.some((e) => e.kind === 'trade' && e.item > 0),
       'evolves by trade holding an item'],
     ['MAGIKARP', (ea) => ea.evolves.length === 1 && ea.evolves[0].level === 20
-      && data.speciesName(ea.evolves[0].into) === 'GYARADOS',
+      && same(data.speciesName(ea.evolves[0].into), 'GYARADOS'),
       'evolves into GYARADOS at Lv20'],
     ['MEGANIUM', (ea) => ea.evolves.length === 0, 'evolves into nothing'],
     ['SMOOCHUM', (ea) => ea.evolves.length === 1 && ea.evolves[0].kind === 'level',
@@ -317,9 +407,15 @@ function verify() {
   console.log(`  ok  ${KNOWN.length} species that were famous before this repo`
     + ' still are, and both pointers land on their own symbol');
   console.log('  ok  every entry is exactly as long as the gap to the next one,'
-    + ' so nothing was read at the wrong width');
+    + ' so nothing was read at the wrong width'
+    + (skipped ? ` (${skipped} last-in-bank, nothing behind them to measure)` : ''));
   console.log(`  note ${jumbled.size} species write their learnset out of level`
     + ` order: ${[...jumbled].join(', ') || 'none'}`);
+  if (shared_tails.size) {
+    console.log(`  note ${shared_tails.size} species have their learnset shared`
+      + ` by an entry pointing into the middle of it:`
+      + ` ${[...shared_tails].join(', ')}`);
+  }
   return 0;
 }
 
@@ -410,8 +506,8 @@ function scoreOrder(mons, order) {
   let right = 0, total = 0;
   for (const { mon, base } of mons) {
     const dvs = dvsUnder(mon.dvWord, order);
-    for (const key of gen2.statNames) {
-      const src = gen2.statSource[key];
+    for (const key of engine.statNames) {
+      const src = engine.statSource[key];
       total++;
       const want = mon.stats[key];
       const got = statFrom(base.stats[key], dvs[src], mon.statExp[src],
@@ -442,8 +538,8 @@ function party({ check = false } = {}) {
     if (!mon) break;
     // The raw word too, so `--check` can re-split it a different way without
     // going back through the reader it is checking.
-    const at = symbols.addr('wPartyMon1') + slot * gen2.partyStride
-      + gen2.mon.dvs - 0xc000;
+    const at = symbols.addr('wPartyMon1') + slot * engine.partyStride
+      + engine.mon.dvs - 0xc000;
     mon.dvWord = (wram[at] << 8) | wram[at + 1];
     mons.push({ mon, base: data.baseStats(mon.species) });
   }
@@ -478,13 +574,13 @@ function party({ check = false } = {}) {
     console.log('  a species with no readable base stats — cannot check');
     return 1;
   }
-  const orders = nibbleOrders(gen2.dvNames);
+  const orders = nibbleOrders(engine.dvNames);
   const scored = orders.map((order) => ({ order, ...scoreOrder(mons, order) }));
-  const mine = scored.find((s) => s.order.join() === gen2.dvNames.join());
+  const mine = scored.find((s) => s.order.join() === engine.dvNames.join());
   const best = scored.reduce((a, b) => (b.right > a.right ? b : a));
   const perfect = scored.filter((s) => s.right === s.total);
 
-  console.log(`  the profile's order ${gen2.dvNames.join(', ')}`
+  console.log(`  the profile's order ${engine.dvNames.join(', ')}`
     + ` reproduces ${mine.right} of ${mine.total} stored stats`);
   if (mine.right === mine.total && perfect.length === 1) {
     console.log('  ok  and it is the only one of the 24 orderings that does —'

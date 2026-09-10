@@ -30,7 +30,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 import { RomData } from '../gen2/romdata.js';
-import { openCartridge } from './cartridge.mjs';
+import { engineOf, openCartridge } from './cartridge.mjs';
 import { gen2 } from '../gen2/engine.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -41,7 +41,10 @@ const DEV = join(HERE, '..', 'dev');
 const cart = openCartridge(DEV);
 if (!cart) process.exit(0);
 const { rom, symbols, gb } = cart;
-const data = new RomData(symbols, gb, ['JohtoGrassWildMons', 'KantoGrassWildMons']);
+// The profile the app would pick for this cartridge, so a tool and the app
+// read it the same way rather than two ways.
+const { title, engine } = engineOf(cart);
+const data = new RomData(symbols, gb, title ? title.encounters : [], engine);
 
 // The type numbers, read off the cartridge's own name table rather than
 // written down: `TypeNames` is a pointer table in the same order as the type
@@ -81,7 +84,7 @@ const typeName = (id) => TYPE_NAMES.get(id) || `type ${id}`;
 const typeId = (text) => {
   const want = text.toUpperCase();
   for (const [id, name] of TYPE_NAMES) if (name === want) return id;
-  if (gen2.typeIds[want] !== undefined) return gen2.typeIds[want];
+  if (engine.typeIds[want] !== undefined) return engine.typeIds[want];
   const n = Number(text);
   return Number.isInteger(n) ? n : null;
 };
@@ -239,7 +242,7 @@ function verify() {
     // printed a page of WRONG about a chart that was entirely correct. A
     // checker that fails on a cartridge it does not understand is worse than
     // no checker, because somebody has to read the output.
-    const from = gen2.typeIds[a], to = gen2.typeIds[d];
+    const from = engine.typeIds[a], to = engine.typeIds[d];
     const got = from === undefined || to === undefined
       ? null : data.matchup(from, to);
     if (got !== want) {
@@ -249,10 +252,16 @@ function verify() {
   }
   // The shape as well as the contents: a table read wrongly is usually the
   // right size divided or multiplied by something.
+  // A **bound**, not a count. Crystal's table has 110 rows and that number
+  // was asserted, which is a fact about Crystal's content rather than about
+  // the decoding: Polished Crystal has 119, having added FAIRY, and read
+  // perfectly it still drew a WRONG line. What a misread actually looks like
+  // is the right size multiplied or divided by something, so the bound is
+  // wide and the count is reported either way.
   const rows = chart.size;
-  if (rows !== 110) {
+  if (rows < 40 || rows > 400) {
     bad++;
-    console.log(`  WRONG  ${rows} rows, and this cartridge's table has 110`);
+    console.log(`  WRONG  ${rows} rows, which is not the size of a type chart`);
   }
   // Three values and no more: nothing, a half and a double. Which *bytes*
   // those are is the cartridge's business -- Crystal writes tenths, 05 and

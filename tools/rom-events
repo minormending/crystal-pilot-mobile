@@ -81,6 +81,7 @@ tool somebody removes from CI.
 """
 import bisect
 import json
+import os
 import pathlib
 import re
 import subprocess
@@ -144,8 +145,11 @@ def offset(bank, addr):
 
 
 class Cart:
-    def __init__(self, rom, sym):
+    def __init__(self, rom, sym, rom_path=None, sym_path=None):
         self.rom = rom
+        # Where they came from, so a check that needs the app's own answer
+        # can hand the same two files to node -- see `profile_words`.
+        self.rom_path, self.sym_path = rom_path, sym_path
         self.by_name = {}
         self.at = []                       # [(file offset, name)], sorted
         for line in sym.splitlines():
@@ -637,7 +641,77 @@ def where(cart, phrase):
     return 0
 
 
-def app_phrases():
+def profile_words(cart):
+    """The words the profile *this* cartridge would be driven by looks for.
+
+    Asked of the app rather than guessed at: `pickTitle` decides which
+    profile a ROM gets, and reading every `titles/*.js` and taking the union
+    would pass a cartridge whose word is in some other hack's profile.
+
+    A row passes if *any* of its words is in this ROM, because that is what
+    `_driveToSaying` asks -- Polished Crystal's start menu says Bag where
+    Crystal's says PACK, and a cartridge only ever says one of them.
+    """
+    if not cart.rom_path:
+        return []
+    script = (
+        "import('%s/tools/cartridge.mjs').then(async (c) => {"
+        "  const cart = c.openCartridge();"
+        "  const { title, engine } = c.engineOf(cart);"
+        "  process.stdout.write('\\n@@' + JSON.stringify({"
+        "    menuWords: engine.menuWords,"
+        "    boxed: title && title.phrases && title.phrases.boxed }));"
+        "});" % ROOT
+    )
+    env = dict(os.environ, DEV_ROM=str(cart.rom_path), DEV_SYM=str(cart.sym_path))
+    try:
+        got = subprocess.run(['node', '-e', script], capture_output=True,
+                             text=True, timeout=60, env=env)
+        line = [l for l in got.stdout.splitlines() if l.startswith('@@')]
+        found = json.loads(line[-1][2:]) if line else {}
+    except Exception:
+        return []
+    out = [(v, 'the engine profile', f'the {k} menu row')
+           for k, v in (found.get('menuWords') or {}).items() if v]
+    # And the title's word for a catch that went to the box, from the same
+    # picked profile. Read out of `titles/crystal.js` by name before, which
+    # asked every cartridge whether it says Crystal's sentence.
+    if found.get('boxed'):
+        out.append((found['boxed'], 'the title profile', 'a boxed catch'))
+    return out
+
+
+def stores_text_plainly(cart):
+    """Whether this cartridge keeps its text as charmap bytes at all.
+
+    **Measured structurally, not in English.** The first version of this
+    looked for "was", "the " and "you" -- which is the language-bound mistake
+    this repository has already made once, and the Dutch build has 37 of
+    "the " against Crystal's 1260 while storing its text perfectly plainly.
+    What is true in any language is that plain text leaves long runs of
+    letter bytes in the ROM.
+
+    Measured across five cartridges: Crystal 13180, pokecrystal16 13161, the
+    Dutch build 14798, PokemonAmbrosia 23182 -- and Polished Crystal **174**,
+    because `macros/scripts/text.asm` compresses a string whenever
+    compression saves space. The bound is a hundredth of the smallest of
+    those and five times the largest compressed one, which is as much
+    daylight as a threshold ever gets.
+    """
+    if getattr(cart, '_plain', None) is None:
+        found, run = 0, 0
+        for b in cart.rom:
+            if 0xa0 <= b <= 0xb9 or b == SPACE:
+                run += 1
+            else:
+                if run >= 10:
+                    found += 1
+                run = 0
+        cart._plain = found >= 1000
+    return cart._plain
+
+
+def app_phrases(cart):
     """Every phrase the app matches against the screen, out of the source.
 
     Three kinds, and all three are words the *game* says: the title's `boxed`
@@ -648,10 +722,7 @@ def app_phrases():
     number in these tools is: a list of literals maintained by hand beside the
     literals themselves is the thing that goes stale.
     """
-    out = []
-    title = (ROOT / 'titles' / 'crystal.js').read_text()
-    for m in re.finditer(r"boxed:\s*'([^']+)'", title):
-        out.append((m.group(1), 'titles/crystal.js', 'a boxed catch'))
+    out = list(profile_words(cart))
     menus = (ROOT / 'gen2' / 'menus.js').read_text()
     for m in re.finditer(r"_driveToSaying\('([^']+)'", menus):
         out.append((m.group(1), 'gen2/menus.js', 'a menu row it drives to'))
@@ -688,19 +759,41 @@ def phrases(cart):
     because it means nobody checked.
     """
     bad = 0
-    for phrase, where_, why in app_phrases():
-        hits, note = find_text(cart, phrase)
-        if hits is None:
-            print(f'  ??  {where_}  "{phrase}": {note}')
+    for phrase, where_, why in app_phrases(cart):
+        # A list is a row the app will accept several words for, and one of
+        # them being in the ROM is the whole requirement.
+        choices = phrase if isinstance(phrase, list) else [phrase]
+        found, unreadable = None, None
+        for one in choices:
+            hits, note = find_text(cart, one)
+            if hits is None:
+                unreadable = note
+            elif hits:
+                found = (one, hits)
+                break
+        shown = ' / '.join(f'"{c}"' for c in choices)
+        if found:
+            one, hits = found
+            print(f'  "{one}" — {cart.label(hits[0], bound=4096)}'
+                  f'{"" if len(hits) == 1 else f" and {len(hits) - 1} more"}')
+        elif unreadable and len(choices) == 1:
+            print(f'  ??  {where_}  {shown}: {unreadable}')
             bad += 1
-        elif not hits:
-            print(f'  !!  {where_}  "{phrase}" is not in this ROM — '
+        elif not stores_text_plainly(cart):
+            # **Not every cartridge keeps its dialogue as charmap bytes.**
+            # Polished Crystal compresses it, so "was" is nowhere in that ROM
+            # while being on half its screens. The app matches the *tilemap*,
+            # decompressed by then, so the phrase may be perfectly findable
+            # at run time -- and "not in this ROM" would be a confident wrong
+            # answer about a phrase that works.
+            print(f'  note  {where_}  {shown}: this cartridge does not '
+                  f'store its text as plain bytes, so this cannot be looked '
+                  f'up here — the app matches the screen, which is '
+                  f'decompressed by then')
+        else:
+            print(f'  !!  {where_}  {shown} is not in this ROM — '
                   f'{why} will never be recognised')
             bad += 1
-        else:
-            off = hits[0]
-            print(f'  "{phrase}" — {cart.label(off, bound=4096)}'
-                  f'{"" if len(hits) == 1 else f" and {len(hits) - 1} more"}')
     return bad
 
 
@@ -1074,7 +1167,7 @@ def load():
         print(f'no cartridge in {DEV.name}/ — nothing to read')
         print('(a ROM is not in this repository and never will be)')
         return None
-    return Cart(rom.read_bytes(), sym.read_text())
+    return Cart(rom.read_bytes(), sym.read_text(), rom, sym)
 
 
 # The whole gate object, brace to brace. A non-greedy `.*?needs:` was the

@@ -16,7 +16,7 @@ const SHELL = [
   './app/runner.js', './gbcore/version.js', './gbcore/remember.js',
   './gen2/collision.js', './gen2/nav.js', './gen2/romdata.js', './gen2/screen.js',
   './gen2/world.js',
-  './gen2/journey.js', './titles/contract.js', './titles/crystal.js', './titles/crystal-early.js', './titles/generic.js', './titles/pick.js', './gbcore/room.js', './gbcore/stream.js',
+  './gen2/journey.js', './titles/contract.js', './titles/crystal.js', './titles/crystal-early.js', './titles/generic.js', './titles/polished.js', './titles/pick.js', './gbcore/room.js', './gbcore/stream.js',
   // Vendored from the kidsync repo, and cached for the same reason as the rest:
   // unlisted means served from the network, which is invisible until someone is
   // on a train. The Firebase SDK these pull from gstatic is *not* cached -- it

@@ -1876,7 +1876,13 @@ def check_phrases():
     out = subprocess.run([sys.executable, str(HERE / "rom-events"), "--phrases"],
                          capture_output=True, text=True)
     bad = [l for l in out.stdout.splitlines() if "!!" in l or "??" in l]
-    for l in bad:
+    # A `note` is a thing this cartridge cannot be *asked* -- one that
+    # compresses its text has no plain bytes to look a phrase up in, and the
+    # app matches the screen rather than the ROM. Shown, because somebody
+    # should know the check did not apply, and not counted, because a check
+    # that cannot run has not failed.
+    notes = [l for l in out.stdout.splitlines() if l.strip().startswith("note")]
+    for l in bad + notes:
         print(f"        {l.strip()}")
     if out.returncode or bad:
         return fail(f"{len(bad) or 1} phrase(s) this cartridge never says")

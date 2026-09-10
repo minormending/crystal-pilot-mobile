@@ -191,10 +191,21 @@ export const gen2 = {
   // record, it has three of them, and reading them at three bytes turns its
   // learnset into whatever the shifted bytes happen to say.
   //
-  // The species evolved into is always the record's **last** byte, whichever
-  // kind it is, so no per-kind field table is needed -- only the width.
+  // The species evolved into is the record's **last** byte on this cartridge,
+  // whichever kind it is, so no per-kind field table is needed -- only the
+  // width and how far back from the end the species sits. Polished Crystal
+  // writes `dp species, form`, two bytes, so there it is one further back.
   evo: {
     end: 0,
+    intoBack: 1,
+    // Whether one terminator can end a species' move list *and* mark the
+    // next species as having no evolutions. Crystal writes both bytes
+    // separately, so every record carries its own two. Polished Crystal's
+    // `learnset` macro emits one and says so -- "end of evolutions and, if
+    // there were no evos, previous mon's moves". It changes nothing for the
+    // reader, which stops at the byte either way, and it changes the *length*
+    // of a record, which is what `tools/dex --verify` measures.
+    sharedEnd: false,
     bytes: { 1: 3, 2: 3, 3: 3, 4: 3, 5: 4 },
     kind: { level: 1, item: 2, trade: 3, happiness: 4, stat: 5 },
     // EVOLVE_HAPPINESS's parameter and EVOLVE_STAT's second one, from
@@ -211,6 +222,50 @@ export const gen2 = {
   // so the id *is* the index. Named here because the pointer stride is the one
   // thing about it a hack could change, and because a dex entry that says
   // "type 20" has not answered the question.
+  // --- the cartridge's alphabet --------------------------------------------
+  // Everything about decoding a name that is not "A is $80". Crystal's blocks
+  // are here, and a cartridge that moved them says so rather than reading
+  // every name with a question mark in it.
+  //
+  // **This is not cosmetic.** NIDORAN-female and NIDORAN-male differ by one
+  // byte and nothing else, so a charmap that cannot tell $ef from $f5 draws
+  // two identical species and hunting for one of them stops at the other --
+  // which is the bug that put `punctuation` in this app in the first place.
+  // Polished Crystal moves the whole block: its ♂ is $be and its ♀ is $bf.
+  alphabet: {
+    upper: [0x80, 0x99], lower: [0xa0, 0xb9], digits: [0xf6, 0xff],
+    space: 0x7f,
+    // One byte, four letters: the game expands it to POKé when it prints.
+    ligature: 0x54,
+    // A line break inside a *name* is a space -- a landmark name is written
+    // to fit a two-line sign. $1f is the one landmark names use; $4e and $4f
+    // are the ones ordinary text uses.
+    breaks: [0x1f, 0x4e, 0x4f],
+    // Measured out of the cartridge rather than copied hopefully: 0xe0 in
+    // FARFETCH'D and KING'S ROCK, 0xe3 in HO-OH, 0xe8 in MR.MIME, GUARD
+    // SPEC., EXP.SHARE and S.S.TICKET, 0xef and 0xf5 in the two NIDORAN.
+    punctuation: {
+      0xe0: "'", 0xe3: '-', 0xe6: '?', 0xe7: '!', 0xe8: '.',
+      0xe9: '&', 0xea: 'é', 0xef: '\u2642', 0xf1: '×', 0xf3: '/',
+      0xf4: ',', 0xf5: '\u2640',
+    },
+  },
+  // --- the words on the game's own menus -----------------------------------
+  // What a row *says*, which is how the pilot finds it: the cursor is walked
+  // until the selected line reads one of these. Lists rather than words,
+  // because a cartridge may call the same row something else and there is
+  // no third thing to do about it -- Polished Crystal's start menu reads
+  // Bag, Save, Options, Quit, so a pilot looking for PACK walked its whole
+  // menu and gave up.
+  //
+  // Order is preference, and Crystal's word is first everywhere. Matching
+  // folds case, so a word is here only when it is a different *word*.
+  menuWords: {
+    party: ['POKéMON'],
+    pack: ['PACK'],
+    save: ['SAVE'],
+    switch: ['SWITCH'],
+  },
   typeNameMax: 12,
   // How an entry of `TypeNames` points at its name, in order of preference.
   // Crystal writes `dw`: two bytes, an address in the table's own bank.

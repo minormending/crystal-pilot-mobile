@@ -17,7 +17,7 @@ flowchart LR
     E[an edit] --> H{{".githooks/pre-commit"}}
     H --> T["./run-tests<br/>931 behaviour tests"]
     H --> C["tools/check-app<br/>31 groups"]
-    H --> D["tools/docs-check<br/>45 tracked sections"]
+    H --> D["tools/docs-check<br/>46 tracked sections"]
     T --> OK[commit]
     C --> OK
     D --> OK
@@ -129,7 +129,7 @@ section gives. Everything by hand runs against a local build.
 flowchart BT
     C["the app"] --> T["./run-tests<br/>931 behaviour tests"]
     C --> A["tools/check-app<br/>31 groups"]
-    C --> D["tools/docs-check<br/>45 tracked sections"]
+    C --> D["tools/docs-check<br/>46 tracked sections"]
     C --> V["tools/coverage<br/>what the suite never runs"]
     T --> M["tools/mutate<br/>break a line, see who notices"]
     A --> K["tools/check-checks<br/>break each group's own subject"]
@@ -574,7 +574,7 @@ Which makes some hacks much more informative than others:
 | [pokecrystal-speedchoice](https://github.com/Dabomstew/pokecrystal-speedchoice) | `PM_CRYSTAL` | 251 | changed flow and menus, vanilla species |
 | [Majora-Crystal](https://github.com/WasabiRaptor/Majora-Crystal) | `PM_CRYSTAL` | 255 | built around a time limit — the adversary for the clock reading |
 | [pokecrystal-nl](https://github.com/wfowler1/pokecrystal-nl) · [-es](https://github.com/erosunica/pokecrystal-es) · [_cn](https://github.com/SnDream/pokecrystal_cn) | `PM_CRYSTAL` | 251 | the charmap and the English phrases. Dutch built and run: **29/31**, and both failures are true — `sent to BILL`, `PACK` and `SWITCH` are not in that ROM, and its switch box begins `WISSEL` |
-| [polishedcrystal](https://github.com/Rangi42/polishedcrystal) | `PKPCRYSTAL` | 334 | the generic fallback, and the hardest thing to support properly — built and run: **24/31**, and it earns the description |
+| [polishedcrystal](https://github.com/Rangi42/polishedcrystal) | `PKPCRYSTAL` | 291 | the hardest thing to support properly, and the one that found seven declared numbers — built, run, and given a profile: **25/31**, with `tools/dex --verify` clean over all 291 species |
 
 Four are built and run. **A word about the assembler**, because it is the
 thing that decides whether a hack can be tested at all: `polishedcrystal` and

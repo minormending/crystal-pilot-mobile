@@ -14,6 +14,9 @@
 // bug and the reason `loadSlot` and the handoff both check a ROM fingerprint
 // before believing a save. So a pair is taken when the two names *agree*, and
 // a pair that has to be assumed is said out loud.
+import { readHeader } from '../gbcore/cartridge.js';
+import { engineFor } from '../titles/contract.js';
+import { pickTitle } from '../titles/pick.js';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, extname, basename } from 'node:path';
 
@@ -89,6 +92,25 @@ export function findCartridge(dev) {
  * `gb.js` reaches for a canvas on the way in, and it was repeated in four
  * tools before it was repeated in one.
  */
+/**
+ * The engine numbers this cartridge would run under, and which profile said so.
+ *
+ * **The tools were reading every cartridge as Crystal.** `RomData` takes an
+ * engine profile and they all left it out, so the stock one applied -- which
+ * is right for Crystal and for every hack that kept its shape, and wrong for
+ * the one that did not: `tools/dex bulbasaur` on Polished Crystal answered
+ * "no readable base-stats entry" while the app, which does pick a profile,
+ * read it. A tool that disagrees with the app it is meant to check is worse
+ * than no tool.
+ *
+ * The same `pickTitle` the app uses, from the same header and symbol table,
+ * so there is one answer to "which cartridge is this" and not two.
+ */
+export function engineOf({ rom, symbols }) {
+  const title = pickTitle({ header: readHeader(rom), symbols });
+  return { title, engine: engineFor(title) };
+}
+
 export function openCartridge(dev) {
   const found = findCartridge(dev);
   if (!found) {

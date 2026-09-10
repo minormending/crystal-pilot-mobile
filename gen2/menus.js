@@ -47,12 +47,11 @@ const PRESS_SETTLES = 3;
 // not interactive the instant a cursor reads non-zero -- and by the second the
 // box has always been up.
 const MENU_STEP_TRIES = 3;
-// The two words this walk drives to. Written here rather than in a title,
-// which is a judgement worth stating: they are the *engine's* own menu, in
-// the same class as PACK and SAVE two screens away -- a hack that renamed
-// them has renamed the START menu, and `check-app phrases` holds all of them
-// to the cartridge either way.
-const PARTY_ROW = 'POKéMON', SWITCH_ROW = 'SWITCH';
+// The words this walk drives to live in the engine profile, as `menuWords`
+// -- one list per row, because a hack that renamed the START menu has
+// renamed it and there is nothing to do about that but know its word.
+// Polished Crystal's reads Bag, Save, Options, Quit. `check-app phrases`
+// holds every list to the cartridge either way.
 
 export function withMenus(Base) {
   // Named, so a stack trace says which of these a frame came from.
@@ -274,9 +273,10 @@ export function withMenus(Base) {
     if (!await this._openStartMenu()) {
       return { ok: false, message: 'the menu would not open' };
     }
-    if (!await this._driveToSaying(PARTY_ROW)) {
+    const words = this.state.e.menuWords;
+    if (!await this._driveToSaying(words.party)) {
       await this.closeMenus();
-      return { ok: false, message: `no row says ${PARTY_ROW}` };
+      return { ok: false, message: `no row says ${words.party[0]}` };
     }
     await this.push('A', 6, 10);
     await this.step(SETTLE_PACK);
@@ -292,9 +292,9 @@ export function withMenus(Base) {
     await this.push('A', 6, 10);
     await this.step(SETTLE_PACK);
     // The submenu, by its word rather than its shape.
-    if (!await this._driveToSaying(SWITCH_ROW)) {
+    if (!await this._driveToSaying(this.state.e.menuWords.switch)) {
       await this.closeMenus();
-      return { ok: false, message: `no row says ${SWITCH_ROW}` };
+      return { ok: false, message: `no row says ${this.state.e.menuWords.switch[0]}` };
     }
     await this.push('A', 6, 10);
     await this.step(SETTLE_PACK);
@@ -324,7 +324,7 @@ export function withMenus(Base) {
     // shape is still checked afterwards, because a row that says the right
     // thing and opens the wrong box is exactly the kind of thing this app
     // stopped believing several passes ago.
-    if (await this._driveToSaying('PACK')) {
+    if (await this._driveToSaying(this.state.e.menuWords.pack)) {
       await this.push('A', 6, 10);
       await this.step(SETTLE_PACK);
       if (this._isBox(await this.snap(), shape)) return true;
@@ -771,7 +771,7 @@ export function withMenus(Base) {
   /** The row that says SAVE, wherever the menu has put it. */
   async _trySaveByName() {
     if (!await this._openStartMenu()) return false;
-    if (!await this._driveToSaying('SAVE')) return false;
+    if (!await this._driveToSaying(this.state.e.menuWords.save)) return false;
     return this._confirmSave();
   }
 
@@ -938,7 +938,9 @@ export function withMenus(Base) {
    * False also means "could not read the screen", which is why every caller
    * keeps the search it had.
    */
-  async _driveToSaying(word, tries = 12) {
+  async _driveToSaying(words, tries = 12) {
+    // One word or several: a row a cartridge might call more than one thing.
+    const want = Array.isArray(words) ? words : [words];
     for (let i = 0; i < tries; i++) {
       const sc = await this.screen();
       // No arrow means no menu to drive, and pressing anyway is how this would
@@ -946,7 +948,7 @@ export function withMenus(Base) {
       // with nothing selected is "cannot tell" and costs no presses at all --
       // which is also what a cartridge whose tilemap cannot be read looks like.
       if (!sc || !sc.arrow()) return false;
-      if (sc.selectedSays(word)) return true;
+      if (want.some((w) => sc.selectedSays(w))) return true;
       if (!await this._arrowMoved()) return false;
     }
     return false;
