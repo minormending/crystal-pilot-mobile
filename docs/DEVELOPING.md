@@ -16,7 +16,7 @@ what CI checks and what the pre-commit hook blocks on.
 flowchart LR
     E[an edit] --> H{{".githooks/pre-commit"}}
     H --> T["./run-tests<br/>915 behaviour tests"]
-    H --> C["tools/check-app<br/>30 groups"]
+    H --> C["tools/check-app<br/>31 groups"]
     H --> D["tools/docs-check<br/>45 tracked sections"]
     T --> OK[commit]
     C --> OK
@@ -128,14 +128,14 @@ section gives. Everything by hand runs against a local build.
 ```mermaid
 flowchart BT
     C["the app"] --> T["./run-tests<br/>915 behaviour tests"]
-    C --> A["tools/check-app<br/>30 groups"]
+    C --> A["tools/check-app<br/>31 groups"]
     C --> D["tools/docs-check<br/>45 tracked sections"]
     C --> V["tools/coverage<br/>what the suite never runs"]
     T --> M["tools/mutate<br/>break a line, see who notices"]
     A --> K["tools/check-checks<br/>break each group's own subject"]
     T -.-> V
     M -.->|"survivors, by file"| R(["the suite is load-bearing"])
-    K -.->|"30 of 30 bite"| R2(["the groups are awake"])
+    K -.->|"31 of 31 bite"| R2(["the groups are awake"])
     V -.->|"60%, and where"| R3(["the gaps are known"])
 ```
 
@@ -464,7 +464,7 @@ is wrong, not the check. It is not in the pre-commit hook: it runs `check-app`
 about fifty times, which is the wrong price for every commit and the right
 one for the commit that changes a check.
 
-`tools/check-app` is thirty groups, each one a class of mistake that parses
+`tools/check-app` is thirty-one groups, each one a class of mistake that parses
 fine and is wrong at run time:
 
 | group | asserts |
@@ -499,9 +499,75 @@ fine and is wrong at run time:
 ## The tools that ask the cartridge
 
 Everything above runs on a clean checkout. What follows needs a `.gbc` and a
-`.sym` in `dev/`, built from the disassembly — and every one of these says so
-and exits 0 without them, so `tools/check-app` is still green on a machine that
-has no cartridge at all.
+`.sym` in `dev/` — and every one of these says so and exits 0 without them, so
+`tools/check-app` is still green on a machine that has no cartridge at all.
+
+**Any names, not `pokecrystal.*`.** Five tools opened that pair by name, which
+is right for the disassembly and wrong for everything built from it: a hack's
+Makefile names its own output, so `pokeperidot.gbc`, `crystal-speedchoice.gbc`,
+`polishedcrystal-3.0.0.gbc`. Drop a build in and the tools find it.
+
+**The pairing is the careful part, and the globbing is not.** A symbol file
+describes exactly one build — its addresses are that ROM's memory map — and
+handed the wrong ROM it does not fail, it *answers*. Every read comes back
+plausible and wrong. So:
+
+| what is in `dev/` | what happens |
+| --- | --- |
+| one ROM, one `.sym`, same name | used, silently |
+| several, some sharing a name | the newest matching pair, and it says which |
+| one of each, names differ | used, with a warning that this is an assumption |
+| several, none sharing a name | refused, and it says what it found |
+| nothing | the usual "no cartridge in dev/", exit 0 |
+
+`DEV_ROM` and `DEV_SYM` override the search outright, which is what makes a run
+over several hacks scriptable without moving files about.
+
+The rule is written twice — `tools/cartridge.mjs` for the node tools and
+`tools/cartridge.py` for these checks and `rom-events` — because the two halves
+of this repository are two languages. A `cartridge` check group holds them to
+each other, for the reason `romlayout` holds the two map-table readers to each
+other: **two readers of one directory that disagreed about which cartridge is
+current would be worse than either**, and `check-app` verifying one build while
+`tools/dex` verified another would have both saying ok.
+
+### Testing a hack
+
+The point of all of the above. Build any pokecrystal-based hack, drop its
+`.gbc` and `.sym` into `dev/`, and run the cartridge checks — what fails is a
+list of the assumptions that hack breaks:
+
+```bash
+tools/check-app          # gates, gyms, types, menus, phrases, romlayout, moves
+tools/dex --verify       # every species, its evolutions and its learnset
+tools/types --verify     # the type chart against rules that predate this repo
+tools/clock --verify     # which hours are morning, day and night
+tools/rom-events --verify  # the object layout, over every map
+```
+
+Two things decide most of what happens. **The ROM title**: `titles/pick.js`
+gives the Crystal profile to anything titled `PM_CRYSTAL` that also has
+`JohtoGrassWildMons`, so a hack that kept its header is claimed as Crystal and
+driven with Johto's gyms, healers and gates — which is right until it moved
+one. Anything else falls to `generic`, which is honest and does less. **And the
+engine profile**: `speciesCount`, `partyStride`, `nameLength` and the rest are
+Crystal's numbers, so a hack that added species or widened an id needs the one
+field that says so.
+
+Which makes some hacks much more informative than others:
+
+| hack | title | species | what it exercises |
+| --- | --- | --- | --- |
+| [patched-crystal](https://github.com/UberMedic7/patched-crystal) | `PM_CRYSTAL` | 251 | the control — bug fixes only, so anything that differs is this app's fault |
+| [pokecrystal16](https://github.com/fellowship-of-the-roms/pokecrystal16) | `PM_CRYSTAL` | 251 | **16-bit species ids, content otherwise vanilla** — the cleanest isolation of a structural change |
+| [PokemonAmbrosia](https://github.com/AndrewC101/PokemonAmbrosia) | `PM_CRYSTAL` | 254 | species past `speciesCount`, *while* being claimed as Crystal |
+| [pokecrystal-speedchoice](https://github.com/Dabomstew/pokecrystal-speedchoice) | `PM_CRYSTAL` | 251 | changed flow and menus, vanilla species |
+| [Majora-Crystal](https://github.com/WasabiRaptor/Majora-Crystal) | `PM_CRYSTAL` | 255 | built around a time limit — the adversary for the clock reading |
+| [pokecrystal-nl](https://github.com/wfowler1/pokecrystal-nl) · [-es](https://github.com/erosunica/pokecrystal-es) · [_cn](https://github.com/SnDream/pokecrystal_cn) | `PM_CRYSTAL` | 251 | the charmap and the English phrases — `phrases` should fail, loudly |
+| [polishedcrystal](https://github.com/Rangi42/polishedcrystal) | `PKPCRYSTAL` | 334 | the generic fallback, and the hardest thing to support properly |
+
+None of that is a promise that any of them work. It is a list of the questions
+each one asks, and the checks above are how the answers arrive.
 
 They divide into two kinds, and the division is worth keeping in mind because
 only one of them can fail:

@@ -4053,6 +4053,50 @@ and *next*, which are facts about a Pokémon being levelled rather than about a
 species. Sorted, because MUK's entry is genuinely out of level order on this
 cartridge and a list that jumped backwards would read as a decoding bug.
 
+### A fifty-fourth pass: testing a hack should not require renaming files
+
+Five tools opened `dev/pokecrystal.gbc` and `dev/pokecrystal.sym` by name.
+That is right for the disassembly and wrong for everything built from it — a
+hack's Makefile names its own output, so `pokeperidot.gbc`,
+`crystal-speedchoice.gbc`, `polishedcrystal-3.0.0.gbc`. Testing one meant
+renaming two files, and renaming files to test a thing is how you end up
+testing the wrong thing.
+
+**The globbing is trivial and the pairing is not.** A symbol file describes
+exactly one build: its addresses are that ROM's memory map, and handed the
+wrong ROM it does not fail, it *answers*. Every read comes back plausible and
+wrong — which is why `loadSlot` and the handoff both check a ROM fingerprint
+before believing a save, and why this refuses rather than guesses. A pair is
+taken when the two names agree; one-of-each with different names is used and
+**said out loud**; several with nothing in common is refused with a list of
+what was found.
+
+That last distinction earned itself immediately. The Python half is asked six
+times, once per skip gate, so it is quiet when `dev/` is simply empty — that is
+a clean checkout and every caller already says it is skipping. But it is *loud*
+when there are files it cannot pair, because those are a cartridge somebody put
+there expecting it to be used, and a silent skip would read as the checks
+passing.
+
+### And the rule is written twice, so it is checked
+
+`tools/cartridge.mjs` for the node tools, `tools/cartridge.py` for the checks
+and `rom-events`, because the two halves of this repository are two languages
+and neither calls the other cheaply. **This project has been caught by a second
+reader five separate times** — 1536 maps out of 388, a charmap inside the tool
+whose own header warns about second readers, a type-name decoder with its own
+partial alphabet. So there is a `cartridge` check group that runs both finders
+over `dev/` and asserts they pick the same pair, exactly as `romlayout` holds
+the two map-table readers to each other.
+
+Its `check-checks` mutation had to supply the state as well as the break: the
+sandbox is rsynced **without** `dev/`, and one cartridge is not enough to
+disagree about. So the mutation makes two builds and flips the node finder to
+prefer the older one. The files it makes are empty, which is the tell — the
+pairing rule reads names and modification times and never a byte, and that is
+precisely the property that lets two implementations of it drift apart without
+either erroring.
+
 ## The part that had to be redesigned
 
 The desktop pilot hangs its whole design on CPU hooks: the game's own routines
