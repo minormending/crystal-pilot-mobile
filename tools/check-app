@@ -2062,8 +2062,14 @@ def check_cartridge():
                        capture_output=True, text=True, cwd=ROOT)
     if r.returncode != 0:
         return fail(f"the node finder would not run: {r.stderr.strip()[:120]}")
-    theirs = json.loads(r.stdout.strip() or "null")
-    mine = [str(rom.relative_to(ROOT)), str(sym.relative_to(ROOT))]
+    said = json.loads(r.stdout.strip() or "null") or []
+    # Resolved, not compared as written. The node side answers a path relative
+    # to the repository and `DEV_ROM` answers wherever the cartridge actually
+    # is -- which is the whole point of that override and is routinely outside
+    # the tree, so anything that assumed otherwise was wrong about the one case
+    # somebody sets it for. `ROOT / p` leaves an absolute `p` alone.
+    theirs = sorted(str((ROOT / q).resolve()) for q in said)
+    mine = sorted(str(pathlib.Path(q).resolve()) for q in (rom, sym))
     if theirs != mine:
         print(f"        python picks {mine}")
         print(f"        node picks   {theirs}")
