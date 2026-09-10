@@ -4377,7 +4377,7 @@ cartridge will not say which hours are which.
 
 ## 8j. A cartridge that changed everything it could
 
-<!-- covers: titles/polished.js gen2/engine.js gen2/romdata.js gen2/state.js gen2/menus.js @ 913dcc9d76a5 -->
+<!-- covers: titles/polished.js gen2/engine.js gen2/romdata.js gen2/state.js gen2/menus.js @ 58096f5c226c -->
 
 Polished Crystal is the profile in `docs/DEVELOPING.md`'s hack table described
 as "the generic fallback, and the hardest thing to support properly". It is
@@ -4695,6 +4695,26 @@ instructions to reading this one's: `--set 0x2e4` lands on
 the object list read right and `places` measured, standing in Violet City
 discovers six Centers and four Marts — Violet's own doors among them at
 (31,25) and (9,17), which are the same two tiles on Crystal.
+
+Twelve Marts are declared as well, generated the way the Centers were: a map
+whose symbol is `*Mart`, the town that warps into it, that warp's tile, and a
+clerk at (1,3) to say the room is one. Thirteen have a clerk and Saffron's has
+no door any map warps through, so it is left out — a Mart the pilot cannot
+reach is a row it cannot press. Declared as well as discovered because
+discovery sees three legs and `martList` concatenates: this is what lets the
+Shop row answer from anywhere in the game.
+
+**And the counter geometry is the one number in a mart that is assumed.** A
+counter is a wall, so the pilot stands two tiles off and looks at it — (3,3)
+facing LEFT at a clerk on (1,3), measured once in Cherrygrove. Twelve entries
+inherited it untested, which is what the new `marts` check group is for: it
+walks from `stand` in the direction `face` and asks whether anybody is there.
+All twelve are, and eleven of them are unnameable — Polished writes its clerks
+as `mart_clerk_event`, an `OBJECTTYPE_COMMAND` whose two bytes are a command
+and its operand rather than an address, so resolving them gave
+`ToughClaws+5` and `HitmontopBackpic+58`. An object is named only when its
+pointer lands on a symbol *start* now, which is the same exactness test
+`--layout` scores a stride with.
 
 **And its dialogue is compressed.** `macros/scripts/text.asm` compresses a
 string whenever compression saves space, so "was" is nowhere in that ROM while
@@ -7269,7 +7289,7 @@ about that code did not.
 
 ### The other checks
 
-<!-- covers: tools/check-app @ 70b80da59ab9 -->
+<!-- covers: tools/check-app @ a9ee1cc032fc -->
 
 `tools/check-app` runs everything that can be verified without a ROM:
 
@@ -7306,7 +7326,8 @@ tools/check-app contrast     # or one group
 | `counts` | every number in the prose the repository can compute is right — `tools/renumber` writes them in |
 | `gates` | a declared errand names a real method; and, with a cartridge, its event is one the ROM sets and its tile holds whoever sets it |
 | `gyms` | a declared gym's leader, tile, kind and badge bit are what the cartridge says — skipped without a cartridge |
-| `romlayout` | `tools/rom-events` and `gen2/world.js` agree about the map-events strides |
+| `marts` | a declared mart's door is one its town warps through, and the tile the pilot is sent to faces somebody — the counter geometry is what a mart cannot derive |
+| `romlayout` | the map-events block is read at *this* cartridge's strides: the objects behind a trigger tile resolve like the objects in front of one |
 | `types` | the optional symbols the app reads travel to another device, and — with a cartridge — the decoded type chart agrees with twenty-two matchups nobody had to look up |
 | `menus` | every box the app tells apart by shape declares that shape, asks the instance for it, and — with a cartridge — is the shape the cartridge's own menu header draws |
 | `phrases` | no engine module compares a screen phrase written into it, and every phrase the app looks for is one the cartridge says. A phrase that is not in the ROM never matches and never fails |

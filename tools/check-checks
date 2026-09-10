@@ -200,6 +200,14 @@ def mutations(root):
         # press A at an empty floor. The *door* is checked the same way now,
         # against the town's warp table, so either coordinate biting proves
         # the group.
+        # The one number a mart declaration cannot derive: a counter is a
+        # wall, so the pilot stands two tiles off and looks at it. Turned
+        # the other way it presses A at empty floor.
+        "marts": lambda: edit("titles/crystal.js", sub(
+            "{ map: CHERRYGROVE_MART, from: CHERRYGROVE_CITY, door: [23, 3],\n"
+            "      stand: [3, 3], face: 'LEFT' },",
+            "{ map: CHERRYGROVE_MART, from: CHERRYGROVE_CITY, door: [23, 3],\n"
+            "      stand: [3, 3], face: 'RIGHT' },")),
         "gyms": lambda: edit("titles/crystal.js", sub(
             "door: [10, 15]", "door: [10, 16]")),
         # One stride moved in the tool, which is what happened by hand and

@@ -430,6 +430,55 @@ export const polished = {
     { map: key(26, 4), reach: 'healAtCenter',
       inside: key(26, 6), door: [29,3], nurse: [5,1] }, // Cherrygrove
   ],
+  // **Every Mart with a counter in it, found the way the Centers were.**
+  // A map whose own symbol is `*Mart`, the town that warps into it, that
+  // warp's tile for the door, and a clerk wearing `SPRITE_MART_CLERK` at
+  // (1,3) to say the room is one. Twelve of the thirteen; Saffron's is left
+  // out because no map in the game warps into it that this reader can
+  // follow, and a Mart with no door is a row that cannot be pressed.
+  //
+  // Cherrygrove's door comes out (23,3) and Violet's (9,17), which are the
+  // two tiles `titles/crystal.js` measured by hand -- so the derivation
+  // agrees with somebody's eyes on the two places both cartridges can be
+  // compared, the same check the healers passed.
+  //
+  // `stand` and `face` rather than the clerk's tile, because a counter is a
+  // *wall*: the clerk sits at (1,3) and the tile you can talk to it from is
+  // (3,3) facing LEFT, two away across a corner. Crystal's geometry, and it
+  // is the one thing here that is assumed rather than read -- a wrong
+  // `stand` walks the pilot to a tile it cannot speak from, which is a
+  // refusal rather than a wrong purchase.
+  //
+  // Declared as well as discovered for the reason the healers are:
+  // `discover` sees three legs and `martList` concatenates, so this is what
+  // lets the Shop row answer from anywhere in the game rather than from the
+  // corner of it the pilot happens to be in.
+  marts: [
+    { map: key(8, 3), from: key(8, 7), door: [21, 5],
+      stand: [3, 3], face: 'LEFT' }, // Azalea Town
+    { map: key(5, 5), from: key(5, 10), door: [15, 29],
+      stand: [3, 3], face: 'LEFT' }, // Blackthorn City
+    { map: key(7, 6), from: key(7, 13), door: [25, 23],
+      stand: [3, 3], face: 'LEFT' }, // Cerulean City
+    { map: key(26, 5), from: key(26, 4), door: [23, 3],
+      stand: [3, 3], face: 'LEFT' }, // Cherrygrove City
+    { map: key(4, 8), from: key(4, 2), door: [29, 21],
+      stand: [3, 3], face: 'LEFT' }, // Ecruteak City
+    { map: key(17, 7), from: key(17, 6), door: [5, 13],
+      stand: [3, 3], face: 'LEFT' }, // Fuchsia City
+    { map: key(18, 10), from: key(18, 5), door: [1, 7],
+      stand: [3, 3], face: 'LEFT' }, // Lavender Town
+    { map: key(1, 7), from: key(1, 13), door: [21, 17],
+      stand: [3, 3], face: 'LEFT' }, // Olivine City
+    { map: key(14, 7), from: key(14, 4), door: [23, 21],
+      stand: [3, 3], face: 'LEFT' }, // Pewter City
+    { map: key(12, 8), from: key(12, 3), door: [21, 13],
+      stand: [3, 3], face: 'LEFT' }, // Vermilion City
+    { map: key(10, 4), from: key(10, 3), door: [9, 17],
+      stand: [3, 3], face: 'LEFT' }, // Violet City
+    { map: key(23, 8), from: key(23, 2), door: [29, 19],
+      stand: [3, 3], face: 'LEFT' }, // Viridian City
+  ],
   // **Every gym in Johto, and not one number of it typed out by hand.**
   //
   // `tools/rom-events --findgyms` reads all six fields per entry out of the

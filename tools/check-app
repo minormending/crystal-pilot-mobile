@@ -1683,6 +1683,40 @@ def check_gyms():
               f"leader and badge bit")
 
 
+def check_marts():
+    """Every mart a title declares has a door, and a counter to press A at.
+
+    Skipped without a cartridge, like `gyms` and `gates`.
+
+    A mart declaration carries two numbers no derivation gives it. The door
+    comes out of the warp table, but `stand` and `face` do not: **a mart
+    counter is a wall**, so the pilot cannot stand on the clerk's tile and has
+    to be sent to one two away, across a corner, looking at it. That geometry
+    was measured once in Cherrygrove, written into two entries by hand, and
+    then assumed for twelve more when Polished Crystal's marts were generated
+    out of the cartridge.
+
+    Assumed and unchecked is the combination worth a check group. This walks
+    from `stand` in the direction `face` and asks whether it arrives at
+    anybody: a wrong pair sends the pilot to press A at empty floor, which
+    reads in the log as a shop that would not serve them.
+
+    The reading lives in `tools/rom-events --marts`.
+    """
+    if not cartridge.has_cartridge(ROOT):
+        return ok("no cartridge here, so the declared marts are not checked")
+    out = subprocess.run([sys.executable, str(HERE / "rom-events"), "--marts"],
+                         capture_output=True, text=True)
+    bad = [l for l in out.stdout.splitlines() if "!!" in l or "??" in l]
+    for l in bad:
+        print(f"        {l.strip()}")
+    if out.returncode or bad:
+        return fail(f"{len(bad) or 1} mart(s) the cartridge does not agree with")
+    found = [l for l in out.stdout.splitlines() if " looks at (" in l]
+    return ok(f"all {len(found)} declared mart(s) have a door the town warps "
+              f"through and a counter the pilot can reach")
+
+
 def check_types():
     """The decoded type chart agrees with things about Pokemon nobody looked up.
 
@@ -2174,6 +2208,7 @@ CHECKS = {
     "gates": check_gates,
     "romlayout": check_rom_layout,
     "gyms": check_gyms,
+    "marts": check_marts,
     "types": check_types,
     "menus": check_menus,
     "phrases": check_phrases,

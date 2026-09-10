@@ -16,7 +16,7 @@ what CI checks and what the pre-commit hook blocks on.
 flowchart LR
     E[an edit] --> H{{".githooks/pre-commit"}}
     H --> T["./run-tests<br/>951 behaviour tests"]
-    H --> C["tools/check-app<br/>32 groups"]
+    H --> C["tools/check-app<br/>33 groups"]
     H --> D["tools/docs-check<br/>46 tracked sections"]
     T --> OK[commit]
     C --> OK
@@ -128,14 +128,14 @@ section gives. Everything by hand runs against a local build.
 ```mermaid
 flowchart BT
     C["the app"] --> T["./run-tests<br/>951 behaviour tests"]
-    C --> A["tools/check-app<br/>32 groups"]
+    C --> A["tools/check-app<br/>33 groups"]
     C --> D["tools/docs-check<br/>46 tracked sections"]
     C --> V["tools/coverage<br/>what the suite never runs"]
     T --> M["tools/mutate<br/>break a line, see who notices"]
     A --> K["tools/check-checks<br/>break each group's own subject"]
     T -.-> V
     M -.->|"survivors, by file"| R(["the suite is load-bearing"])
-    K -.->|"32 of 32 bite"| R2(["the groups are awake"])
+    K -.->|"33 of 33 bite"| R2(["the groups are awake"])
     V -.->|"62%, and where"| R3(["the gaps are known"])
 ```
 
@@ -464,7 +464,7 @@ is wrong, not the check. It is not in the pre-commit hook: it runs `check-app`
 about fifty times, which is the wrong price for every commit and the right
 one for the commit that changes a check.
 
-`tools/check-app` is thirty-two groups, each one a class of mistake that parses
+`tools/check-app` is thirty-three groups, each one a class of mistake that parses
 fine and is wrong at run time:
 
 | group | asserts |
@@ -490,6 +490,7 @@ fine and is wrong at run time:
 | `labels` | every job row is named after its own key, capitalised — which is the word the runner prints, built from the key rather than from a second table |
 | `gates` | every road a title declares shut names an event the ROM actually sets — skipped without a cartridge |
 | `gyms` | every gym a title declares has the right leader on the right tile, as a script object, with a badge bit that is a badge — skipped without a cartridge |
+| `marts` | every mart a title declares has a door its town warps through, and the tile the pilot is sent to faces somebody — the counter geometry is the one thing a mart cannot derive, and it was assumed for twelve of them |
 | `romlayout` | the map-events block is read at *this* cartridge's strides — the objects behind a trigger tile resolve like the objects in front of one. It compared two files before, and two files can agree and both be wrong |
 | `phrases` | no engine module compares a screen phrase written into it — a phrase is content, so it is the title's to say — and, with a cartridge, every phrase the app looks for is one the cartridge actually says |
 | `menus` | every box the app tells apart by shape declares that shape in the profile and asks the instance for it — and, with a cartridge, the shape is the one the cartridge's own menu header draws |
@@ -907,6 +908,7 @@ tools/rom-events --script Route32CooltrainerMContinueScene
 tools/rom-events --text Route32CooltrainerMText_AideIsWaiting
 tools/rom-events --gates                    every declared gate, against the ROM
 tools/rom-events --gyms                     every declared gym, against the ROM
+tools/rom-events --marts                    every declared mart, against the ROM
 tools/rom-events --findgyms                 where every gym leader stands
 tools/rom-events --layout                   the strides, against the cartridge
 tools/rom-events --verify                   the object layout, over all 361 maps

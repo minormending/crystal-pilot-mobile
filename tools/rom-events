@@ -34,6 +34,10 @@ So it is a tool.
         leader's tile, whether that object is one you talk to, and whether the
         badge bit is a badge
 
+    tools/rom-events --marts
+        every mart a title declares: its door, and whether the tile the pilot
+        is sent to actually faces somebody
+
     tools/rom-events --verify
         check the object layout against every map the app can read: the type field and the
         script's own name have to agree about which objects are trainers
@@ -1125,6 +1129,114 @@ def app_numbers():
     return out
 
 
+MART = re.compile(r'\{\s*map:\s*' + MAP_REF + r',\s*from:\s*' + MAP_REF
+                  + r',\s*door:\s*\[(\d+),\s*(\d+)\],'
+                  r'\s*\n?\s*stand:\s*\[(\d+),\s*(\d+)\],'
+                  r'\s*face:\s*[\'"](\w+)[\'"]', re.S)
+# Which way a tile faces, as a step. The pilot stands *off* the counter and
+# looks at it, so walking this way from `stand` has to arrive at whoever is
+# being talked to.
+FACING = {'LEFT': (-1, 0), 'RIGHT': (1, 0), 'UP': (0, -1), 'DOWN': (0, 1)}
+# How far along that line the object may be. Two, because a mart counter is a
+# wall and the clerk stands behind it: measured in Cherrygrove, the clerk is
+# at (1,3) and the only tile you can talk to it from is (3,3).
+MART_REACH = 2
+
+
+def object_name(cart, o):
+    """What to call an object, or what kind it is if it has no name.
+
+    **Not every object's pointer is a script pointer.** Polished Crystal's
+    mart clerks are written `mart_clerk_event 1, 3, MARTTYPE_STANDARD,
+    MART_AZALEA`, which comes out as an `OBJECTTYPE_COMMAND` whose two bytes
+    are a command and its operand rather than an address -- so resolving them
+    gives a symbol, and eleven of its twelve clerks came back as things like
+    `ToughClaws+5` and `HitmontopBackpic+58`. Standing exactly where the
+    check said, under a name that means nothing.
+
+    The test is exactness: a pointer that lands on a symbol *start* is a
+    script and a number that lands in the middle of one is a number. Which is
+    the same test `--layout` scores a stride with, for the same reason.
+    """
+    bank, _, addr = o['script'].partition(':')
+    found = cart.near(int(bank, 16), int(addr, 16))
+    return found if '+' not in found and not found.startswith('$') \
+        else f'a type-{o["type"]} object, whose two bytes are not a pointer'
+
+
+def marts(cart, name_of=None):
+    """Every declared mart, against what the cartridge says.
+
+    Three claims per entry and the ROM answers all three: the town has a warp
+    at the declared door that leads into the shop, the shop has somebody
+    standing in it, and **the tile the pilot is sent to actually faces them**.
+
+    That last one is the reason this exists. `stand` and `face` are the two
+    numbers a mart declaration cannot derive from the clerk's position -- a
+    counter is a wall, so you talk to it from two tiles away across a corner
+    -- and until now nothing checked them at all. Twelve marts were generated
+    for Polished Crystal from the cartridge with Crystal's counter geometry
+    assumed for every one, which is exactly the kind of assumption that wants
+    a check rather than a comment.
+    """
+    bad = 0
+    for path in picked_titles(cart):
+        src = path.read_text()
+        keys = {m.group(1): (int(m.group(2)), int(m.group(3)))
+                for m in KEY.finditer(src)}
+
+        def resolve(ref):
+            if ref in keys:
+                return keys[ref]
+            written = INLINE_KEY.fullmatch(ref)
+            return (int(written.group(1)), int(written.group(2))) \
+                if written else None
+
+        for m in MART.finditer(src):
+            shop, town, dx, dy, sx, sy, face = m.groups()
+            at, home = resolve(shop), resolve(town)
+            if not at or not home:
+                print(f'{path.name}: a mart’s maps are neither '
+                      f'`key(group, number)` nor a constant that is one')
+                bad += 1
+                continue
+            shop_name = name_of(at) if name_of else None
+            town_name = name_of(home) if name_of else None
+            print(f'{path.name}: {shop_name or shop} from {town_name or town}')
+            if not shop_name or not town_name:
+                print('  ?? no symbol for one of its maps')
+                continue
+            into = [(w['x'], w['y']) for w in map_warps(cart, town_name)
+                    if w['to'] == ((at[0] << 8) | at[1])]
+            if (int(dx), int(dy)) in into:
+                print(f'  door ({dx},{dy}) in {town_name} warps into {shop_name}')
+            else:
+                print(f'  !! ({dx},{dy}) is not a way into {shop_name}'
+                      + (f'; {town_name} warps in at '
+                         f'{", ".join(f"({x},{y})" for x, y in into)}'
+                         if into else f'; {town_name} has no warp into it'))
+                bad += 1
+            step = FACING.get(face)
+            if not step:
+                print(f'  !! {face} is not a direction')
+                bad += 1
+                continue
+            here = {(o['x'], o['y']): o for o in route_objects().get(shop_name, [])}
+            seen = None
+            for n in range(1, MART_REACH + 1):
+                seen = here.get((int(sx) + step[0] * n, int(sy) + step[1] * n))
+                if seen:
+                    break
+            if seen:
+                print(f'  ({sx},{sy}) facing {face} looks at ({seen["x"]},'
+                      f'{seen["y"]}): {object_name(cart, seen)}')
+            else:
+                print(f'  !! nothing within {MART_REACH} tile(s) of ({sx},{sy}) '
+                      f'facing {face} — the pilot would press A at a wall')
+                bad += 1
+    return bad
+
+
 def gyms(cart, name_of=None):
     """Every declared gym, against what the cartridge says."""
     bad = 0
@@ -1711,6 +1823,8 @@ def main(argv):
         return 1 if find_gyms(cart) else 0
     if '--layout' in argv:
         return layout(cart)
+    if '--marts' in argv:
+        return 1 if marts(cart, map_symbol(cart)) else 0
     if '--gyms' in argv:
         return 1 if gyms(cart, map_symbol(cart)) else 0
     if '--verify' in argv:
