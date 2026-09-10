@@ -15,7 +15,7 @@ what CI checks and what the pre-commit hook blocks on.
 ```mermaid
 flowchart LR
     E[an edit] --> H{{".githooks/pre-commit"}}
-    H --> T["./run-tests<br/>938 behaviour tests"]
+    H --> T["./run-tests<br/>940 behaviour tests"]
     H --> C["tools/check-app<br/>31 groups"]
     H --> D["tools/docs-check<br/>46 tracked sections"]
     T --> OK[commit]
@@ -39,7 +39,7 @@ git config core.hooksPath .githooks
 ./run-tests -v         # notes and stack lines
 ```
 
-938 tests in 27 files, and what each file is about says more than the count:
+940 tests in 27 files, and what each file is about says more than the count:
 
 | file | tests | what it pins down |
 | --- | --- | --- |
@@ -59,7 +59,7 @@ git config core.hooksPath .githooks
 | `remember.mjs` | 14 | which remembered choices are believed, and which dropped |
 | `worker.mjs` | 14 | the idle loop: one step outstanding, and a lost step recovered |
 | `nav.mjs` | 14 | the walk loop: what it decides between two steps, and every reason it stops |
-| `screen.mjs` | 17 | the frames that go between two devices, and who may press what |
+| `screen.mjs` | 19 | the frames that go between two devices, and who may press what |
 | `runner.mjs` | 13 | running the list: the budget, the evidence something moved, and the save at the end |
 | `saves.mjs` | 15 | which battery record belongs to the cartridge in the machine |
 | `room.mjs` | 15 | the merge rules and the handshake, so two devices settle rather than fight |
@@ -127,7 +127,7 @@ section gives. Everything by hand runs against a local build.
 
 ```mermaid
 flowchart BT
-    C["the app"] --> T["./run-tests<br/>938 behaviour tests"]
+    C["the app"] --> T["./run-tests<br/>940 behaviour tests"]
     C --> A["tools/check-app<br/>31 groups"]
     C --> D["tools/docs-check<br/>46 tracked sections"]
     C --> V["tools/coverage<br/>what the suite never runs"]

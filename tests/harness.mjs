@@ -15,6 +15,7 @@ import { writeFileSync } from 'node:fs';
 import { RomData } from '../gen2/romdata.js';
 import { Symbols } from '../gen2/symbols.js';
 import { gen2 } from '../gen2/engine.js';
+import { charOf } from '../gen2/screen.js';
 
 const GB_WRAM_START = 0xc000;
 const WRAM_BYTES = 0x2000;
@@ -423,14 +424,18 @@ const w16 = (wram, addr, v) => {
  */
 export function paintScreen(wram, sym, lines, engine = gen2) {
   const cm = engine.charmap || {};
+  // **Inverted from `charOf` itself**, tile by tile, rather than rebuilt
+  // from the same tables it reads. That is what makes the claim above true
+  // by construction: this used to walk `charmap.ranges`, and when the
+  // letter blocks moved into `alphabet` so that names and screens would
+  // share one statement of them, this painter kept reading a field that no
+  // longer existed and painted every letter as blank.
   const back = new Map();
-  for (const [from, to, first] of cm.ranges || []) {
-    for (let t = from; t <= to; t++) {
-      back.set(String.fromCharCode(first.charCodeAt(0) + (t - from)), t);
-    }
+  for (let t = 0; t <= 0xff; t++) {
+    const ch = charOf(t, engine);
+    if (ch !== ' ' && !back.has(ch)) back.set(ch, t);
   }
-  for (const [t, ch] of Object.entries(cm.singles || {})) back.set(ch, Number(t));
-  const blank = back.get(' ') === undefined ? 0 : back.get(' ');
+  const blank = (engine.alphabet || {}).space ?? 0;
   const base = sym.addr('wTilemap') - GB_WRAM_START;
   for (let y = 0; y < 18; y++) {
     const line = (lines[y] || '').padEnd(20, ' ');

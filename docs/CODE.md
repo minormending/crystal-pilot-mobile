@@ -919,7 +919,7 @@ the symbol file does not name the tilemap, which is *cannot read* rather than
 
 ### `screen.js` — the words on screen
 
-<!-- covers: gen2/screen.js @ c46efac9d9f8 -->
+<!-- covers: gen2/screen.js @ 786df216dde9 -->
 
 Gen 2 renders text into `wTilemap` — twenty by eighteen bytes of tile ids — and
 the letters *are* tiles. So the words a person is reading have been sitting in
@@ -1780,7 +1780,7 @@ mechanism's evidence spans two runs rather than one.
 
 ### The bigger number is not the harder hit
 
-<!-- covers: gen2/romdata.js gen2/engine.js gen2/battle.js @ 01325e93f84e -->
+<!-- covers: gen2/romdata.js gen2/engine.js gen2/battle.js @ 7b169809c10f -->
 
 For twenty-three passes the pilot ranked its moves by one number: the `power`
 byte out of the cartridge's move table. `romdata.move()` had been returning the
@@ -1934,7 +1934,7 @@ pilot uses, not a second one beside it. See section 10.
 
 ### Sending out somebody who can touch it
 
-<!-- covers: gen2/battle.js gen2/engine.js @ c5b28715c357 -->
+<!-- covers: gen2/battle.js gen2/engine.js @ bbd9d60a7da6 -->
 
 The pass before could tell that the Pokémon on the field takes nothing off a
 Ghost, and said so. The remedy it named — *a different Pokémon* — was one the
@@ -4071,7 +4071,7 @@ sent the reader at it.
 
 ## 8h. What a species becomes, and when
 
-<!-- covers: gen2/romdata.js gen2/engine.js @ 7e821ecac143 -->
+<!-- covers: gen2/romdata.js gen2/engine.js @ 1d5fcab4ae73 -->
 
 Two questions a party entry cannot answer: *what will this turn into*, and
 *what is it about to learn*. Both are in one table, because in Gen 2 they are
@@ -4163,7 +4163,7 @@ file says they do.
 
 ## 8i. Reaching an hour
 
-<!-- covers: gen2/jobs.js gen2/engine.js gen2/romdata.js gen2/state.js gbcore/saves.js app/rows.js @ 2643abc5cc15 -->
+<!-- covers: gen2/jobs.js gen2/engine.js gen2/romdata.js gen2/state.js gbcore/saves.js app/rows.js @ 1dc93134c472 -->
 
 A third of Johto's grass is behind the clock. HOOTHOOT is on Route 29 after
 dark and nowhere on it at noon, and for four versions the usage guide said the
@@ -4330,7 +4330,7 @@ cartridge will not say which hours are which.
 
 ## 8j. A cartridge that changed everything it could
 
-<!-- covers: titles/polished.js gen2/engine.js gen2/romdata.js gen2/state.js gen2/menus.js @ 7e324520caff -->
+<!-- covers: titles/polished.js gen2/engine.js gen2/romdata.js gen2/state.js gen2/menus.js @ 724c3e9d28c5 -->
 
 Polished Crystal is the profile in `docs/DEVELOPING.md`'s hack table described
 as "the generic fallback, and the hardest thing to support properly". It is
@@ -4500,6 +4500,19 @@ they meet: **evening rolls the day's table 60% of the time and the night's
 the other 40%.** So `encounter.blockOf` maps a time to a block *or a list of
 them*, and what is in the grass in the evening is the union of both rather
 than either alone.
+
+**One alphabet, for names and for screens.** `screen.js` carried its own
+`[0x80, 0x99, 'A']` beside `alphabet.upper` — two statements of one fact, and
+the second one is the one that matters most, because *the screen is what
+every menu the pilot drives is matched against*. A cartridge that moved its
+letter blocks would have had its names right and its screens wrong. `charOf`
+reads `alphabet` now, and `charmap` keeps only the handful of tiles a screen
+has and a name does not: the cursor, the `'s` ligature, the yen sign.
+
+Which is what makes the menu words usable rather than merely present. Its
+start menu reads `#dex`, `#mon`, **Bag**, **Save**, Options, Exit — decoded
+through its own alphabet those come back as themselves, and `menuWords` lists
+them beside Crystal's so the first one the selected row says wins.
 
 **And its dialogue is compressed.** `macros/scripts/text.asm` compresses a
 string whenever compression saves space, so "was" is nowhere in that ROM while
@@ -5208,7 +5221,7 @@ before a step is taken, so a stopped walk does not move at all.
 
 ### What is behind the Gym door, before you open it
 
-<!-- covers: gen2/romdata.js gen2/engine.js app/rows.js @ 5a9671fd0f33 -->
+<!-- covers: gen2/romdata.js gen2/engine.js app/rows.js @ d2b159c5b5fd -->
 
 The Gym row could say where the Gym is and who is in it. **Whether it is worth
 going** is two facts the cartridge has had all along, and neither of them

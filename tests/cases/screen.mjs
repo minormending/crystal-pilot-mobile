@@ -7,6 +7,8 @@
 import { blindTo, paintScreen, symbols, test, worldRam } from '../harness.mjs';
 import { GameState } from '../../gen2/state.js';
 import { gen2 } from '../../gen2/engine.js';
+import { polished } from '../../titles/polished.js';
+import { engineFor } from '../../titles/contract.js';
 import { arrowAt, charOf, fold, screenLines, screenSays, screenText,
          selectedLine } from '../../gen2/screen.js';
 
@@ -217,4 +219,42 @@ test('a phrase is matched inside one line, not across two', async (t) => {
   const wram = showing(['THE PARTY IS', 'FULL OF POKéMON']);
   t.true(screenSays(wram, AT, 'party is'), 'within a line');
   t.false(screenSays(wram, AT, 'is full'), 'and not across the break');
+});
+
+
+// --- a cartridge whose menus are in its own words -------------------------
+
+test('a menu row is found by the word this cartridge writes on it',
+     async (t) => {
+  // The whole point of `menuWords` being a list. Polished Crystal's start
+  // menu reads Bag, Save, Options, Quit; a pilot looking for PACK walked
+  // the whole thing and gave up, and one looking for SAVE never saved.
+  const engine = engineFor(polished);
+  const wram = worldRam(sym);
+  paintScreen(wram, sym, ['#dex', '#mon', '>Bag', 'Save', 'Options', 'Exit'],
+              engine);
+  const line = selectedLine(wram, AT, engine);
+  // The cursor glyph is part of the line, the way it is on Crystal.
+  t.eq(line, '>Bag', 'the row the arrow is on, in the cartridge\'s own word');
+  const says = (word) => fold(line).includes(fold(word));
+  t.true(engine.menuWords.pack.some(says), 'the pack row is recognised');
+  t.false(engine.menuWords.save.some(says), 'and it is not the save row');
+});
+
+test('the same screen decodes with the letters the profile declares',
+     async (t) => {
+  // Its alphabet moved -- ♂ is $be where Crystal has $ef -- and the screen
+  // is read with the same one names are. Before that this file carried its
+  // own copy of the letter blocks, so a cartridge that moved them would
+  // have had its names right and its screens wrong.
+  const engine = engineFor(polished);
+  const wram = worldRam(sym);
+  paintScreen(wram, sym, ['Nidoran\u2640'], engine);
+  t.eq(screenLines(wram, AT, engine)[0].trim(), 'Nidoran\u2640',
+       'painted and read through one alphabet');
+  // And Crystal's own, unchanged, through the other.
+  const two = worldRam(sym);
+  paintScreen(two, sym, ['NIDORAN\u2640'], gen2);
+  t.eq(screenLines(two, AT, gen2)[0].trim(), 'NIDORAN\u2640',
+       'and Crystal still reads its own');
 });

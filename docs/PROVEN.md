@@ -4310,6 +4310,79 @@ Ground move at neutral where the game will do nothing at all. That is a real
 thing about how the pilot behaves there, and the check saying so is the check
 working.
 
+### A fifty-eighth pass: parity, and what parity turned out to mean
+
+Polished Crystal passes **31 of 31**. Getting the last six groups took four
+more structures out of this repository and into the cartridge, and every one
+of them had been a fact about *Crystal* wearing a fact about *Gen 2*'s
+clothes.
+
+**Its trainers**, which the pass before had refused, read after three
+separate repairs. Its `dba` pointers go into other banks, so the table is
+*walked* rather than measured — and **work RAM counts as a pointer**, because
+its 123rd class points at `wInverGroup`, a party built at run time, and a
+scan insisting on ROM lost the twenty-six classes behind it. What bounds a
+class is the next *record*, not the next class: its groups are wherever the
+linker put them, with Bugsy below Falkner in the same bank, and a bound taken
+from the next class came out behind the start and emptied forty-two of them.
+And its records **say their own length** — `db _tr_size`, the name, a flags
+byte, the Pokémon, no terminator — with each Pokémon three bytes plus one per
+flag, four for moves, and a whole terminated string for a nickname, *in that
+written order*. Taking a fixed width and then walking the string found
+Whitney's Miltank where her EVs are and called her class empty.
+
+Falkner's record says 39 and holds a name of 8, a flags byte, and three
+Pokémon of ten. That arithmetic replaces the `$ff`: a record whose Pokémon do
+not fill it exactly is refused. **713 trainers over 137 classes**, and the
+eight leaders carry the parties its source gives them.
+
+**Its day has four parts**, and the hours are `cp` operands in
+`GetValueByTimeOfDay` rather than a table — so `engine.hours` is where a
+profile says what a table would have. The block ids *are* readable, and they
+are not in the obvious order: `00 01 03 02`, evening 3 and night 2.
+
+**Its grass is a different stride** — a two-byte map id and one rate against
+Crystal's five-byte header, three-byte slots against two — which is the kind
+of difference that reads a neighbouring map's block instead of failing. Three
+blocks against four times of day, and `GetTimeOfDayNotEve` says how they
+meet: evening rolls the day's table 60% of the time and the night's the other
+40%, so the grass in the evening is the union of both.
+
+**And one row its chart deliberately does not have.** `; db GROUND, FLYING,
+NO_EFFECT -- checks airborne state instead`. `damage.extra` is where a
+profile supplies what a chart leaves out, consulted ahead of the table
+because there is nothing there to disagree with.
+
+### The check that mattered most was the one about the screen
+
+`screen.js` carried its own copy of the letter blocks beside
+`alphabet.upper`. Two statements of one fact, and **the screen is what every
+menu the pilot drives is matched against** — so a cartridge that moved its
+letters would have had its names right and its menus unfindable. One
+statement now, and its start menu decodes as Bag, Save, Options, Exit, which
+is what `menuWords` lists.
+
+Finding that also broke the test harness's screen painter, which had been
+inverting the same table by hand. It inverts `charOf` tile by tile now, which
+is what its own comment had been claiming for eleven passes.
+
+### And four more checks stopped asserting Crystal at everything
+
+The leader check held Crystal's class numbers and parties to every cartridge;
+`tools/clock --verify` held Crystal's boundary hours to every day. Both now
+assert content against Crystal and *structure* everywhere — eight leaders in
+eight distinct classes sharing one class name, the last of them the
+highest-levelled; a day of unbroken runs with exactly one wrapping midnight.
+Those catch what the content checks were for, on a cartridge nobody wrote
+them about.
+
+**What is left is one thing, and it is honest.** The pilot has never been
+booted on this cartridge. Every word it looks for is one the ROM has, decoded
+through the alphabet the screen is read with, and a painted screen matches
+them — but a painted screen is this repository's own, and the difference
+between that and a running game is the difference this repository keeps
+writing passes about.
+
 ## The part that had to be redesigned
 
 The desktop pilot hangs its whole design on CPU hooks: the game's own routines

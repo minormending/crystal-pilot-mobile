@@ -31,12 +31,26 @@ const COLS = 20, ROWS = 18;
  */
 export function charOf(tile, engine = gen2) {
   const cm = engine.charmap || {};
-  for (const [from, to, first] of cm.ranges || []) {
-    if (tile >= from && tile <= to) {
-      return String.fromCharCode(first.charCodeAt(0) + (tile - from));
+  // Screen-only tiles first -- the cursor, the `'s` ligature, the yen sign,
+  // the `>` that is also the cursor's glyph -- because those are readings a
+  // tilemap has and a *name* does not, and where the two disagree about a
+  // byte the screen's reading is the one wanted here.
+  const one = (cm.singles || {})[tile];
+  if (one !== undefined) return one;
+  // Then the cartridge's alphabet, which is the same one names are read
+  // with. **One statement of it, not two.** This file used to carry its own
+  // `[0x80, 0x99, 'A']` beside `alphabet.upper`, and a cartridge that moved
+  // its letter blocks would have had its names right and its screens wrong
+  // -- which is the reading every menu the pilot drives is matched against.
+  const a = engine.alphabet || {};
+  for (const [range, first] of [[a.upper, 'A'], [a.lower, 'a'],
+                                [a.digits, '0']]) {
+    if (range && tile >= range[0] && tile <= range[1]) {
+      return String.fromCharCode(first.charCodeAt(0) + (tile - range[0]));
     }
   }
-  return (cm.singles || {})[tile] || ' ';
+  if (tile === a.space) return ' ';
+  return (a.punctuation || {})[tile] || ' ';
 }
 
 /**

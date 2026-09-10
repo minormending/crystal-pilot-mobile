@@ -613,10 +613,15 @@ export const gen2 = {
   // Here rather than in a title profile because it is an *encoding*, the same
   // kind of thing as `moneyBytes`: a pokecrystal hack keeps this charmap, and a
   // translation is exactly the case where a title would want to replace it.
+  // What a *tile* means, over and above what a name byte means. The letters,
+  // digits, space and punctuation come from `alphabet`, because a cartridge
+  // has one of those and this file used to state it twice -- so a hack that
+  // moved its letter blocks would have had its names right and its screens
+  // wrong, and the screen is what every menu the pilot drives is matched
+  // against. What is left here is the handful of tiles a *screen* has and a
+  // name does not.
   charmap: {
-    ranges: [[0x80, 0x99, 'A'], [0xa0, 0xb9, 'a'], [0xf6, 0xff, '0']],
-    singles: { 0x7f: ' ', 0xf3: '/', 0xe6: '?', 0xe8: '.', 0xf4: ',',
-               0xe7: '!', 0xf0: '¥', 0xf1: 'x', 0xed: '>', 0x6d: ':',
+    singles: { 0xf0: '¥', 0xf1: 'x', 0xed: '>', 0x6d: ':',
                0xd4: '\u2019s' },
     // The arrow is named twice on purpose: once above so a dumped screen shows
     // which row is selected, and once here so `arrowAt` can find the tile
