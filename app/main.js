@@ -498,7 +498,7 @@ async function reallyStart() {
   saves = new Saves(gb, state, romdata, progress);
   collision = new CollisionMap(symbols, gb, title.engine);
   nav = new Nav(gb, symbols);
-  world = new World(symbols, gb);
+  world = new World(symbols, gb, title.engine);
   boot = new title.drive(gb, state, tasks, collision, nav, progress, world);
   A_MARK = {
     x: symbols.addr('wXCoord'), y: symbols.addr('wYCoord'),

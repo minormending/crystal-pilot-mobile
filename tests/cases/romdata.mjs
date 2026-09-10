@@ -1164,6 +1164,28 @@ test('a type says its own name, out of the cartridge', async (t) => {
   t.eq(rom.typeName(1), 'FIGHTING', 'the longest one still fits');
 });
 
+test('which index holds item one is the profile\'s to say', async (t) => {
+  // Crystal's ItemNames begins with MASTER BALL, so item 1 is index 0.
+  // Polished Crystal's begins with an entry for the no-item slot, so item 1
+  // is index 1 -- and every item read one early: Pikachu evolved with a
+  // WATER STONE where its own record says THUNDERSTONE. Declared rather
+  // than derived, because a placeholder here is a plausible item name and
+  // gives a reader nothing to see.
+  const sym = symbols();
+  const { bank, addr } = { bank: sym.bank('ItemNames'), addr: sym.addr('ItemNames') };
+  const enc = (t2) => [...t2].map((c) => 0x80 + c.charCodeAt(0) - 65);
+  const bytes = [...enc('FIRST'), 0x50, ...enc('SECOND'), 0x50,
+                 ...enc('THIRD'), 0x50];
+  const at = (engine) => new RomData(sym, {
+    romByte: (b, a) => (b === bank && a >= addr && a < addr + bytes.length
+      ? bytes[a - addr] : 0x50),
+  }, [], engine);
+  t.eq(at(gen2).itemName(1), 'FIRST', 'index zero holds item one by default');
+  t.eq(at({ ...gen2, itemBase: 1 }).itemName(1), 'SECOND',
+       'and a cartridge with a slot in front of it says so');
+  t.eq(at({ ...gen2, itemBase: 1 }).itemName(2), 'THIRD', 'for every item');
+});
+
 test('a relative name table is read as one, without being told', async (t) => {
   // Polished Crystal writes `TypeNames` as `dr`, which assembles as
   // `db X - @`: one byte per entry, an offset from that entry's *own*

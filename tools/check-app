@@ -1595,9 +1595,24 @@ def check_rom_layout():
 
     js = (ROOT / "gen2" / "world.js").read_text()
     want = numbers(js, ROM_LAYOUT_JS)
+    # The map *header*'s three numbers moved into the engine profile when
+    # Polished Crystal turned out to write seven bytes with no attributes
+    # bank where Crystal writes nine with one. Same comparison, one file
+    # further along: the tool's hand-written copies are still held to the
+    # app's, which is the whole point of this check.
+    engine = (ROOT / "gen2" / "engine.js").read_text()
+    header = re.search(r"mapHeader:\s*\{([^}]*)\}", engine)
+    if header:
+        fields = dict(re.findall(r"(\w+):\s*(\d+)", header.group(1)))
+        for name, field in (("MAP_BYTES", "bytes"),
+                            ("MAP_ATTRIBUTES_BANK", "attrBank"),
+                            ("MAP_ATTRIBUTES", "attrAddr")):
+            if field in fields:
+                want[name] = fields[field]
     if len(want) < len(ROM_LAYOUT_NAMES):
         missing = sorted(set(ROM_LAYOUT_NAMES) - set(want))
-        return fail(f"gen2/world.js does not define {', '.join(missing)}")
+        return fail(f"gen2/world.js and gen2/engine.js between them do not "
+                    f"define {', '.join(missing)}")
     got = numbers((HERE / "rom-events").read_text(), ROM_LAYOUT)
     problems = []
     for name, value in sorted(want.items()):

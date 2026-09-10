@@ -16,15 +16,14 @@
 // the west and New Bark to the east, and Cherrygrove -> Route 30 -> Route 31,
 // matching data/maps/attributes.asm.
 
-// The map header, from constants/map_data_constants.asm.
-const MAP_BYTES = 9;
-const MAP_ATTRIBUTES_BANK = 0, MAP_ATTRIBUTES = 3;
+// The map header's shape is `engine.mapHeader` -- Polished Crystal's is
+// seven bytes with no attributes bank where Crystal's is nine with one.
 // And the landmark this map belongs to, which is what the game itself calls the
 // place. Byte 5 of the nine, measured by grouping rather than guessed: Violet
 // City, its Mart and its Center all read 6; Cherrygrove's three all read 3; and
 // Elm's lab reads 1, which is New Bark Town's -- because Elm's lab is in New
 // Bark Town. No other byte in the header groups that way.
-const MAP_LANDMARK = 5;
+
 
 // The tail of a map-attributes block: a bitmask, then one struct per connection
 // in a fixed order, whatever subset of them is present.
@@ -86,11 +85,15 @@ const SIDES = [
 ];
 
 /** One number for a (group, number) pair, matching Nav.mapKey(). */
+import { gen2 } from './engine.js';
+
 export const mapKey = (group, number) => group * 256 + number;
 
 export class World {
-  constructor(symbols, gb) {
+  constructor(symbols, gb, engine = null) {
     this.gb = gb;
+    this.e = engine || gen2;
+    this.h = this.e.mapHeader;
     this.groups = {
       bank: symbols.bank('MapGroupPointers'),
       addr: symbols.addr('MapGroupPointers'),
@@ -98,6 +101,60 @@ export class World {
     this.cache = new Map();
     this.warpCache = new Map();
     this.objectCache = new Map();
+  }
+
+  /**
+   * The bank every attributes block lives in, on a cartridge that does not
+   * say per map.
+   *
+   * Crystal repeats the bank in each map's header, so this is never asked of
+   * it. Polished Crystal writes `dw \1_MapAttributes` and nothing else,
+   * because all of its blocks are in one bank -- and which bank that is
+   * appears nowhere in the data. The symbol file knows, and the symbol file
+   * is exactly what a second device may not have.
+   *
+   * **So it is scored.** Every bank in the ROM is tried against every map
+   * the cartridge has, and a map's block agrees if its height and width are
+   * a real size and its connection mask has only the four direction bits.
+   * A wrong bank is arbitrary bytes read as a size, and fails on nearly all
+   * of six hundred maps; the right one passes nearly all of them. The best
+   * is taken only if it clears the second best by a wide margin, and
+   * otherwise this answers zero -- which reads as "no such bank" everywhere
+   * a caller uses it, the same as any other unreadable map.
+   */
+  _attrBank() {
+    if (this._bank !== undefined) return this._bank;
+    const maps = [];
+    for (let group = 1; group <= 26 && maps.length < 400; group++) {
+      const n = this.mapCount(group);
+      for (let number = 1; number <= (n || 0); number++) {
+        const list = this._word(this.groups.bank,
+                                this.groups.addr + (group - 1) * 2);
+        const header = list + (number - 1) * this.h.bytes;
+        maps.push(this._word(this.groups.bank, header + this.h.attrAddr));
+      }
+    }
+    const banks = Math.ceil(this.gb.romBanks ? this.gb.romBanks : 0x80);
+    const score = (bank) => {
+      let n = 0;
+      for (const addr of maps) {
+        if ((addr & 0xc000) !== 0x4000) continue;
+        const h = this.gb.romByte(bank, addr + ATTR_HEIGHT);
+        const w = this.gb.romByte(bank, addr + ATTR_WIDTH);
+        const mask = this.gb.romByte(bank, addr + ATTR_CONNECTIONS);
+        if (h > 0 && h <= 64 && w > 0 && w <= 64 && (mask & 0xf0) === 0) n++;
+      }
+      return n;
+    };
+    let best = { bank: 0, n: -1 }, second = -1;
+    for (let bank = 1; bank < banks; bank++) {
+      const n = score(bank);
+      if (n > best.n) { second = best.n; best = { bank, n }; }
+      else if (n > second) second = n;
+    }
+    const enough = maps.length / 2;
+    return (this._bank = best.n >= enough && best.n > second * 1.5
+      ? best.bank : 0);
   }
 
   _word(bank, addr) {
@@ -140,7 +197,7 @@ export class World {
       // number in one is right where staying permissive is not. Found by
       // `tools/mutate` surviving the change, which is the tool answering a
       // question sharper than the one it was asked.
-      if (step >= 0 && step % MAP_BYTES === 0) count = step / MAP_BYTES;
+      if (step >= 0 && step % this.h.bytes === 0) count = step / this.h.bytes;
     } catch (e) { /* unreadable is the same answer as unbounded */ }
     this._counts.set(group, count);
     return count;
@@ -159,10 +216,13 @@ export class World {
       throw new Error(`no map ${group}.${number} on this cartridge`);
     }
     const list = this._word(this.groups.bank, this.groups.addr + (group - 1) * 2);
-    const header = list + (number - 1) * MAP_BYTES;
+    const header = list + (number - 1) * this.h.bytes;
     return {
-      bank: this.gb.romByte(this.groups.bank, header + MAP_ATTRIBUTES_BANK),
-      addr: this._word(this.groups.bank, header + MAP_ATTRIBUTES),
+      // Null in the header means the cartridge keeps every attributes block
+      // in one bank and does not repeat it per map -- found once, below.
+      bank: this.h.attrBank === null ? this._attrBank()
+        : this.gb.romByte(this.groups.bank, header + this.h.attrBank),
+      addr: this._word(this.groups.bank, header + this.h.attrAddr),
     };
   }
 
@@ -250,8 +310,8 @@ export class World {
   landmarkOf(group, number) {
     try {
       const list = this._word(this.groups.bank, this.groups.addr + (group - 1) * 2);
-      const header = list + (number - 1) * MAP_BYTES;
-      return this.gb.romByte(this.groups.bank, header + MAP_LANDMARK);
+      const header = list + (number - 1) * this.h.bytes;
+      return this.gb.romByte(this.groups.bank, header + this.h.landmark);
     } catch (e) {
       return null;
     }

@@ -70,6 +70,18 @@ export const polished = {
     // Crystal's list — a wrong word rather than a missing one, which is the
     // kind of mistake a profile exists to stop.
     growthRates: ['mediumFast', 'mediumSlow', 'fast', 'slow'],
+    // Seven bytes a map header, not nine, and no attributes bank in it:
+    // `db tileset`, `dn sign, environment`, `dw attributes`, `db location,
+    // music`, `dn phone, palette`. Read at Crystal's offsets its headers
+    // gave addresses like $0401 and the map graph came out empty. The bank
+    // is found by scoring rather than declared -- see `_attrBank` -- because
+    // a number like "$26" is true of one release and nothing else.
+    mapHeader: { bytes: 7, attrBank: null, attrAddr: 2, landmark: 4 },
+    // Its `ItemNames` begins with an entry for the no-item slot, "Park
+    // Ball", so POKE_BALL is index 1 rather than 0 -- and every item read
+    // one early. Pikachu evolved with a Water Stone where its own record
+    // says Thunderstone.
+    itemBase: 1,
     // $ff moves, against Crystal's 251.
     moveCount: 255,
     // **Eight bytes an entry, not seven**: it adds a category byte --

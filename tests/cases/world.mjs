@@ -12,6 +12,7 @@
 // test the stub, and the byte layout is the part that can be wrong.
 import { test } from '../harness.mjs';
 import { World, mapKey } from '../../gen2/world.js';
+import { gen2 } from '../../gen2/engine.js';
 
 const SIDES = { UP: 0x8, DOWN: 0x4, LEFT: 0x2, RIGHT: 0x1 };
 // The structs are stored north, south, west, east whatever subset is present.
@@ -456,4 +457,72 @@ test('a trigger off the map, or too many of them, is a bad read', async (t) => {
   ]));
   t.eq(off.world.coordEventsOn(1, 1), [{ scene: 0, x: 3, y: 3 }],
        'the one inside a four-by-four map, and not the other');
+});
+
+
+// --- a cartridge whose map headers are a different shape -------------------
+//
+// Polished Crystal writes seven bytes and no attributes bank: `db tileset`,
+// `dn sign, environment`, `dw attributes`. Crystal writes nine with the bank
+// in front. Read at the wrong offsets its headers gave addresses like $0401,
+// which is not in a banked window, and every map came back unreadable.
+
+/** A two-map cartridge laid out the way `header` says, in `attrBank`. */
+function shaped(header, attrBank) {
+  const GB = 4, GA = 0x4000, TABLE = 0x5000;
+  const rom = new Map();
+  const put = (b, a, v) => rom.set(`${b}:${a}`, v);
+  const put16 = (b, a, v) => { put(b, a, v & 0xff); put(b, a + 1, v >> 8); };
+  put16(GB, GA, TABLE);
+  put16(GB, GA + 2, TABLE + 2 * header.bytes);       // one group of two maps
+  for (let n = 1; n <= 2; n++) {
+    const at = TABLE + (n - 1) * header.bytes;
+    const attr = 0x6000 + (n - 1) * 0x100;
+    if (header.attrBank !== null) put(GB, at + header.attrBank, attrBank);
+    put16(GB, at + header.attrAddr, attr);
+    // A size and a connection mask, which is what makes a bank plausible.
+    put(attrBank, attr + 1, 9);
+    put(attrBank, attr + 2, 20);
+    put(attrBank, attr + 11, 0);
+  }
+  const symbols = { bank: () => GB, addr: () => GA, has: () => true };
+  const gb = { romByte: (b, a) => rom.get(`${b}:${a}`) || 0, romBanks: 8 };
+  return new World(symbols, gb, { ...gen2, mapHeader: header });
+}
+
+test('a map header is read at the shape the profile declares', async (t) => {
+  const nine = shaped({ bytes: 9, attrBank: 0, attrAddr: 3, landmark: 5 }, 5);
+  t.eq(nine._attributes(1, 1).addr, 0x6000, 'Crystal-shaped, first map');
+  t.eq(nine._attributes(1, 2).addr, 0x6100, 'and the second is nine bytes on');
+
+  const seven = shaped({ bytes: 7, attrBank: null, attrAddr: 2, landmark: 4 }, 5);
+  t.eq(seven._attributes(1, 1).addr, 0x6000, 'seven-shaped, first map');
+  t.eq(seven._attributes(1, 2).addr, 0x6100,
+       'and the second is seven bytes on, not nine');
+});
+
+test('the attributes bank is found when the header does not carry one',
+     async (t) => {
+  // Polished Crystal keeps every attributes block in one bank and says so
+  // nowhere in the data. The symbol file knows and a second device may not
+  // have one, so the bank is scored: every bank in the ROM against every
+  // map, and a map agrees when its size is a real size and its connection
+  // mask has only the four direction bits.
+  const seven = shaped({ bytes: 7, attrBank: null, attrAddr: 2, landmark: 4 }, 5);
+  t.eq(seven._attrBank(), 5, 'the one bank the maps make sense in');
+  t.eq(seven._attributes(1, 1).bank, 5, 'and it is what a reader is given');
+});
+
+test('a cartridge no bank fits is answered with none', async (t) => {
+  // Nothing plausible anywhere is "cannot read this", not a guess. Zero is
+  // what every other unreadable map answers, and the callers already handle
+  // it.
+  const GB = 4, GA = 0x4000;
+  const rom = new Map();
+  rom.set(`${GB}:${GA}`, 0x00); rom.set(`${GB}:${GA + 1}`, 0x50);
+  const symbols = { bank: () => GB, addr: () => GA, has: () => true };
+  const gb = { romByte: () => 0, romBanks: 8 };
+  const bare = new World(symbols, gb,
+    { ...gen2, mapHeader: { bytes: 7, attrBank: null, attrAddr: 2, landmark: 4 } });
+  t.eq(bare._attrBank(), 0, 'no bank rather than the first one that scored');
 });

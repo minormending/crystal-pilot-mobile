@@ -4240,6 +4240,76 @@ ROM. **Polished Crystal's 24 is not a near miss** — it is a different
 cartridge that happens to be Gen 2 shaped, and the checks now say so in
 twenty-one lines instead of thirty-nine.
 
+### A fifty-seventh pass: the cartridge that was all assumptions
+
+Polished Crystal is what a repository finds out when it points its own tools
+at something that shares a lineage and nothing else. **It could not be opened
+at all**: `GameState`'s constructor reads `wBattleMenuCursorPosition`, which
+that cartridge calls `wBattleMenuCursorBuffer`, and `symbols.addr` throws on a
+name that is not there. One renamed variable and the app did not start.
+
+Seven things it changed turned out to be readable off the cartridge, and each
+one had been a fact about *Crystal* standing in for a fact about *Gen 2*:
+
+| what | how it is settled now |
+| --- | --- |
+| the chart's scale | the two non-zero values are a half and a double, and must agree |
+| type-name pointers | entry 0 and entry 1 both decode, in order |
+| the string terminator | the byte before the second entry's target |
+| party field offsets | `wPartyMon1DVs` minus `wPartyMon1` |
+| DV packing | the width of the field: two bytes is Gen 2's, three is a nibble a stat |
+| the species-name index | a name starts with a letter, and `?000?` does not |
+| the attributes bank | the one bank all six hundred maps read as maps in |
+
+**The last of those is the one that stopped it walking.** Its map headers are
+seven bytes with no attributes bank — every block is in one — so read at
+Crystal's nine the addresses came out as `$0401` and the map graph was empty.
+The bank is scored rather than declared, because `$26` is true of this
+release and nothing else: every bank tried against every map, a map agreeing
+when its size is a real size and its connection mask has only four bits. It
+answers `$26` here and `$25` on Crystal, which is where Crystal's actually
+are — the cartridge that does not need the derivation still agrees with it.
+
+**Two things could not be derived**, and they are what a title profile is
+for. `BaseData` has no species id in front of its entries and nothing
+self-describing at all, and the cartridge's own words are its own: Bag rather
+than PACK, Oran Berry rather than BERRY, ♂ at `$be`, an eight-byte move struct
+with a category byte, and nineteen types renumbered end to end with FAIRY on
+the end.
+
+### And four checks were asking one cartridge about another one's content
+
+The move-ranking check read move *order* out of a pokecrystal source tree and
+indexed this ROM with it, at seven bytes an entry where its move struct is
+eight — misreading the table twice over and then asserting that GUILLOTINE is
+effect 38, which is a fact about Crystal. It asks the ROM's own `MoveNames`
+now and asserts what the app needs: **every move whose damage ignores the
+power byte is in `lethalEffects`, whatever this cartridge numbers it.** On
+Crystal it had been quietly checking four of its nine moves, because the ROM
+says `HORN DRILL` and the list said `HORN_DRILL`.
+
+The gym and gate checks read *every* `titles/*.js` and held each one to
+whatever ROM was loaded, so this cartridge was asked whether Crystal's
+Goldenrod Gym is where Crystal says. They read the picked profile now.
+
+And **a check that cannot run has not failed.** This cartridge has no
+`BattleMenuHeader`, so the shape the app declares for that box is unverified
+— worth saying, and not the same as wrong. Its Bug-Contest discriminator is
+claimed by no header at all, which is the opposite of the ambiguity that check
+exists for. Its dialogue is *compressed*, so `check-app phrases` has no bytes
+to look a phrase up in; the app matches the tilemap, which is decompressed by
+then. What tells a compressed cartridge from a plain one is measured
+structurally rather than in English — the language-bound mistake this
+repository already made once — as **runs of ten letter bytes**: Crystal
+13180, the Dutch build 14798, PokemonAmbrosia 23182, and this one 174.
+
+**It reads 29 of 31 now, and both failures are true.** Its trainer parties are
+in banks the reader will not guess at. And its chart deliberately omits
+Ground-on-Flying — `; checks airborne state instead` — so the app prices a
+Ground move at neutral where the game will do nothing at all. That is a real
+thing about how the pilot behaves there, and the check saying so is the check
+working.
+
 ## The part that had to be redesigned
 
 The desktop pilot hangs its whole design on CPU hooks: the game's own routines

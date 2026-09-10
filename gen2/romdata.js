@@ -203,7 +203,7 @@ export class RomData {
   itemName(id) {
     if (!id || id === 0xff) return '';
     if (this._itemCache && this._itemCache.has(id)) return this._itemCache.get(id);
-    const name = this._packedName(this.items, id);
+    const name = this._packedName(this.items, id + this.e.itemBase);
     if (!this._itemCache) this._itemCache = new Map();
     this._itemCache.set(id, name);
     return name;

@@ -285,6 +285,18 @@ export const gen2 = {
   moveBytes: 7,
   moveField: { effect: 1, power: 2, type: 3, pp: 5 },
   moveCount: 251,
+  // Which *index* of `ItemNames` holds item 1. Zero on Crystal, whose table
+  // begins with MASTER BALL. Polished Crystal's begins with an entry for the
+  // no-item slot -- "Park Ball" -- so its POKE_BALL is index 1, and reading
+  // at index 0 made every item on that cartridge the one before it: Pikachu
+  // evolved with a WATER STONE where its record says THUNDERSTONE.
+  //
+  // **Declared, where the species table's is derived.** A placeholder there
+  // is `?000?`, which does not start with a letter and gives the reader
+  // something to see; a placeholder here is a plausible item name and gives
+  // it nothing. The move table is not shifted on either cartridge, which is
+  // why this is one number and not three.
+  itemBase: 0,
   // Effects whose damage has nothing to do with the power byte, so ranking by
   // power to find something gentle picks exactly the moves that end a battle:
   //   38 OHKO, 40 SUPER_FANG, 87 LEVEL_DAMAGE, 88 PSYWAVE, 89 COUNTER,
@@ -371,6 +383,19 @@ export const gen2 = {
   // A grass entry is: map group, map number, three rates, then three blocks of
   // seven (level, species) -- morning, day, night.
   encounter: { blocks: 3, slotsPerBlock: 7, headerBytes: 5 },
+  // --- a map's header, in `MapGroupPointers` ------------------------------
+  // Crystal writes nine bytes and puts the attributes' **bank** in front:
+  // `db BANK(attributes), tileset, environment` then `dw attributes`.
+  // Polished Crystal writes seven and no bank at all -- `db tileset`,
+  // `dn sign, environment`, `dw attributes` -- because every one of its
+  // attribute blocks is in one bank. Read at Crystal's offsets its headers
+  // gave addresses like $0401, which is not in a banked window, and the map
+  // graph came out empty.
+  //
+  // `attrBank: null` means the bank is not in the header and has to be
+  // found; see `_attrBank` in world.js, which scores every bank in the ROM
+  // against every map and takes the one that works.
+  mapHeader: { bytes: 9, attrBank: 0, attrAddr: 3, landmark: 5 },
   // What those three blocks are called, in the order `wTimeOfDay` numbers
   // them. Keys rather than prose, the same bargain `growthRates` makes: what
   // to call "after dark" on a screen is the interface's business and `rows.js`
