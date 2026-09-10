@@ -4078,6 +4078,23 @@ when there are files it cannot pair, because those are a cartridge somebody put
 there expecting it to be used, and a silent skip would read as the checks
 passing.
 
+### And it failed on the push, in the one path it was written for
+
+`check_moves` is a group whose whole shape is *skip unless there is a
+cartridge*, and it was the one caller handed a path that could now be `None`.
+`rom_path.exists()` on `None` is an `AttributeError`, and it fires only on a
+machine with no cartridge — which is CI, and a clean checkout, and never the
+machine the change was made on. A green local run, a red push.
+
+The fix is two lines; what is worth keeping is the second half.
+`DEV_NO_CARTRIDGE=1` makes every one of these tools behave as though `dev/`
+were empty, and `tools/check-app --no-cartridge` does it for the checks. Every
+cartridge-reading group has two paths and only one of them is ever taken on a
+developer's machine, so the other one is exactly the sort of code this
+repository keeps finding untested — *a path that was measured once and then
+wired up is the path least likely to have a test*, arriving from a new
+direction.
+
 ### And the rule is written twice, so it is checked
 
 `tools/cartridge.mjs` for the node tools, `tools/cartridge.py` for the checks

@@ -32,6 +32,10 @@ const stemOf = (f) => basename(f, extname(f));
  * run over several hacks scriptable without moving files about.
  */
 export function findCartridge(dev) {
+  // The other half of the override, and the one that catches bugs rather than
+  // enabling scripts: every tool here has a second path for when there is no
+  // cartridge, and on a machine with one that path never runs.
+  if (process.env.DEV_NO_CARTRIDGE) return null;
   const forced = process.env.DEV_ROM && process.env.DEV_SYM;
   if (forced) {
     return { rom: process.env.DEV_ROM, sym: process.env.DEV_SYM,

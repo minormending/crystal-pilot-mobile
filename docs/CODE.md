@@ -6748,7 +6748,7 @@ about that code did not.
 
 ### The other checks
 
-<!-- covers: tools/check-app @ 380b0ca4983c -->
+<!-- covers: tools/check-app @ e1be0dfc3ec7 -->
 
 `tools/check-app` runs everything that can be verified without a ROM:
 

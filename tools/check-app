@@ -350,7 +350,11 @@ def check_moves():
         os.environ.get("POKECRYSTAL_SOURCE", pathlib.Path.home()
                        / "projects" / "pokecrystal"))
     moves_asm = src / "data" / "moves" / "moves.asm"
-    if not (rom_path.exists() and sym_path.exists() and moves_asm.exists()):
+    # `cartridge_paths` answers None where there is nothing to pair, which is
+    # the case this check is *written* for and was the one place that assumed a
+    # Path came back. It only fails on a machine with no cartridge -- CI and a
+    # clean checkout, and never the machine it was changed on.
+    if not rom_path or not sym_path or not moves_asm.exists():
         print("  skip  move ranking (no cartridge in dev/, or no source)")
         return 0
 
@@ -2103,6 +2107,12 @@ CHECKS = {
 
 
 def main(argv):
+    # `--no-cartridge` runs the checks the way CI runs them, on a machine that
+    # has one. Every group that reads a cartridge has a second path for when
+    # there is none, and that path is invisible to whoever has a `dev/` --
+    # which is how a `None` reached `.exists()` and only failed after a push.
+    if "--no-cartridge" in argv:
+        os.environ["DEV_NO_CARTRIDGE"] = "1"
     wanted = [a for a in argv if not a.startswith("-")] or list(CHECKS)
     unknown = [w for w in wanted if w not in CHECKS]
     if unknown:

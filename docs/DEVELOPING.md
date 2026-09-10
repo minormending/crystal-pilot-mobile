@@ -521,7 +521,17 @@ plausible and wrong. So:
 | nothing | the usual "no cartridge in dev/", exit 0 |
 
 `DEV_ROM` and `DEV_SYM` override the search outright, which is what makes a run
-over several hacks scriptable without moving files about.
+over several hacks scriptable without moving files about. `DEV_NO_CARTRIDGE=1`
+does the opposite and is the one that catches bugs: it makes every tool here
+behave as though `dev/` were empty, which is **the path CI takes and the one
+nobody with a cartridge ever runs**. `tools/check-app --no-cartridge` is the
+same thing for the checks.
+
+That is not a hypothetical. The first version of this module handed
+`check_moves` a `None` where it expected a path, and `check_moves` is precisely
+a group written to skip without a cartridge — so the failure existed only on a
+machine that had none, which is CI and a clean checkout and never the machine
+it was written on. It got through a green local run and failed on the push.
 
 The rule is written twice — `tools/cartridge.mjs` for the node tools and
 `tools/cartridge.py` for these checks and `rom-events` — because the two halves

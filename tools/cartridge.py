@@ -29,6 +29,13 @@ def find_cartridge(dev: pathlib.Path):
     `DEV_ROM` and `DEV_SYM` override the search, which is what makes a run over
     several hacks scriptable without moving files about.
     """
+    # The other half of the override, and the one that catches bugs rather than
+    # enabling scripts: every group that reads a cartridge has a second path for
+    # when there is none, and on a machine with a cartridge that path never
+    # runs. It is the path CI takes, and a clean checkout, and it is where the
+    # first version of this module put an AttributeError.
+    if os.environ.get("DEV_NO_CARTRIDGE"):
+        return None, None, None
     forced_rom, forced_sym = os.environ.get("DEV_ROM"), os.environ.get("DEV_SYM")
     if forced_rom and forced_sym:
         return pathlib.Path(forced_rom), pathlib.Path(forced_sym), None
