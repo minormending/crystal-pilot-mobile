@@ -88,6 +88,11 @@ import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 DEV = ROOT / 'dev'
+sys.path.insert(0, str(ROOT / 'tools'))
+# Shared with `tools/check-app`, for the reason `counts.py` is shared with
+# `tools/renumber`: two readers of one directory that disagreed about which
+# cartridge is current would be worse than either.
+import cartridge  # noqa: E402
 
 # Enough of the script command set to read a gate, and every one of these was
 # derived from the symbol file rather than looked up -- the derivation is in
@@ -1060,8 +1065,12 @@ def cart_trainer(cart, who):
 
 
 def load():
-    rom, sym = DEV / 'pokecrystal.gbc', DEV / 'pokecrystal.sym'
-    if not rom.exists() or not sym.exists():
+    # Whatever cartridge is in `dev/`, paired by name -- see tools/cartridge.py
+    # for why the pairing is the careful part and the globbing is not.
+    rom, sym, note = cartridge.find_cartridge(DEV)
+    if note:
+        print(f'[cartridge] {note}')
+    if not rom or not sym:
         print(f'no cartridge in {DEV.name}/ — nothing to read')
         print('(a ROM is not in this repository and never will be)')
         return None

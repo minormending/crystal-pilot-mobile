@@ -24,29 +24,23 @@
 //
 // Needs a ROM and a symbol file in `dev/`; `--save` and `--shift` also need a
 // `.sav` there. Without them it says so and exits 0.
-import { readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
-import { Symbols } from '../gen2/symbols.js';
 import { RomData } from '../gen2/romdata.js';
+import { openCartridge } from './cartridge.mjs';
 import { GameState } from '../gen2/state.js';
 import { gen2 } from '../gen2/engine.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DEV = join(HERE, '..', 'dev');
-const ROM = join(DEV, 'pokecrystal.gbc');
-const SYM = join(DEV, 'pokecrystal.sym');
 
-if (!existsSync(ROM) || !existsSync(SYM)) {
-  console.log('no cartridge in dev/ — nothing to read');
-  console.log('(a ROM is not in this repository and never will be)');
-  process.exit(0);
-}
-
-const rom = readFileSync(ROM);
-const symbols = new Symbols(readFileSync(SYM, 'utf8'));
-const gb = { romByte: (bank, addr) => rom[bank * 0x4000 + (addr & 0x3fff)] };
+// Whatever cartridge is in `dev/`, paired by name -- see tools/cartridge.mjs
+// for why the pairing is the careful part and the globbing is not.
+const cart = openCartridge(DEV);
+if (!cart) process.exit(0);
+const { rom, symbols, gb } = cart;
 const data = new RomData(symbols, gb, []);
 const state = new GameState(symbols, gen2);
 
