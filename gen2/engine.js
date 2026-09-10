@@ -897,3 +897,28 @@ export const gen2 = {
   // single hard-coded pair says about every cartridge but one.
   saveCheck: [[99, 127]],
 };
+
+
+/**
+ * Which object kinds count as `name`, as a `Set`.
+ *
+ * **A cartridge can have more than one kind of the same thing.** Crystal's
+ * `objectTypes` is three numbers and a trainer is 2. Polished Crystal has
+ * eight, and *two* of them are trainers: `OBJECTTYPE_TRAINER` and
+ * `OBJECTTYPE_GENERICTRAINER`, the second being the one most trainers on a
+ * route or in a Gym actually are. 461 of its 525 fightable objects are type
+ * 3, so `type === objectTypes.trainer` saw 12% of the trainers in the game
+ * and the Duel row offered to clear a map that was full of people it could
+ * not see.
+ *
+ * So a kind is a number *or a list of them*, the same bargain
+ * `encounter.blockOf` makes, and this is what a caller asks instead of
+ * comparing. An absent kind is an empty set, which is the same "cannot say"
+ * every reader here answers with -- and the three callers all check
+ * `size` before offering anything.
+ */
+export function kindsOf(engine, name) {
+  const declared = ((engine && engine.objectTypes) || {})[name];
+  if (declared === undefined) return new Set();
+  return new Set(Array.isArray(declared) ? declared : [declared]);
+}

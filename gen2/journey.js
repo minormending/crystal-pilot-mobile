@@ -15,6 +15,7 @@
 // to land on and stops with a plain description if it lands somewhere else,
 // because a walk that quietly drifts off course ends up mashing A at a wall.
 import { CollisionMap } from './collision.js';
+import { kindsOf } from './engine.js';
 import { World } from './world.js';
 
 // How many times a pickup starts over -- each one escapes whatever is on screen
@@ -2046,10 +2047,10 @@ export class Journey {
     const spent = new Set();
     const stats = { fought: 0, won: 0, prize: 0 };
     const wram = await this.settled();
-    const trainerType = (this.state.e.objectTypes || {}).trainer;
-    const list = wram && trainerType !== undefined
+    const fights = kindsOf(this.state.e, 'trainer');
+    const list = wram && fights.size
       ? this.collision.placedObjects(wram)
-          .filter((o) => o.index !== 0 && o.type === trainerType)
+          .filter((o) => o.index !== 0 && fights.has(o.type))
       : [];
     const placed = list.length;
     const rounds = placed + slack;

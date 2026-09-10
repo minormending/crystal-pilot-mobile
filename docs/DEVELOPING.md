@@ -15,7 +15,7 @@ what CI checks and what the pre-commit hook blocks on.
 ```mermaid
 flowchart LR
     E[an edit] --> H{{".githooks/pre-commit"}}
-    H --> T["./run-tests<br/>950 behaviour tests"]
+    H --> T["./run-tests<br/>951 behaviour tests"]
     H --> C["tools/check-app<br/>32 groups"]
     H --> D["tools/docs-check<br/>46 tracked sections"]
     T --> OK[commit]
@@ -39,7 +39,7 @@ git config core.hooksPath .githooks
 ./run-tests -v         # notes and stack lines
 ```
 
-950 tests in 27 files, and what each file is about says more than the count:
+951 tests in 27 files, and what each file is about says more than the count:
 
 | file | tests | what it pins down |
 | --- | --- | --- |
@@ -47,7 +47,7 @@ git config core.hooksPath .githooks
 | `rows.mjs` | 147 | what every row and offer says, when its button works, and what the runner picks |
 | `menus.mjs` | 73 | the order the START menu is driven in, and what is closed between tries |
 | `battle.mjs` | 84 | whose turn it is, which Pokémon is out, and a win from a whiteout |
-| `collision.mjs` | 38 | which tiles can be walked, and which have somebody standing on them |
+| `collision.mjs` | 39 | which tiles can be walked, and which have somebody standing on them |
 | `capture.mjs` | 41 | weakening, ball choice, the party prompt, and the refusals before a throw |
 | `grind.mjs` | 22 | what a grind says while it works, and the bounds that make it stop |
 | `clock.mjs` | 22 | waiting for an hour, and telling a clock that will not move from a game that is not running |
@@ -127,7 +127,7 @@ section gives. Everything by hand runs against a local build.
 
 ```mermaid
 flowchart BT
-    C["the app"] --> T["./run-tests<br/>950 behaviour tests"]
+    C["the app"] --> T["./run-tests<br/>951 behaviour tests"]
     C --> A["tools/check-app<br/>32 groups"]
     C --> D["tools/docs-check<br/>46 tracked sections"]
     C --> V["tools/coverage<br/>what the suite never runs"]

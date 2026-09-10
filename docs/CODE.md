@@ -114,7 +114,7 @@ of the subtleties in sections 6 and 7.
 
 ## 2. The shape of it
 
-<!-- covers-api: app/main.js gen2/journey.js titles/crystal.js gen2/tasks.js gen2/nav.js gen2/world.js gen2/collision.js gen2/state.js gen2/romdata.js gen2/symbols.js gbcore/gb.js @ 9869e2bed0e8 -->
+<!-- covers-api: app/main.js gen2/journey.js titles/crystal.js gen2/tasks.js gen2/nav.js gen2/world.js gen2/collision.js gen2/state.js gen2/romdata.js gen2/symbols.js gbcore/gb.js @ e946c70d643b -->
 
 Thirty modules, in four directories, and the directories are the design:
 **an import may point down this list and never up.**
@@ -1027,7 +1027,7 @@ noticing at all.
 
 ### `collision.js` — what you can walk on
 
-<!-- covers: gen2/collision.js @ aafdf85d9589 -->
+<!-- covers: gen2/collision.js @ 63ca6a9f7713 -->
 
 Decodes the loaded map into "can I stand on this tile", and does breadth-first
 pathfinding over the result. This is what turns walking from trial and error
@@ -1085,6 +1085,19 @@ So the three readers over them each pick the array that answers their question:
   what an object *is*, and the struct says whether it is here and where. It
   returns an empty list rather than falling back, because a fallback would offer
   a walk to somebody a flag is still hiding.
+
+**And *what an object is* can be more than one number.** Crystal has three
+object kinds and a trainer is 2. Polished Crystal has eight, of which two are
+trainers — `OBJECTTYPE_TRAINER` and `OBJECTTYPE_GENERICTRAINER` — and **461 of
+its 525 fightable objects are the second one**. Held to a single number this
+saw an eighth of the trainers in the game, and every trainer in every Gym but
+the leader is generic, so a "cleared" Gym would have been a Gym nobody fought.
+
+So `objectTypes.trainer` is a number *or a list of them*, the same bargain
+`encounter.blockOf` makes, and `kindsOf(engine, 'trainer')` in
+`gen2/engine.js` is what the three callers ask instead of comparing. An
+undeclared kind is an empty set, which is the generic profile's position:
+silence rather than a guess that walks the pilot up to a shopkeeper.
 
 ```mermaid
 flowchart LR
@@ -1274,7 +1287,7 @@ Route 30's door to it at `(17,5)`.
 
 ## 4. Taking one step, and planning a walk
 
-<!-- covers: gen2/nav.js gen2/collision.js @ f6579756db3a -->
+<!-- covers: gen2/nav.js gen2/collision.js @ d849bfc8f52b -->
 
 ### One step
 
@@ -1379,7 +1392,7 @@ point those coordinates mean somewhere else entirely.
 
 ## 5. Crossing to the next map
 
-<!-- covers: gen2/journey.js gen2/world.js @ fb90698f40c0 -->
+<!-- covers: gen2/journey.js gen2/world.js @ ae2279c32e5b -->
 
 A connection spans only part of a shared edge, so "walk west until something
 happens" does not work. `crossEdge()` closes the distance in stages, then tries
@@ -1794,7 +1807,7 @@ mechanism's evidence spans two runs rather than one.
 
 ### The bigger number is not the harder hit
 
-<!-- covers: gen2/romdata.js gen2/engine.js gen2/battle.js @ 523b21fe3c5d -->
+<!-- covers: gen2/romdata.js gen2/engine.js gen2/battle.js @ ed136ee551ea -->
 
 For twenty-three passes the pilot ranked its moves by one number: the `power`
 byte out of the cartridge's move table. `romdata.move()` had been returning the
@@ -1948,7 +1961,7 @@ pilot uses, not a second one beside it. See section 10.
 
 ### Sending out somebody who can touch it
 
-<!-- covers: gen2/battle.js gen2/engine.js @ 9f185f6702ee -->
+<!-- covers: gen2/battle.js gen2/engine.js @ 4f09d82dcb89 -->
 
 The pass before could tell that the Pokémon on the field takes nothing off a
 Ghost, and said so. The remedy it named — *a different Pokémon* — was one the
@@ -2466,7 +2479,7 @@ flowchart TD
 
 ## 7a. Five that act on where you already are
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ cddf572a4202 -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ ae627991c925 -->
 
 Grind, hunt and catch all go *looking* for something. These five do the obvious
 thing with the situation you are already in, and take no parameters:
@@ -3102,7 +3115,7 @@ because that failure is only otherwise discovered by reaching for the undo.
 
 ## 8. The errands
 
-<!-- covers: titles/crystal.js gen2/journey.js @ c1e13347f2d2 -->
+<!-- covers: titles/crystal.js gen2/journey.js @ 53957559fbad -->
 
 Everything in this section is `crystal.js` — the only file in the app that names
 a Crystal map, a Crystal door or a Crystal NPC. What it stands on is
@@ -3474,7 +3487,7 @@ the bag" rather than "did we gain any".
 
 ## 8a. Finding the Centers and the Marts in the cartridge
 
-<!-- covers: gen2/world.js gen2/journey.js @ fb90698f40c0 -->
+<!-- covers: gen2/world.js gen2/journey.js @ ae2279c32e5b -->
 
 The last thing in this app that had to be written out by hand. A title said
 where the Centers and the Marts were, so the pilot healed in the two towns
@@ -3724,7 +3737,7 @@ by, which is the only leg it can measure.
 
 ## 8d. A route the game itself refuses
 
-<!-- covers: gen2/journey.js gen2/state.js @ a6d9f6f26e18 -->
+<!-- covers: gen2/journey.js gen2/state.js @ fb8b304722a1 -->
 
 The pass before this one taught the walk to *quote* the man who turns it back.
 This is the pilot doing something about it.
@@ -3831,7 +3844,7 @@ counting bytes reads a full case as one.
 
 ## 8e. Fighting everybody here
 
-<!-- covers: gen2/journey.js @ 501eb6b1bb61 -->
+<!-- covers: gen2/journey.js @ 8d51609079fa -->
 
 The primitive a Gym needs. The pilot has been stopped on Route 32 for three
 passes by a man who wants Falkner beaten first, and beating Falkner means
@@ -3932,7 +3945,7 @@ costs however long it takes somebody to notice their money is gone.
 
 ## 8f. Going and winning a badge
 
-<!-- covers: gen2/journey.js gen2/state.js titles/crystal.js @ c41f55bbe5e5 -->
+<!-- covers: gen2/journey.js gen2/state.js titles/crystal.js @ 3a4847df5612 -->
 
 The pilot has been turned back from Route 32 since the pass it learned to find
 Pokémon Centers. `reopen` throws away every written-off road the moment a badge
@@ -4015,7 +4028,7 @@ everybody is a heal whatever it says about itself.
 
 ## 8g. The tiles that run a script, and saying hello
 
-<!-- covers: gen2/world.js gen2/journey.js @ fb90698f40c0 -->
+<!-- covers: gen2/world.js gen2/journey.js @ ae2279c32e5b -->
 
 Four passes of machinery pointed at one sentence a man says, and the reader that
 made it diagnosable is twelve lines.
@@ -4105,7 +4118,7 @@ sent the reader at it.
 
 ## 8h. What a species becomes, and when
 
-<!-- covers: gen2/romdata.js gen2/engine.js @ 9191992762bb -->
+<!-- covers: gen2/romdata.js gen2/engine.js @ dfd14fdf6310 -->
 
 Two questions a party entry cannot answer: *what will this turn into*, and
 *what is it about to learn*. Both are in one table, because in Gen 2 they are
@@ -4197,7 +4210,7 @@ file says they do.
 
 ## 8i. Reaching an hour
 
-<!-- covers: gen2/jobs.js gen2/engine.js gen2/romdata.js gen2/state.js gbcore/saves.js app/rows.js @ e7b50a7a7cdd -->
+<!-- covers: gen2/jobs.js gen2/engine.js gen2/romdata.js gen2/state.js gbcore/saves.js app/rows.js @ 15982c05c07e -->
 
 A third of Johto's grass is behind the clock. HOOTHOOT is on Route 29 after
 dark and nowhere on it at noon, and for four versions the usage guide said the
@@ -4364,7 +4377,7 @@ cartridge will not say which hours are which.
 
 ## 8j. A cartridge that changed everything it could
 
-<!-- covers: titles/polished.js gen2/engine.js gen2/romdata.js gen2/state.js gen2/menus.js @ aee3bf4c66f0 -->
+<!-- covers: titles/polished.js gen2/engine.js gen2/romdata.js gen2/state.js gen2/menus.js @ 9c0469fb681d -->
 
 Polished Crystal is the profile in `docs/DEVELOPING.md`'s hack table described
 as "the generic fallback, and the hardest thing to support properly". It is
@@ -4683,7 +4696,7 @@ This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ 957a5a532b97 -->
+<!-- covers: app/main.js index.html @ 471061d03867 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -5232,7 +5245,7 @@ seconds by a page whose loop was supposedly running.
 
 ### One thing at a time
 
-<!-- covers: app/main.js @ f608cb4cf4bf -->
+<!-- covers: app/main.js @ a7cccb5db75a -->
 
 One Game Boy, one joypad, one canvas — so a great deal of this app is about
 making sure two things are never driving them at once. There are three claims,
@@ -5374,7 +5387,7 @@ before a step is taken, so a stopped walk does not move at all.
 
 ### What is behind the Gym door, before you open it
 
-<!-- covers: gen2/romdata.js gen2/engine.js app/rows.js @ 7ad2b779e7f2 -->
+<!-- covers: gen2/romdata.js gen2/engine.js app/rows.js @ be8410ff49df -->
 
 The Gym row could say where the Gym is and who is in it. **Whether it is worth
 going** is two facts the cartridge has had all along, and neither of them
@@ -5487,7 +5500,7 @@ is the noise this list exists to replace.
 
 ### Leading with the one that can answer the room
 
-<!-- covers: gen2/romdata.js gen2/menus.js gen2/journey.js @ dd5c7d24b7a2 -->
+<!-- covers: gen2/romdata.js gen2/menus.js gen2/journey.js @ 335c439e3971 -->
 
 **Gen 2 sends out slot one and asks nobody.** So the party's order decides the
 first battle of a Gym — and since the pass before, the pilot has known exactly
@@ -5645,10 +5658,11 @@ Violet, `a0 b2 b2 b2 82 82 80` in Azalea — zero wherever the script symbol is 
 leader or a guide, two wherever it is named `Trainer...`.
 
 Two maps is not a sample, which is why `tools/rom-events --verify` checks that
-rule against **all 388 maps** in the game: 1396 objects, twelve disagreements,
-every one of them explicable — some trainers are talked to rather than seen, so
-`TrainerOfficerDirk` is legitimately a script object, and the Trainer House's
-receptionist is named `Trainer…` while being nobody to fight.
+rule against **every map the app can read** — 361 on Crystal: 1336 objects,
+twelve disagreements, every one of them explicable, because some trainers are
+talked to rather than seen, so `TrainerOfficerDirk` is legitimately a script
+object and the Trainer House's receptionist is named `Trainer…` while being
+nobody to fight.
 
 **And the first run of that verification found a worse error than the one it
 was written for.** 233 disagreements out of 3879 objects — because
@@ -5659,15 +5673,24 @@ objects of "type 9" whose script pointers landed three bytes inside a trainer's
 the two maps the layout was derived from were the two maps it could not fail
 on.
 
-Three constants were hand-copied and three were wrong. `check-app romlayout`
-reads all seven out of both files and compares them, which is the repair for
-*two copies of a structure* rather than for carelessness.
+Three constants were hand-copied and three were wrong, so `check-app
+romlayout` read all seven out of both files and compared them — the repair for
+*two copies of a structure* rather than for carelessness. It was not enough.
+Polished Crystal's coord event really is five bytes; both files said eight;
+the check saw them agree. **The tool has no copy at all now** and asks
+`tools/route`, and `romlayout` asks the cartridge — see [a cartridge that
+changed everything it could](#8j-a-cartridge-that-changed-everything-it-could).
+
+The low-nibble rule is Crystal's too, incidentally: Polished gives the palette
+its own byte and writes the type whole, and it has two trainer kinds rather
+than one. On that cartridge the same check reads 2108 objects with 22
+disagreements.
 
 </details>
 
 ### Gates: asking the cartridge what it wants
 
-<!-- covers: gen2/state.js gen2/journey.js titles/crystal.js @ c41f55bbe5e5 -->
+<!-- covers: gen2/state.js gen2/journey.js titles/crystal.js @ 3a4847df5612 -->
 
 Two kinds of closed road, and the difference is everything:
 
@@ -5776,7 +5799,7 @@ a conversation.
 
 ### The card behind a party row
 
-<!-- covers: app/rows.js app/main.js index.html @ f3b6bb37530c -->
+<!-- covers: app/rows.js app/main.js index.html @ 65d2b86d352a -->
 
 Two questions the game itself will not answer about a Pokémon you are
 carrying — *what is this made of* and *what is it about to become* — and both
@@ -5865,7 +5888,7 @@ at body size.
 
 ### Running the list
 
-<!-- covers: app/rows.js app/main.js @ 60aea826d065 -->
+<!-- covers: app/rows.js app/main.js @ 70ace65b2137 -->
 
 The app has spent forty passes learning to answer one question — *what can the
 pilot do here, and which of those is worth most?* — and twenty showing the
@@ -5989,7 +6012,7 @@ to deposit your last Pokémon.
 
 ### The settings and the save card
 
-<!-- covers: index.html app/main.js @ 957a5a532b97 -->
+<!-- covers: index.html app/main.js @ 471061d03867 -->
 
 The pilot's own list got a glyph column, shorter names and a slot to fill in
 v165. These two cards did not, and reading them found that they had a different
@@ -6617,7 +6640,7 @@ they have been installed.
 
 ### Watching the other device's screen
 
-<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ 461d725ff5ec -->
+<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ 8c40f56cfadb -->
 
 One device shows its screen; the other watches it, and plays it if the first
 one says so. The picture goes straight between them over WebRTC and never

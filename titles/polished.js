@@ -145,13 +145,20 @@ export const polished = {
     // the type whole, and masking it would fold `OBJECTTYPE_SCRIPT_SILENT`
     // ($06) into a script and lose the distinction it exists to make.
     mapEvents: { ...gen2.mapEvents, coordBytes: 5, typeMask: 0xff },
-    // Two more kinds than Crystal, and the one that matters is 3. Its
+    // Five more kinds than Crystal, and the one that matters is 3. Its
     // `script_constants.asm` reads SCRIPT, ITEMBALL, TRAINER,
     // GENERICTRAINER, POKEMON, COMMAND, SCRIPT_SILENT, DONOTHING -- so the
-    // first three agree with Crystal and a *generic* trainer, which is most
-    // of the trainers in a Gym, is a fourth kind nothing in Crystal has.
-    objectTypes: { script: 0, itemball: 1, trainer: 2, genericTrainer: 3,
-                   pokemon: 4, command: 5, scriptSilent: 6, doNothing: 7 },
+    // first three agree with Crystal, and a *generic* trainer is a fourth
+    // kind nothing in Crystal has.
+    //
+    // **`trainer` is a list here, because 461 of this cartridge's 525
+    // fightable objects are the second kind.** Only 64 are type 2. Held to
+    // one number the Duel row counted an eighth of the trainers in the game
+    // and offered to clear a map full of people it could not see -- and
+    // every Gym but the leader is generic, so a swept Gym would have been a
+    // Gym nobody fought.
+    objectTypes: { script: 0, itemball: 1, trainer: [2, 3], pokemon: 4,
+                   command: 5, scriptSilent: 6, doNothing: 7 },
     // Which object says *this room is a Pokemon Center* and which says
     // *this is a Mart*. Different sprites and, for the nurse, a different
     // tile.

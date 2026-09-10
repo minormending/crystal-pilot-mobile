@@ -229,6 +229,37 @@ test('a trainer the map placed but has not spawned is not offered', async (t) =>
   t.eq(cm.trainers(), [], 'nobody to fight');
 });
 
+test('a cartridge with two kinds of trainer is offered both', async (t) => {
+  // **Polished Crystal has `OBJECTTYPE_TRAINER` and
+  // `OBJECTTYPE_GENERICTRAINER`, and 461 of its 525 fightable objects are
+  // the second one.** Held to a single number this saw an eighth of the
+  // trainers in the game, and every trainer in every Gym but the leader is
+  // generic -- so a "cleared" Gym would have been a Gym nobody fought.
+  //
+  // A kind is a number or a list of them, the same bargain
+  // `encounter.blockOf` makes.
+  const two = { ...gen2,
+                objectTypes: { ...gen2.objectTypes, trainer: [2, 3] } };
+  const objects = [
+    { sprite: 1, x: 8, y: 15 },              // index 0 is the player
+    { sprite: 39, x: 9, y: 27, type: 2 },    // at (5,23)
+    { sprite: 89, x: 9, y: 28, type: 3 },    // at (5,24)
+    { sprite: 76, x: 9, y: 29, type: 0 },    // a Rattata at (5,25)
+  ];
+  const spawned = [
+    { placed: 1, sprite: 39, x: 9, y: 27 },
+    { placed: 2, sprite: 89, x: 9, y: 28 },
+    { placed: 3, sprite: 76, x: 9, y: 29 },
+  ];
+  t.eq(mapWith({ mapBlocks: ROUTE_30, objects, spawned }).trainers(),
+       [{ x: 5, y: 23, sprite: 39 }],
+       'one kind declared, one trainer seen');
+  t.eq(mapWith({ mapBlocks: ROUTE_30, engine: two, objects, spawned })
+         .trainers(),
+       [{ x: 5, y: 23, sprite: 39 }, { x: 5, y: 24, sprite: 89 }],
+       'two kinds declared, both — and still not the Rattata');
+});
+
 test('a cartridge whose profile names no object types offers no trainers',
      async (t) => {
   // The generic profile's position, and the same rule the takeable sprites

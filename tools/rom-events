@@ -450,7 +450,15 @@ def verify(cart):
     # of here: Crystal has one and Polished Crystal has two, the second being
     # the `OBJECTTYPE_GENERICTRAINER` most of its Gym trainers are.
     kinds = object_kinds(cart)
-    fights = {v for k, v in kinds.items() if 'rainer' in k} or {2}
+    # A kind is a number or a list of them -- see `kindsOf` in
+    # `gen2/engine.js`, which is what the app asks. Polished Crystal's
+    # `trainer` is `[2, 3]`.
+    fights = set()
+    for name, value in kinds.items():
+        if 'rainer' not in name:
+            continue
+        fights.update(value if isinstance(value, list) else [value])
+    fights = fights or {2}
     objects = disagree = 0
     for name in maps:
         for script, (_, _, kind) in gym_objects(cart, name).items():

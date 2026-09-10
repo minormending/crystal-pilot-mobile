@@ -20,6 +20,7 @@ import { createHost, createWatcher } from '../gbcore/stream.js';
 import { Cancelled } from '../gbcore/taskbase.js';
 import { REPLACED_SLOT, Saves, SLOT_IDS, UNDO_SLOT } from '../gbcore/saves.js';
 import { GameState } from '../gen2/state.js';
+import { kindsOf } from '../gen2/engine.js';
 import { Tasks } from '../gen2/tasks.js';
 import { CollisionMap } from '../gen2/collision.js';
 import { Nav } from '../gen2/nav.js';
@@ -2081,10 +2082,10 @@ async function refresh() {
   } else {
     martsNear = false;
   }
-  const trainerType = (state.e.objectTypes || {}).trainer;
-  trainersOnMap = collision && s.worldLoaded && s.wram && trainerType !== undefined
+  const fights = kindsOf(state.e, 'trainer');
+  trainersOnMap = collision && s.worldLoaded && s.wram && fights.size
     ? collision.placedObjects(s.wram)
-        .filter((o) => o.index !== 0 && o.type === trainerType).length
+        .filter((o) => o.index !== 0 && fights.has(o.type)).length
     : 0;
   // Named in the Heal row before the row is pressed, the same way the nearer
   // Center is -- so the choice the pilot would make is visible rather than

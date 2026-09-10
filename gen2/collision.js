@@ -19,7 +19,7 @@
 // into the emulator per byte would make a search of a few hundred tiles slow
 // enough to feel broken.
 import { GameBoy } from '../gbcore/gb.js';
-import { gen2 } from './engine.js';
+import { gen2, kindsOf } from './engine.js';
 
 const b = GameBoy.byteAt;
 
@@ -351,11 +351,11 @@ export class CollisionMap {
    * somebody who is not there.
    */
   trainers(wram = this.wram) {
-    const want = (this.e.objectTypes || {}).trainer;
-    if (want === undefined) return [];
+    const want = kindsOf(this.e, 'trainer');
+    if (!want.size) return [];
     const live = this.liveObjects(wram);
     if (!live) return [];
-    return live.filter((o) => o.type === want)
+    return live.filter((o) => want.has(o.type))
       .map((o) => ({ x: o.x, y: o.y, sprite: o.sprite }));
   }
 
