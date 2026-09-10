@@ -245,6 +245,23 @@ export const gen2 = {
   //
   // `stab` is the same-type bonus: Gen 2 scales damage by 15/10 when the move
   // shares a type with the Pokemon using it.
+  // The type numbers themselves. **The chart is indexed by these and a rule
+  // about Pokemon has to be written in them**, because the *names* come out of
+  // the cartridge and are one translation away from changing: on a Dutch build
+  // FIRE reads VUUR and ELECTRIC reads ELEKTRO, and a checker that looked its
+  // rules up by name resolved every one of them to nothing and reported thirty
+  // correct matchups as wrong.
+  //
+  // 0x06 BIRD and 0x13 CURSE are here for completeness and are used by
+  // nothing: Gen 2 leaves 0x0a-0x13 between the physical types and the special
+  // ones, and BIRD is unused. Naming them is what stops the gap looking like a
+  // mistake in this list.
+  typeIds: {
+    NORMAL: 0x00, FIGHTING: 0x01, FLYING: 0x02, POISON: 0x03, GROUND: 0x04,
+    ROCK: 0x05, BIRD: 0x06, BUG: 0x07, GHOST: 0x08, STEEL: 0x09,
+    CURSE: 0x13, FIRE: 0x14, WATER: 0x15, GRASS: 0x16, ELECTRIC: 0x17,
+    PSYCHIC: 0x18, ICE: 0x19, DRAGON: 0x1a, DARK: 0x1b,
+  },
   damage: {
     matchupBytes: 3, neutral: 10, chartEnd: 0xff, chartForesight: 0xfe,
     chartScan: 256, stab: 1.5,
@@ -265,6 +282,24 @@ export const gen2 = {
   // pointer table ends where its own first pointer lands: 67 classes on this
   // cartridge, and a hack that added one does not need this file changed.
   trainerMonBytes: { 0: 2, 1: 6, 2: 3, 3: 7 },
+  // How wide one entry of `TrainerGroups` is -- and this is a *list of the
+  // widths that exist*, not a declaration, because which one a cartridge uses
+  // is derived from the table itself the same way its length is.
+  //
+  // Two is a `dw` table, which is what Crystal has. Three is `dba`: a bank
+  // byte and then the address, which is what a hack writes when its trainer
+  // data outgrew one bank -- pokecrystal16 does exactly this. Measured on
+  // both: at `TrainerGroups` vanilla reads `1f 5a 35 5a ...` and
+  // pokecrystal16 reads `0e d4 59 0e ea 59 ...`, so the bank comes first and
+  // the address after it, little-endian.
+  //
+  // The derivation is decisive rather than a guess, which is why it is a
+  // derivation: read the first entry at each width and only one of them lands
+  // inside the same bank window as the table with a gap divisible by itself.
+  // Both cartridges then agree the table holds **67 classes**, which is the
+  // cross-check -- pokecrystal16 did not add trainer classes, it widened the
+  // pointers to them.
+  trainerPointerBytes: [2, 3],
   trainerEnd: 0xff,
   // A bound on a terminated name, not a size. "COOLTRAINER♀" is the longest
   // class name; a trainer's own name is shorter still.

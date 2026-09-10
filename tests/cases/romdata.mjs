@@ -419,7 +419,7 @@ const TRAINER_BASE = 0x5999;
  * The bytes come out in the cartridge's own shape: a `dw` per class, then a
  * terminated name, a type byte, the Pokémon, and `$ff`.
  */
-function trainerBytes(classes) {
+function trainerBytes(classes, { wide = 2, bank = 0x0e } = {}) {
   const enc = (t) => [...t].map((c) => (c === ' ' ? 0x7f : 0x80 + c.charCodeAt(0) - 65));
   const bodies = classes.map((trainers) => {
     const out = [];
@@ -438,10 +438,15 @@ function trainerBytes(classes) {
     }
     return out;
   });
-  const head = classes.length * 2;
+  // `wide` is the entry size, and three is what rgbds `dba` emits: a bank byte
+  // and then the address. Built as bytes rather than described, because the
+  // width is the thing under test and a fixture that declared it could not be
+  // read at the wrong one.
+  const head = classes.length * wide;
   const bytes = [];
   let at = TRAINER_BASE + head;
   for (const body of bodies) {
+    if (wide > 2) bytes.push(bank);
     bytes.push(at & 0xff, at >> 8);
     at += body.length;
   }
@@ -1173,4 +1178,43 @@ test('a table with no terminator is not a table', async (t) => {
   t.eq(rom.hoursOf(0), null, 'and nothing built on it answers either');
   t.eq(romReading({}, {}).hourBlocks(), null,
        'as with a cartridge that does not name the table');
+});
+
+test('a three-byte pointer table is read at three bytes, without being told',
+     async (t) => {
+  // pokecrystal16 writes `TrainerGroups` as `dba` -- a bank byte then the
+  // address -- because its trainer data outgrew one bank. Read at two bytes
+  // the same table decodes: 503 classes instead of 67, names like
+  // "ser? ATTACK.", and every class boundary lost. So the width is derived
+  // from the table the same way its length is, and this holds that.
+  const rom = romReading(TYPED, {
+    chart: CHART, trainers: trainerBytes(LEADERS, { wide: 3 }),
+    classes: CLASS_NAMES,
+    species: { 16: [N, 0x02], 17: [N, 0x02], 11: [BUG, BUG],
+               14: [BUG, 0x03], 123: [BUG, 0x02], 35: [N, N], 241: [N, N] },
+  });
+  const falkner = rom.trainer('FALKNER');
+  t.ne(falkner, null, 'found at all');
+  t.eq(falkner.group, 1, 'in the first class, not the five-hundredth');
+  t.eq(falkner.party.map((m) => [m.level, m.species]), [[7, 16], [9, 17]],
+       'with the party he has');
+  t.eq(rom.trainer('BUGSY').group, 3, 'and the class boundaries still hold');
+});
+
+test('the width is derived, so the two-byte table still reads at two',
+     async (t) => {
+  // The other half: a derivation that always answered three would have made
+  // the test above pass and every real Crystal cartridge fail.
+  const rom = withTrainers();
+  t.eq(rom.trainer('FALKNER').group, 1, 'vanilla, unchanged');
+  t.eq(rom.trainerIndex().size, 3, 'three trainers over three classes');
+});
+
+test('a table whose first pointer fits no width at all is not a table',
+     async (t) => {
+  // Neither two nor three divides into a gap of one, and nothing lands in the
+  // bank window -- which is what a symbol file aimed somewhere else gives.
+  const rom = romReading(TYPED, { trainers: [0x01, 0x00, 0x00, 0x00, 0x00] });
+  t.eq(rom.trainerIndex(), null, 'refused rather than decoded');
+  t.eq(rom.trainer('FALKNER'), null, 'and nothing is found through it');
 });

@@ -374,18 +374,27 @@ export class RomData {
     if (this._trainers !== undefined) return this._trainers;
     if (!this.trainers) return (this._trainers = null);
     const { bank, addr } = this.trainers;
+    // How wide an entry is, derived rather than declared -- see `_pointerWidth`.
+    const wide = this._pointerWidth(bank, addr);
+    if (!wide) return (this._trainers = null);
     const word = (at) => this.gb.romByte(bank, at) | (this.gb.romByte(bank, at + 1) << 8);
-    const first = word(addr);
-    // The table ends where its first pointer lands. A first pointer at or
-    // below the table itself is not a pointer table.
-    if (!(first > addr)) return (this._trainers = null);
-    const count = (first - addr) >> 1;
+    // The address is the *last two bytes* of an entry whatever its width, and
+    // a three-byte entry puts the bank in front of it. Honoured rather than
+    // ignored: a `dba` table exists so that it can cross banks, and on the
+    // one cartridge measured every entry happens to name the table's own --
+    // which is exactly the state in which an assumption survives being tested.
+    const entry = (i) => {
+      const at = addr + i * wide;
+      return { bank: wide > 2 ? this.gb.romByte(bank, at) : bank,
+               addr: word(at + wide - 2) };
+    };
+    const count = (entry(0).addr - addr) / wide;
     // Built from the length rather than counted up to it: reading one
     // pointer too many puts the first trainer's *name* in the list as a
     // word, which is a plausible address and bounds the last class with
     // whatever it happens to be. There is no comparison here to get wrong
     // now, which is the better answer than a test for one.
-    const ptr = Array.from({ length: count }, (_, i) => word(addr + i * 2));
+    const ptr = Array.from({ length: count }, (_, i) => entry(i));
     const out = new Map();
     for (let g = 0; g < count; g++) {
       // The next class's pointer, or nothing for the last one -- which is
@@ -395,11 +404,18 @@ export class RomData {
       // them has an off-by-one to get wrong; `tools/mutate` widened the
       // comparison and nothing could fail either way, which is a survivor
       // that is really a spare decision.
-      const stop = ptr[g + 1] === undefined ? null : ptr[g + 1];
-      let at = ptr[g];
+      //
+      // And only when the next class is in the *same* bank, because two
+      // addresses in different banks do not compare -- a class whose
+      // successor lives elsewhere is as unbounded as the last one, and
+      // pretending otherwise would cut it short at an address that means
+      // nothing to it.
+      const next = ptr[g + 1];
+      const stop = next && next.bank === ptr[g].bank ? next.addr : null;
+      let at = ptr[g].addr;
       for (let guard = 0; guard < 64; guard++) {
         if (stop !== null && at >= stop) break;
-        const read = this._trainerAt(bank, at);
+        const read = this._trainerAt(ptr[g].bank, at);
         if (!read) break;
         // First definition wins, the same rule the symbol table uses: a name
         // shared by two trainers -- and dozens are -- is asked about by
@@ -412,6 +428,38 @@ export class RomData {
       }
     }
     return (this._trainers = out);
+  }
+
+  /**
+   * How wide one entry of the trainer pointer table is, or null.
+   *
+   * **Derived, not declared**, and it is the same self-describing property the
+   * class count uses: the entries sit immediately behind the pointers, so the
+   * first pointer *is* the end of the table — and a width that is wrong makes
+   * that arithmetic obviously wrong rather than subtly so.
+   *
+   * A candidate width passes three tests together. The first entry's address
+   * must be past the table; the gap must divide by the width, since that gap
+   * is a whole number of entries; and it must land in the same 16KB window as
+   * the table, because a banked address that does not is not an address in
+   * this bank. Measured on two cartridges, only one width passes on each:
+   * Crystal's `dw` table at width two, pokecrystal16's `dba` table at three.
+   *
+   * The list's order is the tie-break if a cartridge ever satisfies both, and
+   * two is first because it is the shape Gen 2 ships.
+   */
+  _pointerWidth(bank, addr) {
+    for (const wide of this.e.trainerPointerBytes) {
+      const at = addr + wide - 2;
+      const first = this.gb.romByte(bank, at)
+        | (this.gb.romByte(bank, at + 1) << 8);
+      const gap = first - addr;
+      if (gap > 0 && gap % wide === 0
+          && (first & 0xc000) === (addr & 0xc000)) {
+        return wide;
+      }
+    }
+    return null;
   }
 
   /**
