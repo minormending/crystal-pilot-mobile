@@ -445,6 +445,23 @@ export const polished = {
     { map: key(26, 4), reach: 'healAtCenter',
       inside: key(26, 6), door: [29,3], nurse: [5,1] }, // Cherrygrove
   ],
+  // Where to go looking for grass when there is none underfoot. Five early
+  // Johto routes, the same fallback `titles/crystal.js` declares three of.
+  //
+  // **Declared rather than derived, and the reason is a road the graph can
+  // walk and the game cannot.** Every map with a grass table is a correct
+  // answer to "where is there grass", and asking the cartridge from New Bark
+  // Town returns Route 27 at one leg and Route 26 at two -- the late-game
+  // road to Kanto, which the map data joins to New Bark's eastern edge and a
+  // guard closes for most of the story. A pilot sent there walks until
+  // somebody turns it back.
+  //
+  // So this is the half of the answer that is about the *story*: the routes
+  // an early game can actually stand on. Their keys and their contents came
+  // out of the encounter table -- Route 29 has Rattata, Hoothoot and Hoppip
+  // one leg out, Route 46 Geodude and Spearow at two -- and which of them to
+  // walk to is `backToGrass`'s decision, nearest first.
+  grassyMaps: [key(24, 1), key(5, 9), key(26, 1), key(26, 2), key(10, 1)],
   // **Every Mart with a counter in it, found the way the Centers were.**
   // A map whose own symbol is `*Mart`, the town that warps into it, that
   // warp's tile for the door, and a clerk wearing `SPRITE_MART_CLERK` at

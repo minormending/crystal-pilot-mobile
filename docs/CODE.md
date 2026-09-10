@@ -4377,7 +4377,7 @@ cartridge will not say which hours are which.
 
 ## 8j. A cartridge that changed everything it could
 
-<!-- covers: titles/polished.js gen2/engine.js gen2/romdata.js gen2/state.js gen2/menus.js @ 4d861d703db3 -->
+<!-- covers: titles/polished.js gen2/engine.js gen2/romdata.js gen2/state.js gen2/menus.js @ 651d2883aca9 -->
 
 Polished Crystal is the profile in `docs/DEVELOPING.md`'s hack table described
 as "the generic fallback, and the hardest thing to support properly". It is
@@ -4712,6 +4712,18 @@ instructions to reading this one's: `--set 0x2e4` lands on
 the object list read right and `places` measured, standing in Violet City
 discovers six Centers and four Marts — Violet's own doors among them at
 (31,25) and (9,17), which are the same two tiles on Crystal.
+
+**And five grassy maps, which are the one list here that is not derived.**
+Every map with a grass table is a correct answer to "where is there grass",
+and asking the cartridge from New Bark Town returns Route 27 at one leg and
+Route 26 at two — the late-game road to Kanto, which the map data joins to
+New Bark's eastern edge and a guard closes for most of the story. The graph
+can walk it and the game cannot. So `grassyMaps` is the half of that answer
+which is about the story: Route 29, Route 46, Route 30, Route 31, Route 32,
+which is Crystal's three plus the two this cartridge puts within reach.
+`tools/route --reach` sees them now — it read `map:` and `inside:` and walked
+straight past a bare list, so a patch of grass no route reaches was a
+fallback that could never fire and nothing said so.
 
 Twelve Marts are declared as well, generated the way the Centers were: a map
 whose symbol is `*Mart`, the town that warps into it, that warp's tile, and a

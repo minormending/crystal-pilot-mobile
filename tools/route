@@ -241,9 +241,19 @@ if (argv.includes('--reach')) {
     // profile whose healers are generated from the cartridge has no
     // `const` for any of them, so the whole check quietly applied to
     // nothing -- twenty-one Centers and not one of them asked about.
-    for (const m of src.matchAll(/(map|inside):\s*key\((\d+),\s*(\d+)\)/g)) {
+    for (const m of src.matchAll(/(map|inside|from):\s*key\((\d+),\s*(\d+)\)/g)) {
       declared.push([`${m[1]} ${m[2]}.${m[3]}`,
                      mapKey(Number(m[2]), Number(m[3]))]);
+    }
+    // And the bare lists: `grassyMaps` is keys with no field name in front
+    // of them, so the sweep above walked straight past all five. A patch of
+    // grass no route reaches is a fallback that can never fire -- which is
+    // exactly the kind of silence this check exists to break.
+    for (const list of src.matchAll(/\bgrassyMaps:\s*\[([^\]]*)\]/g)) {
+      for (const m of list[1].matchAll(/key\((\d+),\s*(\d+)\)/g)) {
+        declared.push([`grass ${m[1]}.${m[2]}`,
+                       mapKey(Number(m[1]), Number(m[2]))]);
+      }
     }
     if (!declared.length) continue;
     const start = declared.find(([n]) => n === 'PLAYERS_HOUSE_2F')
