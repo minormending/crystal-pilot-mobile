@@ -15,7 +15,7 @@ what CI checks and what the pre-commit hook blocks on.
 ```mermaid
 flowchart LR
     E[an edit] --> H{{".githooks/pre-commit"}}
-    H --> T["./run-tests<br/>915 behaviour tests"]
+    H --> T["./run-tests<br/>918 behaviour tests"]
     H --> C["tools/check-app<br/>31 groups"]
     H --> D["tools/docs-check<br/>45 tracked sections"]
     T --> OK[commit]
@@ -39,7 +39,7 @@ git config core.hooksPath .githooks
 ./run-tests -v         # notes and stack lines
 ```
 
-915 tests in 27 files, and what each file is about says more than the count:
+918 tests in 27 files, and what each file is about says more than the count:
 
 | file | tests | what it pins down |
 | --- | --- | --- |
@@ -55,7 +55,7 @@ git config core.hooksPath .githooks
 | `control.mjs` | 30 | the task lifecycle: stopping, failing, undo points, and loops that must end |
 | `state.mjs` | 39 | reading the party, the map, the badges and the battery out of work RAM |
 | `titles.mjs` | 19 | choosing a profile for a cartridge, and falling back to generic |
-| `romdata.mjs` | 78 | the cartridge's own character encoding and tables, byte by byte |
+| `romdata.mjs` | 81 | the cartridge's own character encoding and tables, byte by byte |
 | `remember.mjs` | 14 | which remembered choices are believed, and which dropped |
 | `worker.mjs` | 14 | the idle loop: one step outstanding, and a lost step recovered |
 | `nav.mjs` | 14 | the walk loop: what it decides between two steps, and every reason it stops |
@@ -127,7 +127,7 @@ section gives. Everything by hand runs against a local build.
 
 ```mermaid
 flowchart BT
-    C["the app"] --> T["./run-tests<br/>915 behaviour tests"]
+    C["the app"] --> T["./run-tests<br/>918 behaviour tests"]
     C --> A["tools/check-app<br/>31 groups"]
     C --> D["tools/docs-check<br/>45 tracked sections"]
     C --> V["tools/coverage<br/>what the suite never runs"]
@@ -569,12 +569,20 @@ Which makes some hacks much more informative than others:
 | hack | title | species | what it exercises |
 | --- | --- | --- | --- |
 | [patched-crystal](https://github.com/UberMedic7/patched-crystal) | `PM_CRYSTAL` | 251 | the control — bug fixes only, so anything that differs is this app's fault |
-| [pokecrystal16](https://github.com/fellowship-of-the-roms/pokecrystal16) | `PM_CRYSTAL` | 251 | **16-bit species ids, content otherwise vanilla** — the cleanest isolation of a structural change |
+| [pokecrystal16](https://github.com/fellowship-of-the-roms/pokecrystal16) | `PM_CRYSTAL` | 251 | **16-bit species ids, content otherwise vanilla** — built and run: **31/31**, once the trainer pointer width was derived rather than assumed |
 | [PokemonAmbrosia](https://github.com/AndrewC101/PokemonAmbrosia) | `PM_CRYSTAL` | 254 | species past `speciesCount`, *while* being claimed as Crystal |
 | [pokecrystal-speedchoice](https://github.com/Dabomstew/pokecrystal-speedchoice) | `PM_CRYSTAL` | 251 | changed flow and menus, vanilla species |
 | [Majora-Crystal](https://github.com/WasabiRaptor/Majora-Crystal) | `PM_CRYSTAL` | 255 | built around a time limit — the adversary for the clock reading |
-| [pokecrystal-nl](https://github.com/wfowler1/pokecrystal-nl) · [-es](https://github.com/erosunica/pokecrystal-es) · [_cn](https://github.com/SnDream/pokecrystal_cn) | `PM_CRYSTAL` | 251 | the charmap and the English phrases — `phrases` should fail, loudly |
+| [pokecrystal-nl](https://github.com/wfowler1/pokecrystal-nl) · [-es](https://github.com/erosunica/pokecrystal-es) · [_cn](https://github.com/SnDream/pokecrystal_cn) | `PM_CRYSTAL` | 251 | the charmap and the English phrases. Dutch built and run: **29/31**, and both failures are true — `sent to BILL`, `PACK` and `SWITCH` are not in that ROM, and its switch box begins `WISSEL` |
 | [polishedcrystal](https://github.com/Rangi42/polishedcrystal) | `PKPCRYSTAL` | 334 | the generic fallback, and the hardest thing to support properly |
+
+Two are built and run. **A word about the ones that are not**: most Crystal
+hacks pin an old rgbds and will not assemble with a current one.
+`patched-crystal` wants **0.5.2**, a 2021 release whose syntax predates
+`DEF x EQU`, and every one of its seven branches is on it. `PokemonAmbrosia`
+targets 1.0.0 and still fails to link (`JR target must be between -128 and 127
+bytes away`). Budget for building an old assembler, or pick from the ones that
+say 1.0.0 and mean it.
 
 None of that is a promise that any of them work. It is a list of the questions
 each one asks, and the checks above are how the answers arrive.
@@ -709,7 +717,19 @@ than one standing next to it.
 `--verify` exists because the chart is 110 rows of three bytes with a
 **one-byte** separator in the middle, so every wrong reading of it produces a
 chart — just not this cartridge's. The twenty-two rules it asserts are facts
-about Pokémon rather than facts about this code: Electric cannot touch Ground,
+about Pokémon rather than facts about this code, and they are written in type
+**ids** rather than in type names for exactly that reason: a Dutch build calls
+FIRE `VUUR` and ELECTRIC `ELEKTRO`, so looking a rule up through the
+cartridge's own name table resolved all twenty-two to nothing and printed a
+page of `WRONG` about a chart that was entirely correct. The ids are constants
+and live in the engine profile; the names come out of the ROM and are one
+translation away from changing. The same repair applies to the eight gym
+leaders: they are asserted to share **one** class name, whatever this cartridge
+calls it, rather than to read `LEADER` — which still catches the failure the
+check exists for, since a decode that has lost its class boundaries gives eight
+*different* answers.
+
+The rules are: Electric cannot touch Ground,
 Water doubles on Fire, Psychic cannot touch Dark, Normal cannot touch Ghost.
 The last of those is the row directly behind the separator, so a decode that
 eats one byte loses it first. It checks the shape too — 110 rows, and no

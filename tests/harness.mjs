@@ -624,14 +624,12 @@ export function markSaved(sram, sym, present = true) {
 }
 
 // --- a cartridge's tables, without a cartridge ------------------------------
-// The type numbers Gen 2 uses, as far as the fakes need them. Written here
-// rather than in a test, because a move's type and a Pokemon's type have to
-// come from the same numbering or every matchup in every test is a coincidence.
-export const TYPE = {
-  NORMAL: 0, FIGHTING: 1, FLYING: 2, POISON: 3, GROUND: 4, ROCK: 5, BUG: 7,
-  GHOST: 8, STEEL: 9, FIRE: 0x14, WATER: 0x15, GRASS: 0x16, ELECTRIC: 0x17,
-  PSYCHIC: 0x18, ICE: 0x19, DRAGON: 0x1a, DARK: 0x1b,
-};
+// The type numbers Gen 2 uses. Re-exported from the engine profile rather than
+// listed again, because a move's type and a Pokemon's type have to come from
+// the same numbering or every matchup in every test is a coincidence -- and
+// two lists of them is how they stop being the same numbering. It moved there
+// when `tools/types --verify` needed the same constants for the same reason.
+export const TYPE = gen2.typeIds;
 
 export function fakeRom({ moves = {}, species = {}, items = {}, chart = [],
                           landmarks = {}, trainers = {}, types = {},

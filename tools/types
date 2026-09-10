@@ -69,9 +69,19 @@ const TYPE_NAMES = (() => {
   return out;
 })();
 const typeName = (id) => TYPE_NAMES.get(id) || `type ${id}`;
+/**
+ * A type id from whatever somebody typed, or null.
+ *
+ * The cartridge's own names first, so `tools/types vuur gras` works on a Dutch
+ * build -- and then the engine's constant names, so `tools/types fire grass`
+ * works on one too. Before that second line a translated cartridge answered
+ * nothing to every English word, which is the state that made `--verify`
+ * report thirty correct matchups as wrong.
+ */
 const typeId = (text) => {
   const want = text.toUpperCase();
   for (const [id, name] of TYPE_NAMES) if (name === want) return id;
+  if (gen2.typeIds[want] !== undefined) return gen2.typeIds[want];
   const n = Number(text);
   return Number.isInteger(n) ? n : null;
 };
@@ -186,15 +196,32 @@ function verifyTrainers() {
                   + `should be ${JSON.stringify(party)}`);
     }
   }
-  // Every leader is a LEADER, which is a second reading of the same rows
-  // through a different table.
-  for (const [name] of LEADERS) {
+  // Every leader shares one class name, which is a second reading of the same
+  // rows through a different table.
+  //
+  // **They agree with each other rather than with the word LEADER**, and that
+  // is the same repair the rules above needed: a class name is text the
+  // cartridge owns, so a Dutch build reads LEIDER and asserting the English
+  // word reported all eight as wrong about a table that was entirely right.
+  // What the check is actually for survives the change -- a decode that has
+  // lost the class boundaries gives eight *different* answers, which is what
+  // pokecrystal16's three-byte pointer table did before it could be read:
+  // "null", "ser? ATTACK.", "RIVAL".
+  //
+  // It still has to be *a* name. Eight empty strings agree with each other and
+  // are what a cartridge with no class-name table gives.
+  const classes = LEADERS.map(([name]) => {
     const got = data.trainer(name);
-    const cls = got && data.trainerClass(got.group);
-    if (cls !== 'LEADER') {
-      bad++;
-      console.log(`  WRONG  ${name}'s class reads "${cls}", not LEADER`);
-    }
+    return got ? data.trainerClass(got.group) : null;
+  });
+  const same = classes.every((c) => c && c === classes[0]);
+  if (!same) {
+    bad++;
+    LEADERS.forEach(([name], i) => {
+      console.log(`  WRONG  ${name}'s class reads ${JSON.stringify(classes[i])}`);
+    });
+    console.log('         eight leaders should share one class name, whatever '
+                + 'this cartridge calls it');
   }
   console.log(`${LEADERS.length} leader(s) over ${index.size} trainer(s): `
               + (bad ? `${bad} disagreement(s)`
@@ -205,8 +232,16 @@ function verifyTrainers() {
 function verify() {
   let bad = 0;
   for (const [a, d, want, why] of RULES) {
-    const from = typeId(a), to = typeId(d);
-    const got = from === null || to === null ? null : data.matchup(from, to);
+    // **By id, not by name.** These rules are claims about Pokemon -- Electric
+    // cannot touch Ground -- and Pokemon does not change language. The names
+    // in the table do: a Dutch build calls them ELEKTRO and GROND, so looking
+    // them up through the cartridge resolved all twenty-two to nothing and
+    // printed a page of WRONG about a chart that was entirely correct. A
+    // checker that fails on a cartridge it does not understand is worse than
+    // no checker, because somebody has to read the output.
+    const from = gen2.typeIds[a], to = gen2.typeIds[d];
+    const got = from === undefined || to === undefined
+      ? null : data.matchup(from, to);
     if (got !== want) {
       bad++;
       console.log(`  WRONG  ${a} on ${d}: reads ${got}, should be ${want} — ${why}`);

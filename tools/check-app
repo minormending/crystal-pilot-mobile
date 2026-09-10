@@ -1724,9 +1724,18 @@ def check_trainers():
                             f"trainer types")
     # And the count stays derived. A literal beside the pointer table is the
     # thing that rots when a hack adds a class.
-    if not re.search(r"first - addr\) >> 1", romdata):
+    # Written as "the gap over the entry width" rather than as one exact
+    # expression, because the expression changed the day a hack turned up with
+    # three-byte entries and the *claim* did not: the count is still the
+    # distance to the first pointer divided by how wide one is, and a literal
+    # beside the pointer table would still be the bug this guards.
+    if not re.search(r"entry\(0\)\.addr - addr\) / wide", romdata):
         problems.append("gen2/romdata.js  no longer derives the class count "
                         "from where the first pointer lands")
+    # And the width itself is derived, which is the same claim one level down.
+    if not re.search(r"_pointerWidth\(bank, addr\)", romdata):
+        problems.append("gen2/romdata.js  no longer derives the pointer width "
+                        "from the table itself")
     for p in problems:
         print(f"        {p}")
     if problems:
