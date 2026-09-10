@@ -204,9 +204,14 @@ def mutations(root):
             "door: [10, 15]", "door: [10, 16]")),
         # One stride moved in the tool, which is what happened by hand and
         # cost an hour of confident nonsense.
-        "romlayout": lambda: edit("tools/rom-events", sub(
-            "WARP_BYTES, COORD_BYTES, BG_BYTES, OBJECT_BYTES = 5, 8, 5, 13",
-            "WARP_BYTES, COORD_BYTES, BG_BYTES, OBJECT_BYTES = 5, 5, 5, 13")),
+        # The stride the two cartridges this repository has actually
+        # disagree about. There is nowhere left to mistype it twice -- it is
+        # one number in the engine profile now -- so the mutation is the
+        # honest one: give Crystal Polished Crystal's coord event and watch
+        # every map with a trigger tile on it stop having anybody on it.
+        "romlayout": lambda: edit("gen2/engine.js", sub(
+            "warpBytes: 5, coordBytes: 8, bgBytes: 5, objectBytes: 13,",
+            "warpBytes: 5, coordBytes: 5, bgBytes: 5, objectBytes: 13,")),
         # An errand that names nothing, which `gatesFrom` turns into a
         # missing offer rather than an error -- the kind of nothing nobody
         # notices.

@@ -1179,7 +1179,7 @@ Two more things the map alone will not tell you:
 
 ### `world.js` — which map adjoins which
 
-<!-- covers: gen2/world.js @ 4bce66bbb153 -->
+<!-- covers: gen2/world.js @ 8f466c3a4d60 -->
 
 The map graph, read out of the cartridge: edge connections *and* warps, so it can
 route out of a building rather than only across a route.
@@ -1204,6 +1204,13 @@ connected sides plus one 12-byte struct per connection naming the map beyond it.
 Warps live in the map's event block: two filler bytes, a count, then five bytes
 per warp — `y`, `x`, the destination warp index, and the group and number of the
 map it leads to.
+
+Every number in that paragraph is Crystal's, and every one of them is
+`engine.mapAttr` and `engine.mapEvents` rather than a constant in this file.
+Polished Crystal has no filler bytes and keeps its warps inside the map script
+header; its coord event is five bytes where Crystal's is eight. See [a cartridge
+that changed everything it
+could](#8j-a-cartridge-that-changed-everything-it-could).
 
 Nothing is loaded up front, and expanding outward from wherever the player is
 reaches everything walkable and nothing else, which is all a journey needs.
@@ -1239,6 +1246,13 @@ from being worse than the bug — none of which can refuse a map that exists:
   coordinates are *raw* where the objects' are stored four higher — measured,
   and the sort of asymmetry that reads as obviously consistent. See [the tiles
   that run a script](#8g-the-tiles-that-run-a-script-and-saying-hello).
+- **`objectsOn` also reports each object's kind and where its script lives.**
+  The kind is what tells a gym leader from the trainers around them — a leader
+  is *talked to*, so it is a script object, and nothing else in the ROM
+  distinguishes them. The script pointer is there for a caller with the symbol
+  table: it is the difference between "somebody stands at (5,2)" and
+  `VioletGymFalknerScript`, and it is what lets `tools/rom-events` name a
+  leader without walking the event block a second time.
 - **A tile off the map is not a tile**, which needed `sizeOf(group, number)` —
   the ROM's own copy of what `collision.mapSize()` reads from work RAM, so it
   can be asked about a room nobody has walked into. Measured against two maps
@@ -1365,7 +1379,7 @@ point those coordinates mean somewhere else entirely.
 
 ## 5. Crossing to the next map
 
-<!-- covers: gen2/journey.js gen2/world.js @ 5bbd653e37d5 -->
+<!-- covers: gen2/journey.js gen2/world.js @ fb90698f40c0 -->
 
 A connection spans only part of a shared edge, so "walk west until something
 happens" does not work. `crossEdge()` closes the distance in stages, then tries
@@ -1780,7 +1794,7 @@ mechanism's evidence spans two runs rather than one.
 
 ### The bigger number is not the harder hit
 
-<!-- covers: gen2/romdata.js gen2/engine.js gen2/battle.js @ f89439225cad -->
+<!-- covers: gen2/romdata.js gen2/engine.js gen2/battle.js @ 523b21fe3c5d -->
 
 For twenty-three passes the pilot ranked its moves by one number: the `power`
 byte out of the cartridge's move table. `romdata.move()` had been returning the
@@ -1934,7 +1948,7 @@ pilot uses, not a second one beside it. See section 10.
 
 ### Sending out somebody who can touch it
 
-<!-- covers: gen2/battle.js gen2/engine.js @ 22585206f6f1 -->
+<!-- covers: gen2/battle.js gen2/engine.js @ 9f185f6702ee -->
 
 The pass before could tell that the Pokémon on the field takes nothing off a
 Ghost, and said so. The remedy it named — *a different Pokémon* — was one the
@@ -3460,7 +3474,7 @@ the bag" rather than "did we gain any".
 
 ## 8a. Finding the Centers and the Marts in the cartridge
 
-<!-- covers: gen2/world.js gen2/journey.js @ 5bbd653e37d5 -->
+<!-- covers: gen2/world.js gen2/journey.js @ fb90698f40c0 -->
 
 The last thing in this app that had to be written out by hand. A title said
 where the Centers and the Marts were, so the pilot healed in the two towns
@@ -3496,6 +3510,20 @@ than on the two maps the app already knew:
 | --- | --- | --- |
 | the nurse | 23 | **21 at (3,1)** |
 | a clerk | 26 | **13 at (1,3)** |
+
+**A profile's, not the engine's, and Polished Crystal is why that matters.**
+Its nurse is sprite 151 standing at (5,1) and its clerk is sprite 152 at
+(1,3) — 21 of 26 and 13 of 46, by the same count over the same table. The
+method was run against Crystal first and returned Crystal's two rows exactly,
+which is the only reason to trust it on a cartridge nobody has measured by
+hand.
+
+None of that could be seen until the event block was read at the right
+strides: `objectsOn` was stepping past Polished Crystal's five-byte coord
+events by Crystal's eight, so every map that has a trigger tile on it came
+back with nobody standing on it — and *nobody standing on it* is what a quiet
+room looks like. See [a cartridge that changed everything it
+could](#8j-a-cartridge-that-changed-everything-it-could).
 
 The other thirteen clerks are department-store floors and kiosks, which this
 rule does not claim. Narrow on purpose: **a wrong match walks the pilot into a
@@ -3537,7 +3565,7 @@ after](#8d-a-route-the-game-itself-refuses).
 
 ## 8b. Asking the cartridge what its places are called
 
-<!-- covers: gen2/romdata.js gen2/world.js @ a38d7d1fbade -->
+<!-- covers: gen2/romdata.js gen2/world.js @ 100af45ae27a -->
 
 The one table that **retires** hand-written data rather than adding to it. A map
 used to be called whatever the title profile said, and everything else was
@@ -3612,7 +3640,7 @@ go](#8c-naming-a-city-is-a-feature).
 
 ## 8c. Naming a city is a feature
 
-<!-- covers: titles/crystal.js gen2/world.js @ 963f4020152a -->
+<!-- covers: titles/crystal.js gen2/world.js @ 255165b8e71c -->
 
 The map graph has always reached most of Johto. A flood over its exits from
 Route 31 finds sixty-odd maps in five legs — and every feature in this app was
@@ -3987,7 +4015,7 @@ everybody is a heal whatever it says about itself.
 
 ## 8g. The tiles that run a script, and saying hello
 
-<!-- covers: gen2/world.js gen2/journey.js @ 5bbd653e37d5 -->
+<!-- covers: gen2/world.js gen2/journey.js @ fb90698f40c0 -->
 
 Four passes of machinery pointed at one sentence a man says, and the reader that
 made it diagnosable is twelve lines.
@@ -4004,6 +4032,12 @@ runs when he is *spoken to*, and he stands one tile east at (19,8).
 Measured, and it is the opposite of the reader three lines away in the same
 file — the kind of asymmetry that reads as obviously consistent and puts a
 trigger four tiles from where it is.
+
+**And its width is the cartridge's.** Those eight bytes are Crystal's: three
+of content, a pad, the pointer, two more pads. Polished Crystal writes the
+three and the pointer and stops. `engine.mapEvents.coordBytes` is the number,
+and it is the one that decides where the objects behind the triggers begin —
+so getting it wrong empties the object list rather than moving a trigger.
 
 ```mermaid
 flowchart TD
@@ -4071,7 +4105,7 @@ sent the reader at it.
 
 ## 8h. What a species becomes, and when
 
-<!-- covers: gen2/romdata.js gen2/engine.js @ ad510371185e -->
+<!-- covers: gen2/romdata.js gen2/engine.js @ 9191992762bb -->
 
 Two questions a party entry cannot answer: *what will this turn into*, and
 *what is it about to learn*. Both are in one table, because in Gen 2 they are
@@ -4163,7 +4197,7 @@ file says they do.
 
 ## 8i. Reaching an hour
 
-<!-- covers: gen2/jobs.js gen2/engine.js gen2/romdata.js gen2/state.js gbcore/saves.js app/rows.js @ e87c92df0e24 -->
+<!-- covers: gen2/jobs.js gen2/engine.js gen2/romdata.js gen2/state.js gbcore/saves.js app/rows.js @ e7b50a7a7cdd -->
 
 A third of Johto's grass is behind the clock. HOOTHOOT is on Route 29 after
 dark and nowhere on it at noon, and for four versions the usage guide said the
@@ -4330,7 +4364,7 @@ cartridge will not say which hours are which.
 
 ## 8j. A cartridge that changed everything it could
 
-<!-- covers: titles/polished.js gen2/engine.js gen2/romdata.js gen2/state.js gen2/menus.js @ b574e7284076 -->
+<!-- covers: titles/polished.js gen2/engine.js gen2/romdata.js gen2/state.js gen2/menus.js @ 837ae7eba86f -->
 
 Polished Crystal is the profile in `docs/DEVELOPING.md`'s hack table described
 as "the generic fallback, and the hardest thing to support properly". It is
@@ -4574,6 +4608,35 @@ with 21 map objects rather than 16. Measured on the running game: with the
 player at (4,6), the spawned struct 34 bytes × 2 in reads (5,6), which is
 the girl standing next to them. At Crystal's stride nothing read at all, so
 the walker had no one to walk around.
+
+**Its coord event is five bytes and Crystal's is eight, and nothing failed.**
+Crystal pads: `db scene, y, x`, a filler byte, `dw script`, then two more
+filler bytes. Polished Crystal writes the five bytes of content and stops. The
+strides lived as constants in `gen2/world.js`, so `coordEventsOn` reported
+three triggers for New Bark Town at scenes 0, 65 and 68 — the map has seven,
+at scenes 1 and 3 — and `objectsOn`, which steps *past* the triggers to reach
+the objects, came back with an empty list for a town with five people standing
+on it.
+
+An empty list is exactly what a map with nobody on it looks like. So
+`discover`, which recognises a Pokémon Center by its nurse and a Mart by its
+clerk, found neither on any map in the game, and the profile grew a
+hand-written table of nineteen Centers instead of deriving them.
+
+The block's four strides are `engine.mapEvents` now, and the type byte with
+them: Crystal packs the palette into the high nibble of byte seven, so its
+type is the low nibble, and Polished gives the palette its own byte and writes
+the type whole. Masking there would fold `OBJECTTYPE_SCRIPT_SILENT` into a
+script. It has eight kinds where Crystal has three, and the one that matters
+is `OBJECTTYPE_GENERICTRAINER` — most of the trainers in a Gym.
+
+**And with the block read right, its eight gyms declare themselves.**
+`tools/rom-events --findgyms` produces every field of a gym declaration from
+the ROM: the town, the room, the door tile, where the leader stands, and the
+badge bit. It had answered "no script object named for them on a Gym map" for
+all eight, twice over and for two different reasons — the stride above, and a
+64 KiB truncation, both written up in
+`docs/DEVELOPING.md` under *What a second reader of the map tables costs*.
 
 **And its dialogue is compressed.** `macros/scripts/text.asm` compresses a
 string whenever compression saves space, so "was" is nowhere in that ROM while
@@ -5282,7 +5345,7 @@ before a step is taken, so a stopped walk does not move at all.
 
 ### What is behind the Gym door, before you open it
 
-<!-- covers: gen2/romdata.js gen2/engine.js app/rows.js @ bdbb53b0b54d -->
+<!-- covers: gen2/romdata.js gen2/engine.js app/rows.js @ 7ad2b779e7f2 -->
 
 The Gym row could say where the Gym is and who is in it. **Whether it is worth
 going** is two facts the cartridge has had all along, and neither of them
@@ -7138,7 +7201,7 @@ about that code did not.
 
 ### The other checks
 
-<!-- covers: tools/check-app @ 9d1f327e4f39 -->
+<!-- covers: tools/check-app @ 70b80da59ab9 -->
 
 `tools/check-app` runs everything that can be verified without a ROM:
 

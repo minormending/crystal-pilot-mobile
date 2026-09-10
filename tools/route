@@ -5,6 +5,9 @@
 //     tools/route --exits 10.1      every way out of Route 32
 //     tools/route --reach           every map a title declares, from the start
 //     tools/route --maps            every map the cartridge has, by name
+//     tools/route --objects         what stands on every one of them
+//     tools/route --warps           every door, and where it leads
+//     tools/route --triggers        every tile that runs a script
 //     tools/route --json 10.5 8.7   the same, for a script to read
 //
 // **This runs `gen2/world.js`, and that is the whole point of it.** The first
@@ -23,7 +26,7 @@
 //
 // Needs a ROM and a symbol file in `dev/`, which are not in this repository and
 // never will be. Without them it says so and exits 0.
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -31,6 +34,25 @@ import { World, mapKey } from '../gen2/world.js';
 import { engineOf, openCartridge } from './cartridge.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
+
+/**
+ * Say something, and be sure it was said.
+ *
+ * **`console.log` into a pipe is asynchronous, and `process.exit` does not
+ * wait for it.** Every mode here ends in `process.exit(0)`, which was
+ * harmless while the biggest answer was a few hundred lines -- and then
+ * `--objects` produced a megabyte of JSON for Polished Crystal's 488 maps
+ * and the reader on the other end got exactly 65536 bytes of it. Not an
+ * error, not a truncation anybody announced: valid JSON's opening brace and
+ * then a cut, which `json.loads` refuses and `tools/rom-events` was written
+ * to treat as "no maps". Every gym in the game came back unfound, twice, for
+ * two different reasons, and this was the second.
+ *
+ * `writeSync` on the file descriptor blocks until the bytes are gone.
+ */
+function say(text) {
+  writeSync(1, `${text}\n`);
+}
 const DEV = join(HERE, '..', 'dev');
 
 // Whatever cartridge is in `dev/`, paired by name -- see tools/cartridge.mjs
@@ -107,19 +129,93 @@ const plain = argv.filter((a) => !a.startsWith('--'));
 if (argv.includes('--maps')) {
   const out = {};
   for (const [key, name] of NAME) out[`${key >> 8}.${key & 0xff}`] = name;
-  if (json) console.log(JSON.stringify(out));
-  else for (const [k, v] of Object.entries(out)) console.log(`${k}  ${v}`);
+  if (json) say(JSON.stringify(out));
+  else for (const [k, v] of Object.entries(out)) say(`${k}  ${v}`);
+  process.exit(0);
+}
+
+if (argv.includes('--triggers')) {
+  // The tiles that run a script when stepped on, per named map. The third of
+  // the event block's four lists, and the one whose *width* is the thing
+  // cartridges disagree about -- so this is what `check-app romlayout` uses
+  // to tell a right stride from a wrong one: a map with triggers on it is a
+  // map the object reader has to step over something to reach.
+  const out = {};
+  for (const [key, name] of NAME) {
+    out[name] = world.coordEventsOn(key >> 8, key & 0xff);
+  }
+  if (json) say(JSON.stringify(out));
+  else for (const [name, list] of Object.entries(out)) {
+    if (!list.length) continue;
+    say(`${name}:`);
+    for (const c of list) say(`  (${c.x},${c.y})  scene ${c.scene}`);
+  }
+  process.exit(0);
+}
+
+if (argv.includes('--warps')) {
+  // Every named map's doors, out of the app's own reader, for the same
+  // reason `--objects` is here: `tools/rom-events` used to walk the event
+  // block itself, keyed off a `<Map>_MapEvents` symbol. Polished Crystal has
+  // none -- its warps live inside the map script header -- so every door in
+  // the game came back missing and every gym came back without one.
+  const out = {};
+  for (const [key, name] of NAME) {
+    out[name] = world.warps(key >> 8, key & 0xff)
+      .map((w) => ({ x: w.x, y: w.y, to: w.key }));
+  }
+  if (json) say(JSON.stringify(out));
+  else for (const [name, warps] of Object.entries(out)) {
+    if (!warps.length) continue;
+    say(`${name}:`);
+    for (const w of warps) say(`  (${w.x},${w.y})  → ${label(w.to)}`);
+  }
+  process.exit(0);
+}
+
+if (argv.includes('--objects')) {
+  // Every named map's object list, out of the app's own reader.
+  //
+  // **Here so that `tools/rom-events` can stop having a second one.** Finding
+  // where a gym leader stands means walking a map's event block, and the tool
+  // walked it in Python with Crystal's strides written out by hand. That is
+  // the fifth time a second reader of this cartridge's tables gave a
+  // confident wrong answer: on Polished Crystal, whose coord event is five
+  // bytes where Crystal's is eight, it found no leader on any of the eight
+  // Gym maps and said so as "no script object named for them", which reads
+  // like a fact about the hack.
+  //
+  // The script pointer is here because a symbol file turns it into a name,
+  // and a name is what a gym declaration is checked against. `bank:addr` in
+  // hex, which is how a `.sym` file writes it.
+  const out = {};
+  for (const [key, name] of NAME) {
+    out[name] = world.objectsOn(key >> 8, key & 0xff).map((o) => ({
+      map: `${key >> 8}.${key & 0xff}`,
+      sprite: o.sprite, x: o.x, y: o.y, type: o.type,
+      script: `${o.script.bank.toString(16)}:${o.script.addr.toString(16)}`,
+    }));
+  }
+  if (json) say(JSON.stringify(out));
+  else for (const [name, objects] of Object.entries(out)) {
+    if (!objects.length) continue;
+    say(`${name}:`);
+    for (const o of objects) {
+      say(`  (${o.x},${o.y})  type ${o.type}  sprite ${o.sprite}  `
+                  + `${o.script}`);
+    }
+  }
   process.exit(0);
 }
 
 if (argv.includes('--exits')) {
   const key = parse(plain[0] || '');
-  if (key === null) { console.log('give a map as group.number'); process.exit(2); }
-  console.log(`${label(key)} exits:`);
+  if (key === null) { say('give a map as group.number'); process.exit(2); }
+  say(`${label(key)} exits:`);
   for (const e of world.exits(key)) {
     const how = e.kind === 'edge' ? e.dir.toLowerCase()
                                   : `warp at (${e.tile.join(',')})`;
-    console.log(`  ${how.padEnd(24)} → ${label(e.key)}`);
+    say(`  ${how.padEnd(24)} → ${label(e.key)}`);
   }
   process.exit(0);
 }
@@ -156,16 +252,16 @@ if (argv.includes('--reach')) {
     // lowest-numbered map declared, which is somewhere in the same world
     // and is what "can the pilot get there from here" wants.
     const from_ = start || [...declared].sort((a, b) => a[1] - b[1])[0];
-    if (!from_) { console.log(`${file}: no starting map to measure from`); continue; }
-    console.log(`${file}: ${declared.length} declared map(s), from ${label(from_[1])}`);
+    if (!from_) { say(`${file}: no starting map to measure from`); continue; }
+    say(`${file}: ${declared.length} declared map(s), from ${label(from_[1])}`);
     for (const [name, key] of declared) {
       if (key === from_[1]) continue;
       const legs = way(from_[1], key);
       if (legs === null) {
-        console.log(`  !! ${name} (${label(key)}) is in no route from the start`);
+        say(`  !! ${name} (${label(key)}) is in no route from the start`);
         problems += 1;
       } else if (!json) {
-        console.log(`  ${String(legs.length).padStart(2)} leg(s)  ${name} — ${label(key)}`);
+        say(`  ${String(legs.length).padStart(2)} leg(s)  ${name} — ${label(key)}`);
       }
     }
   }
@@ -174,24 +270,24 @@ if (argv.includes('--reach')) {
 
 const [a, b] = plain;
 if (!a || !b) {
-  console.log(readFileSync(fileURLToPath(import.meta.url), 'utf8')
+  say(readFileSync(fileURLToPath(import.meta.url), 'utf8')
     .split('\n').filter((l) => l.startsWith('//')).map((l) => l.slice(3)).join('\n'));
   process.exit(2);
 }
 const from = parse(a), to = parse(b);
 if (from === null || to === null) {
-  console.log('give maps as group.number, e.g. tools/route 10.5 8.7');
+  say('give maps as group.number, e.g. tools/route 10.5 8.7');
   process.exit(2);
 }
 const legs = way(from, to);
 if (json) {
-  console.log(JSON.stringify(
+  say(JSON.stringify(
     { from: label(from), to: label(to),
       legs: legs && legs.map((l) => ({ ...l, to: label(l.to) })) }, null, 1));
 } else if (legs === null) {
-  console.log(`${label(from)} → ${label(to)}: no route in the app's own graph`);
+  say(`${label(from)} → ${label(to)}: no route in the app's own graph`);
   process.exit(1);
 } else {
-  console.log(`${label(from)} → ${label(to)}: ${legs.length} leg(s)`);
-  for (const leg of legs) console.log(`  ${leg.how.padEnd(24)} → ${label(leg.to)}`);
+  say(`${label(from)} → ${label(to)}: ${legs.length} leg(s)`);
+  for (const leg of legs) say(`  ${leg.how.padEnd(24)} → ${label(leg.to)}`);
 }

@@ -15,7 +15,7 @@ what CI checks and what the pre-commit hook blocks on.
 ```mermaid
 flowchart LR
     E[an edit] --> H{{".githooks/pre-commit"}}
-    H --> T["./run-tests<br/>946 behaviour tests"]
+    H --> T["./run-tests<br/>950 behaviour tests"]
     H --> C["tools/check-app<br/>32 groups"]
     H --> D["tools/docs-check<br/>46 tracked sections"]
     T --> OK[commit]
@@ -39,7 +39,7 @@ git config core.hooksPath .githooks
 ./run-tests -v         # notes and stack lines
 ```
 
-946 tests in 27 files, and what each file is about says more than the count:
+950 tests in 27 files, and what each file is about says more than the count:
 
 | file | tests | what it pins down |
 | --- | --- | --- |
@@ -51,7 +51,7 @@ git config core.hooksPath .githooks
 | `capture.mjs` | 41 | weakening, ball choice, the party prompt, and the refusals before a throw |
 | `grind.mjs` | 22 | what a grind says while it works, and the bounds that make it stop |
 | `clock.mjs` | 22 | waiting for an hour, and telling a clock that will not move from a game that is not running |
-| `world.mjs` | 26 | reading a cartridge's own maps: sizes, warps, objects and triggers |
+| `world.mjs` | 30 | reading a cartridge's own maps: sizes, warps, objects and triggers |
 | `control.mjs` | 30 | the task lifecycle: stopping, failing, undo points, and loops that must end |
 | `state.mjs` | 44 | reading the party, the map, the badges and the battery out of work RAM |
 | `titles.mjs` | 19 | choosing a profile for a cartridge, and falling back to generic |
@@ -127,7 +127,7 @@ section gives. Everything by hand runs against a local build.
 
 ```mermaid
 flowchart BT
-    C["the app"] --> T["./run-tests<br/>946 behaviour tests"]
+    C["the app"] --> T["./run-tests<br/>950 behaviour tests"]
     C --> A["tools/check-app<br/>32 groups"]
     C --> D["tools/docs-check<br/>46 tracked sections"]
     C --> V["tools/coverage<br/>what the suite never runs"]
@@ -490,7 +490,7 @@ fine and is wrong at run time:
 | `labels` | every job row is named after its own key, capitalised — which is the word the runner prints, built from the key rather than from a second table |
 | `gates` | every road a title declares shut names an event the ROM actually sets — skipped without a cartridge |
 | `gyms` | every gym a title declares has the right leader on the right tile, as a script object, with a badge bit that is a badge — skipped without a cartridge |
-| `romlayout` | `tools/rom-events` and `gen2/world.js` agree about all seven map-table strides. Three were hand-copied into the tool and three were wrong |
+| `romlayout` | the map-events block is read at *this* cartridge's strides — the objects behind a trigger tile resolve like the objects in front of one. It compared two files before, and two files can agree and both be wrong |
 | `phrases` | no engine module compares a screen phrase written into it — a phrase is content, so it is the title's to say — and, with a cartridge, every phrase the app looks for is one the cartridge actually says |
 | `menus` | every box the app tells apart by shape declares that shape in the profile and asks the instance for it — and, with a cartridge, the shape is the one the cartridge's own menu header draws |
 | `types` | every optional symbol the app reads travels in the shared digest, both sides' type addresses are read, and — with a cartridge — the decoded type chart agrees with twenty-two matchups nobody had to look up |
@@ -629,9 +629,9 @@ parsed the ROM itself would agree with the app until it did not, and then it
 would be a confident wrong answer hiding the bug it was written to find — five
 of those have actually happened here, which is why `tools/route --maps` prints
 the app's own map table and the Python tool asks it. `tools/rom-events` is the
-deliberate exception: it decodes *scripts*, which the app does not read at all,
-and where it overlaps — the map-table strides — a `romlayout` check holds the
-two readers to each other.
+deliberate exception: it decodes *scripts*, which the app does not read at
+all. Where it used to overlap — the map tables — it no longer reads the ROM
+at all, and asks `tools/route`.
 
 **And a check is only worth having if it can fail.** Each `--verify` asserts
 things that were true about Pokémon before this repository existed, rather than
@@ -680,6 +680,9 @@ tools/route 10.5 8.7        the way from Violet City to Azalea Town
 tools/route --exits 10.1    every way out of Route 32
 tools/route --reach         every map a title declares, from where a game starts
 tools/route --maps          every map the cartridge has, by its symbol name
+tools/route --warps         every door on every map, and where it leads
+tools/route --objects       what stands on every map, with its script pointer
+tools/route --triggers      every tile that runs a script when stepped on
 ```
 
 **It runs `gen2/world.js`.** That is the whole point of it: the app builds its
@@ -699,7 +702,6 @@ for every group — and the app's `mapCount` is deliberately permissive where it
 cannot tell. That is the fourth divergence in two passes between this app's ROM
 reading and a copy of it, three of them constants. So the copy is gone.
 
-**What routing does *not* claim is walkability**, and the difference is
 **`--maps` exists because a Python reader of the same table came back with
 1536 maps out of 388.** A (group, number) past the end of a group still
 resolves to *some* attributes pointer, and some of those land on a real
@@ -709,6 +711,16 @@ second reader of this app's map tables gave a confident wrong answer, so
 `--maps` prints `World`'s own table and `tools/rom-events --findgyms` asks it
 rather than deriving one.
 
+**`--warps`, `--objects` and `--triggers` are the sixth time, and they are
+what finished the job.** `tools/rom-events` still walked the event block
+itself for the objects on a map — the leader in a Gym, the nurse behind a
+counter — with Crystal's strides written out beside the app's, and
+`check-app romlayout` comparing the two files. Which caught the day one was
+mistyped and could never catch the day both were right about Crystal and
+wrong about the cartridge in the drive. See [what a second reader of the map
+tables costs](#what-a-second-reader-of-the-map-tables-costs).
+
+**What routing does *not* claim is walkability**, and the difference is
 instructive. `tools/route` says Violet City → Azalea Town is three legs: down
 to Route 32, down to Route 33, left into Azalea. A walker cannot take the
 second one — Route 32's south end is the mouth of Union Cave — so the pilot
@@ -896,11 +908,54 @@ tools/rom-events --text Route32CooltrainerMText_AideIsWaiting
 tools/rom-events --gates                    every declared gate, against the ROM
 tools/rom-events --gyms                     every declared gym, against the ROM
 tools/rom-events --findgyms                 where every gym leader stands
-tools/rom-events --verify                   the object layout, over all 388 maps
+tools/rom-events --layout                   the strides, against the cartridge
+tools/rom-events --verify                   the object layout, over all 361 maps
 tools/rom-events --menus                    every box the app drives, by shape
 tools/rom-events --phrases                  every phrase it looks for, in the ROM
 tools/rom-events --find SWITCH              where the cartridge writes a word
 ```
+
+#### What a second reader of the map tables costs
+
+**Three of those commands used to walk a map's event block in Python.** The
+app walks the same block in `gen2/world.js`, so the strides existed twice,
+and `check-app romlayout` compared the two files line for line. It earned its
+keep on the first day: coord events are eight bytes and the tool said five,
+so every map carrying one parsed into drift, and Cianwood City produced
+objects of "type 9" whose script pointers landed three bytes inside a
+trainer's `.AskNumber2` label.
+
+Then a cartridge arrived whose coord event **is** five bytes. Both files said
+eight. The check compared them, saw them agree, and passed. Every gym in
+Polished Crystal came back as "no script object named for them on a Gym map",
+which reads like a fact about the hack and was a fact about this repository.
+
+So the strides moved into the engine profile, where a title can override
+them; `gen2/world.js` is the one reader; and `tools/rom-events` asks it
+through `tools/route --objects`, `--warps` and `--triggers`. It reads no map
+tables of its own any more. `map_symbol` went the same way — following a
+map's attributes pointer means knowing whether the header is nine bytes with
+a bank in front or seven with none, which is exactly the knowledge that
+belongs in one place.
+
+**And then the answer was truncated at 65536 bytes.** `tools/route` ends
+every mode in `process.exit(0)`, which was harmless while the biggest reply
+was a few hundred lines. `--objects` on 488 maps is a megabyte of JSON, and
+`console.log` into a pipe is asynchronous: the reader on the other end got
+exactly 64 KiB, an opening brace and a cut. Not an error, not a truncation
+anyone announced — just JSON that will not parse, which the caller was
+written to treat as "no maps". Every gym came back unfound a second time,
+for a completely different reason. Every mode writes with `writeSync` now.
+
+`romlayout` is a different check as a result, and a better one: it asks the
+*cartridge* rather than another file. A map with a trigger tile on it is a
+map the object reader has to step over something to reach, so its objects are
+compared against the objects on maps with no triggers — same cartridge, same
+reader, everything the same but the step. No threshold has to know which game
+it is looking at. Crystal reads 86.3% of its script pointers onto exact
+symbols behind a trigger against 98.5% elsewhere; Polished Crystal, 70.7%
+against 75.7%. Get the width wrong and both cartridges read **no objects at
+all** on every map that has one.
 
 Every gate in Gen 2 is a script reading one bit of `wEventFlags`, so *why does
 this road turn me back?* has an answer in the ROM — and answering it needs no

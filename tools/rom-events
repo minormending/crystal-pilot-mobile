@@ -25,6 +25,10 @@ So it is a tool.
     in two passes, three of them constants: the reader that matters is the
     app's.
 
+    tools/rom-events --layout
+        whether the event block's strides are this cartridge's own, asked of
+        the cartridge rather than of another file that also wrote them down
+
     tools/rom-events --gyms
         every gym a title declares, against the cartridge: who stands on the
         leader's tile, whether that object is one you talk to, and whether the
@@ -276,30 +280,33 @@ class Cart:
 
 CHECKEVENT = 0x31
 
-# A map's `_MapEvents` block, as the cartridge lays it out. **Derived, not
-# looked up** -- and the derivation is why it can be trusted: Violet Gym's
-# fourth field distinguishes two objects (00) from two others (02), which is
-# the app's own `objectTypes` {script: 0, trainer: 2}; its ninth and tenth
-# bytes resolve to `VioletGymFalknerScript`, `TrainerBirdKeeperRod`,
-# `TrainerBirdKeeperAbe` and `VioletGymGuideScript`, which is four for four;
-# and reading fields 1 and 2 as y+4 and x+4 puts Falkner at (5,1) and Abe at
-# (2,10) -- the two positions this repository had already measured out of work
-# RAM, a pass and a cartridge apart.
+# A map's event block used to be laid out here, field by field, as its own
+# reading of the cartridge. **It is gone, and this file asks the app.**
 #
-# Four independent agreements is what makes this a reading rather than a guess.
-# `gen2/world.js` decodes the first two sections of the same block for coord
-# events; this is the rest of it.
-# **These are the app's numbers, and `check-app romlayout` holds them to it.**
-# They were written out here by hand and one of them was wrong: coord events
-# are eight bytes and this said five, so every map with a coord event on it
-# parsed into drift -- Cianwood City produced objects of "type 9" whose script
-# pointers landed three bytes inside a trainer's `.AskNumber2` label. Violet
-# Gym and Azalea Gym have no coord events, so the two maps this was derived
-# from were the two it could not fail on.
+# The derivation was careful. Violet Gym's fourth field distinguished two
+# objects from two others, matching the app's `objectTypes`; its ninth and
+# tenth bytes resolved to `VioletGymFalknerScript`, `TrainerBirdKeeperRod`,
+# `TrainerBirdKeeperAbe` and `VioletGymGuideScript`, four for four; and
+# reading two fields as y+4 and x+4 put Falkner at (5,1) and Abe at (2,10),
+# the two positions this repository had already measured out of work RAM a
+# pass and a cartridge apart. Four independent agreements.
 #
-# `gen2/world.js` holds the same layout because the app reads warps and coord
-# events at run time. Two copies of a structure is the defect; the check is the
-# repair.
+# It was still wrong twice. Coord events are eight bytes and it said five, so
+# every map carrying one parsed into drift -- Cianwood City produced objects
+# of "type 9" whose script pointers landed three bytes inside a trainer's
+# `.AskNumber2` label, and the two maps the layout came from have no coord
+# events, so they were the two it could not fail on. `check-app romlayout`
+# was written to hold the copies to each other, and it did.
+#
+# And then a cartridge came along where **both** copies were right about
+# themselves and one was right about the cartridge. Polished Crystal writes a
+# five-byte coord event; Crystal writes eight; the check compared two files
+# and saw them agree. Every gym in the hack came back with no leader on it.
+#
+# Two copies of a structure is the defect, and a check that they match is a
+# repair for one half of it. The other half is that neither copy knows which
+# cartridge it is looking at. So the strides live in the engine profile, one
+# reader reads them, and this file asks that reader -- see `ask_route`.
 # How far to look for a map. Bounds rather than counts: the cartridge has 26
 # groups and no group has 64 maps, and asking about one that is not there
 # answers nothing rather than failing -- which is the same permissiveness
@@ -307,86 +314,59 @@ CHECKEVENT = 0x31
 # its traversal learned the hard way.
 MAP_GROUPS, MAPS_PER_GROUP = 26, 64
 
-FILLER = 2
-WARP_BYTES, COORD_BYTES, BG_BYTES, OBJECT_BYTES = 5, 8, 5, 13
-OBJ_SPRITE, OBJ_Y, OBJ_X, OBJ_SCRIPT = 0, 1, 2, 9
-# **The type is the low nibble of byte seven, and byte four is not the type.**
-# Worth writing down because byte four *is* the type in Violet Gym -- 00, 02,
-# 02, 00 against Falkner, two Bird Keepers and the guide, which is four for
-# four and completely wrong. Azalea Gym has byte four at 00 for all seven of
-# its objects, five of which are trainers.
-#
-# Byte seven reads 90 92 92 80 in Violet and a0 b2 b2 b2 82 82 80 in Azalea:
-# low nibble 0 wherever the script symbol is a leader or a guide, 2 wherever it
-# is named `Trainer...`. Eleven objects across two maps, and `--verify` checks
-# the same rule against all 388 maps in the game rather than these two.
-OBJ_TYPE, OBJ_TYPE_MASK = 7, 0x0f
-# The cartridge stores an object's coordinates four higher than the map's own.
-OBJ_OFFSET = 4
+# What the app's object kinds are called, for printing. The numbers are
+# `engine.objectTypes` and the app supplies them; these are the words.
+# Anything past the three Crystal has -- Polished Crystal adds five, of which
+# a *generic* trainer is the one that matters -- prints as its number, which
+# is honest about a kind this file has no word for.
 OBJ_KINDS = {0: 'script', 1: 'item ball', 2: 'trainer'}
 
 
 def map_objects(cart, name):
-    """A map's warps and objects, from the ROM, with their scripts named.
+    """A map's warps and objects, with their scripts named.
 
     Which answers the question a gym declaration asks -- *where does the
-    leader stand?* -- without a running game. Better than without: the object's
-    script pointer resolves to a symbol, so the leader is *named* rather than
-    inferred from a position. `AzaleaGymBugsyScript` is not a heuristic.
+    leader stand?* -- without a running game. Better than without: the
+    object's script pointer resolves to a symbol, so the leader is *named*
+    rather than inferred from a position. `AzaleaGymBugsyScript` is not a
+    heuristic.
+
+    **Warps store their coordinates as-is; objects store them four higher.**
+    Two conventions in one block, and checking rather than assuming is what
+    caught it: New Bark's first warp reads (6,3) to map 24.5, which is exactly
+    the `labDoor: [6, 3]` and `ELMS_LAB = key(24, 5)` this repository measured
+    by hand a long time ago. Subtracting four there gives y = -1. The app's
+    reader knows both conventions, which is now the only place either is
+    written down.
     """
-    key = f'{name}_MapEvents'
-    if key not in cart.by_name:
-        return [f'{name}: no _MapEvents in the symbol file']
-    bank, addr = cart.by_name[key]
-    rd = lambda i: cart.rom[offset(bank, addr + i)]
-    at = FILLER
+    warps, objects = map_warps(cart, name), route_objects().get(name)
+    if objects is None and not warps:
+        return [f'{name}: the app\u2019s reader has no such map']
     out = [f'{name}:']
-    warps = rd(at); at += 1
-    # **Warps store their coordinates as-is; objects store them four higher.**
-    # Two conventions in one block, and checking rather than assuming is what
-    # caught it: New Bark's first warp reads (6,3) to map 24.5, which is
-    # exactly the `labDoor: [6, 3]` and `ELMS_LAB = key(24, 5)` this repository
-    # measured by hand a long time ago. Subtracting four there gives y = -1.
-    for i in range(warps):
-        b = at + i * WARP_BYTES
-        out.append(f'  warp {i + 1}: ({rd(b + 1)},{rd(b)}) '
-                   f'to {rd(b + 3)}.{rd(b + 4)} (its warp {rd(b + 2)})')
-    at += warps * WARP_BYTES
-    for label, size in (('coord', COORD_BYTES), ('bg', BG_BYTES)):
-        n = rd(at); at += 1 + n * size
-        out.append(f'  {n} {label} event(s)')
-    objects = rd(at); at += 1
-    for i in range(objects):
-        b = at + i * OBJECT_BYTES
-        ptr = rd(b + OBJ_SCRIPT) | rd(b + OBJ_SCRIPT + 1) << 8
-        raw = rd(b + OBJ_TYPE) & OBJ_TYPE_MASK
-        kind = OBJ_KINDS.get(raw, f'type {raw}')
-        out.append(f'  object {i + 1}: '
-                   f'({rd(b + OBJ_X) - OBJ_OFFSET},{rd(b + OBJ_Y) - OBJ_OFFSET})'
-                   f'  {kind:9}  sprite {rd(b + OBJ_SPRITE):3}  '
-                   f'{cart.near(bank, ptr)}')
+    for i, w in enumerate(warps):
+        out.append(f'  warp {i + 1}: ({w["x"]},{w["y"]}) '
+                   f'to {w["to"] >> 8}.{w["to"] & 0xff}')
+    for i, o in enumerate(objects or []):
+        kind = OBJ_KINDS.get(o['type'], f'type {o["type"]}')
+        bank, _, addr = o['script'].partition(':')
+        out.append(f'  object {i + 1}: ({o["x"]},{o["y"]})'
+                   f'  {kind:9}  sprite {o["sprite"]:3}  '
+                   f'{cart.near(int(bank, 16), int(addr, 16))}')
     return out
 
 
 def gym_objects(cart, name):
-    """{script symbol: (x, y, kind)} for one map, for checking a declaration."""
+    """{script symbol: (x, y, kind)} for one map, for checking a declaration.
+
+    The app reads the objects -- see `route_objects` -- and this names them.
+    Naming is the half a running game cannot do and a symbol file can: an
+    object at (5,2) is a person, and `VioletGymFalknerScript` is Falkner.
+    """
     found = {}
-    key = f'{name}_MapEvents'
-    if key not in cart.by_name:
-        return found
-    bank, addr = cart.by_name[key]
-    rd = lambda i: cart.rom[offset(bank, addr + i)]
-    at = FILLER
-    warps = rd(at); at += 1 + warps * WARP_BYTES
-    for size in (COORD_BYTES, BG_BYTES):
-        n = rd(at); at += 1 + n * size
-    objects = rd(at); at += 1
-    for i in range(objects):
-        b = at + i * OBJECT_BYTES
-        ptr = rd(b + OBJ_SCRIPT) | rd(b + OBJ_SCRIPT + 1) << 8
-        found[cart.near(bank, ptr)] = (rd(b + OBJ_X) - OBJ_OFFSET,
-                                       rd(b + OBJ_Y) - OBJ_OFFSET,
-                                       rd(b + OBJ_TYPE) & OBJ_TYPE_MASK)
+    for o in route_objects().get(name, []):
+        bank, _, addr = o['script'].partition(':')
+        found[cart.near(int(bank, 16), int(addr, 16))] = (o['x'], o['y'],
+                                                          o['type'])
     return found
 
 
@@ -433,41 +413,22 @@ def map_events(cart, name):
     return out
 
 
-MAP_EVENTS = '_MapEvents'
-# One map's row in its group's list, and where the attributes pointer sits in
-# it. The app's `world.js` reads the same table to find a map's size and its
-# events; `check-app romlayout` holds the two to each other.
-MAP_BYTES, MAP_ATTRIBUTES_BANK, MAP_ATTRIBUTES = 9, 0, 3
-
-
 def map_symbol(cart):
     """A lookup from (group, number) to the map's own name in the symbol file.
 
-    A title declares its maps as `key(group, number)`, because that is what the
-    game puts in work RAM; the symbol file knows them as `AzaleaGym_...`. The
-    bridge is the attributes pointer: every map's row in `MapGroupPointers`
-    holds one, and there is a `<Map>_MapAttributes` symbol at that address.
+    A title declares its maps as `key(group, number)`, because that is what
+    the game puts in work RAM; the symbol file knows them as `AzaleaGym_...`.
+    The bridge is the attributes pointer, and following it means reading a
+    map's row in `MapGroupPointers` -- nine bytes on Crystal with the
+    attributes bank in front, seven on Polished Crystal with no bank at all.
 
-    Without this the checking has to be told which symbol goes with which
-    number, which is one more hand-written table to drift.
+    So this asks `tools/route --maps`, which runs the app's own reader with
+    the profile the app would pick. It used to walk the table here, with the
+    nine and the three written out; on a cartridge with seven-byte headers
+    that produced a name for every map and the wrong one for all of them.
     """
-    if 'MapGroupPointers' not in cart.by_name:
-        return lambda key: None
-    gbank, gaddr = cart.by_name['MapGroupPointers']
-    attrs = {}
-    for name, (bank, addr) in cart.by_name.items():
-        if name.endswith('_MapAttributes'):
-            attrs[(bank, addr)] = name[:-len('_MapAttributes')]
-
-    def find(key):
-        group, number = key
-        base = offset(gbank, gaddr) + (group - 1) * 2
-        listed = cart.rom[base] | cart.rom[base + 1] << 8
-        row = offset(gbank, listed) + (number - 1) * MAP_BYTES
-        bank = cart.rom[row + MAP_ATTRIBUTES_BANK]
-        addr = cart.rom[row + MAP_ATTRIBUTES] | cart.rom[row + MAP_ATTRIBUTES + 1] << 8
-        return attrs.get((bank, addr))
-    return find
+    named = route_maps()
+    return lambda key: named.get((key[0] << 8) | key[1])
 
 
 def verify(cart):
@@ -484,25 +445,41 @@ def verify(cart):
     00 for all seven of Azalea Gym's, five of which are trainers. Two maps is
     not a sample.
     """
-    maps = sorted(n[:-len(MAP_EVENTS)] for n in cart.by_name
-                  if n.endswith(MAP_EVENTS))
+    maps = sorted(route_objects())
+    # Which numbers mean *trainer*, out of the picked profile rather than out
+    # of here: Crystal has one and Polished Crystal has two, the second being
+    # the `OBJECTTYPE_GENERICTRAINER` most of its Gym trainers are.
+    kinds = object_kinds(cart)
+    fights = {v for k, v in kinds.items() if 'rainer' in k} or {2}
     objects = disagree = 0
     for name in maps:
         for script, (_, _, kind) in gym_objects(cart, name).items():
             objects += 1
-            named = script.startswith('Trainer')
-            if named != (kind == 2):
+            # **A name rule, and it is the cartridge's naming and not a
+            # standard.** Crystal calls a trainer's script `Trainer...`;
+            # Polished Crystal calls most of them `GenericTrainer...`, so
+            # `startswith('Trainer')` disagreed with the type field 479 times
+            # in a game with 2108 objects on its maps -- which is not a
+            # finding about the hack, it is this rule not knowing the word.
+            named = script.startswith(('Trainer', 'GenericTrainer'))
+            if named != (kind in fights):
                 disagree += 1
                 if disagree <= 10:
                     print(f'  {name}: {script} is type {kind}')
     print(f'{len(maps)} maps, {objects} objects, {disagree} disagreement(s) '
-          f'between the type field and the script name')
+          f'between the type field and the script name '
+          f'(a trainer is type {", ".join(str(f) for f in sorted(fights))})')
     # Reported, not failed. The name rule is a validator with real exceptions:
     # some trainers are *talked to* rather than seen, so `TrainerOfficerDirk`
     # is legitimately a script object, and the Trainer House's receptionist is
     # named `Trainer...` while being nobody to fight. Twelve of 1396 at the
     # time of writing, every one of them explicable. What the layout is held to
     # instead is `check-app romlayout`, which is binary and cannot drift.
+    #
+    # The count moved from 388 maps to 361 when this stopped listing
+    # `<Map>_MapEvents` symbols and started asking the app which maps it can
+    # read. Fewer maps, the same twelve disagreements: the symbols this no
+    # longer counts are ones the map tables do not reach.
     return 0
 
 
@@ -673,6 +650,35 @@ def picked_titles(cart):
     one = ROOT / 'titles' / f'{which}.js'
     return [one] if which and one.exists() else \
         sorted((ROOT / 'titles').glob('*.js'))
+
+
+def ask_engine(cart, *fields):
+    """One or more fields of the picked engine profile, as JSON.
+
+    The same asking `profile_words` does, generalised -- `pickTitle` decides
+    which profile a ROM gets and the app is the only thing that knows.
+    """
+    if not cart.rom_path:
+        return None
+    script = (
+        "import('%s/tools/cartridge.mjs').then(async (c) => {"
+        "  const cart = c.openCartridge('%s/dev');"
+        "  const { engine } = c.engineOf(cart);"
+        "  const want = %s;"
+        "  const out = {};"
+        "  for (const f of want) out[f] = engine[f];"
+        "  process.stdout.write('\\n@@' + JSON.stringify(out));"
+        "});" % (ROOT, ROOT, json.dumps(list(fields)))
+    )
+    env = dict(os.environ, DEV_ROM=str(cart.rom_path), DEV_SYM=str(cart.sym_path))
+    try:
+        got = subprocess.run(['node', '-e', script], capture_output=True,
+                             text=True, timeout=60, env=env)
+        line = [l for l in got.stdout.splitlines() if l.startswith('@@')]
+        found = json.loads(line[-1][2:]) if line else {}
+    except Exception:
+        return None
+    return found[fields[0]] if len(fields) == 1 else found
 
 
 def profile_words(cart):
@@ -1097,8 +1103,7 @@ def find_gyms(cart, name_of=None):
     doors = {}
     for key, name in name_of.items():
         for w in map_warps(cart, name):
-            doors.setdefault(w['to'], []).append(
-                (key, name, w['x'], w['y'], w['id']))
+            doors.setdefault(w['to'], []).append((key, name, w['x'], w['y']))
 
     print(f'{len(JOHTO_LEADERS)} leader(s), against {len(name_of)} named maps')
     missing = 0
@@ -1120,10 +1125,13 @@ def find_gyms(cart, name_of=None):
             continue
         for key, name, x, y, _ in rooms:
             # A warp from a *different* map, because a room's warps back out
-            # are in the same table and a map does not lead into itself. The
-            # destination warp number orders them: the front door is 1.
-            town = sorted((d for d in doors.get(key, []) if d[0] != key),
-                          key=lambda d: d[4])
+            # are in the same table and a map does not lead into itself. More
+            # than one is reported rather than ranked -- the front door used
+            # to be picked by the destination warp number, and that number
+            # went when this stopped walking the block itself. Every gym in
+            # both cartridges has exactly one way in, so ranking bought
+            # nothing; saying how many there are catches the day it does.
+            town = [d for d in doors.get(key, []) if d[0] != key]
             print(f'  {who} in {name} at ({x},{y})'
                   + (f'  — {len(party)} Pokémon, up to Lv'
                      f'{max(m["level"] for m in party)}' if party else ''))
@@ -1132,7 +1140,7 @@ def find_gyms(cart, name_of=None):
                       f'{key >> 8}.{key & 0xff}')
                 missing += 1
                 continue
-            tkey, tname, tx, ty, _ = town[0]
+            tkey, tname, tx, ty = town[0]
             print(f'      {{ map: key({tkey >> 8}, {tkey & 0xff}), '
                   f'inside: key({key >> 8}, {key & 0xff}), '
                   f'door: [{tx}, {ty}], leader: \'{who}\', '
@@ -1145,44 +1153,163 @@ def find_gyms(cart, name_of=None):
     return missing
 
 
-def route_maps():
-    """{key: symbol name} for every map, out of `tools/route --maps`."""
-    out = subprocess.run(['node', str(ROOT / 'tools' / 'route'), '--maps', '--json'],
-                         capture_output=True, text=True)
+def ask_route(*flags):
+    """Whatever `tools/route` answers, as JSON, or `{}`.
+
+    **Every question about the map tables goes through here.** The app's
+    `gen2/world.js` reads them, `tools/route` runs it, and this file asks
+    rather than parsing the ROM a second time -- because it did parse it a
+    second time, and the second reader was wrong five separate ways. Three
+    hand-copied strides, a whole traversal that could not see Cherrygrove,
+    and then Polished Crystal, whose coord event is five bytes where
+    Crystal's is eight: the gym finder stepped past the triggers by three
+    bytes per trigger, landed inside the next record, and reported that no
+    Gym map in the game had a leader standing on it.
+    """
+    out = subprocess.run(['node', str(ROOT / 'tools' / 'route'), '--json',
+                          *flags], capture_output=True, text=True)
     try:
-        raw = json.loads(out.stdout or '{}')
+        return json.loads(out.stdout or '{}')
     except ValueError:
         return {}
+
+
+def route_maps():
+    """{key: symbol name} for every map, out of `tools/route --maps`."""
     named = {}
-    for text, name in raw.items():
+    for text, name in ask_route('--maps').items():
         group, _, number = text.partition('.')
         named[(int(group) << 8) | int(number)] = name
     return named
 
 
+def route_objects():
+    """{map symbol: [object]} for every named map, asked once and kept.
+
+    An object is `{map, sprite, x, y, type, script}`, and `script` is the
+    `bank:addr` its pointer resolves to -- which is what makes a leader a
+    *name* rather than an inference.
+    """
+    if not hasattr(route_objects, 'cache'):
+        route_objects.cache = ask_route('--objects')
+    return route_objects.cache
+
+
+def route_warps():
+    """{map symbol: [{x, y, to}]} for every named map, asked once and kept."""
+    if not hasattr(route_warps, 'cache'):
+        route_warps.cache = ask_route('--warps')
+    return route_warps.cache
+
+
+def route_triggers():
+    """{map symbol: [{scene, x, y}]} for every named map, asked once."""
+    if not hasattr(route_triggers, 'cache'):
+        route_triggers.cache = ask_route('--triggers')
+    return route_triggers.cache
+
+
+# How far below the rest of the game a trigger-carrying map's object list may
+# read before it is called a bad stride. Measured on the two cartridges this
+# has: Crystal's trigger maps resolve 86.3% of their script pointers exactly
+# against 96.7% elsewhere, and Polished Crystal's 70.7% against 75.7%. Ten
+# points and five. Twenty is twice the worse of them and a quarter of the
+# gap a wrong stride opens, which is not a gap at all -- both cartridges
+# read *zero* objects on their trigger maps when the width is wrong.
+LAYOUT_MARGIN = 20.0
+
+
+def layout(cart):
+    """Whether the event block's strides are this cartridge's own.
+
+    **The check that replaced comparing two hand-written copies.** The strides
+    lived in `gen2/world.js` and again here, and `check-app romlayout` held
+    them to each other -- which caught the day one was mistyped and could
+    never catch the day both were right about Crystal and wrong about the
+    cartridge in front of them. Polished Crystal writes a five-byte coord
+    event where Crystal writes eight, both files said eight, and they agreed.
+
+    So this asks the cartridge instead, and the question is self-calibrating:
+    **a map with trigger tiles on it is a map the object reader has to step
+    over something to reach.** Get the width wrong and only those maps break.
+    Compare them against the maps with no triggers at all -- same cartridge,
+    same reader, same everything but the step -- and no threshold has to know
+    which game it is looking at.
+
+    "Breaks" is measured as script pointers that no longer land on a symbol.
+    A pointer read out of the middle of the next record is a number, and a
+    number lands where it lands: on both cartridges, a wrong stride takes the
+    trigger maps from hundreds of objects to none at all.
+    """
+    objects, triggers = route_objects(), route_triggers()
+    if not objects:
+        print('the app\u2019s reader found no maps at all')
+        return 1
+    known = set()
+    for name, (bank, addr) in cart.by_name.items():
+        known.add((bank, addr))
+    tally = {True: [0, 0], False: [0, 0]}
+    for name, found in objects.items():
+        has = bool(triggers.get(name))
+        for o in found:
+            bank, _, addr = o['script'].partition(':')
+            at = (int(bank, 16), int(addr, 16))
+            tally[has][0 if at in known else 1] += 1
+    (hit, miss), (ohit, omiss) = tally[True], tally[False]
+    rate = lambda a, b: 100.0 * a / (a + b) if a + b else None
+    with_t, without_t = rate(hit, miss), rate(ohit, omiss)
+    maps = sum(1 for n in objects if triggers.get(n))
+    print(f'{len(objects)} maps, {maps} of them carrying trigger tiles')
+    if without_t is None:
+        print('  no objects anywhere — the block is not being read')
+        return 1
+    print(f'  maps with no triggers: {ohit + omiss} object(s), '
+          f'{without_t:.1f}% of their scripts land on a symbol')
+    if not maps:
+        print('  no map on this cartridge has a trigger tile, so the coord '
+              'event\u2019s width is not exercised here')
+        return 0
+    if with_t is None:
+        print(f'  maps with triggers: no objects at all, on {maps} map(s) '
+              f'that have them — the coord event\u2019s width is wrong')
+        return 1
+    print(f'  maps with triggers:    {hit + miss} object(s), '
+          f'{with_t:.1f}% of theirs')
+    if without_t - with_t > LAYOUT_MARGIN:
+        print(f'  !! {without_t - with_t:.1f} points worse behind a trigger, '
+              f'which is a stride and not a coincidence')
+        return 1
+    return 0
+
+
+def object_kinds(cart):
+    """`engine.objectTypes` for the profile this cartridge would be driven by.
+
+    Which kinds mean *trainer* is a fact about the cartridge, not a constant.
+    Crystal has three -- script, item ball, trainer -- and Polished Crystal
+    has eight, of which two are trainers: `OBJECTTYPE_TRAINER` and
+    `OBJECTTYPE_GENERICTRAINER`, the second being most of the trainers in a
+    Gym. Held to Crystal's number, every Gym in that hack read as full of
+    objects that disagreed with their own names.
+    """
+    if not hasattr(object_kinds, 'cache'):
+        object_kinds.cache = {}
+    key = str(getattr(cart, 'rom_path', None))
+    if key not in object_kinds.cache:
+        object_kinds.cache[key] = ask_engine(cart, 'objectTypes') or {}
+    return object_kinds.cache[key]
+
+
 def map_warps(cart, name):
     """`[{x, y, to}]` for one map: where each warp is and which map it enters.
 
-    The same block `gym_objects` walks, stopping at the first count instead of
-    the fourth -- and the two readings share every stride, which is why they
-    are in one file and checked by `romlayout`.
+    The app's own answer, through `tools/route --warps`. It used to be a
+    second walk of the event block in this file, keyed off a `<Map>_MapEvents`
+    symbol -- and Polished Crystal has none of those, because its warps live
+    inside the map script header rather than behind a pointer of their own.
+    Every door in the game came back missing.
     """
-    out = []
-    key = f'{name}_MapEvents'
-    if key not in cart.by_name:
-        return out
-    bank, addr = cart.by_name[key]
-    rd = lambda i: cart.rom[offset(bank, addr + i)]
-    at = FILLER
-    warps = rd(at)
-    at += 1
-    for i in range(warps):
-        b = at + i * WARP_BYTES
-        # y, x, the destination warp number, then the destination map as
-        # group and number.
-        out.append({'y': rd(b), 'x': rd(b + 1), 'id': rd(b + 2),
-                    'to': (rd(b + 3) << 8) | rd(b + 4)})
-    return out
+    return route_warps().get(name, [])
 
 
 def cart_trainer(cart, who):
@@ -1341,6 +1468,8 @@ def main(argv):
         return 0
     if '--findgyms' in argv:
         return 1 if find_gyms(cart) else 0
+    if '--layout' in argv:
+        return layout(cart)
     if '--gyms' in argv:
         return 1 if gyms(cart, map_symbol(cart)) else 0
     if '--verify' in argv:

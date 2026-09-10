@@ -37,30 +37,27 @@
 const TILES_PER_BLOCK = 2;
 
 
-// A map's event block: two filler bytes, a count, then five bytes per warp --
-// y, x, which warp on the far side, and the group and number of the map it
-// leads to. The block shares a bank with the map scripts.
-// Where the warp count and the warps sit inside the event block is
-// `engine.mapAttr` -- Crystal's block opens with two filler bytes and
-// Polished Crystal's begins on the count itself.
-const WARP_BYTES = 5;
+// A map's event block: a count, then five bytes per warp -- y, x, which warp
+// on the far side, and the group and number of the map it leads to -- and then
+// three more counted lists. The block shares a bank with the map scripts.
+// Where the warp count and the warps sit inside it is `engine.mapAttr`:
+// Crystal's block opens with two filler bytes and Polished Crystal's begins on
+// the count itself.
+//
+// **The strides of the four lists are `engine.mapEvents`, and they used to be
+// constants here.** Every size was measured against work RAM -- the object
+// list this parses out of the ROM matches `wMapObjects` entry for entry on
+// Elm's lab, Cherrygrove's Center and Route 30, sprites and tiles and types
+// alike, which is a stronger check than reading the macro would be. All of
+// that was measured on Crystal, and Polished Crystal writes a five-byte coord
+// event where Crystal writes eight. Nothing failed: `objectsOn` stepped past
+// the triggers by the wrong amount, landed mid-record, and came back empty for
+// New Bark Town, which has five people standing on it.
+//
+// Only the warp fields stay here, because a warp is the same five bytes on
+// every cartridge this has met -- Polished still writes a map id as
+// `db group, number` even with 488 maps to number.
 const WARP_Y = 0, WARP_X = 1, WARP_GROUP = 3, WARP_NUMBER = 4;
-// The rest of the event block, past the warps: a count and then that many
-// fixed-size records, three times over. Every size measured against work RAM --
-// the object list this parses out of the ROM matches `wMapObjects` entry for
-// entry on Elm's lab, Cherrygrove's Center and Route 30, sprites and tiles and
-// types alike, which is a stronger check than reading the macro would be.
-const COORD_BYTES = 8, BG_BYTES = 5, OBJECT_BYTES = 13;
-// A coord event: the scene it belongs to, then y and x, then a pad byte, then
-// the script it runs. **Measured, and the coordinates are *not* offset** --
-// which is the opposite of the objects three lines down and exactly the sort of
-// asymmetry that reads as obviously consistent and is not. Route 32's first
-// coord event dumps as `00 08 12 00 ab 44 00 00`: scene 0 at y 8, x 0x12, and
-// (18,8) is the tile the pilot was measurably turned back on.
-const COORD_SCENE = 0, COORD_Y = 1, COORD_X = 2;
-const OBJECT_SPRITE = 0, OBJECT_Y = 1, OBJECT_X = 2;
-// Objects are stored with the same +4 origin work RAM uses.
-const OBJECT_ORIGIN = 4;
 // A sanity bound, like MAX_WARPS. **A count that reaches it means the read is
 // wrong, not that the map is crowded**, and the difference is what the bound is
 // for: truncating at thirty-two and returning them believes the first
@@ -332,7 +329,8 @@ export class World {
       // one -- see MAX_OBJECTS.
       if (count > MAX_WARPS) throw new Error(`${count} warps is not a map`);
       for (let i = 0; i < count; i++) {
-        const at = events + this.e.mapAttr.warps + i * WARP_BYTES;
+        const at = events + this.e.mapAttr.warps
+          + i * this.e.mapEvents.warpBytes;
         const g = this.gb.romByte(bank, at + WARP_GROUP);
         const n = this.gb.romByte(bank, at + WARP_NUMBER);
         if (!g || !n) continue;
@@ -372,7 +370,13 @@ export class World {
   }
 
   /**
-   * What the ROM places on a map: `[{ sprite, x, y }]`.
+   * What the ROM places on a map: `[{ sprite, x, y, type }]`.
+   *
+   * `type` is the object's kind -- `engine.objectTypes` names them, and the
+   * one that matters is that a person you *talk to* is a script and a person
+   * who *sees you* is a trainer. A gym leader is the first, every trainer in
+   * the room with them is the second, and nothing else in the ROM tells them
+   * apart.
    *
    * The same block `warps` walks, read further along. Which makes it the one
    * reader in this app that can look at a map **it is not standing on** --
@@ -395,16 +399,17 @@ export class World {
       const bank = this.gb.romByte(attr.bank, attr.addr + this.e.mapAttr.scriptsBank);
       const events = this._eventsAt(attr);
       const rd = (i) => this.gb.romByte(bank, (events + i) & 0xffff);
+      const ev = this.e.mapEvents, field = ev.object;
       let at = this.e.mapAttr.warpCount;
-      at += 1 + rd(at) * WARP_BYTES;              // warps
-      at += 1 + rd(at) * COORD_BYTES;             // coord events
-      at += 1 + rd(at) * BG_BYTES;                // bg events
+      at += 1 + rd(at) * ev.warpBytes;            // warps
+      at += 1 + rd(at) * ev.coordBytes;           // coord events
+      at += 1 + rd(at) * ev.bgBytes;              // bg events
       const count = rd(at++);
       if (count > MAX_OBJECTS) throw new Error(`${count} objects is not a map`);
       for (let i = 0; i < count; i++) {
-        const o = at + i * OBJECT_BYTES;
-        const x = rd(o + OBJECT_X) - OBJECT_ORIGIN;
-        const y = rd(o + OBJECT_Y) - OBJECT_ORIGIN;
+        const o = at + i * ev.objectBytes;
+        const x = rd(o + field.x) - field.origin;
+        const y = rd(o + field.y) - field.origin;
         // **A tile off the map is not a tile**, which is the same rule
         // `placedObjects` follows over work RAM and for the same reason: a read
         // that has walked off the end of something gives plausible numbers, and
@@ -412,7 +417,15 @@ export class World {
         // makes it do something wrong. This is what caught the sweep looking
         // for the Gyms -- an object at (141,72) on a map twenty tiles wide.
         if (size && (x < 0 || y < 0 || x >= size[0] || y >= size[1])) continue;
-        out.push({ sprite: rd(o + OBJECT_SPRITE), x, y });
+        out.push({ sprite: rd(o + field.sprite), x, y,
+                   type: rd(o + field.type) & ev.typeMask,
+                   // Where the object's script lives, so a caller with the
+                   // symbol table can *name* it. Two more reads out of a
+                   // record already in hand, and the difference between "an
+                   // object stands here" and "this is
+                   // `VioletGymFalknerScript`".
+                   script: { bank, addr: rd(o + field.script)
+                                         | rd(o + field.script + 1) << 8 } });
       }
     } catch (e) {
       // Same as the other readers here: nonsense reads mean nothing placed,
@@ -448,18 +461,19 @@ export class World {
       const bank = this.gb.romByte(attr.bank, attr.addr + this.e.mapAttr.scriptsBank);
       const events = this._eventsAt(attr);
       const rd = (i) => this.gb.romByte(bank, (events + i) & 0xffff);
+      const ev = this.e.mapEvents, field = ev.coord;
       let at = this.e.mapAttr.warpCount;
-      at += 1 + rd(at) * WARP_BYTES;              // past the warps
+      at += 1 + rd(at) * ev.warpBytes;            // past the warps
       const count = rd(at++);
       if (count > MAX_COORD_EVENTS) {
         throw new Error(`${count} coord events is not a map`);
       }
       for (let i = 0; i < count; i++) {
-        const c = at + i * COORD_BYTES;
-        const x = rd(c + COORD_X), y = rd(c + COORD_Y);
+        const c = at + i * ev.coordBytes;
+        const x = rd(c + field.x), y = rd(c + field.y);
         // The same rule the objects follow: a tile off the map is not a tile.
         if (size && (x >= size[0] || y >= size[1])) continue;
-        out.push({ scene: rd(c + COORD_SCENE), x, y });
+        out.push({ scene: rd(c + field.scene), x, y });
       }
     } catch (e) {
       // Nonsense reads mean no triggers, not a crash -- as everywhere here.

@@ -126,6 +126,60 @@ export const polished = {
     mapAttr: { height: 1, width: 2, scriptsBank: 6, events: null,
                connections: 9, structs: 10,
                eventSkip: [2, 3], warpCount: 0, warps: 1 },
+    // **A coord event is five bytes here and eight on Crystal.** Crystal
+    // pads: `db scene, y, x`, a filler byte, `dw script`, then two more
+    // filler bytes. Polished writes the five bytes of content and stops.
+    //
+    // Nothing failed on the wrong stride, which is the whole reason this is
+    // written down. `coordEventsOn` reported three triggers for New Bark
+    // Town at scenes 0, 65 and 68 -- the map has seven, at scenes 1 and 3 --
+    // and `objectsOn`, which steps past the triggers to reach the objects,
+    // came back with an empty list for a town with five people on it. An
+    // empty list is what a map with nobody on it looks like, so the pilot's
+    // Center-finder simply never found a Center and the profile grew a
+    // hand-written table of nineteen instead.
+    //
+    // The type byte is the other half. Crystal packs the palette into the
+    // high nibble of byte seven -- `dn palette, type` -- so its type is the
+    // low nibble. Polished gives the palette a byte of its own and writes
+    // the type whole, and masking it would fold `OBJECTTYPE_SCRIPT_SILENT`
+    // ($06) into a script and lose the distinction it exists to make.
+    mapEvents: { ...gen2.mapEvents, coordBytes: 5, typeMask: 0xff },
+    // Two more kinds than Crystal, and the one that matters is 3. Its
+    // `script_constants.asm` reads SCRIPT, ITEMBALL, TRAINER,
+    // GENERICTRAINER, POKEMON, COMMAND, SCRIPT_SILENT, DONOTHING -- so the
+    // first three agree with Crystal and a *generic* trainer, which is most
+    // of the trainers in a Gym, is a fourth kind nothing in Crystal has.
+    objectTypes: { script: 0, itemball: 1, trainer: 2, genericTrainer: 3,
+                   pokemon: 4, command: 5, scriptSilent: 6, doNothing: 7 },
+    // Which object says *this room is a Pokemon Center* and which says
+    // *this is a Mart*. Different sprites and, for the nurse, a different
+    // tile.
+    //
+    // Measured the same way Crystal's were, over every map in the game:
+    // count the maps carrying each sprite, keep the ones that land
+    // overwhelmingly on maps the symbol file calls a Center or a Mart, and
+    // take the tile most of them stand on. On Crystal the method returns
+    // sprite 55 at (3,1) for 21 of 23 nurses and sprite 57 at (1,3) for 13
+    // of 26 clerks -- which is exactly what `gen2/engine.js` has written
+    // down, so the method reproduces somebody's hand before it is trusted
+    // with a cartridge nobody has measured.
+    //
+    // Here it gives **sprite 151 at (5,1)** for 21 of 26, and **sprite 152
+    // at (1,3)** for 13 of 46. The nurse's tile is the one the twenty-one
+    // Centers in `healers` below already say by hand, found a different way
+    // -- so the two agree.
+    //
+    // `reach` is Crystal's, and it is the one number here that is assumed:
+    // a counter is a wall, so the clerk at (1,3) is spoken to from (3,3)
+    // facing LEFT, two tiles away across a corner. Both cartridges put the
+    // clerk on the same tile of what looks like the same room, and a wrong
+    // `reach` walks the pilot to a tile it cannot talk from rather than
+    // into a stranger's house.
+    places: {
+      center: { sprite: 151, at: [5, 1], nurse: [5, 1] },
+      mart: { sprite: 152, at: [1, 3], reach: { dx: 2, dy: 0, face: 'LEFT' } },
+    },
     // Seven bytes a map header, not nine, and no attributes bank in it:
     // `db tileset`, `dn sign, environment`, `dw attributes`, `db location,
     // music`, `dn phone, palette`. Read at Crystal's offsets its headers

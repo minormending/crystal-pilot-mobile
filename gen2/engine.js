@@ -498,6 +498,41 @@ export const gen2 = {
     // Crystal's event block opens with two filler bytes.
     eventSkip: null, warpCount: 2, warps: 3,
   },
+  // --- the event block itself: four lists, each a count and fixed records ---
+  //
+  // **Declared here because two readers walk it and they were walking it
+  // differently.** `gen2/world.js` reads warps, trigger tiles and the object
+  // list; `tools/rom-events` reads the same block to find where a gym leader
+  // stands. Both had the strides as their own module constants, and both were
+  // Crystal's -- so on Polished Crystal `objectsOn` came back empty for New
+  // Bark Town, which has five people on it, and `coordEventsOn` reported
+  // three triggers at scenes 0, 65 and 68 where the map has seven at 1 and 3.
+  //
+  // A wrong stride here does not fail. It lands mid-record and answers, which
+  // is why one declaration matters more than the numbers in it.
+  //
+  // The one that diverges is `coordBytes`. Crystal writes `db scene, y, x`,
+  // **a filler byte**, `dw script` and *two more filler bytes* -- eight for
+  // five bytes of content. Polished Crystal drops all three: `db scene, y, x`
+  // then `dw script`, which is five. Everything else is the same width on
+  // both, warps included, because Polished still writes a map id as
+  // `db group, number` even with 488 maps.
+  mapEvents: {
+    warpBytes: 5, coordBytes: 8, bgBytes: 5, objectBytes: 13,
+    // Inside a coord event. **Not offset**, unlike the objects below, which
+    // is exactly the sort of asymmetry that reads as obviously consistent
+    // and is not.
+    coord: { scene: 0, y: 1, x: 2 },
+    // Inside an object. `origin` is the +4 the cartridge stores tiles at, the
+    // same one work RAM uses.
+    object: { sprite: 0, y: 1, x: 2, type: 7, script: 9, origin: 4 },
+    // **The type is the low nibble of byte seven on Crystal, and the whole
+    // byte on Polished Crystal.** Crystal packs the palette into the high
+    // nibble -- `dn \9, \<10>` -- and Polished gives the palette its own
+    // byte, so masking there would turn `OBJECTTYPE_SCRIPT_SILENT` into a
+    // script and `$1x` into nothing.
+    typeMask: 0x0f,
+  },
   // What those three blocks are called, in the order `wTimeOfDay` numbers
   // them. Keys rather than prose, the same bargain `growthRates` makes: what
   // to call "after dark" on a screen is the interface's business and `rows.js`

@@ -23,7 +23,7 @@ const ORDER = ['UP', 'DOWN', 'LEFT', 'RIGHT'];
  *
  * `maps` is keyed by map key: `{ edges: { RIGHT: key, ... }, warps: [[x,y,key]] }`.
  */
-function cartridge(maps, { pad = 0 } = {}) {
+function cartridge(maps, { pad = 0, engine = gen2 } = {}) {
   const GROUPS_BANK = 1, GROUPS_ADDR = 0x4000;
   const ATTR_BANK = 2, EVENT_BANK = 3;
   const rom = new Map();                       // "bank:addr" -> byte
@@ -97,17 +97,48 @@ function cartridge(maps, { pad = 0 } = {}) {
       put(EVENT_BANK, w + 3, to >> 8);
       put(EVENT_BANK, w + 4, to & 0xff);
     });
-    // Then the coord events, right after the warps: scene, y, x, a pad byte and
-    // a script pointer. **Raw coordinates, unlike the objects** -- which is the
-    // asymmetry this fake exists to hold the reader to.
-    let cursor = events + 3 + warps.length * 5;
+    // Then the coord events, right after the warps: scene, y, x, and on
+    // Crystal a pad byte, a script pointer and two more pad bytes. **Raw
+    // coordinates, unlike the objects** -- which is the asymmetry this fake
+    // exists to hold the reader to.
+    //
+    // Laid out at the strides the *profile* gives rather than at Crystal's,
+    // because a fake that only ever writes one shape cannot catch a reader
+    // that only ever reads one. Polished Crystal's coord event is five bytes
+    // where Crystal's is eight, and the reader walked past it by three per
+    // trigger to reach the objects.
+    const ev = engine.mapEvents;
+    let cursor = events + 3 + warps.length * ev.warpBytes;
     const triggers = spec.triggers || [];
     put(EVENT_BANK, cursor++, triggers.length);
     triggers.forEach(([x, y, scene], i) => {
-      const c = cursor + i * 8;
-      put(EVENT_BANK, c + 0, scene || 0);
-      put(EVENT_BANK, c + 1, y);
-      put(EVENT_BANK, c + 2, x);
+      const c = cursor + i * ev.coordBytes;
+      put(EVENT_BANK, c + ev.coord.scene, scene || 0);
+      put(EVENT_BANK, c + ev.coord.y, y);
+      put(EVENT_BANK, c + ev.coord.x, x);
+    });
+    // The bg events, which this fake never puts anything in and must still
+    // count: a list of none is a zero byte, and leaving the byte out is how
+    // the object list ends up one place too early.
+    cursor += triggers.length * ev.coordBytes;
+    put(EVENT_BANK, cursor++, (spec.signs || []).length);
+    cursor += (spec.signs || []).length * ev.bgBytes;
+    // And the objects. Stored `origin` higher than the map's own
+    // coordinates, and carrying the type in whichever part of byte seven the
+    // profile says.
+    const objects = spec.objects || [];
+    put(EVENT_BANK, cursor++, objects.length);
+    objects.forEach(([x, y, sprite, kind = 0, script = 0], i) => {
+      const o = cursor + i * ev.objectBytes;
+      put16le(EVENT_BANK, o + ev.object.script, script);
+      put(EVENT_BANK, o + ev.object.sprite, sprite);
+      put(EVENT_BANK, o + ev.object.y, y + ev.object.origin);
+      put(EVENT_BANK, o + ev.object.x, x + ev.object.origin);
+      // The high bits of the type byte are the palette on Crystal and the
+      // whole type on Polished, so the fake writes something into them: a
+      // reader that forgets to mask reads $50 for a script.
+      put(EVENT_BANK, o + ev.object.type,
+          ev.typeMask === 0xff ? kind : (5 << 4) | (kind & 0x0f));
     });
   }
 
@@ -117,7 +148,7 @@ function cartridge(maps, { pad = 0 } = {}) {
   const gb = {
     romByte(bank, addr) { reads.count++; return rom.get(`${bank}:${addr}`) || 0; },
   };
-  return { world: new World(symbols, gb), reads };
+  return { world: new World(symbols, gb, engine), reads };
 }
 
 // New Bark — Route 29 — Cherrygrove — Route 30, with Elm's lab behind a door.
@@ -447,6 +478,82 @@ test('a trigger coordinate is raw, where an object coordinate is not',
   t.eq(c.world.coordEventsOn(1, 1)[0].x, 5, 'the trigger is where it says');
   t.eq(c.world.coordEventsOn(1, 1)[0].y, 6, 'on both axes');
 });
+
+// --- the objects on a map, at the profile's strides -------------------------
+
+test('what stands on a map is read with its kind', async (t) => {
+  // The object list is the reader that lets the pilot know what is behind a
+  // door it has not walked through -- a nurse means a Pokemon Center -- and
+  // the kind is what tells a leader from the trainers around them: a leader
+  // is talked to, so it is a *script* object, where a trainer starts a battle
+  // by seeing you.
+  const c = cartridge(new Map([
+    [mapKey(1, 1), { blocks: [10, 10],
+                     objects: [[3, 1, 55, 0], [8, 15, 84, 1], [5, 6, 39, 2]] }],
+    [mapKey(1, 2), {}],
+  ]));
+  t.eq(c.world.objectsOn(1, 1).map((o) => [o.sprite, o.x, o.y, o.type]),
+       [[55, 3, 1, 0], [84, 8, 15, 1], [39, 5, 6, 2]],
+       'three objects, their tiles un-offset and their kinds masked');
+});
+
+test('an object carries where its script lives, so it can be named',
+     async (t) => {
+  // The one fact that turns "somebody stands here" into
+  // `VioletGymFalknerScript`. The app cannot name it -- it has no use for the
+  // symbol table on this path -- and `tools/rom-events` can, which is why the
+  // pointer comes out of the reader instead of a second walk of the same
+  // block.
+  const c = cartridge(new Map([
+    [mapKey(1, 1), { blocks: [10, 10], objects: [[3, 1, 55, 0, 0x651a]] }],
+    [mapKey(1, 2), {}],
+  ]));
+  const [who] = c.world.objectsOn(1, 1);
+  t.eq(who.script.addr, 0x651a, 'the pointer out of the record');
+  t.eq(who.script.bank, 3, 'in the bank the map keeps its scripts in');
+});
+
+test('an object list is found past triggers of the profile\u2019s own width',
+     async (t) => {
+  // **The bug this pair of readers actually had.** Both strides were
+  // Crystal's, written down twice, and Polished Crystal's coord event is five
+  // bytes where Crystal's is eight. So the walk to the objects overshot by
+  // three per trigger, landed inside whatever followed, and answered: New
+  // Bark Town, which has five people standing on it, came back empty -- and
+  // an empty list is exactly what a map with nobody on it looks like, so
+  // nothing complained.
+  const shape = { blocks: [10, 10],
+                  triggers: [[1, 8, 0], [1, 9, 0], [6, 4, 0]],
+                  objects: [[3, 2, 10, 0], [1, 6, 9, 0]] };
+  const maps = new Map([[mapKey(1, 1), shape], [mapKey(1, 2), {}]]);
+  const both = [[10, 3, 2], [9, 1, 6]];
+  const seen = (c) => c.world.objectsOn(1, 1).map((o) => [o.sprite, o.x, o.y]);
+  t.eq(seen(cartridge(maps)), both, 'behind three eight-byte triggers');
+  const short = { ...gen2,
+                  mapEvents: { ...gen2.mapEvents, coordBytes: 5,
+                               typeMask: 0xff } };
+  t.eq(seen(cartridge(maps, { engine: short })), both,
+       'and behind three five-byte ones, which is the same map');
+});
+
+test('a type byte is masked where the profile packs a palette into it',
+     async (t) => {
+  // Crystal writes `dn palette, type`, so the type is the low nibble and the
+  // high one is colour. Polished Crystal gives the palette its own byte and
+  // writes the type whole -- and masking there would fold its
+  // `OBJECTTYPE_SCRIPT_SILENT` ($06) and `OBJECTTYPE_DONOTHING` ($07) into
+  // kinds that mean something else.
+  const maps = new Map([
+    [mapKey(1, 1), { blocks: [10, 10], objects: [[1, 1, 39, 6]] }],
+    [mapKey(1, 2), {}],
+  ]);
+  t.eq(cartridge(maps).world.objectsOn(1, 1)[0].type, 6,
+       'the low nibble, with the palette in the high one discarded');
+  const whole = { ...gen2, mapEvents: { ...gen2.mapEvents, typeMask: 0xff } };
+  t.eq(cartridge(maps, { engine: whole }).world.objectsOn(1, 1)[0].type, 6,
+       'and the whole byte where there is no palette in it');
+});
+
 
 test('a trigger off the map, or too many of them, is a bad read', async (t) => {
   // The same two rules the object reader follows, and for the same reason: a

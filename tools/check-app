@@ -1598,79 +1598,44 @@ def check_gates():
               f"whoever sets it")
 
 
-# Every constant both readers of the cartridge's map tables have to agree
-# about. Three of them were copied by hand into `tools/rom-events` and three
-# were wrong, which is the argument for the check rather than for more care.
-ROM_LAYOUT_NAMES = ("WARP_BYTES", "COORD_BYTES", "BG_BYTES", "OBJECT_BYTES",
-                    "MAP_BYTES", "MAP_ATTRIBUTES_BANK", "MAP_ATTRIBUTES")
-_NAMES = "|".join(ROM_LAYOUT_NAMES)
-ROM_LAYOUT = re.compile(rf"^({_NAMES})\s*=\s*(\d+)", re.M)
-ROM_LAYOUT_JS = re.compile(rf"\b({_NAMES})\s*=\s*(\d+)")
-# Both files write some of them as a tuple on one line.
-ROM_LAYOUT_TUPLE = re.compile(rf"^((?:{_NAMES})(?:,\s*(?:{_NAMES}))+)"
-                              r"\s*=\s*([\d,\s]+)$", re.M)
-
-
 def check_rom_layout():
-    """`tools/rom-events` and `gen2/world.js` agree about the map-events block.
+    """The event block is read at *this* cartridge's strides.
 
-    Both read the same structure out of the cartridge -- the app for warps and
-    coord events at run time, the tool for objects when somebody asks where a
-    gym leader stands -- so the strides live in two places, and two copies of a
-    structure is a defect waiting for its moment.
+    Skipped without a cartridge, like `moves` and `gates`.
 
-    **This check exists because the moment came immediately.** The tool's
-    constants were written out by hand and `COORD_BYTES` was 5 where the app
-    says 8. Every map with a coord event on it parsed into drift: Cianwood City
-    produced objects of "type 9" whose script pointers landed three bytes
-    inside a trainer's `.AskNumber2` label. And the two maps the layout was
-    derived from -- Violet Gym and Azalea Gym -- have no coord events, so they
-    were the two maps it could not fail on.
+    **This check used to compare two hand-written copies of a structure, and
+    that is why it is worth reading.** `gen2/world.js` walked a map's event
+    block for warps and trigger tiles; `tools/rom-events` walked the same
+    block for the objects on a map. Both had the strides written out as their
+    own constants, so the strides existed twice, and one of them was mistyped:
+    coord events are eight bytes and the tool said five, so every map carrying
+    one parsed into drift -- Cianwood City produced objects of "type 9" whose
+    script pointers landed three bytes inside a trainer's `.AskNumber2` label.
+    Comparing the two files caught it in four lines.
 
-    Reading the numbers out of both files and comparing is four lines. Deriving
-    a layout from two examples and believing it cost an hour.
+    Then Polished Crystal arrived, whose coord event really is five bytes.
+    Both files still said eight; the check compared them and saw them agree;
+    and every Gym in the hack reported no leader standing in it. **Two copies
+    of a structure was half the defect. The other half was that neither copy
+    knew which cartridge it was looking at.**
+
+    So the strides moved into the engine profile, `tools/rom-events` stopped
+    reading the ROM and started asking `tools/route`, and this asks the
+    cartridge whether the answer is right -- see `rom-events --layout` for how
+    it is self-calibrating, which is the part that matters: it needs no
+    threshold that knows which game it is.
     """
-    def numbers(text, pattern):
-        found = dict(pattern.findall(text))
-        for packed in ROM_LAYOUT_TUPLE.finditer(text):
-            names = [n.strip() for n in packed.group(1).split(",")]
-            values = [v.strip() for v in packed.group(2).split(",") if v.strip()]
-            found.update(dict(zip(names, values)))
-        return found
-
-    js = (ROOT / "gen2" / "world.js").read_text()
-    want = numbers(js, ROM_LAYOUT_JS)
-    # The map *header*'s three numbers moved into the engine profile when
-    # Polished Crystal turned out to write seven bytes with no attributes
-    # bank where Crystal writes nine with one. Same comparison, one file
-    # further along: the tool's hand-written copies are still held to the
-    # app's, which is the whole point of this check.
-    engine = (ROOT / "gen2" / "engine.js").read_text()
-    header = re.search(r"mapHeader:\s*\{([^}]*)\}", engine)
-    if header:
-        fields = dict(re.findall(r"(\w+):\s*(\d+)", header.group(1)))
-        for name, field in (("MAP_BYTES", "bytes"),
-                            ("MAP_ATTRIBUTES_BANK", "attrBank"),
-                            ("MAP_ATTRIBUTES", "attrAddr")):
-            if field in fields:
-                want[name] = fields[field]
-    if len(want) < len(ROM_LAYOUT_NAMES):
-        missing = sorted(set(ROM_LAYOUT_NAMES) - set(want))
-        return fail(f"gen2/world.js and gen2/engine.js between them do not "
-                    f"define {', '.join(missing)}")
-    got = numbers((HERE / "rom-events").read_text(), ROM_LAYOUT)
-    problems = []
-    for name, value in sorted(want.items()):
-        if name not in got:
-            problems.append(f"tools/rom-events  does not define {name}")
-        elif got[name] != value:
-            problems.append(f"tools/rom-events  {name} is {got[name]}, "
-                            f"and gen2/world.js says {value}")
-    for p in problems:
-        print(f"        {p}")
-    return fail(f"{len(problems)} stride(s) the two readers disagree about") \
-        if problems else ok(f"both readers of the map-events block agree "
-                            f"about all {len(want)} strides")
+    if not cartridge.has_cartridge(ROOT):
+        return ok("no cartridge here, so the map-events strides are not checked")
+    out = subprocess.run([sys.executable, str(HERE / "rom-events"), "--layout"],
+                         capture_output=True, text=True)
+    for line in out.stdout.splitlines():
+        print(f"        {line}")
+    if out.returncode:
+        return fail("the event block is not being read at this cartridge's "
+                    "strides")
+    return ok("the object list behind a trigger tile reads like the object "
+              "list in front of one")
 
 
 def check_gyms():
