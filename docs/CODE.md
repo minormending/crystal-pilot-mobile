@@ -4364,7 +4364,7 @@ cartridge will not say which hours are which.
 
 ## 8j. A cartridge that changed everything it could
 
-<!-- covers: titles/polished.js gen2/engine.js gen2/romdata.js gen2/state.js gen2/menus.js @ 837ae7eba86f -->
+<!-- covers: titles/polished.js gen2/engine.js gen2/romdata.js gen2/state.js gen2/menus.js @ aee3bf4c66f0 -->
 
 Polished Crystal is the profile in `docs/DEVELOPING.md`'s hack table described
 as "the generic fallback, and the hardest thing to support properly". It is
@@ -4637,6 +4637,35 @@ badge bit. It had answered "no script object named for them on a Gym map" for
 all eight, twice over and for two different reasons — the stride above, and a
 64 KiB truncation, both written up in
 `docs/DEVELOPING.md` under *What a second reader of the map tables costs*.
+
+The eight are in `titles/polished.js` now, pasted from that output and held to
+the cartridge by `check-app gyms`: an object stands on each leader's tile, its
+script pointer resolves to a symbol carrying the leader's name, and it is a
+*script* object rather than a trainer — which is the fact that decides whether
+`clearHere` could ever beat one. All eight are reachable in the app's own map
+graph, Blackthorn seven legs from the bedroom.
+
+**Its badge order is not Crystal's, and no check could have caught that.**
+Crystal runs ZEPHYR, HIVE, PLAIN, FOG, STORM, MINERAL, GLACIER, RISING;
+Polished swaps the middle pair, so Chuck's Storm Badge is bit 5 and Jasmine's
+Mineral is 4. `check-app gyms` asks whether a declared bit *is* a badge bit in
+`EngineFlags`, and both of them are — so the wrong one passes, and the pilot
+offers a gym it has beaten for ever while reading a win as a loss.
+
+The tool used to hold the eight leaders in a list whose *index was the bit*,
+called out in a comment as the one fact it did not read. It now declares which
+badge each leader hands over — a fact about the story — and reads what bit
+that badge is out of the cartridge's own `BadgeNames`, which Polished has
+because it names a badge as it gives it to you and Crystal never does. Decoded
+without knowing the terminator: a run of letter bytes is a word and anything
+else ends it, so `99 a4 af a7 b8 b1 53` is Zephyr whether the cartridge writes
+`$50` after it or `$53`. Crystal has no such table and keeps the classic order,
+which is its own.
+
+**And two objects can stand on one tile.** Cianwood's Chuck is at (12,11) and
+so is a `SPRITE_BIG_HO_OH` statue that shows only while
+`EVENT_BOULDERS_IN_CIANWOOD_GYM` is set. The check wanted *every* object on the
+leader's tile to be a leader-shaped script; it wants one of them to be.
 
 **And its dialogue is compressed.** `macros/scripts/text.asm` compresses a
 string whenever compression saves space, so "was" is nowhere in that ROM while

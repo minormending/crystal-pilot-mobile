@@ -223,27 +223,36 @@ test('Crystal names Violet City, and can heal and shop there', async (t) => {
 // ROM. What is worth testing here is the shape the engine relies on, because a
 // second gym is the first time this list has had more than one entry -- and
 // every rule about it was written when it could not be exercised.
+//
+// **Every title that declares any**, rather than Crystal's. Polished Crystal
+// declares eight, generated in one paste from `--findgyms`, and a generated
+// list is exactly the kind that can come out in the wrong order or with a
+// repeated bit. Crystal's two were hand-written and read twice.
+const WITH_GYMS = TITLES.filter((t) => (t.gyms || []).length);
 
 test('the declared gyms are in badge order, one bit each', async (t) => {
   // `gymList` walks them and asks `hasBadge` per entry, so a repeated bit
   // would mark two gyms beaten at once and a gap would leave one unofferable
   // for ever.
-  const bits = crystal.gyms.map((g) => g.badge);
-  t.eq(bits, [...bits].sort((a, b) => a - b), 'in order');
-  t.eq(new Set(bits).size, bits.length, 'and no bit used twice');
-  t.eq(bits[0], 0, 'starting at the first badge');
+  for (const title of WITH_GYMS) {
+    const bits = title.gyms.map((g) => g.badge);
+    t.eq(bits, [...bits].sort((a, b) => a - b), `${title.id}: in order`);
+    t.eq(new Set(bits).size, bits.length, `${title.id}: no bit used twice`);
+    t.eq(bits[0], 0, `${title.id}: starting at the first badge`);
+  }
 });
 
 test('every gym names a town, a room, a door, a leader and a tile',
      async (t) => {
   // Five facts, and the engine dereferences all five: a missing one is a
   // silent `undefined` inside a walk rather than a refusal.
-  for (const g of crystal.gyms) {
-    t.true(Number.isInteger(g.map), `${g.leader}: a town`);
-    t.true(Number.isInteger(g.inside), `${g.leader}: a room`);
-    t.eq(g.door.length, 2, `${g.leader}: a door`);
-    t.eq(g.leaderAt.length, 2, `${g.leader}: a tile to talk from`);
-    t.true(Number.isInteger(g.badge), `${g.leader}: a badge bit`);
+  for (const title of WITH_GYMS) for (const g of title.gyms) {
+    const who = `${title.id}/${g.leader}`;
+    t.true(Number.isInteger(g.map), `${who}: a town`);
+    t.true(Number.isInteger(g.inside), `${who}: a room`);
+    t.eq(g.door.length, 2, `${who}: a door`);
+    t.eq(g.leaderAt.length, 2, `${who}: a tile to talk from`);
+    t.true(Number.isInteger(g.badge), `${who}: a badge bit`);
   }
 });
 
@@ -252,15 +261,20 @@ test('a gym room is never also a town, and never shared', async (t) => {
   // `through(door, inside)`. Two gyms sharing a room, or a room that is also
   // somebody's town, would write off the wrong leg -- which is exactly the
   // defect that made the shut-leg feature do nothing on a cartridge.
-  const rooms = crystal.gyms.map((g) => g.inside);
-  const towns = crystal.gyms.map((g) => g.map);
-  t.eq(new Set(rooms).size, rooms.length, 'each gym its own room');
-  t.false(rooms.some((r) => towns.includes(r)), 'and no room is a town');
+  for (const title of WITH_GYMS) {
+    const rooms = title.gyms.map((g) => g.inside);
+    const towns = title.gyms.map((g) => g.map);
+    t.eq(new Set(rooms).size, rooms.length, `${title.id}: each its own room`);
+    t.false(rooms.some((r) => towns.includes(r)),
+            `${title.id}: and no room is a town`);
+  }
 });
 
 test('every gym is somewhere the cartridge has a name for', async (t) => {
   // Otherwise the row reads "map 8.5", which is honest and useless. The town's
-  // name comes from the landmark table for free; the room's has to be declared.
+  // name comes from the landmark table for free; the room's has to be
+  // declared -- and a title with no `names` at all has said so, which is a
+  // gap in what the interface can say rather than a broken declaration.
   for (const g of crystal.gyms) {
     t.true(!!crystal.names[g.inside], `${g.leader}'s room is named`);
     t.true(!!crystal.names[g.map] || true, `${g.leader}'s town`);

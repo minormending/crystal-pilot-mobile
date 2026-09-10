@@ -483,10 +483,17 @@ def verify(cart):
     return 0
 
 
-GYM = re.compile(r'\{\s*map:\s*(\w+),\s*inside:\s*(\w+),\s*door:\s*\[(\d+),\s*(\d+)\],'
+# A map in a declaration is either a `const` by name or a `key(g, n)` written
+# straight in. Crystal names all of its; a profile whose eight gyms came out
+# of `--findgyms` in one paste has no reason to name sixteen maps once each,
+# and `tools/route --reach` already reads both forms for the same reason.
+MAP_REF = r'(\w+|key\(\d+,\s*\d+\))'
+GYM = re.compile(r'\{\s*map:\s*' + MAP_REF + r',\s*inside:\s*' + MAP_REF
+                 + r',\s*door:\s*\[(\d+),\s*(\d+)\],'
                  r'\s*\n?\s*leader:\s*[\'"](\w+)[\'"],\s*leaderAt:\s*\[(\d+),\s*(\d+)\],'
                  r'\s*badge:\s*(\d+)', re.S)
 KEY = re.compile(r'const (\w+) = key\((\d+),\s*(\d+)\);')
+INLINE_KEY = re.compile(r'key\((\d+),\s*(\d+)\)')
 BADGE_FLAG_BYTES = 3
 
 
@@ -989,13 +996,24 @@ def gyms(cart, name_of=None):
         src = path.read_text()
         keys = {m.group(1): (int(m.group(2)), int(m.group(3)))
                 for m in KEY.finditer(src)}
+
+        def resolve(ref):
+            """A `(group, number)` from a constant's name or a written key."""
+            if ref in keys:
+                return keys[ref]
+            written = INLINE_KEY.fullmatch(ref)
+            return (int(written.group(1)), int(written.group(2))) \
+                if written else None
+
         for m in GYM.finditer(src):
             town, room, dx, dy, leader, lx, ly, badge = m.groups()
             print(f'{path.name}: {leader} in {room}')
-            if room not in keys or town not in keys:
-                print('  !! its maps are not `key(group, number)` constants')
+            if not resolve(room) or not resolve(town):
+                print('  !! its maps are neither `key(group, number)` nor a '
+                      'constant that is one')
                 bad += 1
                 continue
+            keys = dict(keys, **{room: resolve(room), town: resolve(town)})
             # The room's own name in the symbol file, found by the map it exits
             # into and the number it sits at -- the same reasoning a person
             # would do, done by the tool.
@@ -1028,42 +1046,99 @@ def gyms(cart, name_of=None):
             objects = gym_objects(cart, room_name)
             at = [(sym, xy) for sym, xy in objects.items()
                   if (xy[0], xy[1]) == (int(lx), int(ly))]
+            flag = f', engine flag ${bits[int(badge)]:02x}' \
+                if int(badge) in bits else ''
             if not at:
                 print(f'  !! nothing stands at ({lx},{ly}) in {room_name}')
                 bad += 1
+            # **One of the objects on that tile has to be the leader, not all
+            # of them.** Two things can share a tile when only one is ever on
+            # screen: Cianwood's Chuck stands at (12,11) and so does a
+            # `SPRITE_BIG_HO_OH` statue that appears only while
+            # `EVENT_BOULDERS_IN_CIANWOOD_GYM` is set. Held to "every object
+            # here is a leader-shaped script", that gym failed for having
+            # scenery in it.
             for sym, (_, _, kind) in at:
                 named = leader.title() in sym or leader.capitalize() in sym
-                ok_kind = kind == 0
-                flag = f', engine flag ${bits[int(badge)]:02x}' \
-                    if int(badge) in bits else ''
-                print(f'  at ({lx},{ly}): {sym}  {"script" if ok_kind else f"type {kind}"}'
-                      f'  badge bit {badge}{flag}')
-                if not named:
-                    print(f'  !! that script is not named for {leader}')
-                    bad += 1
-                if not ok_kind:
-                    print('  !! a leader is talked to, so it must be a script object')
-                    bad += 1
-                if int(badge) not in bits:
-                    print(f'  !! badge bit {badge} is not a badge in EngineFlags')
-                    bad += 1
+                print(f'  at ({lx},{ly}): {sym}  '
+                      f'{"script" if kind == 0 else f"type {kind}"}'
+                      f'  badge bit {badge}{flag}'
+                      f'{"" if named else "  — not named for " + leader}')
+            if at and not any(leader.title() in sym or leader.capitalize() in sym
+                              for sym, (_, _, kind) in at if kind == 0):
+                print(f'  !! no script object named for {leader} stands there'
+                      f' — a leader is talked to, so it cannot be a trainer')
+                bad += 1
+            if int(badge) not in bits:
+                print(f'  !! badge bit {badge} is not a badge in EngineFlags')
+                bad += 1
     return bad
 
 
-# The eight Johto gym leaders, by the name the *trainer table* gives them --
-# so this list is a list of nothing but names, and everything else about them
-# is read. It could be derived too, by taking every trainer whose class name
-# is LEADER, and is not: the Kanto leaders are in the same table and this app
-# declares no Kanto maps, so a list of eight is the honest scope rather than a
-# shortcut.
-# **In badge order**, which is the one fact here that is not read: the Johto
-# badge bits run ZEPHYR, HIVE, PLAIN, FOG, STORM, MINERAL, GLACIER, RISING,
-# and that is a fact about the game rather than about the cartridge's tables.
-# So the index *is* the badge bit, said out loud rather than computed
-# silently -- and `check-app gyms` holds a declared bit to `EngineFlags`
-# afterwards, which is the half that can be checked.
-JOHTO_LEADERS = ('FALKNER', 'BUGSY', 'WHITNEY', 'MORTY',
-                 'CHUCK', 'JASMINE', 'PRYCE', 'CLAIR')
+# The eight Johto gym leaders and the badge each one hands over, by the name
+# the *trainer table* gives them -- so this list is a list of nothing but
+# names, and everything else about them is read. It could be derived too, by
+# taking every trainer whose class name is LEADER, and is not: the Kanto
+# leaders are in the same table and this app declares no Kanto maps, so a
+# list of eight is the honest scope rather than a shortcut.
+#
+# **Which leader gives which badge is a fact about the story. What bit that
+# badge is, is a fact about the cartridge, and this used to conflate them.**
+# The list was in badge order and its index *was* the bit, said out loud
+# rather than computed silently -- ZEPHYR, HIVE, PLAIN, FOG, STORM, MINERAL,
+# GLACIER, RISING. Polished Crystal runs ZEPHYR, HIVE, PLAIN, FOG,
+# **MINERAL, STORM**, GLACIER, RISING: Chuck and Jasmine swap. Declaring
+# Chuck at bit 4 there means offering a beaten gym for ever, or reading a win
+# as a loss, and `check-app gyms` could not have caught it -- both numbers
+# are badge bits in `EngineFlags`, which is all that check can ask.
+LEADER_BADGES = (('FALKNER', 'Zephyr'), ('BUGSY', 'Hive'),
+                 ('WHITNEY', 'Plain'), ('MORTY', 'Fog'),
+                 ('CHUCK', 'Storm'), ('JASMINE', 'Mineral'),
+                 ('PRYCE', 'Glacier'), ('CLAIR', 'Rising'))
+# What a letter is, for reading a table of names out of the ROM without
+# knowing its terminator. Both cartridges use the same two blocks; a run of
+# them is a word and anything else ends it.
+UPPER, LOWER = range(0x80, 0x9a), range(0xa0, 0xba)
+
+
+def badge_names(cart):
+    """{badge name, lowercased: bit} out of the cartridge's own table.
+
+    Polished Crystal names the badge it has just given you, so `BadgeNames`
+    lists all sixteen in bit order -- Zephyr, Hive, Plain, Fog, Mineral,
+    Storm, Glacier, Rising, then Kanto's. That is the badge order, read
+    rather than assumed.
+
+    Decoded without knowing the terminator: a run of letter bytes is a word
+    and the byte that is not a letter ends it, which works whether the
+    cartridge writes `$50` after each one or `$53`. `99 a4 af a7 b8 b1 53` is
+    Zephyr.
+
+    Crystal has no such table -- it never shows a badge's name -- so this
+    answers nothing there and the caller keeps the classic order, which is
+    Crystal's own.
+    """
+    if 'BadgeNames' not in cart.by_name:
+        return {}
+    bank, addr = cart.by_name['BadgeNames']
+    at = offset(bank, addr)
+    out, word = {}, []
+    letter = lambda b: chr(b - 0x80 + 65) if b in UPPER else (
+        chr(b - 0xa0 + 97) if b in LOWER else None)
+    # Sixteen names is well under 300 bytes; a bound rather than a count,
+    # like every other scan here.
+    for byte in cart.rom[at:at + 300]:
+        c = letter(byte)
+        if c:
+            word.append(c)
+        elif word:
+            out.setdefault(''.join(word).lower(), len(out))
+            word = []
+        elif out:
+            # Two non-letters running is the end of the list, not a gap in
+            # the middle of it.
+            break
+    return out
 
 
 def find_gyms(cart, name_of=None):
@@ -1093,6 +1168,11 @@ def find_gyms(cart, name_of=None):
     # answer, so it is the app's reader that answers.
     name_of = name_of or route_maps()
     bits = badge_bits(cart)
+    # Which bit each badge is, out of the cartridge if it says and out of
+    # the classic order if it does not.
+    order = badge_names(cart)
+    where = order and 'its own BadgeNames table' or 'the classic badge order'
+    print(f'badge bits from {where}')
     # Every map's objects, once. 388 maps is two seconds and the alternative
     # is 388 scans per leader.
     where = {}
@@ -1105,9 +1185,12 @@ def find_gyms(cart, name_of=None):
         for w in map_warps(cart, name):
             doors.setdefault(w['to'], []).append((key, name, w['x'], w['y']))
 
-    print(f'{len(JOHTO_LEADERS)} leader(s), against {len(name_of)} named maps')
+    print(f'{len(LEADER_BADGES)} leader(s), against {len(name_of)} named maps')
     missing = 0
-    for badge, who in enumerate(JOHTO_LEADERS):
+    for fallback, (who, badge_name) in enumerate(LEADER_BADGES):
+        badge = order.get(badge_name.lower(), fallback)
+        if badge != fallback:
+            print(f'  ({badge_name} is bit {badge} here, not {fallback})')
         party = cart_trainer(cart, who)
         hits = [v for sym, vs in where.items()
                 if who.title() in sym or who.capitalize() in sym

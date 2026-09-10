@@ -413,6 +413,60 @@ export const polished = {
     { map: key(26, 4), reach: 'healAtCenter',
       inside: key(26, 6), door: [29,3], nurse: [5,1] }, // Cherrygrove
   ],
+  // **Every gym in Johto, and not one number of it typed out by hand.**
+  //
+  // `tools/rom-events --findgyms` reads all six fields per entry out of the
+  // cartridge -- the town, the room, the door tile, the leader's tile, the
+  // badge bit -- and it was run against Crystal first, where it reproduces
+  // Falkner at (5,1) behind Violet's door at (18,17) and Bugsy at (5,7)
+  // behind Azalea's at (10,15). Those are the two entries `titles/crystal.js`
+  // measured by hand, one of them by walking into the room. A derivation that
+  // returns somebody's eyes is a derivation worth pointing at a cartridge
+  // nobody has walked.
+  //
+  // Every field is held to the ROM by `check-app gyms`: an object stands on
+  // the leader's tile, its script pointer resolves to a symbol carrying the
+  // leader's name, that object is a *script* rather than a trainer -- a
+  // leader is talked to, so `clearHere` could never beat one -- and the badge
+  // bit is a bit `EngineFlags` points at `wJohtoBadges` with.
+  //
+  // **Two things about this cartridge that Crystal's two entries could not
+  // have shown.**
+  //
+  // Its badge order is not Crystal's. Crystal runs ZEPHYR, HIVE, PLAIN, FOG,
+  // STORM, MINERAL, GLACIER, RISING; this one swaps the middle pair, so
+  // Chuck's Storm Badge is bit 5 and Jasmine's Mineral is 4. Read out of the
+  // cartridge's own `BadgeNames`, which it has because it names a badge as it
+  // hands it over and Crystal never does. Backwards, the pilot would offer a
+  // beaten gym for ever and read a win as a loss -- and no check could have
+  // said so, because both numbers are badges.
+  //
+  // And Blackthorn's Gym has six ways in. Five are the holes its boulder
+  // puzzle drops you through from the floor above; the sixth, at (18,11), is
+  // the front door in Blackthorn City. The tool reports all six rather than
+  // ranking them, and this is the one that is a door.
+  //
+  // No `opens:` on any of them, the same absence Crystal's carry: what a
+  // badge unlocks is a script's business and this app has been wrong about it
+  // before. See `gates`.
+  gyms: [
+    { map: key(10, 3), inside: key(10, 5), door: [18, 17],
+      leader: 'FALKNER', leaderAt: [5, 2], badge: 0 },
+    { map: key(8, 7), inside: key(8, 5), door: [10, 15],
+      leader: 'BUGSY', leaderAt: [7, 3], badge: 1 },
+    { map: key(11, 6), inside: key(11, 7), door: [28, 7],
+      leader: 'WHITNEY', leaderAt: [8, 3], badge: 2 },
+    { map: key(4, 2), inside: key(4, 9), door: [6, 27],
+      leader: 'MORTY', leaderAt: [5, 1], badge: 3 },
+    { map: key(1, 13), inside: key(1, 2), door: [10, 7],
+      leader: 'JASMINE', leaderAt: [5, 3], badge: 4 },
+    { map: key(22, 2), inside: key(22, 4), door: [8, 43],
+      leader: 'CHUCK', leaderAt: [12, 11], badge: 5 },
+    { map: key(2, 7), inside: key(2, 2), door: [6, 13],
+      leader: 'PRYCE', leaderAt: [5, 3], badge: 6 },
+    { map: key(5, 10), inside: key(5, 1), door: [18, 11],
+      leader: 'CLAIR', leaderAt: [5, 3], badge: 7 },
+  ],
   // No map names and no scripts: the same absences `generic` has,
   // and each one is a job the interface will not offer rather than one that
   // fails. Somebody who plays this cartridge can fill them in.
