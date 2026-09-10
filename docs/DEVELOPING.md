@@ -16,7 +16,7 @@ what CI checks and what the pre-commit hook blocks on.
 flowchart LR
     E[an edit] --> H{{".githooks/pre-commit"}}
     H --> T["./run-tests<br/>955 behaviour tests"]
-    H --> C["tools/check-app<br/>34 groups"]
+    H --> C["tools/check-app<br/>35 groups"]
     H --> D["tools/docs-check<br/>46 tracked sections"]
     T --> OK[commit]
     C --> OK
@@ -128,14 +128,14 @@ section gives. Everything by hand runs against a local build.
 ```mermaid
 flowchart BT
     C["the app"] --> T["./run-tests<br/>955 behaviour tests"]
-    C --> A["tools/check-app<br/>34 groups"]
+    C --> A["tools/check-app<br/>35 groups"]
     C --> D["tools/docs-check<br/>46 tracked sections"]
     C --> V["tools/coverage<br/>what the suite never runs"]
     T --> M["tools/mutate<br/>break a line, see who notices"]
     A --> K["tools/check-checks<br/>break each group's own subject"]
     T -.-> V
     M -.->|"survivors, by file"| R(["the suite is load-bearing"])
-    K -.->|"34 of 34 bite"| R2(["the groups are awake"])
+    K -.->|"35 of 35 bite"| R2(["the groups are awake"])
     V -.->|"62%, and where"| R3(["the gaps are known"])
 ```
 
@@ -464,7 +464,7 @@ is wrong, not the check. It is not in the pre-commit hook: it runs `check-app`
 about fifty times, which is the wrong price for every commit and the right
 one for the commit that changes a check.
 
-`tools/check-app` is thirty-four groups, each one a class of mistake that parses
+`tools/check-app` is thirty-five groups, each one a class of mistake that parses
 fine and is wrong at run time:
 
 | group | asserts |
@@ -492,6 +492,7 @@ fine and is wrong at run time:
 | `gyms` | every gym a title declares has the right leader on the right tile, as a script object, with a badge bit that is a badge — skipped without a cartridge |
 | `marts` | every mart a title declares has a door its town warps through, and the tile the pilot is sent to faces somebody — the counter geometry is the one thing a mart cannot derive, and it was assumed for twelve of them |
 | `wilds` | every grass table walks end to end at this cartridge's own stride: each entry sits on a map the cartridge has, and every slot is a species it has at a level it allows — the stride the profile's own comment warns reads a neighbouring map's block without failing |
+| `items` | every item name a title declares — its heals and its cures — is an item this cartridge has, folded through the app's own lookup. A name it does not have fails in silence: a Heal row that never finds anything in a bag with four potions in it |
 | `romlayout` | the map-events block is read at *this* cartridge's strides — the objects behind a trigger tile resolve like the objects in front of one. It compared two files before, and two files can agree and both be wrong |
 | `phrases` | no engine module compares a screen phrase written into it — a phrase is content, so it is the title's to say — and, with a cartridge, every phrase the app looks for is one the cartridge actually says |
 | `menus` | every box the app tells apart by shape declares that shape in the profile and asks the instance for it — and, with a cartridge, the shape is the one the cartridge's own menu header draws |
@@ -571,12 +572,12 @@ Which makes some hacks much more informative than others:
 | hack | title | species | what it exercises |
 | --- | --- | --- | --- |
 | [patched-crystal](https://github.com/UberMedic7/patched-crystal) | `PM_CRYSTAL` | 251 | the control — bug fixes only, so anything that differs is this app's fault |
-| [pokecrystal16](https://github.com/fellowship-of-the-roms/pokecrystal16) | `PM_CRYSTAL` | 251 | **16-bit species ids, content otherwise vanilla** — built and run: **31/31**, once the trainer pointer width was derived rather than assumed |
-| [PokemonAmbrosia](https://github.com/AndrewC101/PokemonAmbrosia) | `PM_CRYSTAL` | 254 | species past `speciesCount`, *while* being claimed as Crystal — built and run: **25/31**, and its menus are the reason (`Switch`, not `SWITCH`) |
+| [pokecrystal16](https://github.com/fellowship-of-the-roms/pokecrystal16) | `PM_CRYSTAL` | 251 | **16-bit species ids, content otherwise vanilla** — built and run: **35/35**, once the trainer pointer width was derived rather than assumed |
+| [PokemonAmbrosia](https://github.com/AndrewC101/PokemonAmbrosia) | `PM_CRYSTAL` | 254 | species past `speciesCount`, *while* being claimed as Crystal — built and run: **29/35**, and its menus are the reason (`Switch`, not `SWITCH`) |
 | [pokecrystal-speedchoice](https://github.com/Dabomstew/pokecrystal-speedchoice) | `PM_CRYSTAL` | 251 | changed flow and menus, vanilla species |
 | [Majora-Crystal](https://github.com/WasabiRaptor/Majora-Crystal) | `PM_CRYSTAL` | 255 | built around a time limit — the adversary for the clock reading |
-| [pokecrystal-nl](https://github.com/wfowler1/pokecrystal-nl) · [-es](https://github.com/erosunica/pokecrystal-es) · [_cn](https://github.com/SnDream/pokecrystal_cn) | `PM_CRYSTAL` | 251 | the charmap and the English phrases. Dutch built and run: **29/31**, and both failures are true — `sent to BILL`, `PACK` and `SWITCH` are not in that ROM, and its switch box begins `WISSEL` |
-| [polishedcrystal](https://github.com/Rangi42/polishedcrystal) | `PKPCRYSTAL` | 291 | the hardest thing to support properly, and the one that found seven declared numbers — built, run, and given a profile: **31/31**, with `tools/dex --verify` clean over all 291 species |
+| [pokecrystal-nl](https://github.com/wfowler1/pokecrystal-nl) · [-es](https://github.com/erosunica/pokecrystal-es) · [_cn](https://github.com/SnDream/pokecrystal_cn) | `PM_CRYSTAL` | 251 | the charmap and the English phrases. Dutch built and run: **32/35**, and all three failures are true — `sent to BILL`, `PACK` and `SWITCH` are not in that ROM, its switch box begins `WISSEL`, and not one of the twenty-one item names `crystal.js` declares is a word it uses, so its Heal row would find nothing in a full bag |
+| [polishedcrystal](https://github.com/Rangi42/polishedcrystal) | `PKPCRYSTAL` | 291 | the hardest thing to support properly, and the one that found nine declared numbers and a Lv179 Ditto — built, run, and given a profile: **35/35**, with `tools/dex --verify` clean over all 291 species, eight gyms and twelve marts read out of the cartridge, and every one of the 68 maps it declares reachable from the bedroom |
 
 Four are built and run. **A word about the assembler**, because it is the
 thing that decides whether a hack can be tested at all: `polishedcrystal` and
@@ -596,7 +597,7 @@ is an afternoon, and one that asks for 0.5 or 0.6 is a detour.
 
 **What the four say about the app** divides cleanly. pokecrystal16 changes a
 *structure* and passes everything once the structure is derived. The Dutch
-build changes a *language*, and its two failures are true — the app drives
+build changes a *language*, and its three failures are true — the app drives
 menus by their English words. Ambrosia and Polished Crystal change *content*
 and menu text, and their failures name exactly which: `Switch` where the app
 looks for `SWITCH`, a switch box with four rows where the profile says three,
@@ -806,6 +807,7 @@ tools/dex --at 12 cyndaquil            what it would know, and what is next
 tools/dex --evolves 20                 every species that evolves at Lv20
 tools/dex --verify                     the whole table, held to the cartridge
 tools/dex --wilds                      every grass table, at its own stride
+tools/dex --items                      every declared item name, against it
 tools/dex --party                      the party out of a .sav in dev/
 tools/dex --party --check              and the DV nibble order, settled
 ```

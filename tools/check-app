@@ -1756,6 +1756,38 @@ def check_wilds():
     return ok(last[-1] if last else "the wild tables walk end to end")
 
 
+def check_items():
+    """Every item name a title declares is an item this cartridge has.
+
+    Skipped without a cartridge, like `wilds` and `gyms`.
+
+    **A title's item lists are names on purpose** -- an id is layout and a
+    name is content, and content is what a hack changes -- which makes them
+    the one kind of declaration that fails in silence. A `heals` list naming
+    something the cartridge does not have is not an error: it is a Heal row
+    that never finds anything in the bag, and a pilot reporting it has
+    nothing to mend with while carrying four potions.
+
+    `phrases` holds the app's menu words to the ROM and `moves` holds its
+    lethal effects to it. These are the third list of the same kind and
+    nobody had asked the cartridge about them. Folded through the app's own
+    `itemIdOf`, so the question here is exactly the one `cheapestOf` asks at
+    run time. The reading lives in `tools/dex --items`.
+    """
+    if not cartridge.has_cartridge(ROOT):
+        return ok("no cartridge here, so the declared item names are not checked")
+    out = subprocess.run(["node", str(HERE / "dex"), "--items"],
+                         capture_output=True, text=True)
+    bad = [l for l in out.stdout.splitlines() if "!!" in l]
+    for l in bad:
+        print(f"        {l.strip()}")
+    if out.returncode or bad:
+        return fail(f"{len(bad) or 1} declared item name(s) this cartridge "
+                    f"does not have")
+    last = [l for l in out.stdout.splitlines() if "declared item name" in l]
+    return ok(last[-1] if last else "the declared item names are all real")
+
+
 def check_types():
     """The decoded type chart agrees with things about Pokemon nobody looked up.
 
@@ -2249,6 +2281,7 @@ CHECKS = {
     "gyms": check_gyms,
     "marts": check_marts,
     "wilds": check_wilds,
+    "items": check_items,
     "types": check_types,
     "menus": check_menus,
     "phrases": check_phrases,

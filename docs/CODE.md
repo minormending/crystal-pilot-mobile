@@ -7306,7 +7306,7 @@ about that code did not.
 
 ### The other checks
 
-<!-- covers: tools/check-app @ e64c870bb146 -->
+<!-- covers: tools/check-app @ 366a79240f4d -->
 
 `tools/check-app` runs everything that can be verified without a ROM:
 
@@ -7345,6 +7345,7 @@ tools/check-app contrast     # or one group
 | `gyms` | a declared gym's leader, tile, kind and badge bit are what the cartridge says — skipped without a cartridge |
 | `marts` | a declared mart's door is one its town warps through, and the tile the pilot is sent to faces somebody — the counter geometry is what a mart cannot derive |
 | `wilds` | every grass table walks end to end at this cartridge's own stride, and every slot is a species it has at a level it allows |
+| `items` | every item name a title declares is one this cartridge has — the lists that fail in silence |
 | `romlayout` | the map-events block is read at *this* cartridge's strides: the objects behind a trigger tile resolve like the objects in front of one |
 | `types` | the optional symbols the app reads travel to another device, and — with a cartridge — the decoded type chart agrees with twenty-two matchups nobody had to look up |
 | `menus` | every box the app tells apart by shape declares that shape, asks the instance for it, and — with a cartridge — is the shape the cartridge's own menu header draws |

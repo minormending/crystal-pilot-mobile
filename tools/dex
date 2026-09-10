@@ -11,6 +11,8 @@
 //                                     true about Pokemon before this app was
 //     tools/dex --wilds               every wild table walked end to end, at
 //                                     the stride this cartridge's profile says
+//     tools/dex --items               every item name the title declares,
+//                                     against the cartridge's own table
 //     tools/dex --party               the party out of a .sav in dev/, as the
 //                                     app's own card would say it
 //     tools/dex --party --check       and hold the DV nibble order to the
@@ -710,9 +712,56 @@ function wilds() {
   return problems ? 1 : 0;
 }
 
+/**
+ * Every item name a title declares, against the cartridge's own table.
+ *
+ * **A title's item lists are names, on purpose**: an id is layout and a name
+ * is content, and content is what a hack changes. Which makes them the one
+ * kind of declaration that fails *silently* — a `heals` list naming an item
+ * the cartridge does not have is not an error, it is a Heal row that never
+ * finds anything in the bag and a pilot that says it has nothing to mend
+ * with while holding four potions.
+ *
+ * Nothing checked them. `phrases` holds the app's menu words to the ROM and
+ * `moves` holds its lethal effects to it; these are the third list of the
+ * same kind, and they were the one nobody had asked the cartridge about.
+ *
+ * Folded through `itemIdOf`, which is the app's own lookup — so this asks
+ * exactly the question `cheapestOf` will ask at run time, case and POKé and
+ * punctuation included.
+ */
+function items() {
+  const want = [];
+  for (const name of (title.heals || [])) want.push(['heals', name]);
+  for (const [what, list] of Object.entries(title.cures || {})) {
+    for (const name of list) want.push([`cures.${what}`, name]);
+  }
+  if (!want.length) {
+    console.log('this profile declares no item names');
+    return 0;
+  }
+  const seen = new Map();
+  let missing = 0;
+  for (const [where, name] of want) {
+    if (seen.has(name)) continue;
+    const id = data.itemIdOf(name);
+    seen.set(name, id);
+    if (!id) {
+      console.log(`  !! ${where}: "${name}" is not an item on this cartridge`);
+      missing++;
+    }
+  }
+  console.log(`${seen.size} declared item name(s), `
+              + `${missing} the cartridge does not have`);
+  return missing ? 1 : 0;
+}
+
 const args = process.argv.slice(2);
 if (args.includes('--wilds')) {
   process.exit(wilds());
+}
+if (args.includes('--items')) {
+  process.exit(items());
 }
 if (args.includes('--verify')) {
   process.exit(verify());
