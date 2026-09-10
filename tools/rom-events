@@ -83,6 +83,7 @@ never will be. Without them it says so and exits 0 -- the same way the move
 table's check skips itself, because a tool that fails a clean checkout is a
 tool somebody removes from CI.
 """
+import collections
 import bisect
 import json
 import os
@@ -99,38 +100,113 @@ sys.path.insert(0, str(ROOT / 'tools'))
 # cartridge is current would be worse than either.
 import cartridge  # noqa: E402
 
-# Enough of the script command set to read a gate, and every one of these was
-# derived from the symbol file rather than looked up -- the derivation is in
-# docs/CODE.md. `Route32Noop1Scene` is one byte, `91`, which gives `end`; a
-# `dw` landing on a `.Text` symbol gives `writetext`; a branch onto
-# `.DontHaveZephyrBadge` gives the `iffalse` before it.
+# What each script command's arguments look like, by **name**. The numbers
+# used to be here too and they were Crystal's: `checkevent` is `$31` on
+# Crystal and `$33` on Polished Crystal, whose command list is longer, so
+# every gate this file read on that cartridge was decoded with another game's
+# opcodes. It produced commands, of course. Just not those ones.
 #
-# (byte, name, argument shape) where the shape is a string of:
+# The numbers are derived per cartridge instead -- see `commands` -- and this
+# keeps the half that is a fact about the *command* rather than about the
+# build: how many bytes it takes and what they mean.
+#
 #   b = one byte    w = a two-byte pointer, resolved to a label
 #   e = a two-byte event id
-COMMANDS = {
-    0x00: ('scall', 'w'),
-    0x03: ('jump', 'w'),
-    0x06: ('ifequal', 'bw'),
-    0x08: ('iffalse', 'w'),
-    0x09: ('iftrue', 'w'),
-    0x1c: ('readvar', 'b'),
-    0x31: ('checkevent', 'e'),
-    0x32: ('clearevent', 'e'),
-    0x33: ('setevent', 'e'),
-    0x34: ('checkflag', 'e'),
-    0x47: ('opentext', ''),
-    0x49: ('closetext', ''),
-    0x4c: ('writetext', 'w'),
-    0x4e: ('yesorno', ''),
-    0x54: ('waitbutton', ''),
-    0x6b: ('faceplayer', ''),
-    0x6e: ('disappear', 'b'),
-    0x6f: ('appear', 'b'),
-    0x90: ('endcallback', ''),
-    0x91: ('end', ''),
+COMMAND_ARGS = {
+    'scall': 'w', 'farscall': 'w',
+    'jump': 'w', 'sjump': 'w', 'farsjump': 'w',
+    'ifequal': 'bw', 'ifnotequal': 'bw', 'iffalse': 'w', 'iftrue': 'w',
+    'ifgreater': 'bw', 'ifless': 'bw',
+    'readvar': 'b',
+    'checkevent': 'e', 'clearevent': 'e', 'setevent': 'e', 'checkflag': 'e',
+    'setflag': 'e', 'clearflag': 'e',
+    'opentext': '', 'closetext': '', 'writetext': 'w', 'farwritetext': 'w',
+    'yesorno': '', 'waitbutton': '', 'faceplayer': '',
+    'disappear': 'b', 'appear': 'b',
+    'endcallback': '', 'end': '',
 }
-SETEVENT = 0x33
+# The commands this file stops a decode on, and the two it needs by number.
+STOP_AT = ('end', 'endcallback', 'jump', 'sjump')
+# How far a jump table can run, and how many of its entries have to land on a
+# named handler before it is believed. A bound rather than a count, like every
+# other scan here: Crystal's table is 170 commands and Polished Crystal's is
+# longer, and a cartridge could write more.
+COMMAND_SPAN, COMMAND_FLOOR = 256, 64
+HANDLER = 'Script_'
+
+
+def commands(cart):
+    """{opcode: (name, argument shape)} for *this* cartridge.
+
+    **Derived from the jump table, which the symbol file names for us.** Every
+    script command is a `dw` in one table and its handler is called
+    `Script_<name>`, so the table is a run of addresses that are all handlers
+    and a command's opcode is its index in it.
+
+    Found by scoring rather than by looking `ScriptCommandTable` up, because
+    only one of the two cartridges here has that symbol. Every even position
+    in the handlers' own bank is tried; the winner is the one where the most
+    of the next 256 words land on a named handler, and its first word has to
+    land on one too. Crystal scores 170 at `25:6cb1`, which *is*
+    `ScriptCommandTable`; Polished Crystal scores 219 at `25:6334`, which it
+    does not name. Nothing else in either bank comes close, and the runner-up
+    on Polished -- a longer *unbroken* run 266 bytes further on, which is what
+    an earlier version of this took -- scores 91.
+
+    Gaps are allowed on purpose. A handler in another bank is a hole in the
+    run and not the end of the table, and requiring an unbroken run is exactly
+    how the wrong answer above was reached.
+
+    Empty if the table cannot be found, and the caller says so rather than
+    reading a third cartridge's opcodes.
+    """
+    if not hasattr(commands, 'cache'):
+        commands.cache = {}
+    key = str(getattr(cart, 'rom_path', None))
+    if key in commands.cache:
+        return commands.cache[key]
+    handlers = {n: v for n, v in cart.by_name.items()
+                if n.startswith(HANDLER) and '.' not in n}
+    out = {}
+    if handlers:
+        bank = collections.Counter(b for b, _ in handlers.values()) \
+            .most_common(1)[0][0]
+        # **Bank 0 counts too.** Its handlers are reachable from anywhere,
+        # so a `dw` in this table can point at one, and Polished Crystal puts
+        # `Script_opentext` and `Script_waitbutton` there. Left out, those
+        # were holes in the run and the decode read `48  ?` for the second
+        # command of every script in the game. The two ranges cannot collide:
+        # bank 0 lives below $4000 and a banked one at or above it.
+        want = {a: n[len(HANDLER):] for n, (b, a) in handlers.items()
+                if b == bank or (b == 0 and a < 0x4000)}
+        base, end = bank * 0x4000, (bank + 1) * 0x4000
+        word = lambda at: cart.rom[at] | cart.rom[at + 1] << 8
+        best = (0, None)
+        for start in range(base, end - 2):
+            if word(start) not in want:
+                continue
+            hits = sum(1 for i in range(COMMAND_SPAN)
+                       if start + i * 2 + 1 < end and word(start + i * 2) in want)
+            if hits > best[0]:
+                best = (hits, start)
+        hits, start = best
+        if hits >= COMMAND_FLOOR:
+            for i in range(COMMAND_SPAN):
+                if start + i * 2 + 1 >= end:
+                    break
+                a = word(start + i * 2)
+                if a in want and i not in out:
+                    out[i] = (want[a], COMMAND_ARGS.get(want[a]))
+    commands.cache[key] = out
+    return out
+
+
+def opcode(cart, name):
+    """The byte for one command on this cartridge, or None."""
+    for byte, (word, _) in commands(cart).items():
+        if word == name:
+            return byte
+    return None
 
 # The game's own encoding, as far as a line of dialogue uses it. The letter and
 # digit ranges are the same ones `gen2/romdata.js` decodes names with; the
@@ -235,11 +311,19 @@ class Cart:
         out, here, unknown = [], addr, 0
         while here < addr + limit:
             byte = self.rom[offset(bank, here)]
-            cmd = COMMANDS.get(byte)
+            cmd = commands(self).get(byte)
             label = self.near(bank, here)
             tag = f'  {here:04x}  ' + (f'{label:44}' if label != name else ' ' * 44)
-            if not cmd:
-                out.append(f'{tag}{byte:02x}  ?')
+            # A command whose *name* is derived but whose arguments are not
+            # declared is as unreadable as one with no name at all, and more
+            # dangerous: stepping over it by one byte puts every command
+            # after it out of phase, and they all still decode. Polished
+            # Crystal has dozens Crystal does not -- `iftruefwd`, `setval`,
+            # `loadtrainer` -- so this is the common case there and the
+            # decode stops rather than drifting.
+            if not cmd or cmd[1] is None:
+                out.append(f'{tag}{byte:02x}  '
+                           + (f'{cmd[0]}, arguments unknown' if cmd else '?'))
                 unknown += 1
                 here += 1
                 # Three unknowns in a row is the table running out rather than
@@ -262,13 +346,16 @@ class Cart:
                     at += 2
             out.append(f'{tag}{word} {" ".join(args)}'.rstrip())
             here = at
-            if word in ('end', 'endcallback', 'jump'):
+            if word in STOP_AT:
                 break
         return out
 
     def setters(self, event):
         """Every place in the ROM that sets this event, named."""
-        want = bytes([SETEVENT, event & 0xff, (event >> 8) & 0xff])
+        op = opcode(self, 'setevent')
+        if op is None:
+            return []
+        want = bytes([op, event & 0xff, (event >> 8) & 0xff])
         hits, start = [], 0
         while True:
             found = self.rom.find(want, start)
@@ -277,8 +364,6 @@ class Cart:
             hits.append((found, self.label(found)))
             start = found + 1
 
-
-CHECKEVENT = 0x31
 
 # A map's event block used to be laid out here, field by field, as its own
 # reading of the cartridge. **It is gone, and this file asks the app.**
@@ -384,12 +469,17 @@ def map_events(cart, name):
     `<Map>_MapScripts` and a `<Map>_MapEvents` symbol -- 388 of each -- and the
     scripts are laid out between them.
 
-    False positives are possible, since `31 xx xx` also occurs in whatever data
-    shares the region, and the cross-reference is what sorts them out: an event
+    False positives are possible, since the same three bytes also occur in
+    whatever data shares the region, and the cross-reference is what sorts
+    them out: an event
     nothing sets is either a read of the game's own bookkeeping or a
     coincidence, and either way not a gate. That is the same shape of answer
     `--set` gives, and for the same reason.
     """
+    check = opcode(cart, 'checkevent')
+    if check is None:
+        return [f'{name}: this cartridge\u2019s script command table could not '
+                f'be found, so its opcodes are unknown']
     first, last = f'{name}_MapScripts', f'{name}_MapEvents'
     if first not in cart.by_name or last not in cart.by_name:
         return [f'{name}: no _MapScripts/_MapEvents pair in the symbol file']
@@ -399,7 +489,7 @@ def map_events(cart, name):
         return [f'{name}: its events come before its scripts, which cannot be read']
     out, seen = [f'{name}: {end - start} bytes of script'], {}
     for i in range(start, end - 2):
-        if cart.rom[i] != CHECKEVENT:
+        if cart.rom[i] != check:
             continue
         event = cart.rom[i + 1] | cart.rom[i + 2] << 8
         seen.setdefault(event, []).append(i)
@@ -1332,6 +1422,26 @@ def layout(cart):
     number lands where it lands: on both cartridges, a wrong stride takes the
     trigger maps from hundreds of objects to none at all.
     """
+    bad = 0
+    # The script command table, which is the other thing in this file that
+    # used to be Crystal's numbers written down. Reported here because it is
+    # the same shape of claim -- a layout read off one cartridge and applied
+    # to another -- and because a table that cannot be found is the reason
+    # every gate on a hack would go unread.
+    table = commands(cart)
+    named = [w for w, _ in table.values()]
+    if not table:
+        print('no script command table found — this cartridge\u2019s gates '
+              'cannot be read')
+        bad += 1
+    else:
+        missing = [w for w in ('checkevent', 'setevent', 'end')
+                   if w not in named]
+        print(f'{len(table)} script command(s) named from the jump table'
+              + (f', but not {", ".join(missing)}' if missing else ''))
+        if missing:
+            bad += 1
+
     objects, triggers = route_objects(), route_triggers()
     if not objects:
         print('the app\u2019s reader found no maps at all')
@@ -1353,24 +1463,24 @@ def layout(cart):
     print(f'{len(objects)} maps, {maps} of them carrying trigger tiles')
     if without_t is None:
         print('  no objects anywhere — the block is not being read')
-        return 1
+        return bad + 1
     print(f'  maps with no triggers: {ohit + omiss} object(s), '
           f'{without_t:.1f}% of their scripts land on a symbol')
     if not maps:
         print('  no map on this cartridge has a trigger tile, so the coord '
               'event\u2019s width is not exercised here')
-        return 0
+        return bad
     if with_t is None:
         print(f'  maps with triggers: no objects at all, on {maps} map(s) '
               f'that have them — the coord event\u2019s width is wrong')
-        return 1
+        return bad + 1
     print(f'  maps with triggers:    {hit + miss} object(s), '
           f'{with_t:.1f}% of theirs')
     if without_t - with_t > LAYOUT_MARGIN:
         print(f'  !! {without_t - with_t:.1f} points worse behind a trigger, '
               f'which is a stride and not a coincidence')
-        return 1
-    return 0
+        return bad + 1
+    return bad
 
 
 def object_kinds(cart):

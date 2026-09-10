@@ -377,9 +377,19 @@ export const polished = {
   // written by hand, so the derivation agrees with somebody's eyes on the
   // one place both cartridges can be compared.
   //
-  // Written down rather than derived at run time, the way Crystal's three
-  // are, because finding them needs `*_MapAttributes` out of the whole
-  // `.sym` and a device may only have the 100-symbol digest.
+  // **This list was written because the app could not find them, and it
+  // can now.** `discover` recognises a Center by its nurse, and on this
+  // cartridge it recognised none: the object reader was stepping past a
+  // five-byte coord event by eight, so every map with a trigger tile on it
+  // came back empty. With `places` above and the strides right, standing in
+  // Violet City finds six Centers and four Marts, Violet's own doors among
+  // them at (31,25) and (9,17).
+  //
+  // It stays because discovery is **bounded to three legs** and this is
+  // not. `healerList` concatenates: the title's own first, then whatever is
+  // near enough to see and not already here. Twenty-one Centers is what
+  // makes `nearestHeal` able to answer from anywhere in the game rather
+  // than from the corner of it the pilot is standing in.
   healers: [
     { map: key(1, 13), reach: 'healAtCenter',
       inside: key(1, 1), door: [13,17], nurse: [5,1] }, // Olivine

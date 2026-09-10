@@ -4377,7 +4377,7 @@ cartridge will not say which hours are which.
 
 ## 8j. A cartridge that changed everything it could
 
-<!-- covers: titles/polished.js gen2/engine.js gen2/romdata.js gen2/state.js gen2/menus.js @ 9c0469fb681d -->
+<!-- covers: titles/polished.js gen2/engine.js gen2/romdata.js gen2/state.js gen2/menus.js @ 913dcc9d76a5 -->
 
 Polished Crystal is the profile in `docs/DEVELOPING.md`'s hack table described
 as "the generic fallback, and the hardest thing to support properly". It is
@@ -4679,6 +4679,22 @@ which is its own.
 so is a `SPRITE_BIG_HO_OH` statue that shows only while
 `EVENT_BOULDERS_IN_CIANWOOD_GYM` is set. The check wanted *every* object on the
 leader's tile to be a leader-shaped script; it wants one of them to be.
+
+**And its script commands are numbered differently**, which is the last thing
+`tools/rom-events` had written out as Crystal's: `checkevent` is `$31` there
+and `$33` here. Its command list is longer, so everything after the first few
+shifts. The table is derived from the ROM's own jump table now — a command's
+handler is `Script_<name>` and its opcode is that handler's index — which
+takes `--set`, `--map` and `--script` from decoding another game's
+instructions to reading this one's: `--set 0x2e4` lands on
+`VioletGymFalknerScript+22`, exactly where its source writes
+`setevent EVENT_BEAT_FALKNER`. Written up in `docs/DEVELOPING.md` under
+*Asking the cartridge, without running it*.
+
+**Its Centers and Marts are findable now, and the Shop row with them.** With
+the object list read right and `places` measured, standing in Violet City
+discovers six Centers and four Marts — Violet's own doors among them at
+(31,25) and (9,17), which are the same two tiles on Crystal.
 
 **And its dialogue is compressed.** `macros/scripts/text.asm` compresses a
 string whenever compression saves space, so "was" is nowhere in that ROM while

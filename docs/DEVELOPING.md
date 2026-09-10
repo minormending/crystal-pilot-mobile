@@ -967,20 +967,44 @@ app's own character table, then search the whole file for the instruction that
 sets the bit and ask the symbol file whose script it landed in. This is those
 four steps.
 
-**The command table was derived, not looked up**, and the derivation is the
-interesting part: `Route32Noop1Scene` is one byte, `91`, which gives `end`; a
-`dw` that lands on a `.Text` symbol gives `writetext`; a branch onto
-`.DontHaveZephyrBadge` gives the `iffalse` before it. It stops decoding after
-three unknown bytes in a row, because reading on past the end of the table is
-inventing things.
+**The command table was derived, not looked up**, and it was derived twice.
+
+The first time was by reading: `Route32Noop1Scene` is one byte, `91`, which
+gives `end`; a `dw` that lands on a `.Text` symbol gives `writetext`; a branch
+onto `.DontHaveZephyrBadge` gives the `iffalse` before it. Careful, correct,
+and Crystal's — `checkevent` is `$31` there and `$33` on Polished Crystal,
+whose command list is longer. Every script on that cartridge decoded into
+another game's instructions, which is to say into commands, just not those
+ones.
+
+**The second derivation reads the jump table, and the symbol file names it
+for us.** Every command's handler is called `Script_<name>` and the table is a
+run of `dw`s pointing at them, so a command's opcode *is* its index. Found by
+scoring rather than by looking `ScriptCommandTable` up, because only one of
+these two cartridges has that symbol: every even position in the handlers'
+bank is tried and the winner is where the most of the next 256 words land on
+a named handler. Crystal scores 170 at `25:6cb1`, which is
+`ScriptCommandTable`; Polished Crystal scores 224 at `25:6334`, which it does
+not name.
+
+Two details earned themselves. **Gaps are allowed** — a handler in bank 0 is
+reachable from anywhere, and requiring an unbroken run picked a decoy 266
+bytes further on that scored 91 and made `end` come out `$0a`. And **a
+command whose name is derived but whose arguments are not declared counts as
+unknown**, because stepping over it by one byte puts everything after it out
+of phase and it all still decodes. Argument shapes are a fact about the
+command rather than the build, so those stay written down, by name.
+
+It stops after three unknowns in a row, because reading on past the end of
+the table is inventing things.
 
 **`--map` exists because `--script` runs out.** A scene script uses commands
 this tool has never heard of within a dozen bytes — the first real one it was
 pointed at used seven — and the honest response was not to grow the table to a
 hundred instructions but to stop needing it. What a gate actually asks is
-*which event does this map check?*, and that is the three-byte pattern
-`31 xx xx` inside the map's own script region, which every map bounds exactly
-with a `<Map>_MapScripts` and a `<Map>_MapEvents` symbol. 388 of each.
+*which event does this map check?*, and that is `checkevent` and two bytes
+inside the map's own script region, which every map bounds exactly with a
+`<Map>_MapScripts` and a `<Map>_MapEvents` symbol. 388 of each.
 
 **`--find` is the step that unlocked the forty-eighth pass, and it was done by
 hand.** The question was which order the battle party menu lists its options
