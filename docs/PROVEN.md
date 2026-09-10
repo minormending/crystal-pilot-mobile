@@ -4114,6 +4114,61 @@ pairing rule reads names and modification times and never a byte, and that is
 precisely the property that lets two implementations of it drift apart without
 either erroring.
 
+### A fifty-fifth pass: two hacks, built and run
+
+The tools could find any cartridge; this is what they said when pointed at
+one. **pokecrystal16 built cleanly and passed 29 of 31 groups on the first
+run**, and the two failures were one thing.
+
+`TrainerGroups` is `table_width 2` in Crystal and **`table_width 3`** there:
+`dba`, a bank byte then the address, because its trainer data outgrew one
+bank. Read at two bytes the table still decodes — into **503 classes instead
+of 67**, class names reading `"ser? ATTACK."` and `"RIVAL"`, and every
+boundary lost. Measured rather than assumed: at `TrainerGroups` vanilla reads
+`1f 5a 35 5a …` and pokecrystal16 reads `0e d4 59 0e ea 59 …`.
+
+**So the width is derived, the way the class count already was.** Each
+candidate is tried and one kept: the first entry's address must be past the
+table, the gap must divide by the width, and it must land in the same 16KB
+window as the table. Only one passes on each cartridge — and both then agree
+the table holds **67 classes**, which is the cross-check, since pokecrystal16
+did not add classes but widened the pointers to them. It passes 31 of 31 now.
+
+The bank byte a `dba` entry carries is honoured rather than dropped. Every one
+of pokecrystal16's 67 entries names the table's own bank, which is precisely
+the state in which an assumption survives being tested — so a class whose
+successor lives in another bank is unbounded, the way the last one already is,
+because two addresses in different banks do not compare.
+
+### And the checkers were the ones speaking English
+
+`patched-crystal` could not be built at all — its default branch pins rgbds
+**0.5.2**, a 2021 release whose syntax predates `DEF x EQU`, and all seven of
+its branches are on it. A Dutch translation went in its place, and reported
+**sixty failures**. Four of them were real:
+
+> `"sent to BILL"` is not in this ROM — a boxed catch will never be recognised
+> `switchBox` expects `"SWITCH"`, BattleMonMenu.MenuHeader begins `"WISSEL"`
+
+The other fifty-six were mine. `tools/types --verify` resolved its rules
+through the cartridge's *own* type-name table, and that cartridge calls FIRE
+`VUUR` — so every rule resolved to nothing and printed `WRONG` about a chart
+the app was reading perfectly. Asked by id, `matchup(23, 4)` is 0 and
+`matchup(21, 20)` is 2, exactly as they should be. The eight gym leaders went
+the same way: their class reads `LEIDER`.
+
+The rules are written in **ids** now, which are constants, and the type
+numbers moved into the engine profile so the tool and the test harness stop
+keeping separate copies of them. The leaders are asserted to share **one**
+class name, whatever this cartridge calls it — which still catches what the
+check is for, because a decode that has lost its class boundaries gives eight
+*different* answers, as pokecrystal16's did before the width was derived. And
+`tools/types fire grass` now works on a Dutch cartridge, which it did not.
+
+**A checker that fails on a cartridge it does not understand is worse than no
+checker**, because somebody has to read the output — and fifty-six false
+failures is how a person learns to skim past the four true ones.
+
 ## The part that had to be redesigned
 
 The desktop pilot hangs its whole design on CPU hooks: the game's own routines
