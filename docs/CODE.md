@@ -438,7 +438,7 @@ watching.
 
 ### `symbols.js` — where things live
 
-<!-- covers: gen2/symbols.js @ 447959461815 -->
+<!-- covers: gen2/symbols.js @ 40601e43676d -->
 
 Parses the `.sym` file into `name → { bank, addr }`. First definition wins;
 later duplicates are aliases and locals.
@@ -4330,7 +4330,7 @@ cartridge will not say which hours are which.
 
 ## 8j. A cartridge that changed everything it could
 
-<!-- covers: titles/polished.js gen2/engine.js gen2/romdata.js gen2/state.js gen2/menus.js @ 724c3e9d28c5 -->
+<!-- covers: titles/polished.js gen2/engine.js gen2/romdata.js gen2/state.js gen2/menus.js @ f9280acfef9c -->
 
 Polished Crystal is the profile in `docs/DEVELOPING.md`'s hack table described
 as "the generic fallback, and the hardest thing to support properly". It is
@@ -4501,6 +4501,26 @@ the other 40%.** So `encounter.blockOf` maps a time to a block *or a list of
 them*, and what is in the grass in the evening is the union of both rather
 than either alone.
 
+**And two things only booting it found.** The `.sym` gate in `main.js`
+listed `wTilesetCollisionBank` by name, so it turned this cartridge away at
+the door — "missing 1 expected symbol" — long after every reader behind it
+had learned the other name. `require` takes a list of alternatives now, the
+way `pick` does.
+
+The second is worse and quieter. **Its menu cursor is a different tile.**
+Crystal draws `▶` at `$ed`; Polished Crystal draws it at `$f0`, which is
+Crystal's yen sign. `_driveToSaying` gives up the instant a screen has no
+arrow — deliberately, because pressing DOWN in an overworld is a step into
+the grass — so every menu on this cartridge read as *not a menu* and the
+pilot drove none of them. Nothing static could see it: the words were all
+present, the screen decoded, and the one byte that says "this is a menu" was
+a byte nobody had reason to compare.
+
+With `charmap.cursor` in the profile the app reads its main menu as
+`>New Game / Options / Music Player`, finds the arrow at row 2, matches
+`selectedSays('New Game')`, and follows the cursor to `Options` on a DOWN.
+That is `_driveToSaying`'s whole loop, run against the cartridge.
+
 **One alphabet, for names and for screens.** `screen.js` carried its own
 `[0x80, 0x99, 'A']` beside `alphabet.upper` — two statements of one fact, and
 the second one is the one that matters most, because *the screen is what
@@ -4530,7 +4550,7 @@ This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ b508242b0224 -->
+<!-- covers: app/main.js index.html @ 9406f5cea3d0 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -5079,7 +5099,7 @@ seconds by a page whose loop was supposedly running.
 
 ### One thing at a time
 
-<!-- covers: app/main.js @ 16d0aba5610a -->
+<!-- covers: app/main.js @ 4528c02be0fe -->
 
 One Game Boy, one joypad, one canvas — so a great deal of this app is about
 making sure two things are never driving them at once. There are three claims,
@@ -5623,7 +5643,7 @@ a conversation.
 
 ### The card behind a party row
 
-<!-- covers: app/rows.js app/main.js index.html @ e5ccbc5a48ae -->
+<!-- covers: app/rows.js app/main.js index.html @ ff4820acbe66 -->
 
 Two questions the game itself will not answer about a Pokémon you are
 carrying — *what is this made of* and *what is it about to become* — and both
@@ -5712,7 +5732,7 @@ at body size.
 
 ### Running the list
 
-<!-- covers: app/rows.js app/main.js @ 9242adb6ae47 -->
+<!-- covers: app/rows.js app/main.js @ ffa68b898757 -->
 
 The app has spent forty passes learning to answer one question — *what can the
 pilot do here, and which of those is worth most?* — and twenty showing the
@@ -5836,7 +5856,7 @@ to deposit your last Pokémon.
 
 ### The settings and the save card
 
-<!-- covers: index.html app/main.js @ b508242b0224 -->
+<!-- covers: index.html app/main.js @ 9406f5cea3d0 -->
 
 The pilot's own list got a glyph column, shorter names and a slot to fill in
 v165. These two cards did not, and reading them found that they had a different
@@ -6464,7 +6484,7 @@ they have been installed.
 
 ### Watching the other device's screen
 
-<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ eac1d897081f -->
+<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ c028b044b38d -->
 
 One device shows its screen; the other watches it, and plays it if the first
 one says so. The picture goes straight between them over WebRTC and never

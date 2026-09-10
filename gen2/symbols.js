@@ -135,7 +135,16 @@ export class Symbols {
    * address that cannot be read is never usable, whoever asked for it.
    */
   require(names) {
-    const missing = names.filter((n) => !this.map.has(n));
+    // An entry may be **several names for one thing**, the way `pick` takes
+    // them: Polished Crystal calls the collision bank `wTilesetDataBank`,
+    // and this gate turned that cartridge away at the door with "missing 1
+    // expected symbol" long after every reader behind it had learned the
+    // other name. Found by booting it, which is the only thing that could
+    // have found it.
+    const missing = names
+      .map((n) => (Array.isArray(n) ? n : [n]))
+      .filter((group) => !group.some((n) => this.map.has(n)))
+      .map((group) => group.join(' or '));
     if (missing.length) {
       throw new Error(
         `this .sym file is missing ${missing.length} expected symbol(s): ` +

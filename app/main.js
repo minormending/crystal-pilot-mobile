@@ -2143,7 +2143,8 @@ const NEEDED_SYMBOLS = [
   'wMapStatus', 'wMenuCursorY', 'wPlayerTileCollision',
   // tap-to-walk: the collision map and the window stack
   'wOverworldMapBlocks', 'wMapWidth', 'wMapHeight',
-  'wTilesetCollisionBank', 'wTilesetCollisionAddress',
+  ['wTilesetCollisionBank', 'wTilesetDataBank'],
+  'wTilesetCollisionAddress',
   'wWindowStackSize', 'CollisionPermissionTable',
   'wPlayerBGMapOffsetX', 'wPlayerBGMapOffsetY',
   // hunting: the names come out of the ROM. The wild tables do too, and are

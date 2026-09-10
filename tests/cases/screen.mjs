@@ -258,3 +258,22 @@ test('the same screen decodes with the letters the profile declares',
   t.eq(screenLines(two, AT, gen2)[0].trim(), 'NIDORAN\u2640',
        'and Crystal still reads its own');
 });
+
+
+test('a cartridge that draws its cursor elsewhere still has one found',
+     async (t) => {
+  // **The one that only booting found.** Crystal draws the menu arrow at
+  // `$ed`; Polished Crystal draws it at `$f0`, which is Crystal's yen sign.
+  // `_driveToSaying` gives up the instant a screen has no arrow -- on
+  // purpose, because pressing DOWN in an overworld is a step into the grass
+  // -- so every menu on that cartridge read as *not a menu* and the pilot
+  // drove none of them. Every word it looks for was present and correct.
+  const engine = engineFor(polished);
+  t.eq(engine.charmap.cursor, 0xf0, 'the profile says which tile it is');
+  const wram = worldRam(sym);
+  paintScreen(wram, sym, ['New Game', '>Options'], engine);
+  const arrow = arrowAt(wram, AT, engine);
+  t.ne(arrow, null, 'and the arrow is found');
+  t.eq(arrow.row, 1, 'on the row it is drawn on');
+  t.eq(selectedLine(wram, AT, engine), '>Options', 'which is the row read');
+});

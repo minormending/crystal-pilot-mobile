@@ -4376,12 +4376,34 @@ highest-levelled; a day of unbroken runs with exactly one wrapping midnight.
 Those catch what the content checks were for, on a cartridge nobody wrote
 them about.
 
-**What is left is one thing, and it is honest.** The pilot has never been
-booted on this cartridge. Every word it looks for is one the ROM has, decoded
-through the alphabet the screen is read with, and a painted screen matches
-them — but a painted screen is this repository's own, and the difference
-between that and a running game is the difference this repository keeps
-writing passes about.
+### So it was booted, and two things were still wrong
+
+Served locally, loaded into the real app, run in the real emulator. Two
+failures neither the checks nor the tests could have seen.
+
+**The `.sym` gate turned it away at the door.** `NEEDED_SYMBOLS` listed
+`wTilesetCollisionBank` by name, so the app answered "missing 1 expected
+symbol" and refused to start — long after every reader behind that gate had
+learned the other name. `require` takes alternatives now, the way `pick`
+does.
+
+**And its menu cursor is a different tile.** Crystal draws `▶` at `$ed`;
+this one draws it at `$f0`, which is Crystal's yen sign. `_driveToSaying`
+gives up the instant a screen has no arrow — deliberately, because pressing
+DOWN in an overworld is a step into the grass — so **every menu on this
+cartridge read as not a menu, and the pilot would have driven none of
+them.** Every word it looks for was present and correct; the one byte that
+says "this is a menu" was a byte nobody had a reason to compare.
+
+Booted with both fixed, the app reads its main menu as `>New Game /
+Options / Music Player`, finds the arrow, matches `selectedSays('New
+Game')`, presses DOWN, and matches `Options` on the row it lands on. That is
+`_driveToSaying`'s entire loop against a running game.
+
+What has still not been seen is a *saved* game on this cartridge — its
+new-game intro runs through several screens of its own options — so the
+party reader is held to the symbol file and to `tools/dex`, and not yet to a
+live party. That is the honest remaining line.
 
 ## The part that had to be redesigned
 

@@ -148,6 +148,16 @@ export const polished = {
     // ground-type still reads neutral here and takes nothing, which is the
     // same class of thing as an ability this app has never modelled.
     damage: { ...gen2.damage, extra: [[0x04, 0x02, 0]] },
+    // **Its cursor is a different tile**, and that one is not cosmetic:
+    // `_driveToSaying` gives up the instant a screen has no arrow, because
+    // pressing DOWN in an overworld is a step into the grass. Crystal's is
+    // `$ed`; this one draws `▶` at **`$f0`**, which Crystal uses for the
+    // yen sign -- so every menu on this cartridge read as "not a menu" and
+    // the pilot drove none of them. Found by booting it.
+    charmap: {
+      singles: { 0xea: '¥', 0xf1: '\u25b7', 0xf0: '>', 0xbd: ':' },
+      cursor: 0xf0,
+    },
     // **Its start menu is its own.** `#dex`, `#mon`, Bag, Save, Options,
     // Exit, Pokégear, Quit -- so a pilot looking for PACK walked the whole
     // menu and gave up, and one looking for SAVE never saved. The battle
