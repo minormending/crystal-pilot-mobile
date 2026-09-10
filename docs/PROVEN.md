@@ -4405,6 +4405,82 @@ new-game intro runs through several screens of its own options — so the
 party reader is held to the symbol file and to `tools/dex`, and not yet to a
 live party. That is the honest remaining line.
 
+### A fifty-ninth pass: a save, and five things a running game said
+
+The pass before ended on an honest line: the party reader was held to the
+symbol file and to `tools/dex`, and not to a live party. So a game was
+played. New Bark Town, Elm's lab, a Cyndaquil out of the middle Poké Ball,
+and the game's own Save. **Five things were wrong, and none of them could
+have been found any other way.**
+
+**Its warps were unreachable, because its attributes block is shorter.**
+Crystal's carries a separate events pointer and then the connections mask;
+Polished Crystal's stops after the scripts, so `connections` sits at 9 where
+Crystal keeps that pointer — and an indoor room came out with an edge
+connection and a list of warps at coordinates outside the map. Its warps are
+*inside* the map script header, behind a count of scene scripts and a count
+of callbacks, so where they begin depends on the map. Fixed, the app's warp
+list for New Bark Town matches its source line for line: `(6,3)→Elm's lab`,
+`(15,5)→the player's house`, three more.
+
+**Its cursor is a different tile.** `▶` at `$f0`, which is Crystal's yen
+sign, where Crystal draws it at `$ed`. `_driveToSaying` gives up the instant
+a screen has no arrow — deliberately, because pressing DOWN in an overworld
+is a step into the grass — so **every menu read as not a menu**. Every word
+the pilot looks for was present and correct.
+
+**Its save-check digit is 97**, and it calls 99 `SAVE_CHECK_VALUE_1_OLD`,
+"before save version 7". A battery the game had just written, 1269 non-zero
+bytes of it, read as "the cartridge has no save in it yet". `saveCheck` is a
+list of acceptable pairs now, because a cartridge can change its own format
+and still read both of its saves.
+
+**And the caught data was in the wrong place.** The game's summary screen
+said `Day at 5 / New Bark Town`; the reader said level 1, morning, Route 30.
+Crystal packs the time, the level and the place into two bytes; this one
+gives each a byte of its own, with the time in bits 5 and 6 beside the ball
+rather than in the top two. Every byte present, every field misplaced —
+which is exactly what the old comment admitted, that the packing was
+"disassembly-sourced, not measured".
+
+`caughtData` is field descriptors now rather than three masks, and the
+landmark break byte is `$5e` here, so "New Bark?Town" is New Bark Town.
+
+### What the running game confirmed
+
+Read off its own screens and compared with the reader, on one Cyndaquil:
+
+| the game said | the app read |
+| --- | --- |
+| `Aaa 19/ 19`, level 5 | hp 19, maxHp 19, level 5 |
+| `Exp.Points 135` | exp 135 |
+| `Oran Berry` | item 68 → "Oran Berry" |
+| `Day at 5 / New Bark Town` | caught level 5, day, New Bark Town |
+| `Pokémon / Bag / gear / Save / Options / Exit` | every word in `menuWords` |
+| `Sunday, Day, 10:00 AM` | `timeOfDay` 1, and hour 10 is "day" |
+
+And the cursor walked `>  gear` → `>Bag` → `>Pokémon` under the app's own
+matching, which is `_driveToSaying`'s whole loop against a running game.
+
+`tools/dex --party` on the exported battery reads six distinct DVs — 3, 13,
+8, 1, 3, 4 — which is the three-byte format, one nibble a stat, with HP
+stored rather than assembled. Four of the six stats reproduce exactly under
+Gen 2's arithmetic and the two that do not are the two a **nature** moves,
+so `--check` says it cannot check rather than blaming the reading.
+
+### The one still open
+
+Its **collision map cannot be read**, and the reason is worth writing down.
+Polished Crystal LZ-compresses its tileset collision — `lab_collision.bin.lzp`,
+79 bytes for 248 — and decompresses it at run time into `wDecompressedCollisions`
+at **WRAM bank 5**. The app snapshots one 0xC000–0xDFFF window of whatever
+bank is mapped, which during play is bank 1, so the table is somewhere it
+cannot see. Following the ROM pointer reads the compressed bytes and the
+walkable grid comes out a checkerboard. Tap-to-walk and the walking jobs are
+the features that costs; everything that reads the ROM or work RAM is
+unaffected. Reaching it means teaching `gb.js` to read a named WRAM bank,
+which is a pass of its own.
+
 ## The part that had to be redesigned
 
 The desktop pilot hangs its whole design on CPU hooks: the game's own routines

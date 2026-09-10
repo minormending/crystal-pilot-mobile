@@ -83,6 +83,19 @@ export const polished = {
       formSpeciesBit: 0x20,
       monFields: [[0, 1], [2, 1], [3, 1], [4, null], [1, 1], [5, 4]],
     },
+    // Its attributes block stops after the scripts: `db border, height,
+    // width`, `dba BlockData, MapScriptHeader`, `db connections`. So the
+    // connections mask is at 9 where Crystal keeps an events pointer, and
+    // reading Crystal's offsets gave an indoor room an edge connection and
+    // warps at coordinates outside the map.
+    //
+    // Its warps live *inside* the script header, behind a count of scene
+    // scripts and a count of callbacks -- so where they begin depends on
+    // the map. Two bytes a scene script, three a callback, and then the
+    // warp count itself.
+    mapAttr: { height: 1, width: 2, scriptsBank: 6, events: null,
+               connections: 9, structs: 10,
+               eventSkip: [2, 3], warpCount: 0, warps: 1 },
     // Seven bytes a map header, not nine, and no attributes bank in it:
     // `db tileset`, `dn sign, environment`, `dw attributes`, `db location,
     // music`, `dn phone, palette`. Read at Crystal's offsets its headers
@@ -148,6 +161,22 @@ export const polished = {
     // ground-type still reads neutral here and takes nothing, which is the
     // same class of thing as an ability this app has never modelled.
     damage: { ...gen2.damage, extra: [[0x04, 0x02, 0]] },
+    // It writes 97 as its first check digit and calls 99
+    // `SAVE_CHECK_VALUE_1_OLD` -- "before save version 7" -- so both are
+    // its saves. With only Crystal's 99, a battery this cartridge had just
+    // written read as "no save in it yet".
+    saveCheck: [[97, 127], [99, 127]],
+    // Each part of the caught data has a byte of its own here, where
+    // Crystal packs all three into two: the time shares the first with the
+    // ball (`CAUGHT_TIME_MASK %01100000`, a shift of five), the level has
+    // the second and the location the third. Read Crystal's way, a starter
+    // caught "Day at 5, New Bark Town" came back as level 1, morning,
+    // Route 30 -- every byte present and every field misplaced.
+    caughtData: {
+      when: { at: 0, shift: 5, mask: 0x03 },
+      level: { at: 1, shift: 0, mask: 0xff },
+      place: { at: 2, shift: 0, mask: 0xff },
+    },
     // **Its cursor is a different tile**, and that one is not cosmetic:
     // `_driveToSaying` gives up the instant a screen has no arrow, because
     // pressing DOWN in an overworld is a step into the grass. Crystal's is
@@ -174,6 +203,19 @@ export const polished = {
       save: ['SAVE', 'Save'],
       switch: ['SWITCH', 'Switch'],
     },
+    // Its stats are multiplied by a nature -- `NATURE_MASK %00011111` in
+    // the personality byte -- so Gen 2's arithmetic cannot reproduce them
+    // and `--check` would report a disagreement about a reading that is
+    // right. Four of Cyndaquil's six come out exact even so; the two that
+    // do not are the two a nature moves.
+    statsAreGen2: false,
+    // Six stat-experience counters and six DVs, one per stat, so nothing
+    // is shared: Crystal spends one Special counter on two stats, and
+    // mapping this cartridge that way left both special DVs reading null.
+    statSource: { hp: 'hp', atk: 'atk', def: 'def', spd: 'spd',
+                  satk: 'satk', sdef: 'sdef' },
+    statExpNames: ['hp', 'atk', 'def', 'spd', 'satk', 'sdef'],
+    dvNames: ['hp', 'atk', 'def', 'spd', 'satk', 'sdef'],
     // Nineteen types where Crystal has seventeen with two gaps, renumbered
     // end to end: no BIRD, no unused block between the physical types and
     // the special ones, and FAIRY on the end. The numbers are what
@@ -200,7 +242,11 @@ export const polished = {
       upper: [0x80, 0x99], lower: [0xa0, 0xb9], digits: [0xe0, 0xe9],
       space: 0x7f,
       ligature: 0x4d,
-      breaks: [0x55, 0x56, 0x57, 0x58, 0x59],
+      // $5e is the one its *landmark* names use -- read off "New
+      // Bark<break>Town", whose bytes are `8d a4 b6 7f 81 a0 b1 aa 5e 93
+      // ae b6 ad 53`, so the break sits exactly where the sign wraps.
+      // Without it half the towns had a question mark in the middle.
+      breaks: [0x55, 0x56, 0x57, 0x58, 0x59, 0x5e],
       punctuation: {
         0x9c: '.', 0x9d: ',', 0x9e: '?', 0x9f: '!',
         0xbc: '-', 0xbe: '\u2642', 0xbf: '\u2640', 0xc0: "'",

@@ -111,6 +111,21 @@ export function engineOf({ rom, symbols }) {
   return { title, engine: engineFor(title) };
 }
 
+/**
+ * The `.sav` to read, or null -- `DEV_SAV` first, then whatever is in `dev/`.
+ *
+ * The same escape `DEV_ROM` and `DEV_SYM` give the other two files, and it
+ * was missing: a hack's save could only be tested by copying it into `dev/`
+ * beside somebody's real cartridge, which is exactly the thing those
+ * variables exist to avoid.
+ */
+export function findSave(dev) {
+  if (process.env.DEV_SAV) return process.env.DEV_SAV;
+  if (process.env.DEV_NO_CARTRIDGE || !dev || !existsSync(dev)) return null;
+  const found = readdirSync(dev).filter((f) => f.toLowerCase().endsWith('.sav'));
+  return found.length ? join(dev, found.sort()[0]) : null;
+}
+
 export function openCartridge(dev) {
   const found = findCartridge(dev);
   if (!found) {

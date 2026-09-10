@@ -53,7 +53,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 import { RomData } from '../gen2/romdata.js';
-import { engineOf, openCartridge } from './cartridge.mjs';
+import { engineOf, findSave, openCartridge } from './cartridge.mjs';
 import { GameState } from '../gen2/state.js';
 import { describeDex } from '../app/rows.js';
 import { gen2 } from '../gen2/engine.js';
@@ -452,11 +452,6 @@ function wramFromSave(sav) {
 }
 
 /** The newest `.sav` in dev/, or null. */
-function findSave() {
-  const found = readdirSync(DEV).filter((f) => f.toLowerCase().endsWith('.sav'));
-  return found.length ? join(DEV, found.sort()[0]) : null;
-}
-
 /**
  * Gen 2's own stat formula, for checking the DVs against their consequences.
  *
@@ -519,14 +514,17 @@ function scoreOrder(mons, order) {
 }
 
 function party({ check = false } = {}) {
-  const file = findSave();
+  const file = findSave(DEV);
   if (!file) {
-    console.log('no .sav in dev/ — nothing to read');
+    console.log('no .sav in dev/ and no DEV_SAV — nothing to read');
     console.log('(a save is not in this repository either)');
     return 0;
   }
   const sav = readFileSync(file);
-  const state = new GameState(symbols, gen2);
+  // The picked profile, not the stock one: a hack that moved its party
+  // fields or changed its save-check digit is read the way the app
+  // would read it, which is the whole point of a tool like this.
+  const state = new GameState(symbols, engine);
   if (!state.saveIsPresent(sav)) {
     console.log(`${file}: the cartridge would not load this — no save markers`);
     return 1;
@@ -550,7 +548,9 @@ function party({ check = false } = {}) {
 
   for (const { mon } of mons) {
     // The app's own words, so this prints what the card prints.
-    const d = describeDex(mon, { rom: data, engine: gen2 });
+    // The picked profile, so a cartridge with six stat counters instead
+    // of Crystal's five shared ones prints all six.
+    const d = describeDex(mon, { rom: data, engine });
     console.log(`\n${d.name} Lv${d.level}   ${d.types.join('/')}`
       + `   ${mon.hp}/${mon.maxHp}`);
     console.log('     stat    now   DV   trained');
@@ -568,6 +568,16 @@ function party({ check = false } = {}) {
   }
 
   if (!check) return 0;
+  // **This arithmetic is Gen 2's**, and a cartridge that modifies stats
+  // another way cannot be held to it -- see `statsAreGen2`. Saying "no
+  // ordering fits" about Polished Crystal would blame the reader for a
+  // nature multiplier.
+  if (!engine.statsAreGen2) {
+    console.log('\n--- the DVs against the stats they made ---');
+    console.log('  this cartridge does not compute a stat the way Gen 2 does'
+      + ' — its profile says so — so the DVs cannot be checked against it here');
+    return 0;
+  }
 
   console.log('\n--- the DVs against the stats they made ---');
   if (mons.some((m) => !m.base)) {

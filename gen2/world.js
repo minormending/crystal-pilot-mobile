@@ -32,15 +32,18 @@
 // already known from work RAM: Route 32 reads 45 and 10 for a map that is 20 by
 // 90 tiles, and Route 31 reads 9 and 20 for one that is 40 by 18. So height
 // comes first, and a block is two tiles each way.
-const ATTR_HEIGHT = 1, ATTR_WIDTH = 2;
+// The attributes block's shape is `engine.mapAttr` -- Polished Crystal's
+// stops after the scripts and keeps its warps inside the script header.
 const TILES_PER_BLOCK = 2;
-const ATTR_SCRIPTS_BANK = 6, ATTR_EVENTS = 9;
-const ATTR_CONNECTIONS = 11, ATTR_STRUCTS = 12;
+
 
 // A map's event block: two filler bytes, a count, then five bytes per warp --
 // y, x, which warp on the far side, and the group and number of the map it
 // leads to. The block shares a bank with the map scripts.
-const EVENTS_WARP_COUNT = 2, EVENTS_WARPS = 3, WARP_BYTES = 5;
+// Where the warp count and the warps sit inside the event block is
+// `engine.mapAttr` -- Crystal's block opens with two filler bytes and
+// Polished Crystal's begins on the count itself.
+const WARP_BYTES = 5;
 const WARP_Y = 0, WARP_X = 1, WARP_GROUP = 3, WARP_NUMBER = 4;
 // The rest of the event block, past the warps: a count and then that many
 // fixed-size records, three times over. Every size measured against work RAM --
@@ -139,9 +142,9 @@ export class World {
       let n = 0;
       for (const addr of maps) {
         if ((addr & 0xc000) !== 0x4000) continue;
-        const h = this.gb.romByte(bank, addr + ATTR_HEIGHT);
-        const w = this.gb.romByte(bank, addr + ATTR_WIDTH);
-        const mask = this.gb.romByte(bank, addr + ATTR_CONNECTIONS);
+        const h = this.gb.romByte(bank, addr + this.e.mapAttr.height);
+        const w = this.gb.romByte(bank, addr + this.e.mapAttr.width);
+        const mask = this.gb.romByte(bank, addr + this.e.mapAttr.connections);
         if (h > 0 && h <= 64 && w > 0 && w <= 64 && (mask & 0xf0) === 0) n++;
       }
       return n;
@@ -155,6 +158,34 @@ export class World {
     const enough = maps.length / 2;
     return (this._bank = best.n >= enough && best.n > second * 1.5
       ? best.bank : 0);
+  }
+
+  /**
+   * Where this map's event block begins, in the scripts' bank.
+   *
+   * Crystal points at it from the attributes. **Polished Crystal has no
+   * such pointer**: its warps are inside the map script header, behind a
+   * count of scene scripts and a count of callbacks, so where they start
+   * depends on how many of each this map has. `mapAttr.events` is null
+   * there and `eventSkip` says the size of an entry in each list to step
+   * over -- two bytes a scene script, three a callback.
+   *
+   * Measured against NewBarkTown, whose header reads `00 01 | 01 9f 40 |
+   * 05 | 03 06 01 18 03 ...`: no scenes, one callback, five warps, and the
+   * first of them `y 3, x 6, to 1, map 24.3`, which is
+   * `warp_event 6, 3, ELMS_LAB, 1`.
+   */
+  _eventsAt(attr) {
+    const spec = this.e.mapAttr;
+    if (spec.events !== null && spec.events !== undefined) {
+      return this._word(attr.bank, attr.addr + spec.events);
+    }
+    const bank = this.gb.romByte(attr.bank, attr.addr + spec.scriptsBank);
+    let at = this._word(attr.bank, attr.addr + spec.scriptsBank + 1);
+    for (const size of spec.eventSkip || []) {
+      at += 1 + this.gb.romByte(bank, at) * size;
+    }
+    return at;
   }
 
   _word(bank, addr) {
@@ -240,8 +271,8 @@ export class World {
     const out = [];
     try {
       const attr = this._attributes(group, number);
-      const mask = this.gb.romByte(attr.bank, attr.addr + ATTR_CONNECTIONS);
-      let at = attr.addr + ATTR_STRUCTS;
+      const mask = this.gb.romByte(attr.bank, attr.addr + this.e.mapAttr.connections);
+      let at = attr.addr + this.e.mapAttr.structs;
       for (const side of SIDES) {
         if (!(mask & side.bit)) continue;
         const g = this.gb.romByte(attr.bank, at + CONNECTED_GROUP);
@@ -271,14 +302,14 @@ export class World {
     const out = [];
     try {
       const attr = this._attributes(group, number);
-      const bank = this.gb.romByte(attr.bank, attr.addr + ATTR_SCRIPTS_BANK);
-      const events = this._word(attr.bank, attr.addr + ATTR_EVENTS);
-      const count = this.gb.romByte(bank, events + EVENTS_WARP_COUNT);
+      const bank = this.gb.romByte(attr.bank, attr.addr + this.e.mapAttr.scriptsBank);
+      const events = this._eventsAt(attr);
+      const count = this.gb.romByte(bank, events + this.e.mapAttr.warpCount);
       // Over the cap is a bad read, and an empty list is the honest answer to
       // one -- see MAX_OBJECTS.
       if (count > MAX_WARPS) throw new Error(`${count} warps is not a map`);
       for (let i = 0; i < count; i++) {
-        const at = events + EVENTS_WARPS + i * WARP_BYTES;
+        const at = events + this.e.mapAttr.warps + i * WARP_BYTES;
         const g = this.gb.romByte(bank, at + WARP_GROUP);
         const n = this.gb.romByte(bank, at + WARP_NUMBER);
         if (!g || !n) continue;
@@ -338,10 +369,10 @@ export class World {
     try {
       const attr = this._attributes(group, number);
       const size = this.sizeOf(group, number);
-      const bank = this.gb.romByte(attr.bank, attr.addr + ATTR_SCRIPTS_BANK);
-      const events = this._word(attr.bank, attr.addr + ATTR_EVENTS);
+      const bank = this.gb.romByte(attr.bank, attr.addr + this.e.mapAttr.scriptsBank);
+      const events = this._eventsAt(attr);
       const rd = (i) => this.gb.romByte(bank, (events + i) & 0xffff);
-      let at = EVENTS_WARP_COUNT;
+      let at = this.e.mapAttr.warpCount;
       at += 1 + rd(at) * WARP_BYTES;              // warps
       at += 1 + rd(at) * COORD_BYTES;             // coord events
       at += 1 + rd(at) * BG_BYTES;                // bg events
@@ -391,10 +422,10 @@ export class World {
     try {
       const attr = this._attributes(group, number);
       const size = this.sizeOf(group, number);
-      const bank = this.gb.romByte(attr.bank, attr.addr + ATTR_SCRIPTS_BANK);
-      const events = this._word(attr.bank, attr.addr + ATTR_EVENTS);
+      const bank = this.gb.romByte(attr.bank, attr.addr + this.e.mapAttr.scriptsBank);
+      const events = this._eventsAt(attr);
       const rd = (i) => this.gb.romByte(bank, (events + i) & 0xffff);
-      let at = EVENTS_WARP_COUNT;
+      let at = this.e.mapAttr.warpCount;
       at += 1 + rd(at) * WARP_BYTES;              // past the warps
       const count = rd(at++);
       if (count > MAX_COORD_EVENTS) {
@@ -426,8 +457,8 @@ export class World {
   sizeOf(group, number) {
     try {
       const attr = this._attributes(group, number);
-      const h = this.gb.romByte(attr.bank, attr.addr + ATTR_HEIGHT);
-      const w = this.gb.romByte(attr.bank, attr.addr + ATTR_WIDTH);
+      const h = this.gb.romByte(attr.bank, attr.addr + this.e.mapAttr.height);
+      const w = this.gb.romByte(attr.bank, attr.addr + this.e.mapAttr.width);
       if (!w || !h) return null;
       return [w * TILES_PER_BLOCK, h * TILES_PER_BLOCK];
     } catch (e) {

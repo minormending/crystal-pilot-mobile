@@ -336,8 +336,7 @@ export class GameState {
     if (one < 0 || two < 0 || one >= sram.length || two >= sram.length) {
       return false;
     }
-    const [one_, two_] = this.e.saveCheck;
-    return sram[one] === one_ && sram[two] === two_;
+    return this.e.saveCheck.some(([a, b_]) => sram[one] === a && sram[two] === b_);
   }
 
   /** The flat offset of an SRAM symbol inside a battery, or -1. */
@@ -805,19 +804,18 @@ export class GameState {
   _caughtAt(wram, base) {
     const { caughtData, caughtTimes } = this.e;
     const mon = this.mon;
-    const first = b(wram, base + mon.caught);
-    const second = b(wram, base + mon.caught + 1);
+    const field = (f) => (b(wram, base + mon.caught + f.at) >> f.shift) & f.mask;
     // **The mask is the upper bound, so there is not a second one here.** Six
     // bits hold 0 to 63 and Gen 2 clamps a catch above that, so a `<= 100`
     // beside this would be a comparison with no path to being false --
     // `tools/mutate` widened it to `< 100` and nothing could fail either way,
     // which is the tell. Zero is the only value that means *does not say*.
-    const level = first & caughtData.levelMask;
+    const level = field(caughtData.level);
     if (level === 0) return null;
     return {
       level,
-      when: caughtTimes[first >> caughtData.timeShift] || null,
-      place: second & caughtData.placeMask,
+      when: caughtTimes[field(caughtData.when)] || null,
+      place: field(caughtData.place),
     };
   }
 

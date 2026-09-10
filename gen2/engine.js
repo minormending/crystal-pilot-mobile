@@ -88,6 +88,12 @@ export const gen2 = {
   // 65535, and what reaches the stat is its square root -- so the *useful*
   // ceiling is 255 squared, which is 65025, and a counter above that is
   // indistinguishable from one at it.
+  // Whether a stat is exactly Gen 2's arithmetic of base, DV, level and
+  // stat experience -- which is what `tools/dex --party --check` recomputes
+  // to prove the DVs it read. Polished Crystal multiplies by a **nature**
+  // besides, so the formula cannot reproduce its stats and a disagreement
+  // there says nothing about the reading.
+  statsAreGen2: true,
   dvMax: 0x0f,
   statExpMax: 0xffff,
   statExpUseful: 255 * 255,
@@ -129,7 +135,24 @@ export const gen2 = {
   // save does not say" rather than printing it, which is the behaviour a guess
   // has to earn. A save carried in from Gold or Silver genuinely holds zeroes
   // here, so "does not say" is a real state and not only a hedge.
-  caughtData: { timeShift: 6, levelMask: 0x3f, placeMask: 0x7f },
+  // Where and when a Pokemon was caught, as **fields rather than masks**:
+  // each one is a byte at `at`, shifted right by `shift`, masked by `mask`.
+  //
+  // Crystal packs all three into two bytes -- the time in the top two bits
+  // of the first and the level in its other six, the place in seven bits of
+  // the second. Polished Crystal gives each a byte of its own: the time and
+  // the ball share the first (`CAUGHT_TIME_MASK %01100000`, so a shift of
+  // five, not six), the level has the second, the location the third.
+  //
+  // **Measured against a running game**, which is how this was found: its
+  // summary screen said a starter was caught "Day at 5, New Bark Town" and
+  // this reader, following Crystal's packing, said level 1, morning, Route
+  // 30. Every byte was right and every field was in the wrong place.
+  caughtData: {
+    when: { at: 0, shift: 6, mask: 0x03 },
+    level: { at: 0, shift: 0, mask: 0x3f },
+    place: { at: 1, shift: 0, mask: 0x7f },
+  },
   caughtTimes: [null, 'morning', 'day', 'night'],
 
   // --- species -------------------------------------------------------------
@@ -452,6 +475,29 @@ export const gen2 = {
   // found; see `_attrBank` in world.js, which scores every bank in the ROM
   // against every map and takes the one that works.
   mapHeader: { bytes: 9, attrBank: 0, attrAddr: 3, landmark: 5 },
+  // --- a map's attributes block, and the events behind it ------------------
+  // Crystal: border, height, width, the block data's bank and address, the
+  // script bank and address, a **separate events pointer**, a connections
+  // mask, and then one struct per connection. Polished Crystal writes the
+  // same up to the scripts and then stops: `dba BlockData,
+  // MapScriptHeader`, `db connections`. Its warps are *inside* the script
+  // header rather than behind a pointer of their own -- so `connections`
+  // sits at 9 where Crystal has an events pointer, and reading Crystal's
+  // offsets gave an indoor room an edge connection and a list of warps at
+  // coordinates outside the map.
+  //
+  // `events: null` means "the script header is the event block", and then
+  // `eventSkip` says what to step over to reach the warp count: a count
+  // byte and that many entries, per list. Two-byte scene scripts and
+  // three-byte callbacks, measured against NewBarkTown -- 0 scenes, 1
+  // callback, 5 warps, the first of which is `y 3, x 6, to 1, map 24.3`,
+  // which is `warp_event 6, 3, ELMS_LAB, 1`.
+  mapAttr: {
+    height: 1, width: 2, scriptsBank: 6, events: 9,
+    connections: 11, structs: 12,
+    // Crystal's event block opens with two filler bytes.
+    eventSkip: null, warpCount: 2, warps: 3,
+  },
   // What those three blocks are called, in the order `wTimeOfDay` numbers
   // them. Keys rather than prose, the same bargain `growthRates` makes: what
   // to call "after dark" on a screen is the interface's business and `rows.js`
@@ -781,5 +827,14 @@ export const gen2 = {
   // Crystal validates a save by two magic bytes. Counting non-zero bytes does
   // not work: a battery that has never been saved to still reads five.
   sram: { start: 0xa000, bankBytes: 0x2000 },
-  saveCheck: [99, 127],
+  // A **list of acceptable pairs**, not one pair: a cartridge can change its
+  // check digit between save formats and still read both. Polished Crystal
+  // writes 97 and calls 99 `SAVE_CHECK_VALUE_1_OLD`, "before save version
+  // 7" -- so a battery it wrote reads 97 and one carried forward reads 99,
+  // and both are its saves.
+  //
+  // Found by saving a real game on it: the battery had 1269 non-zero bytes
+  // and the app said "the cartridge has no save in it yet", which is what a
+  // single hard-coded pair says about every cartridge but one.
+  saveCheck: [[99, 127]],
 };

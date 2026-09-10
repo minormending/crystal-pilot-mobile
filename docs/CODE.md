@@ -489,7 +489,7 @@ enforces it, so it is a fact about the build rather than a habit.
 
 ### `state.js` — what the game is doing right now
 
-<!-- covers: gen2/state.js @ 4972c1e2fc24 -->
+<!-- covers: gen2/state.js @ 1b9d88b4d034 -->
 
 One snapshot, many answers: `inBattle`, `party`, `pos`, `onGrass`,
 `worldLoaded`, `menu`, `balls`, `items`, each party member's `status`, the
@@ -1179,7 +1179,7 @@ Two more things the map alone will not tell you:
 
 ### `world.js` — which map adjoins which
 
-<!-- covers: gen2/world.js @ 51dfb1a6916c -->
+<!-- covers: gen2/world.js @ 15c8f024bc47 -->
 
 The map graph, read out of the cartridge: edge connections *and* warps, so it can
 route out of a building rather than only across a route.
@@ -1365,7 +1365,7 @@ point those coordinates mean somewhere else entirely.
 
 ## 5. Crossing to the next map
 
-<!-- covers: gen2/journey.js gen2/world.js @ 2e070b523edc -->
+<!-- covers: gen2/journey.js gen2/world.js @ 368bdf354ecc -->
 
 A connection spans only part of a shared edge, so "walk west until something
 happens" does not work. `crossEdge()` closes the distance in stages, then tries
@@ -1582,7 +1582,7 @@ and a Pokémon Center restores PP, so the grind treats it as a trip it already
 knew how to make. See [the tiles that run a
 script](#8g-the-tiles-that-run-a-script-and-saying-hello) for the walk half.
 
-<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 19da243cbb95 -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 3f55758f5135 -->
 
 ### Which move, and which question
 
@@ -1780,7 +1780,7 @@ mechanism's evidence spans two runs rather than one.
 
 ### The bigger number is not the harder hit
 
-<!-- covers: gen2/romdata.js gen2/engine.js gen2/battle.js @ 7b169809c10f -->
+<!-- covers: gen2/romdata.js gen2/engine.js gen2/battle.js @ bb326c240c6a -->
 
 For twenty-three passes the pilot ranked its moves by one number: the `power`
 byte out of the cartridge's move table. `romdata.move()` had been returning the
@@ -1934,7 +1934,7 @@ pilot uses, not a second one beside it. See section 10.
 
 ### Sending out somebody who can touch it
 
-<!-- covers: gen2/battle.js gen2/engine.js @ bbd9d60a7da6 -->
+<!-- covers: gen2/battle.js gen2/engine.js @ 3c8b104b7502 -->
 
 The pass before could tell that the Pokémon on the field takes nothing off a
 Ghost, and said so. The remedy it named — *a different Pokémon* — was one the
@@ -2723,7 +2723,7 @@ said *trainer battle: lost* **seven times**. One loss, reported seven ways.
 
 ## 7d. The counter, and the money it takes
 
-<!-- covers: gen2/menus.js gen2/state.js titles/crystal.js @ 48901f76e022 -->
+<!-- covers: gen2/menus.js gen2/state.js titles/crystal.js @ cf14dc236fe9 -->
 
 Everything the pilot could do until now used what it found. **Shop** walks to a
 mart and buys, which is the first thing it does that spends rather than
@@ -2832,7 +2832,7 @@ counter and came away with **five potions and ¥1800**, in 49 seconds.
 
 ## 7b. Saving, and getting the save out
 
-<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 19da243cbb95 -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 3f55758f5135 -->
 
 ```mermaid
 flowchart TD
@@ -3460,7 +3460,7 @@ the bag" rather than "did we gain any".
 
 ## 8a. Finding the Centers and the Marts in the cartridge
 
-<!-- covers: gen2/world.js gen2/journey.js @ 2e070b523edc -->
+<!-- covers: gen2/world.js gen2/journey.js @ 368bdf354ecc -->
 
 The last thing in this app that had to be written out by hand. A title said
 where the Centers and the Marts were, so the pilot healed in the two towns
@@ -3537,7 +3537,7 @@ after](#8d-a-route-the-game-itself-refuses).
 
 ## 8b. Asking the cartridge what its places are called
 
-<!-- covers: gen2/romdata.js gen2/world.js @ 45ab1ba7a093 -->
+<!-- covers: gen2/romdata.js gen2/world.js @ c8abb57e3d72 -->
 
 The one table that **retires** hand-written data rather than adding to it. A map
 used to be called whatever the title profile said, and everything else was
@@ -3612,7 +3612,7 @@ go](#8c-naming-a-city-is-a-feature).
 
 ## 8c. Naming a city is a feature
 
-<!-- covers: titles/crystal.js gen2/world.js @ d002c0c7635b -->
+<!-- covers: titles/crystal.js gen2/world.js @ c81bbda4e827 -->
 
 The map graph has always reached most of Johto. A flood over its exits from
 Route 31 finds sixty-odd maps in five legs — and every feature in this app was
@@ -3696,7 +3696,7 @@ by, which is the only leg it can measure.
 
 ## 8d. A route the game itself refuses
 
-<!-- covers: gen2/journey.js gen2/state.js @ 584f8f1803fa -->
+<!-- covers: gen2/journey.js gen2/state.js @ 8b5b429a4cdd -->
 
 The pass before this one taught the walk to *quote* the man who turns it back.
 This is the pilot doing something about it.
@@ -3904,7 +3904,7 @@ costs however long it takes somebody to notice their money is gone.
 
 ## 8f. Going and winning a badge
 
-<!-- covers: gen2/journey.js gen2/state.js titles/crystal.js @ 46387a28d10c -->
+<!-- covers: gen2/journey.js gen2/state.js titles/crystal.js @ 1150175428a0 -->
 
 The pilot has been turned back from Route 32 since the pass it learned to find
 Pokémon Centers. `reopen` throws away every written-off road the moment a badge
@@ -3987,7 +3987,7 @@ everybody is a heal whatever it says about itself.
 
 ## 8g. The tiles that run a script, and saying hello
 
-<!-- covers: gen2/world.js gen2/journey.js @ 2e070b523edc -->
+<!-- covers: gen2/world.js gen2/journey.js @ 368bdf354ecc -->
 
 Four passes of machinery pointed at one sentence a man says, and the reader that
 made it diagnosable is twelve lines.
@@ -4071,7 +4071,7 @@ sent the reader at it.
 
 ## 8h. What a species becomes, and when
 
-<!-- covers: gen2/romdata.js gen2/engine.js @ 1d5fcab4ae73 -->
+<!-- covers: gen2/romdata.js gen2/engine.js @ 1e11dbfae804 -->
 
 Two questions a party entry cannot answer: *what will this turn into*, and
 *what is it about to learn*. Both are in one table, because in Gen 2 they are
@@ -4163,7 +4163,7 @@ file says they do.
 
 ## 8i. Reaching an hour
 
-<!-- covers: gen2/jobs.js gen2/engine.js gen2/romdata.js gen2/state.js gbcore/saves.js app/rows.js @ 1dc93134c472 -->
+<!-- covers: gen2/jobs.js gen2/engine.js gen2/romdata.js gen2/state.js gbcore/saves.js app/rows.js @ 41d93d790468 -->
 
 A third of Johto's grass is behind the clock. HOOTHOOT is on Route 29 after
 dark and nowhere on it at noon, and for four versions the usage guide said the
@@ -4330,7 +4330,7 @@ cartridge will not say which hours are which.
 
 ## 8j. A cartridge that changed everything it could
 
-<!-- covers: titles/polished.js gen2/engine.js gen2/romdata.js gen2/state.js gen2/menus.js @ f9280acfef9c -->
+<!-- covers: titles/polished.js gen2/engine.js gen2/romdata.js gen2/state.js gen2/menus.js @ 67532119e8af -->
 
 Polished Crystal is the profile in `docs/DEVELOPING.md`'s hack table described
 as "the generic fallback, and the hardest thing to support properly". It is
@@ -4501,7 +4501,18 @@ the other 40%.** So `encounter.blockOf` maps a time to a block *or a list of
 them*, and what is in the grass in the evening is the union of both rather
 than either alone.
 
-**And two things only booting it found.** The `.sym` gate in `main.js`
+**And five things only booting it found.** Its attributes block is shorter
+than Crystal's — no separate events pointer, so `connections` sits at 9 and
+its warps live *inside* the map script header behind a count of scene
+scripts and a count of callbacks. Its menu cursor is `▶` at `$f0`, which is
+Crystal's yen sign. Its save-check digit is 97, and a battery the game had
+just written read as "no save in it yet". Its caught data gives the time,
+the level and the place a byte each where Crystal packs them into two — the
+summary screen said `Day at 5 / New Bark Town` and the reader said level 1,
+morning, Route 30. And its landmark break byte is `$5e`, so "New
+Bark?Town" was New Bark Town.
+
+**Two things only booting it found.** The `.sym` gate in `main.js`
 listed `wTilesetCollisionBank` by name, so it turned this cartridge away at
 the door — "missing 1 expected symbol" — long after every reader behind it
 had learned the other name. `require` takes a list of alternatives now, the
@@ -5241,7 +5252,7 @@ before a step is taken, so a stopped walk does not move at all.
 
 ### What is behind the Gym door, before you open it
 
-<!-- covers: gen2/romdata.js gen2/engine.js app/rows.js @ d2b159c5b5fd -->
+<!-- covers: gen2/romdata.js gen2/engine.js app/rows.js @ 981581dd74d7 -->
 
 The Gym row could say where the Gym is and who is in it. **Whether it is worth
 going** is two facts the cartridge has had all along, and neither of them
@@ -5534,7 +5545,7 @@ reads all seven out of both files and compares them, which is the repair for
 
 ### Gates: asking the cartridge what it wants
 
-<!-- covers: gen2/state.js gen2/journey.js titles/crystal.js @ 46387a28d10c -->
+<!-- covers: gen2/state.js gen2/journey.js titles/crystal.js @ 1150175428a0 -->
 
 Two kinds of closed road, and the difference is everything:
 
