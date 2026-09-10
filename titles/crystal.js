@@ -426,48 +426,6 @@ export class Crystal extends Journey {
    * and then one -- the same way the desktop pilot does it, and the same way a
    * person would. Her question defaults to yes, which is the answer we want.
    */
-  /**
-   * Heal at a Pokémon Center, whichever one the entry names.
-   *
-   * This was `heal()`, and it was Cherrygrove's: the map it checked for, the
-   * door it went through, the Center it expected and the town it left by were
-   * all constants in the body. A second Center would have been a second copy of
-   * all of it -- so the four became fields of the healer entry and the
-   * procedure reads them. `nearestHeal` hands the entry in.
-   *
-   * The nurse is a *counter*, like a mart clerk: she stands at (3,1) with a
-   * wall in front of her, so the approach is two tiles below and then one, and
-   * the press goes UP into it. Walked in two steps rather than one because the
-   * room is small and the first tile is often occupied by somebody waiting.
-   *
-   * Three attempts, and the party's HP is the evidence -- not the presses
-   * landing. Her question defaults to yes, so `runScripts` answers it.
-   */
-  async healAtCenter(h) {
-    if (!h || !h.inside || !h.door || !h.nurse) return false;
-    if (await this.mapKey() !== h.map && await this.mapKey() !== h.inside) {
-      return false;
-    }
-    if (await this.mapKey() !== h.inside) {
-      if (!await this.through(h.door, h.inside)) return false;
-    }
-    await this.runScripts();
-    for (let attempt = 0; attempt < 3; attempt++) {
-      await this.nav.walkTo(this.collision, [h.nurse[0], h.nurse[1] + 2],
-                            this.walkOpts);
-      await this.nav.walkTo(this.collision, [h.nurse[0], h.nurse[1] + 1],
-                            this.walkOpts);
-      await this.nav.step('UP');
-      await this.gb.press('A', 6, 12);
-      await this.runScripts();
-      const s = await this.snap();
-      if (s.party.length && s.party.every((m) => m.hp === m.maxHp)) break;
-    }
-    const healed = (await this.snap()).party.every((m) => m.hp === m.maxHp);
-    if (healed) this.say(`healed at ${this.where(h.map)}`);
-    await this.leaveVia(h.map);
-    return healed;
-  }
 
   async fetchBall() {
     const p = this.title.places;

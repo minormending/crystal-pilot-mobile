@@ -2708,4 +2708,42 @@ export class Journey {
     }
     return false;
   }
+
+  /**
+   * Heal at one of the title's declared Centers.
+   *
+   * **Moved up from `titles/crystal.js`, because nothing in it was
+   * Crystal's.** It takes a door, an inside and a nurse out of the profile
+   * and walks to them; every method it calls is this class's. It lived on
+   * one title only because Crystal was the only title that had ever
+   * declared a healer, and the day a second one did -- Polished Crystal,
+   * whose twenty-one Centers all keep their nurse at the same tile -- the
+   * profile could describe them and the class could not reach them.
+   */
+  async healAtCenter(h) {
+    if (!h || !h.inside || !h.door || !h.nurse) return false;
+    if (await this.mapKey() !== h.map && await this.mapKey() !== h.inside) {
+      return false;
+    }
+    if (await this.mapKey() !== h.inside) {
+      if (!await this.through(h.door, h.inside)) return false;
+    }
+    await this.runScripts();
+    for (let attempt = 0; attempt < 3; attempt++) {
+      await this.nav.walkTo(this.collision, [h.nurse[0], h.nurse[1] + 2],
+                            this.walkOpts);
+      await this.nav.walkTo(this.collision, [h.nurse[0], h.nurse[1] + 1],
+                            this.walkOpts);
+      await this.nav.step('UP');
+      await this.gb.press('A', 6, 12);
+      await this.runScripts();
+      const s = await this.snap();
+      if (s.party.length && s.party.every((m) => m.hp === m.maxHp)) break;
+    }
+    const healed = (await this.snap()).party.every((m) => m.hp === m.maxHp);
+    if (healed) this.say(`healed at ${this.where(h.map)}`);
+    await this.leaveVia(h.map);
+    return healed;
+  }
+
 }

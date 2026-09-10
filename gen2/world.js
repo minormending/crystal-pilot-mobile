@@ -175,6 +175,29 @@ export class World {
    * first of them `y 3, x 6, to 1, map 24.3`, which is
    * `warp_event 6, 3, ELMS_LAB, 1`.
    */
+  /**
+   * How many maps a search may visit before giving up.
+   *
+   * **A safety valve, not a distance.** It exists so a graph that turns out
+   * to be nonsense cannot spin; it should never be the thing that decides an
+   * answer. It was the constant 400, which is comfortably past Crystal's
+   * 361 maps and *short of Polished Crystal's 488* -- so the far end of
+   * Kanto was unreachable not because no route existed but because the
+   * search stopped before it got there. Three Pokemon Centers, each one leg
+   * from a town the same search reached.
+   *
+   * Counted off the cartridge instead, once, with slack: whatever the
+   * groups say they hold, and never below the old number.
+   */
+  mapBudget() {
+    if (this._budget === undefined) {
+      let n = 0;
+      for (let g = 1; g <= 26; g++) n += this.mapCount(g) || 0;
+      this._budget = Math.max(400, n + 32);
+    }
+    return this._budget;
+  }
+
   _eventsAt(attr) {
     const spec = this.e.mapAttr;
     if (spec.events !== null && spec.events !== undefined) {
@@ -483,7 +506,7 @@ export class World {
    * A route is a list of exits to take in order -- an edge to walk off, a warp
    * to stand on -- and the first one found by breadth is the shortest by legs.
    */
-  route(from, to, { maxMaps = 400, avoid = null } = {}) {
+  route(from, to, { maxMaps = null, avoid = null } = {}) {
     if (from === to) return [];
     return this.routesFrom(from, [to], { maxMaps, avoid }).get(to) || null;
   }
@@ -511,14 +534,18 @@ export class World {
    * map you are standing on -- that is not a journey, and `travelTo` already
    * says "arrived" for it.
    */
-  routesFrom(from, targets, { maxMaps = 400, avoid = null } = {}) {
+  routesFrom(from, targets, { maxMaps = null, avoid = null } = {}) {
     const want = new Set([...targets].filter((k) => k !== from));
     const found = new Map();
     if (!want.size) return found;
+    // **After the early return, not as a default argument.** Counting the
+    // cartridge's maps reads the ROM, and "where am I" asks this for a
+    // target it already has -- a hundred and four reads to answer nothing.
+    const budget = maxMaps === null ? this.mapBudget() : maxMaps;
     const seen = new Set([from]);
     const queue = [[from, []]];
     let head = 0;
-    while (head < queue.length && seen.size < maxMaps && found.size < want.size) {
+    while (head < queue.length && seen.size < budget && found.size < want.size) {
       const [key, path] = queue[head++];
       for (const exit of this.exits(key)) {
         // A leg the caller has already failed to walk. **This is not a

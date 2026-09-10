@@ -40,7 +40,7 @@ if (!cart) process.exit(0);
 const { rom, symbols, gb } = cart;
 // The profile the app would pick for this cartridge, so a tool and the app
 // read its map headers the same way rather than two ways.
-const { engine } = engineOf(cart);
+const { title, engine } = engineOf(cart);
 const world = new World(symbols, gb, engine);
 
 /** Every map's own symbol name, via the attributes pointer it is filed under. */
@@ -130,18 +130,37 @@ if (argv.includes('--reach')) {
   const titles = join(HERE, '..', 'titles');
   const { readdirSync } = await import('node:fs');
   let problems = 0;
-  for (const file of readdirSync(titles).filter((f) => f.endsWith('.js')).sort()) {
+  // **The profile this cartridge would be driven by, not every profile.**
+  // Asking one cartridge whether another hack's maps are reachable resolves
+  // Crystal's VIOLET_POKECENTER to Polished Crystal's Route 32 gate and then
+  // reports on the walk to it, which is a sentence about nothing.
+  const mine = title ? `${title.id}.js` : null;
+  const files = readdirSync(titles).filter((f) => f.endsWith('.js')).sort()
+    .filter((f) => !mine || f === mine);
+  for (const file of files) {
     const src = readFileSync(join(titles, file), 'utf8');
     const declared = [...src.matchAll(/^const (\w+) = key\((\d+),\s*(\d+)\);/gm)]
       .map((m) => [m[1], mapKey(Number(m[2]), Number(m[3]))]);
+    // And the places written straight into a table rather than named. A
+    // profile whose healers are generated from the cartridge has no
+    // `const` for any of them, so the whole check quietly applied to
+    // nothing -- twenty-one Centers and not one of them asked about.
+    for (const m of src.matchAll(/(map|inside):\s*key\((\d+),\s*(\d+)\)/g)) {
+      declared.push([`${m[1]} ${m[2]}.${m[3]}`,
+                     mapKey(Number(m[2]), Number(m[3]))]);
+    }
     if (!declared.length) continue;
     const start = declared.find(([n]) => n === 'PLAYERS_HOUSE_2F')
       || declared.find(([n]) => n === 'NEW_BARK_TOWN');
-    if (!start) { console.log(`${file}: no starting map to measure from`); continue; }
-    console.log(`${file}: ${declared.length} declared map(s), from ${label(start[1])}`);
+    // Where a game begins, for a profile that names it; otherwise the
+    // lowest-numbered map declared, which is somewhere in the same world
+    // and is what "can the pilot get there from here" wants.
+    const from_ = start || [...declared].sort((a, b) => a[1] - b[1])[0];
+    if (!from_) { console.log(`${file}: no starting map to measure from`); continue; }
+    console.log(`${file}: ${declared.length} declared map(s), from ${label(from_[1])}`);
     for (const [name, key] of declared) {
-      if (key === start[1]) continue;
-      const legs = way(start[1], key);
+      if (key === from_[1]) continue;
+      const legs = way(from_[1], key);
       if (legs === null) {
         console.log(`  !! ${name} (${label(key)}) is in no route from the start`);
         problems += 1;

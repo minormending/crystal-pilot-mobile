@@ -539,7 +539,8 @@ async function reallyStart() {
   saves.tag = romTag;
   // Said once, and only when it is worth saying: a cartridge the pilot has no
   // description of behaves correctly in a way that reads as broken.
-  const known = describeTitle(title);
+  // Whether the *cartridge* names its maps, which a profile need not.
+  const known = describeTitle(title, { named: !!romdata.landmarks });
   $('#titlerow').classList.toggle('hide', !known.show);
   $('#titlestate').textContent = known.text;
   shareSymbols();

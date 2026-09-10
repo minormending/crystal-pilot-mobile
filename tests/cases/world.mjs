@@ -526,3 +526,20 @@ test('a cartridge no bank fits is answered with none', async (t) => {
     { ...gen2, mapHeader: { bytes: 7, attrBank: null, attrAddr: 2, landmark: 4 } });
   t.eq(bare._attrBank(), 0, 'no bank rather than the first one that scored');
 });
+
+
+test('the search budget is the cartridge\'s own map count', async (t) => {
+  // **A safety valve, not a distance.** It was the constant 400, which sits
+  // comfortably past Crystal's 361 maps and short of Polished Crystal's
+  // 488 -- so the far end of Kanto came back unreachable, not because no
+  // route existed but because the search stopped before it got there.
+  // Three Pokemon Centers, each one leg from a town the same search had
+  // already reached.
+  const { world } = johto();
+  const budget = world.mapBudget();
+  t.true(budget >= 400, 'never below the number it replaced');
+  // A cartridge with more maps than that gets a bigger one.
+  const many = cartridge(new Map([...Array(60).keys()].map((i) =>
+    [mapKey(1, i + 1), { edges: {} }])), { perGroup: new Map([[1, 60]]) });
+  t.true(many.world.mapBudget() >= 400, 'and a small one still gets the floor');
+});

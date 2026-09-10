@@ -22,7 +22,14 @@
 // renumbered, and its trainer parties are in banks the reader refuses to
 // guess at. See `docs/DEVELOPING.md` for what passes and what does not.
 import { gen2 } from '../gen2/engine.js';
+import { mapKey as key } from '../gen2/world.js';
 import { Journey } from '../gen2/journey.js';
+
+// Where a game begins, which is what `tools/route --reach` measures every
+// other place from. Named the way `titles/crystal.js` names its own, so the
+// tool finds it without being told which profile it is reading.
+const NEW_BARK_TOWN = key(24, 2);
+const PLAYERS_HOUSE_2F = key(24, 5);
 
 export const polished = {
   id: 'polished',
@@ -83,6 +90,15 @@ export const polished = {
       formSpeciesBit: 0x20,
       monFields: [[0, 1], [2, 1], [3, 1], [4, null], [1, 1], [5, 4]],
     },
+    // **No takeable *sprites*, on purpose.** `takeables` finds an item ball
+    // by its type byte, which is 1 here as it is on Crystal, and falls back
+    // to a sprite list for things the map types as scripts -- Crystal's
+    // fruit trees. This cartridge has one sprite, `SPRITE_BALL_CUT_TREE`
+    // `$b4`, for a ball on the ground *and* a cuttable tree, and the three
+    // starter balls in Elm's lab wear it as scripts. Listing it would offer
+    // the pilot Professor Elm's starters as things to pick up. The cost is
+    // that a fruit tree is not offered here; the alternative was worse.
+    takeable: [],
     // 21 map objects of 14 bytes, and a spawned struct of 34 -- against
     // Crystal's 16 of 16 and 40. Measured on the running game: with the
     // player at (4,6) the struct 34 × 2 bytes in reads (5,6), which is the
@@ -291,7 +307,59 @@ export const polished = {
       maxLearn: 40,
     },
   },
-  // No map names, no healers, no scripts: the same absences `generic` has,
+  // **Every Pokemon Center in the game, found by asking the cartridge.**
+  // Not typed out: a map whose own symbol is `*PokeCenter1F` is a Center,
+  // the town that reaches it is whichever map warps into it, the door is
+  // that warp's tile, and the nurse is the object wearing `SPRITE_NURSE`.
+  // All twenty-one keep her at (5,1) -- Crystal's is (3,1) -- and Violet's
+  // door comes out (31,25), which is the tile `titles/crystal.js` has
+  // written by hand, so the derivation agrees with somebody's eyes on the
+  // one place both cartridges can be compared.
+  //
+  // Written down rather than derived at run time, the way Crystal's three
+  // are, because finding them needs `*_MapAttributes` out of the whole
+  // `.sym` and a device may only have the 100-symbol digest.
+  healers: [
+    { map: key(1, 13), reach: 'healAtCenter',
+      inside: key(1, 1), door: [13,17], nurse: [5,1] }, // Olivine
+    { map: key(2, 7), reach: 'healAtCenter',
+      inside: key(2, 3), door: [15,13], nurse: [5,1] }, // Mahogany
+    { map: key(4, 2), reach: 'healAtCenter',
+      inside: key(4, 5), door: [23,27], nurse: [5,1] }, // Ecruteak
+    { map: key(5, 10), reach: 'healAtCenter',
+      inside: key(5, 6), door: [21,29], nurse: [5,1] }, // Blackthorn
+    { map: key(6, 12), reach: 'healAtCenter',
+      inside: key(6, 1), door: [11,15], nurse: [5,1] }, // Cinnabar
+    { map: key(7, 13), reach: 'healAtCenter',
+      inside: key(7, 4), door: [19,15], nurse: [5,1] }, // Cerulean
+    { map: key(8, 7), reach: 'healAtCenter',
+      inside: key(8, 1), door: [15,9], nurse: [5,1] }, // Azalea
+    { map: key(10, 3), reach: 'healAtCenter',
+      inside: key(10, 8), door: [31,25], nurse: [5,1] }, // Violet
+    { map: key(10, 1), reach: 'healAtCenter',
+      inside: key(10, 11), door: [11,73], nurse: [5,1] }, // Route32
+    { map: key(12, 3), reach: 'healAtCenter',
+      inside: key(12, 5), door: [9,3], nurse: [5,1] }, // Vermilion
+    { map: key(14, 2), reach: 'healAtCenter',
+      inside: key(14, 3), door: [61,3], nurse: [5,1] }, // Route3
+    { map: key(14, 4), reach: 'healAtCenter',
+      inside: key(14, 8), door: [13,27], nurse: [5,1] }, // Pewter
+    { map: key(17, 6), reach: 'healAtCenter',
+      inside: key(17, 11), door: [19,27], nurse: [5,1] }, // Fuchsia
+    { map: key(18, 5), reach: 'healAtCenter',
+      inside: key(18, 6), door: [5,7], nurse: [5,1] }, // Lavender
+    { map: key(19, 1), reach: 'healAtCenter',
+      inside: key(19, 2), door: [23,13], nurse: [5,1] }, // SilverCave
+    { map: key(21, 7), reach: 'healAtCenter',
+      inside: key(21, 20), door: [33,9], nurse: [5,1] }, // Celadon
+    { map: key(22, 2), reach: 'healAtCenter',
+      inside: key(22, 5), door: [23,43], nurse: [5,1] }, // Cianwood
+    { map: key(23, 2), reach: 'healAtCenter',
+      inside: key(23, 9), door: [23,25], nurse: [5,1] }, // Viridian
+    { map: key(26, 4), reach: 'healAtCenter',
+      inside: key(26, 6), door: [29,3], nurse: [5,1] }, // Cherrygrove
+  ],
+  // No map names and no scripts: the same absences `generic` has,
   // and each one is a job the interface will not offer rather than one that
   // fails. Somebody who plays this cartridge can fill them in.
 };

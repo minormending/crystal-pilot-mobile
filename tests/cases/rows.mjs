@@ -1306,6 +1306,20 @@ test('a profile with names but no healers is still worth a sentence',
                                     drive: class { async run() {} } });
   t.true(noHealers.show, 'one with nowhere to heal does');
   const noNames = describeTitle({ names: {}, healers: [{}] });
+  // **A cartridge that names its own maps has a profile even with no
+  // `names` table.** Since the landmark reader landed, a profile can leave
+  // that table empty and still put "New Bark Town" in the header -- and
+  // this said "no profile for this cartridge, maps are numbered" to
+  // somebody looking at exactly that, with nineteen Centers to walk to.
+  // Polished Crystal's actual shape: no `names` table, healers derived
+  // from the cartridge, and no scripted intro -- so there is one thing
+  // left to say and it should not be "no profile".
+  const derived = describeTitle({ id: 'polished', names: {}, healers: [{}] },
+                                { named: true });
+  t.false(/no profile/.test(derived.text),
+          'a cartridge that names its maps is not an undescribed one');
+  t.true(/maps named by the cartridge/.test(derived.text),
+         'and it says where the names come from');
   t.true(noNames.show, 'and so does one with no names');
   t.ne(noHealers.text, noNames.text, 'and the two do not say the same thing');
 });

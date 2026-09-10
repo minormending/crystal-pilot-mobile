@@ -4600,6 +4600,69 @@ called Lyra is standing there with a scene and a battle attached, and the
 app reads that battle as Chikorita Grass/Grass level 5 against a Cyndaquil
 Fire/Fire — its own type numbering, through its own chart.
 
+### A sixty-first pass: the jobs, and what a profile is for
+
+With every reader right, parity stops being about bytes and becomes about
+whether the pilot can *do* anything. So the battle was fought and the places
+were found.
+
+**The pilot fights on this cartridge.** `fightBattle` was handed Lyra's
+scripted battle and ran it to the end — read the state, drove the menu,
+picked moves, tracked both sides and returned `"lost"`, with a level-5
+Cyndaquil down and her Chikorita on 5 HP. Losing is the game: Cyndaquil
+knows Tackle and Leer at level 5 and no Fire move at all. What the run
+proves is the loop.
+
+**And it walks.** `nav.walkTo` crosses Elm's lab, around the furniture and
+around the three people standing in it, and stops at the tile where Lyra's
+scene fires — reporting "refused", which is the honest answer to a game that
+would not take the step.
+
+### Twenty-one Pokémon Centers, asked of the cartridge
+
+`titles/crystal.js` hand-writes three healers. Writing twenty-one by hand
+would have been a bad afternoon and a worse file, so they were **found**: a
+map whose own symbol is `*PokeCenter1F` is a Center, the town that reaches
+it is whichever map warps into it, the door is that warp's tile, and the
+nurse is the object wearing `SPRITE_NURSE`. All twenty-one keep her at
+**(5,1)** where Crystal's is (3,1) — and Violet's door comes out **(31,25)**,
+which is exactly the tile Crystal's profile has written by hand. The
+derivation agrees with somebody's eyes on the one place the two cartridges
+can be compared.
+
+`healAtCenter` moved from `titles/crystal.js` up to `Journey`, because
+nothing in it was ever Crystal's: it takes a door, an inside and a nurse out
+of a profile and walks to them. It lived on one title only because Crystal
+was the only title that had ever declared a healer.
+
+From Elm's lab, `nearestHeal` picks **Cherrygrove City**.
+
+### Two things that had quietly stopped being true
+
+**The route planner could not reach Kanto.** `maxMaps` was the constant
+400 — comfortably past Crystal's 361 maps and *short of Polished Crystal's
+488* — so three Pokémon Centers came back "in no route from the start", each
+one leg from a town the same search had already reached. It is a safety
+valve against a nonsense graph, not a distance, and it is counted off the
+cartridge now. Resolved *after* the early return, too: computing it reads the
+ROM, and "where am I" was paying 104 reads to answer a question it already
+had.
+
+**And the app told this cartridge's owner it had no profile.** The banner
+counted `title.names`, which polished leaves empty because the landmark
+table names its maps at run time — so it said "no profile for this
+cartridge, maps are numbered, the pilot cannot start a game or heal" while
+the header read New Bark Town and nineteen Centers were reachable. It asks
+whether the *cartridge* names its maps now.
+
+`tools/route --reach` was reading every profile's places against whatever
+ROM was loaded — resolving Crystal's `VIOLET_POKECENTER` to Polished
+Crystal's Route 32 gate and reporting the walk to it — and it only ever saw
+places declared as named constants, so a profile whose healers are generated
+had **none** of them checked. It reads the picked profile now, and the
+places written into tables. All forty of Polished Crystal's are reachable
+from the house the game starts in.
+
 ## The part that had to be redesigned
 
 The desktop pilot hangs its whole design on CPU hooks: the game's own routines

@@ -1146,9 +1146,16 @@ export function describeUndo(point, refused) {
  * names and no healers is somebody's half-finished file, which is worth saying
  * differently because it is a file to go and finish.
  */
-export function describeTitle(title) {
+export function describeTitle(title, { named = false } = {}) {
   if (!title) return { text: '', show: false };
-  const names = Object.keys(title.names || {}).length;
+  // **A map can be named without a profile naming it.** Since the landmark
+  // table is read out of the cartridge, a profile with no `names` at all
+  // can still put "New Bark Town" in the header -- and this counted the
+  // table, so it told Polished Crystal's owner there was "no profile for
+  // this cartridge, maps are numbered" while the header said New Bark Town
+  // and the pilot had nineteen Pokemon Centers to walk to. `named` is
+  // whether the *cartridge* names its maps, which is the question.
+  const names = Object.keys(title.names || {}).length || (named ? 1 : 0);
   const healers = (title.healers || []).length;
   const scripted = typeof title.drive === 'function'
     && typeof title.drive.prototype.run === 'function';
@@ -1163,9 +1170,12 @@ export function describeTitle(title) {
   const missing = [];
   if (!healers) missing.push('nowhere to heal');
   if (!scripted) missing.push('no scripted start');
+  const own = Object.keys(title.names || {}).length;
   return {
     show: true,
-    text: `${title.id} · ${names} map${names === 1 ? '' : 's'} named`
+    text: `${title.id} · ` + (own
+      ? `${own} map${own === 1 ? '' : 's'} named`
+      : 'maps named by the cartridge')
           + (missing.length ? ` · ${missing.join(', ')}` : ''),
   };
 }
