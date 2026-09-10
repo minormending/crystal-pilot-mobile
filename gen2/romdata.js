@@ -76,10 +76,13 @@ function isNameByte(b) {
 }
 
 /** The game's own character encoding, as far as names use it. */
-export function decodeText(bytes) {
+export function decodeText(bytes, end = NAME_TERMINATOR) {
   let out = '';
   for (const b of bytes) {
-    if (b === NAME_TERMINATOR) break;            // "@" terminates
+    // "@" terminates -- $50 on Crystal, and whatever this cartridge measured
+    // (see `terminator`). Crystal's is honoured either way, because a
+    // cartridge that moved the terminator did not put a letter at $50.
+    if (b === end || b === NAME_TERMINATOR) break;
     if (b === POKE_LIGATURE) out += 'POKé';      // one byte, four letters
     else if (b === 0x7f) out += ' ';
     // A line break inside a *name* is a space. Landmark names are written to
@@ -171,10 +174,36 @@ export class RomData {
     if (!id || id > this.e.speciesCount) return `#${id}`;
     if (this._species.has(id)) return this._species.get(id);
     const { bank, addr } = this.names;
-    const name = decodeText(
-      this._read(bank, addr + (id - 1) * this.e.nameLength, this.e.nameLength));
+    const at = addr + (id - 1 + this._nameShift()) * this.e.nameLength;
+    const name = decodeText(this._read(bank, at, this.e.nameLength),
+                            this.terminator());
     this._species.set(id, name);
     return name;
+  }
+
+  /**
+   * How many entries sit in front of species one -- 0 on Crystal, 1 here.
+   *
+   * Crystal's `PokemonNames` begins with BULBASAUR, so species `id` is entry
+   * `id - 1`. **Polished Crystal begins with a placeholder** -- its source
+   * writes `rawchar "?000?@@@@@"` -- so every name on it came back one
+   * species early, and the placeholder itself came back as species one.
+   *
+   * A name starts with a letter, and that placeholder starts with `$9e`,
+   * which is in neither case block. So the table says which shape it is,
+   * and the test is narrow on purpose: it looks at the *first byte only* of
+   * the first two entries, because "does this decode cleanly" would trip on
+   * a hack whose first species has an apostrophe in it, and shifting a whole
+   * name table by one is a much worse failure than one odd name.
+   */
+  _nameShift() {
+    if (this._shift !== undefined) return this._shift;
+    const { bank, addr } = this.names;
+    const letter = (i) => {
+      const b = this.gb.romByte(bank, addr + i * this.e.nameLength);
+      return (b >= 0x80 && b <= 0x99) || (b >= 0xa0 && b <= 0xb9);
+    };
+    return (this._shift = !letter(0) && letter(1) ? 1 : 0);
   }
 
 
@@ -205,17 +234,22 @@ export class RomData {
    * "LTRA BALL".
    */
   _packedName({ bank, addr }, id) {
+    // The cartridge's own terminator, measured off its name table -- walking
+    // a packed table with the wrong one runs every entry into the next and
+    // answers nothing. Polished Crystal ends a string with $53, and every
+    // item and move name on it came back empty.
+    const end = this.terminator();
     let at = addr;
     for (let n = 1; n < id; n++) {
       for (let guard = 0; guard < PACKED_NAME_MAX; guard++) {
-        if (this.gb.romByte(bank, at++) === NAME_TERMINATOR) break;
+        if (this.gb.romByte(bank, at++) === end) break;
       }
     }
     const bytes = [];
     let ended = false;
     for (let guard = 0; guard < PACKED_NAME_MAX; guard++) {
       const b = this.gb.romByte(bank, at + guard);
-      if (b === NAME_TERMINATOR) { ended = true; break; }
+      if (b === end) { ended = true; break; }
       bytes.push(b);
     }
     // No terminator inside the bound, so that was not a name. The longest in
@@ -259,10 +293,10 @@ export class RomData {
   _terminatedName({ bank, addr }, ptr, max) {
     if (!ptr) return '';
     const bytes = [];
-    const end = this._term === undefined ? NAME_TERMINATOR : this._term;
+    const end = this.terminator();
     for (let i = 0; i < max; i++) {
       const b = this.gb.romByte(bank, ptr + i);
-      if (b === end || b === NAME_TERMINATOR) return decodeText(bytes);
+      if (b === end || b === NAME_TERMINATOR) return decodeText(bytes, end);
       if (b === undefined) return '';
       bytes.push(b);
     }
@@ -503,14 +537,15 @@ export class RomData {
    * a table of 541 entries becomes a table of nonsense.
    */
   _trainerAt(bank, at) {
+    const end = this.terminator();
     const bytes = [];
     let i = at;
     for (; i < at + this.e.trainerNameMax; i++) {
       const b = this.gb.romByte(bank, i);
-      if (b === NAME_TERMINATOR) break;
+      if (b === end) break;
       bytes.push(b);
     }
-    if (this.gb.romByte(bank, i) !== NAME_TERMINATOR) return null;
+    if (this.gb.romByte(bank, i) !== end) return null;
     const kind = this.gb.romByte(bank, i + 1);
     const wide = this.e.trainerMonBytes[kind];
     if (!wide) return null;
@@ -915,6 +950,9 @@ export class RomData {
   _typeNameKind() {
     if (this._typeKind !== undefined) return this._typeKind;
     this._typeKind = null;
+    // No table to measure against, which is a state a cartridge is allowed
+    // to be in -- every other name then reads with the profile's `$50`.
+    if (!this.typeNames) return this._typeKind;
     for (const kind of this.e.typeNamePointers) {
       const run = this._nameRun(this._typeNameTarget(kind, 0),
                                this._typeNameTarget(kind, 1));

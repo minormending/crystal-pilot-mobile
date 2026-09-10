@@ -114,7 +114,7 @@ of the subtleties in sections 6 and 7.
 
 ## 2. The shape of it
 
-<!-- covers-api: app/main.js gen2/journey.js titles/crystal.js gen2/tasks.js gen2/nav.js gen2/world.js gen2/collision.js gen2/state.js gen2/romdata.js gen2/symbols.js gbcore/gb.js @ a4094a7d799c -->
+<!-- covers-api: app/main.js gen2/journey.js titles/crystal.js gen2/tasks.js gen2/nav.js gen2/world.js gen2/collision.js gen2/state.js gen2/romdata.js gen2/symbols.js gbcore/gb.js @ 13c90560ce4c -->
 
 Twenty-nine modules, in four directories, and the directories are the design:
 **an import may point down this list and never up.**
@@ -728,7 +728,7 @@ and in `bootstrap.js`, with nothing able to notice if they drifted.
 
 ### `romdata.js` — what the cartridge knows
 
-<!-- covers: gen2/romdata.js @ bc57c8b0e4fa -->
+<!-- covers: gen2/romdata.js @ 7b54b6213b56 -->
 
 Species names, item names, move names, wild-encounter tables, move power, the
 type chart, and what a species turns into. All read out of the ROM, not shipped
@@ -801,7 +801,22 @@ as a copy, so they cannot drift from the build being driven.
   shifted, and read with Crystal's every name ran to its bound and came back
   empty. One alphabet per cartridge, so what is measured here is what every
   other name in the ROM is read with — species, items, moves, landmarks,
-  trainer classes.
+  trainer classes. That is not a tidiness point: `_packedName` walks
+  terminators to find an entry rather than striding, so the wrong one runs
+  every item name into the next and answers nothing at all. Both of Polished
+  Crystal's packed tables were empty until this.
+
+- `PokemonNames` — fixed width, and **how many entries sit in front of
+  species one is derived.** Crystal begins with BULBASAUR, so species `id` is
+  entry `id - 1`. Polished Crystal begins with a placeholder — its source
+  writes `rawchar "?000?@@@@@"` — so every name on it came back one species
+  early, and the placeholder came back as species one. A name starts with a
+  letter and that one starts with `$9e`, which is in neither case block.
+
+  The test looks at the **first byte only** of the first two entries. "Does
+  this decode cleanly" would trip on a hack whose first species has an
+  apostrophe in it, and shifting a whole name table by one is a much worse
+  failure than one odd name.
 - `TypeMatchups` — 110 rows of `attacker, defender, multiplier-in-tenths`, with
   a one-byte separator in the middle and neutral left out entirely. See [the
   bigger number is not the harder
@@ -1763,7 +1778,7 @@ mechanism's evidence spans two runs rather than one.
 
 ### The bigger number is not the harder hit
 
-<!-- covers: gen2/romdata.js gen2/engine.js gen2/battle.js @ 148c340cd114 -->
+<!-- covers: gen2/romdata.js gen2/engine.js gen2/battle.js @ 6997d626a2fb -->
 
 For twenty-three passes the pilot ranked its moves by one number: the `power`
 byte out of the cartridge's move table. `romdata.move()` had been returning the
@@ -2272,7 +2287,7 @@ fainted.
 
 ## 7. Catching something
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ d58b7194c847 -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ 361181b2fe4e -->
 
 Catching is the most involved loop, because a Poké Ball's odds turn on how much
 HP is left. Throwing at a full-health target is mostly throwing balls away.
@@ -3520,7 +3535,7 @@ after](#8d-a-route-the-game-itself-refuses).
 
 ## 8b. Asking the cartridge what its places are called
 
-<!-- covers: gen2/romdata.js gen2/world.js @ 9b9aba1bff08 -->
+<!-- covers: gen2/romdata.js gen2/world.js @ 6065958a0339 -->
 
 The one table that **retires** hand-written data rather than adding to it. A map
 used to be called whatever the title profile said, and everything else was
@@ -4054,7 +4069,7 @@ sent the reader at it.
 
 ## 8h. What a species becomes, and when
 
-<!-- covers: gen2/romdata.js gen2/engine.js @ 19809321e2cb -->
+<!-- covers: gen2/romdata.js gen2/engine.js @ 1f228942952b -->
 
 Two questions a party entry cannot answer: *what will this turn into*, and
 *what is it about to learn*. Both are in one table, because in Gen 2 they are
@@ -4146,7 +4161,7 @@ file says they do.
 
 ## 8i. Reaching an hour
 
-<!-- covers: gen2/jobs.js gen2/engine.js gen2/romdata.js gen2/state.js gbcore/saves.js app/rows.js @ c7c60a2fd14b -->
+<!-- covers: gen2/jobs.js gen2/engine.js gen2/romdata.js gen2/state.js gbcore/saves.js app/rows.js @ 7a8312aed1e7 -->
 
 A third of Johto's grass is behind the clock. HOOTHOOT is on Route 29 after
 dark and nowhere on it at noon, and for four versions the usage guide said the
@@ -5008,7 +5023,7 @@ before a step is taken, so a stopped walk does not move at all.
 
 ### What is behind the Gym door, before you open it
 
-<!-- covers: gen2/romdata.js gen2/engine.js app/rows.js @ 795082618a8b -->
+<!-- covers: gen2/romdata.js gen2/engine.js app/rows.js @ 7823045fdb6d -->
 
 The Gym row could say where the Gym is and who is in it. **Whether it is worth
 going** is two facts the cartridge has had all along, and neither of them
@@ -5121,7 +5136,7 @@ is the noise this list exists to replace.
 
 ### Leading with the one that can answer the room
 
-<!-- covers: gen2/romdata.js gen2/menus.js gen2/journey.js @ 6763494fe0ae -->
+<!-- covers: gen2/romdata.js gen2/menus.js gen2/journey.js @ 744777408d87 -->
 
 **Gen 2 sends out slot one and asks nobody.** So the party's order decides the
 first battle of a Gym — and since the pass before, the pilot has known exactly

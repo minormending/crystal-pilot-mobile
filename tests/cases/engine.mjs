@@ -104,6 +104,35 @@ test('a name is read at the width the engine profile declares', async (t) => {
   t.eq(said.speciesName(2), 'LMNOP', 'and the second is where the stride says');
 });
 
+test('a placeholder in front of species one is counted, not named', async (t) => {
+  // Crystal's PokemonNames begins with BULBASAUR, so species `id` is entry
+  // `id - 1`. Polished Crystal begins with `rawchar "?000?@@@@@"`, so every
+  // name on it came back one species early and the placeholder came back as
+  // species one. A name starts with a letter and that one starts with $9e.
+  const gb = new FakeGameBoy();
+  const pad = [0x9e, 0xe0, 0xe0, 0xe0, 0x9e, 0x50, 0x50, 0x50, 0x50, 0x50];
+  const enc = (t2) => {
+    const out = [...t2].map((c) => 0x80 + c.charCodeAt(0) - 65);
+    while (out.length < 10) out.push(0x50);
+    return out;
+  };
+  const bytes = [...pad, ...enc('ABC'), ...enc('DEF')];
+  const base = sym.addr('PokemonNames');
+  gb.romByte = (bank, addr) => bytes[addr - base] ?? 0x50;
+  const rom = new RomData(sym, gb, [], gen2);
+  t.eq(rom.speciesName(1), 'ABC', 'species one is the first real name');
+  t.eq(rom.speciesName(2), 'DEF', 'and the shift holds for the rest');
+});
+
+test('a table that starts with a real name is not shifted', async (t) => {
+  // The other half, and the one that matters more: a derivation that always
+  // shifted would break every cartridge that does not need it.
+  const gb = romWithNames(['ABC', 'DEF'], 10);
+  const rom = new RomData(sym, gb, [], gen2);
+  t.eq(rom.speciesName(1), 'ABC', 'entry zero is species one');
+  t.eq(rom.speciesName(2), 'DEF', 'as it has always been');
+});
+
 test('a move id past the count the profile declares is not read at all',
      async (t) => {
   const gb = new FakeGameBoy();
