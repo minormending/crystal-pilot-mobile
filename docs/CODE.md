@@ -4377,7 +4377,7 @@ cartridge will not say which hours are which.
 
 ## 8j. A cartridge that changed everything it could
 
-<!-- covers: titles/polished.js gen2/engine.js gen2/romdata.js gen2/state.js gen2/menus.js @ 8eda7a266f56 -->
+<!-- covers: titles/polished.js gen2/engine.js gen2/romdata.js gen2/state.js gen2/menus.js @ a26d69fffc20 -->
 
 Polished Crystal is the profile in `docs/DEVELOPING.md`'s hack table described
 as "the generic fallback, and the hardest thing to support properly". It is
@@ -4712,6 +4712,31 @@ instructions to reading this one's: `--set 0x2e4` lands on
 the object list read right and `places` measured, standing in Violet City
 discovers six Centers and four Marts — Violet's own doors among them at
 (31,25) and (9,17), which are the same two tiles on Crystal.
+
+**And it has a scripted start, which is the last row that was dark.** Four
+legs — continue the game, downstairs, out of the house, into Elm's lab — over
+four tiles that came out of the warp table rather than a running game: Player's
+House 2F has one warp at (7,0), 1F has two side by side at (8,7) and (9,7),
+and the town warps into the lab at (6,3).
+
+**It stops where the game starts talking**, which is the same shape Crystal's
+takes when no starter is named. On the other side of that last door is Lyra
+and a scene: `nav.walkTo` was measured crossing the lab around the furniture
+and the three people in it and stopping at her trigger with "refused". That
+is the handover point, and it is the game's choice rather than the profile's.
+
+Said plainly because it matters: **this walk has not been run on a live
+game.** The Browser pane this pass had was hidden, and a hidden pane loads a
+ROM and will not step it. Every leg is `through(door, map)` over a declared
+tile, every tile is held to the map graph by `tools/route --reach`, and a
+wrong one makes a leg refuse and name itself — "could not find the stairs" —
+rather than press A at something. That is the weakest claim in this profile
+and the difference is written down rather than smoothed over.
+
+The banner is silent for Polished Crystal now, the same as for Crystal:
+`describeTitle` reads exactly the three things a job row does — a name for a
+map, somewhere to heal, a scripted start — and there is nothing left for it
+to warn about.
 
 **And it has the same gate, found by asking rather than by knowing.**
 `titles/crystal.js` worked that one out by hand over several passes: decode

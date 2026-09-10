@@ -280,3 +280,48 @@ test('every gym is somewhere the cartridge has a name for', async (t) => {
     t.true(!!crystal.names[g.map] || true, `${g.leader}'s town`);
   }
 });
+
+
+// --- what "described" means, across every profile that ships ----------------
+
+test('every shipped profile either drives a cartridge or says what it lacks',
+     async (t) => {
+  // **The banner is the parity marker, and it reads the same things a job
+  // row does**: a name for a map, somewhere to heal, and a scripted start.
+  // Polished Crystal showed "no scripted start" for eight passes, which was
+  // true, and the row it stands for was the last one dark.
+  //
+  // `generic` is the deliberate exception and always will be: it is the
+  // profile for a cartridge nobody has described, and announcing that is its
+  // whole job.
+  for (const title of TITLES) {
+    const said = describeTitle(title, { named: true });
+    if (title.id === 'generic') {
+      t.true(said.show, 'generic says so');
+      continue;
+    }
+    t.false(said.show,
+            `${title.id} needs no announcement — ${said.text || 'silent'}`);
+  }
+});
+
+test('a scripted start walks tiles the profile declares, in order',
+     async (t) => {
+  // Four doors on Polished Crystal and six legs on Crystal, and neither
+  // class names a tile of its own: every one comes out of `places`, which
+  // `tools/route --reach` holds to the map graph. A driver that reached past
+  // its profile for a coordinate is a driver that cannot be checked.
+  for (const title of TITLES) {
+    const run = title.drive && title.drive.prototype.run;
+    if (typeof run !== 'function') continue;
+    const src = run.toString();
+    const named = [...src.matchAll(/\bp\.(\w+)/g)].map((m) => m[1]);
+    t.true(named.length >= 3, `${title.id}: its run walks declared places`);
+    for (const name of new Set(named)) {
+      t.true((title.places || {})[name] !== undefined,
+             `${title.id}: places.${name} is declared`);
+    }
+    t.false(/\[\s*\d+\s*,\s*\d+\s*\]/.test(src),
+            `${title.id}: and no tile is written into the walk itself`);
+  }
+});

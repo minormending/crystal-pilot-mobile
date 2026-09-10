@@ -445,6 +445,29 @@ export const polished = {
     { map: key(26, 4), reach: 'healAtCenter',
       inside: key(26, 6), door: [29,3], nurse: [5,1] }, // Cherrygrove
   ],
+  // The rooms the opening walks through, every tile out of the warp table.
+  //
+  // `tools/route --warps` gives all four in one command: Player's House 2F
+  // has one warp, at (7,0), down to 1F; 1F has two side by side at (8,7) and
+  // (9,7) out to New Bark Town, and (11,0) back up; the town warps into
+  // Elm's lab at (6,3); and the lab's two exits are (4,11) and (5,11). A
+  // door with two tiles is one door twice, the way every building in this
+  // game is drawn, so the first is the one that is walked to.
+  //
+  // Crystal's own eight came from measuring a running game. These are the
+  // same eight facts read out of the cartridge instead, and `tools/route
+  // --reach` holds every one of them to the graph the pilot plans over.
+  places: {
+    playersHouse2f: PLAYERS_HOUSE_2F,
+    stairsDown: [7, 0],
+    playersHouse1f: key(24, 4),
+    frontDoor: [8, 7],
+    newBarkTown: NEW_BARK_TOWN,
+    labDoor: [6, 3],
+    elmsLab: key(24, 3),
+    labExit: [4, 11],
+    route29: key(24, 1),
+  },
   // **The same road, the same man, and the same Egg — found by asking rather
   // than by knowing.** `titles/crystal.js` worked this gate out by hand over
   // several passes: decode the blocker's script, find the event it checks,
@@ -603,5 +626,54 @@ export const polished = {
 export class Polished extends Journey {
   constructor(gb, state, tasks, collision, nav, say, world) {
     super(gb, state, tasks, collision, nav, say, world, polished);
+  }
+
+  /**
+   * Title screen to the door of Elm's lab, and then over to you.
+   *
+   * **Four legs, and it stops where the game starts talking.** Crystal's
+   * `run` goes further -- it hears Elm out, waits at the table, and with a
+   * starter named it takes one and walks to the grass -- because every one
+   * of those steps is a conversation somebody measured on a running
+   * cartridge. This one has not been run on a live game: the Browser pane
+   * this pass had was hidden, and a hidden pane loads a ROM and will not
+   * step it.
+   *
+   * So it does the part that is *walking* and hands over at the part that is
+   * *talking*, which is the same shape Crystal's takes when no starter is
+   * named. Every leg is `through(door, map)` over a tile read out of the
+   * warp table, and every one of those tiles is held to the map graph by
+   * `tools/route --reach`. A wrong tile makes a leg refuse and say which --
+   * "could not find the stairs" -- rather than press A at something.
+   *
+   * What is on the other side of the last door is Lyra, and a scene: the
+   * pass before this measured `nav.walkTo` crossing the lab around the
+   * furniture and the three people in it and stopping at her trigger with
+   * "refused". That is the handover point, and it is the game's choice
+   * rather than this profile's.
+   */
+  async run() {
+    const p = this.title.places;
+    return this.walkLegs([
+      ['starting a new game', async () => {
+        if (await this.tasks.continueGame()) return null;
+        return 'never reached the overworld — is this a Polished Crystal ROM?';
+      }],
+      ['going downstairs', async () =>
+        await this.through(p.stairsDown, p.playersHouse1f)
+          ? null : 'could not find the stairs'],
+      ['out of the house', async () =>
+        await this.through(p.frontDoor, p.newBarkTown)
+          ? null : 'could not get out of the house'],
+      ["into Elm's lab", async () =>
+        await this.through(p.labDoor, p.elmsLab)
+          ? null : 'could not get into the lab'],
+    ], async () => {
+      const now = await this.snap();
+      return { ok: true, handover: true, party: now.party,
+               message: now.party.length
+                 ? 'in the lab — your turn'
+                 : 'in the lab — your turn, Lyra is waiting' };
+    });
   }
 }
