@@ -8,6 +8,7 @@ clean checkout, which is exactly what CI has.
     tools/check-app            run everything
     tools/check-app syntax     just one group
 """
+import json
 import os
 import pathlib
 import re
@@ -17,6 +18,11 @@ import sys
 import tempfile
 
 HERE = pathlib.Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))
+# Shared with `tools/rom-events`, for the same reason `counts.py` is shared with
+# `tools/renumber`: two readers of one directory that disagreed about which
+# cartridge is current would be worse than either.
+import cartridge  # noqa: E402
 ROOT = HERE.parent
 # The app's own source, in dependency order: each directory may import from the
 # ones before it and from none after. Stated here as a list rather than found by
@@ -339,14 +345,13 @@ def check_moves():
     trusting a hand-written table of effect ids, and getting one wrong picks a
     one-hit KO as the gentlest move available.
     """
-    rom_path = ROOT / "dev" / "pokecrystal.gbc"
-    sym_path = ROOT / "dev" / "pokecrystal.sym"
+    rom_path, sym_path = cartridge.cartridge_paths(ROOT)
     src = pathlib.Path(
         os.environ.get("POKECRYSTAL_SOURCE", pathlib.Path.home()
                        / "projects" / "pokecrystal"))
     moves_asm = src / "data" / "moves" / "moves.asm"
     if not (rom_path.exists() and sym_path.exists() and moves_asm.exists()):
-        print("  skip  move ranking (no dev/pokecrystal.gbc + .sym + source)")
+        print("  skip  move ranking (no cartridge in dev/, or no source)")
         return 0
 
     rom = rom_path.read_bytes()
@@ -1502,7 +1507,7 @@ def check_gates():
     if problems:
         return fail(f"{len(problems)} errand(s) that name nothing")
 
-    if not (ROOT / "dev" / "pokecrystal.gbc").exists():
+    if not cartridge.has_cartridge(ROOT):
         return ok("every declared errand exists; no cartridge here, so the "
                   "events and tiles are not checked")
     out = subprocess.run([sys.executable, str(HERE / "rom-events"), "--gates"],
@@ -1610,7 +1615,7 @@ def check_gyms():
     pointer in `MapGroupPointers`, so there is no hand-written table of map
     names to drift. The reading lives in `tools/rom-events --gyms`.
     """
-    if not (ROOT / "dev" / "pokecrystal.gbc").exists():
+    if not cartridge.has_cartridge(ROOT):
         return ok("no cartridge here, so the declared gyms are not checked")
     out = subprocess.run([sys.executable, str(HERE / "rom-events"), "--gyms"],
                          capture_output=True, text=True)
@@ -1667,7 +1672,7 @@ def check_types():
     if problems:
         return fail(f"{len(problems)} type-chart symbol(s) not shared or not read")
 
-    if not (ROOT / "dev" / "pokecrystal.gbc").exists():
+    if not cartridge.has_cartridge(ROOT):
         return ok(f"all {len(optional)} optional symbol(s) shared; no cartridge "
                   f"here, so the chart itself is not checked")
     out = subprocess.run(["node", str(HERE / "types"), "--verify"],
@@ -1723,7 +1728,7 @@ def check_trainers():
     if problems:
         return fail(f"{len(problems)} thing(s) the trainer reader needs")
 
-    if not (ROOT / "dev" / "pokecrystal.gbc").exists():
+    if not cartridge.has_cartridge(ROOT):
         return ok("the trainer layout is declared and its count derived; no "
                   "cartridge here, so the parties are not checked")
     out = subprocess.run(["node", str(HERE / "types"), "--verify"],
@@ -1783,7 +1788,7 @@ def check_menus():
     if problems:
         return fail(f"{len(problems)} box signature(s) not declared or not asked")
 
-    if not (ROOT / "dev" / "pokecrystal.gbc").exists():
+    if not cartridge.has_cartridge(ROOT):
         return ok("every box the app drives declares its shape; no cartridge "
                   "here, so the shapes are not checked")
     out = subprocess.run([sys.executable, str(HERE / "rom-events"), "--menus"],
@@ -1839,7 +1844,7 @@ def check_phrases():
     if problems:
         return fail(f"{len(problems)} screen phrase(s) written into the engine")
 
-    if not (ROOT / "dev" / "pokecrystal.gbc").exists():
+    if not cartridge.has_cartridge(ROOT):
         return ok("no screen phrase is written into the engine; no cartridge "
                   "here, so the phrases are not looked up")
     out = subprocess.run([sys.executable, str(HERE / "rom-events"), "--phrases"],
@@ -2020,8 +2025,51 @@ def check_built_markup():
         else ok("every tag built in JavaScript is closed by the function that opens it")
 
 
+
+def check_cartridge():
+    """Both cartridge finders pick the same pair out of `dev/`.
+
+    The rule for pairing a ROM with a symbol file is written twice -- once in
+    `tools/cartridge.mjs` for the node tools and once in `tools/cartridge.py`
+    for these checks and `rom-events` -- because the two halves of this
+    repository are two languages and neither can call the other cheaply.
+
+    **Two readers of one directory that disagreed about which cartridge is
+    current would be worse than either**, and this project has been caught by
+    exactly that five separate times: a second reader of the map tables that
+    found 1536 maps out of 388, a second charmap in `tools/types`, a second
+    decoder for the type names. The rule is small and the failure is silent --
+    `check-app` would verify one build while `tools/dex` verified another and
+    both would say ok -- so it is held here rather than trusted.
+
+    Skipped with no cartridge, like every other group that needs one: there is
+    nothing to disagree about.
+    """
+    rom, sym, _ = cartridge.find_cartridge(ROOT / "dev")
+    if not rom or not sym:
+        print("  skip  cartridge pairing (nothing in dev/ to pair)")
+        return 0
+    if not shutil.which("node"):
+        return fail("node not found, cannot compare the two finders")
+    script = ("import('./tools/cartridge.mjs').then((m) => {"
+              "const c = m.findCartridge('dev');"
+              "console.log(JSON.stringify(c && [c.rom, c.sym])); });")
+    r = subprocess.run(["node", "--input-type=module", "-e", script],
+                       capture_output=True, text=True, cwd=ROOT)
+    if r.returncode != 0:
+        return fail(f"the node finder would not run: {r.stderr.strip()[:120]}")
+    theirs = json.loads(r.stdout.strip() or "null")
+    mine = [str(rom.relative_to(ROOT)), str(sym.relative_to(ROOT))]
+    if theirs != mine:
+        print(f"        python picks {mine}")
+        print(f"        node picks   {theirs}")
+        return fail("the two cartridge finders disagree")
+    return ok(f"both cartridge finders pick {rom.name} with {sym.name}")
+
+
 CHECKS = {
     "syntax": check_syntax,
+    "cartridge": check_cartridge,
     "layers": check_layers,
     "seam": check_emulator_seam,
     "listeners": check_listeners,

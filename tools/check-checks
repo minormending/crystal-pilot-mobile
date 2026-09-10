@@ -26,6 +26,7 @@ what the group actually greps for -- `s.addr(...)` where the pattern wants
 what the group *claims*, and if it does not, the honest reading is that the
 mutation is wrong.
 """
+import os
 import pathlib
 import shutil
 import subprocess
@@ -69,8 +70,47 @@ def mutations(root):
             p.unlink(missing_ok=True)
         return undo
 
+    def cartridges(*stems):
+        """A `dev/` with one ROM and one symbol file per stem, oldest first.
+
+        Empty files on purpose: the pairing rule reads names and modification
+        times and never a byte, which is the property that lets two finders
+        drift apart without either of them erroring.
+        """
+        dev = root / "dev"
+        dev.mkdir(exist_ok=True)
+        made = []
+        for age, stem in enumerate(reversed(stems)):
+            for ext in (".gbc", ".sym"):
+                f = dev / f"{stem}{ext}"
+                f.write_bytes(b"")
+                os.utime(f, (1_700_000_000 + age * 60,) * 2)
+                made.append(f)
+
+        def undo():
+            for f in made:
+                f.unlink(missing_ok=True)
+            if not any(dev.iterdir()):
+                dev.rmdir()
+        return undo
+
+    def both(*undos):
+        """Apply several mutations as one, undone in reverse."""
+        return lambda: [u() for u in reversed(undos)]
+
     return {
         "syntax": lambda: edit("gen2/state.js", append("\nfunction ((){\n")),
+        # Two builds in dev/, and the node finder made to prefer the older
+        # one where python takes the newer. One cartridge is not enough to
+        # disagree about, and the sandbox has no dev/ at all -- it is rsynced
+        # without one -- so the mutation supplies the state as well as the
+        # break. The files are empty: pairing reads names and timestamps and
+        # never a byte, which is exactly why the two finders can drift apart
+        # without either of them erroring.
+        "cartridge": lambda: both(
+            cartridges("older", "newer"),
+            edit("tools/cartridge.mjs", sub(
+                "  roms.sort(newest);", "  roms.sort(newest).reverse();"))),
         "layers": lambda: edit("gen2/state.js", sub(
             "import", "import { describeRows } from '../app/rows.js';\nimport")),
         "seam": lambda: edit("gen2/state.js", append("\n// probe: gb.core.thing()\n")),
@@ -92,8 +132,8 @@ def mutations(root):
         # loop with no closing tag, which the browser nests instead of
         # rejecting -- so it renders, and looking at it does not find it.
         "builtmarkup": lambda: edit("app/main.js", sub(
-            "      + meter('ev', st.effortPart)\n      + '</div>');",
-            "      + meter('ev', st.effortPart));")),
+            "        + meter('ev', st.effortPart)\n        + '</div>');",
+            "        + meter('ev', st.effortPart));")),
         # A token inside the :root block the group actually parses, set to the
         # background so the pair it is measured against cannot pass.
         "contrast": lambda: edit("index.html", sub("--ink:", "--ink:var(--bg);--was-ink:")),

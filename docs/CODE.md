@@ -6748,7 +6748,7 @@ about that code did not.
 
 ### The other checks
 
-<!-- covers: tools/check-app @ 6884f91c1bca -->
+<!-- covers: tools/check-app @ 380b0ca4983c -->
 
 `tools/check-app` runs everything that can be verified without a ROM:
 
@@ -6760,6 +6760,7 @@ tools/check-app contrast     # or one group
 | Group | Checks |
 | --- | --- |
 | `syntax` | every module parses |
+| `cartridge` | the node and python cartridge finders pick the same ROM and symbol file out of `dev/` |
 | `shell` | the service worker's cached list matches what is on disk, both ways |
 | `markup` | `index.html` tags and CSS braces balance |
 | `builtmarkup` | tags built in a JavaScript template close in the function that opens them |
