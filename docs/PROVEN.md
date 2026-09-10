@@ -4169,6 +4169,77 @@ check is for, because a decode that has lost its class boundaries gives eight
 checker**, because somebody has to read the output — and fifty-six false
 failures is how a person learns to skim past the four true ones.
 
+### A fifty-sixth pass: the hardest one on the list
+
+`polishedcrystal` is described in the developing guide as the generic
+fallback and the hardest thing to support properly, and it earns it: **24 of
+31**, with nineteen renumbered types including FAIRY, a `TypeNames` table of
+one-byte relative offsets where Crystal writes `dw` addresses, 334 species,
+and trainer parties in far banks. It could not be built at all under rgbds
+1.0.2 — `JR target must be between -128 and 127 bytes away, not 65449`, which
+is the same error `PokemonAmbrosia` gave, and the same gate. Not their bug:
+`jr hLCDInterruptFunction` jumps into HRAM and works because the CPU wraps PC
+at 16 bits. **1.0.3 permits the wrap.** Both built on the upgrade, so the
+list has four measured cartridges now rather than two, and Ambrosia reads
+**25 of 31**.
+
+Two things in this repository were wrong, and both were numbers written here
+rather than read from the cartridge.
+
+**The chart's scale.** Polished Crystal writes its multipliers in Q4 fixed
+point — `NOT_VERY_EFFECTIVE EQU 0.5q4 ; $08`, `SUPER_EFFECTIVE EQU 2.0q4 ;
+$20` — where Crystal writes tenths. Read against a declared `neutral: 10`,
+its perfectly correct chart came out as a multiplier of **0.8** and one of
+**3.2**. The bytes were right the whole time.
+
+So `chartUnit()` measures it, and the table describes itself well enough to
+be measured: the two non-zero values in a chart of this shape are a half and
+a double, so the smaller is half of neutral and the larger twice it. **Both
+are used and they must agree** — the larger exactly four times the smaller —
+because one alone cannot tell a half from a quarter. Ten on Crystal, sixteen
+on Polished Crystal, and a chart that answers no such shape keeps the
+declared value rather than a guess derived from it.
+
+`tools/types --verify` was asserting the raw bytes against `{0, 5, 20}` and
+drew two more WRONG lines about "8 tenths" and "32 tenths" — the checker
+contradicting the reader, which is the same failure as asserting in English
+one pass ago. It asks the reader for the scale now.
+
+### Nothing decoded is not an index
+
+**The reader answered an empty map for a table it could not read at all.**
+404 classes on Polished Crystal, not one of them holding a trainer, reported
+as success — and an empty map is an answer every caller believes. The Gym row
+would have said the room ahead was empty rather than unreadable.
+
+The cause is one level up. A `dba` table exists so it *can* cross banks, and
+on pokecrystal16 every entry named the table's own bank — precisely the state
+in which an assumption survives being tested. Polished Crystal points into
+`$7d` and `$79`, Ambrosia into `$34`, and then the first pointer is not the
+end of the table, it is an address the table cannot see. So a bank byte that
+is not the table's own is now refused, and null is the answer.
+
+**There is no bound to substitute, and that is measured, not assumed.** The
+symbol file knows — the next label in the bank ends the table — but the app
+runs from a 45-symbol digest as well as a whole `.sym`, and a reader that
+finds trainers on a desktop and not in a room is worse than one that finds
+none anywhere. Scanning for the last plausible pointer gets Ambrosia exactly
+right at 78 and pokecrystal16 at 67, and then fails on the cartridge that
+motivated it: Polished Crystal's 123rd class points at `$c90f`, which the
+symbol file calls **`wInverGroup`** — a party built in WRAM at run time. A
+table that can point into another bank can point out of the ROM altogether.
+
+One class that will not decode is still only skipped; it is *none of them*
+that loses the table, and there is a test for each side of that, because the
+null is easy to widen by accident into "any failure loses everything".
+
+The remaining failures on both cartridges are true and specific, which is
+what a checker is for: `Switch` where the app looks for `SWITCH`, a switch
+box with four rows where the profile says three, `sent to BILL` in neither
+ROM. **Polished Crystal's 24 is not a near miss** — it is a different
+cartridge that happens to be Gen 2 shaped, and the checks now say so in
+twenty-one lines instead of thirty-nine.
+
 ## The part that had to be redesigned
 
 The desktop pilot hangs its whole design on CPU hooks: the game's own routines
