@@ -51,7 +51,17 @@ const HERE = dirname(fileURLToPath(import.meta.url));
  * `writeSync` on the file descriptor blocks until the bytes are gone.
  */
 function say(text) {
-  writeSync(1, `${text}\n`);
+  try {
+    writeSync(1, `${text}\n`);
+  } catch (e) {
+    // **A closed pipe is a reader that has finished, not an error.**
+    // `console.log` swallowed this and `writeSync` throws it, so
+    // `tools/route --maps | head -1` went from printing one line to
+    // printing one line and a stack trace. Nothing is left to say to
+    // somebody who has stopped listening.
+    if (e && e.code === 'EPIPE') process.exit(0);
+    throw e;
+  }
 }
 const DEV = join(HERE, '..', 'dev');
 
