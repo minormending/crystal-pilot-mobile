@@ -231,6 +231,48 @@ const TYPED = {
 /** A real RomData reading that chart, from bytes. */
 const charted = (chart = CHART) => romReading(TYPED, { chart });
 
+test('what neutral means is measured off the chart, not written here',
+     async (t) => {
+  // Gen 2 writes the multiplier in tenths -- 05 and 20, so neutral is 10.
+  // **Polished Crystal writes Q4 fixed point**, `0.5q4` is $08 and `2.0q4`
+  // is $20, and read as tenths those came out 0.8 and 3.2: the bytes right
+  // and the scale a number in this repository. The two values in the table
+  // describe the scale between them, so it is taken from there.
+  const q4 = [
+    N, ROCK, 0x08,
+    FIRE, GRASS, 0x20,
+    FIRE, WATER, 0x08,
+    ELECTRIC, GROUND, 0,
+    0xff,
+  ];
+  const rom = charted(q4);
+  t.eq(rom.matchup(FIRE, GRASS), 2, 'a double is a double on either scale');
+  t.eq(rom.matchup(N, ROCK), 0.5, 'and a half is a half, not four fifths');
+  t.eq(rom.matchup(ELECTRIC, GROUND), 0, 'nothing is still nothing');
+  t.eq(rom.matchup(FIRE, N), 1, 'and the pairs it omits are neutral');
+  t.eq(charted().chartUnit(), 10, 'the tenths chart is unmoved');
+  t.eq(rom.chartUnit(), 16, 'and this one measures sixteen');
+  // The smallest scale a Gen 2-shaped chart can be written on: a half of 1
+  // and a double of 4. It is here because the zeroes are dropped by asking
+  // for *above zero*, and "above one" reads the same on every chart but
+  // this one -- where it would throw the half away and leave a table with a
+  // single multiplier in it, which measures nothing.
+  t.eq(charted([N, ROCK, 1, FIRE, GRASS, 4, 0xff]).chartUnit(), 2,
+       'a half of one is a multiplier, not an absence');
+});
+
+test('a chart on no scale this reader knows keeps the declared one',
+     async (t) => {
+  // The measurement uses *both* values and requires them to agree -- the
+  // largest exactly four times the smallest -- because one alone cannot
+  // tell a half from a quarter. A table that does not answer that shape is
+  // not a Gen 2 chart, and guessing a scale off it would be worse than the
+  // profile's own number, which is right for every cartridge that ships the
+  // real table.
+  const odd = charted([N, ROCK, 7, FIRE, GRASS, 9, 0xff]);
+  t.eq(odd.chartUnit(), 10, 'the declared unit, not a derived one');
+});
+
 test('the chart comes out of the bytes as the cartridge stores it', async (t) => {
   const rom = charted();
   t.eq(rom.matchup(FIRE, GRASS), 2, 'fire on grass doubles');
@@ -515,7 +557,7 @@ test('a type byte nobody has heard of is not a trainer', async (t) => {
   // at a plausible length, so an unknown value stops the read rather than
   // picking a stride.
   const rom = withTrainers([[['MYSTERY', 9, [[5, 16]]]]]);
-  t.eq(rom.trainerIndex().size, 0, 'nothing was read');
+  t.eq(rom.trainerIndex(), null, 'nothing was read, and that is not an index');
   t.eq(rom.trainer('MYSTERY'), null, 'and it says so');
 });
 
@@ -524,7 +566,7 @@ test('a name with no terminator inside its bound is not a trainer', async (t) =>
     chart: CHART, classes: CLASS_NAMES,
     trainers: [0x9b, 0x59, ...Array.from({ length: 40 }, () => 0x80)],
   });
-  t.eq(rom.trainerIndex().size, 0, 'a bank of letters is not a table');
+  t.eq(rom.trainerIndex(), null, 'a bank of letters is not a table');
 });
 
 test('a pointer table whose first pointer is not past it is not one',
@@ -647,7 +689,7 @@ test('a name that runs to its bound without terminating is not a name',
   // shorter. Reaching the bound means the bytes are not a name table.
   const long = 'A'.repeat(20);
   const rom = withTrainers([[[long, 1, [[4, 19]]]]]);
-  t.eq(rom.trainerIndex().size, 0, 'nothing was read');
+  t.eq(rom.trainerIndex(), null, 'nothing was read');
 });
 
 test('a move with no PP left cannot hurt anything', async (t) => {
@@ -701,7 +743,7 @@ test('fourteen bytes is a name and fifteen is not', async (t) => {
   // symbol file points somewhere else.
   t.eq(withTrainers([[['A'.repeat(14), 1, [[4, 19]]]]]).trainerIndex().size, 1,
        'fourteen is inside it');
-  t.eq(withTrainers([[['A'.repeat(15), 1, [[4, 19]]]]]).trainerIndex().size, 0,
+  t.eq(withTrainers([[['A'.repeat(15), 1, [[4, 19]]]]]).trainerIndex(), null,
        'and fifteen is past it');
 });
 
@@ -1208,6 +1250,37 @@ test('the width is derived, so the two-byte table still reads at two',
   const rom = withTrainers();
   t.eq(rom.trainer('FALKNER').group, 1, 'vanilla, unchanged');
   t.eq(rom.trainerIndex().size, 3, 'three trainers over three classes');
+});
+
+test('a three-byte table pointing into another bank is refused', async (t) => {
+  // Polished Crystal's `TrainerGroups` is `dba` too, and its entries name
+  // banks $7d and $79 -- so its first pointer is not the end of the table,
+  // it is an address in a bank the table cannot see. The arithmetic that
+  // gives 67 classes on pokecrystal16 gave 404 on it. A pointer whose bank
+  // is not the table's own cannot bound the table, so the width is refused
+  // rather than used to count.
+  const rom = romReading(TYPED, {
+    chart: CHART, trainers: trainerBytes(LEADERS, { wide: 3, bank: 0x7d }),
+    classes: CLASS_NAMES,
+  });
+  t.eq(rom.trainerIndex(), null, 'refused rather than miscounted');
+});
+
+test('one unreadable class does not throw away the ones that read',
+     async (t) => {
+  // The other side of "nothing decoded is not an index": a single class the
+  // reader cannot make sense of is skipped, and the three behind it are
+  // still answers. Written because the null is easy to widen by accident
+  // into "any failure loses the table".
+  const rom = romReading(TYPED, {
+    chart: CHART, classes: CLASS_NAMES,
+    trainers: trainerBytes([...LEADERS, [['MYSTERY', 9, [[5, 16]]]]]),
+    species: { 16: [N, 0x02], 17: [N, 0x02], 11: [BUG, BUG], 14: [BUG, 0x03],
+               123: [BUG, 0x02], 35: [N, N], 241: [N, N] },
+  });
+  t.eq(rom.trainerIndex().size, 3, 'the three that decode');
+  t.eq(rom.trainer('FALKNER').group, 1, 'and they are the right three');
+  t.eq(rom.trainer('MYSTERY'), null, 'the fourth is not among them');
 });
 
 test('a table whose first pointer fits no width at all is not a table',

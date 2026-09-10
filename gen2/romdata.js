@@ -427,6 +427,12 @@ export class RomData {
         at = read.next;
       }
     }
+    // Nothing decoded is *cannot read this table*, not "this cartridge has
+    // no trainers". An empty map is an answer, and every caller believes it:
+    // the Gym row would have said the room ahead is empty. Polished Crystal
+    // is where that mattered -- 404 classes of nothing -- and null is what
+    // the rest of the app is already written to handle.
+    if (!out.size) return (this._trainers = null);
     return (this._trainers = out);
   }
 
@@ -454,6 +460,14 @@ export class RomData {
       const first = this.gb.romByte(bank, at)
         | (this.gb.romByte(bank, at + 1) << 8);
       const gap = first - addr;
+      // A bank byte that is not the table's own makes the gap meaningless:
+      // the first entry is then somewhere else entirely and does not mark
+      // where these pointers stop. Polished Crystal's table is `dba` into
+      // banks $7d and $79, and the arithmetic that gives 67 classes on
+      // pokecrystal16 gave 404 on it -- none of which held a trainer, since
+      // that cartridge's party records are a different shape as well. So a
+      // cross-bank table is refused rather than counted.
+      if (wide > 2 && this.gb.romByte(bank, addr) !== bank) continue;
       if (gap > 0 && gap % wide === 0
           && (first & 0xc000) === (addr & 0xc000)) {
         return wide;
@@ -864,9 +878,46 @@ export class RomData {
     if (!table) return null;
     if (attack === null || attack === undefined) return null;
     if (defend === null || defend === undefined) return null;
+    const unit = this.chartUnit();
     const found = table.get((attack << 8) | defend);
-    const tenths = found === undefined ? this.e.damage.neutral : found;
-    return tenths / this.e.damage.neutral;
+    const raw = found === undefined ? unit : found;
+    return raw / unit;
+  }
+
+  /**
+   * What byte value means *neutral* in this cartridge's chart, measured.
+   *
+   * Gen 2 writes the multiplier in tenths, so 05 is a half and 20 is a
+   * double and neutral -- which is never written down, being the case the
+   * table omits -- is 10. **Polished Crystal writes Q4 fixed point**: its
+   * own constants are `NOT_VERY_EFFECTIVE EQU 0.5q4 ; $08` and
+   * `SUPER_EFFECTIVE EQU 2.0q4 ; $20`, and read as tenths those became a
+   * multiplier of 0.8 and one of 3.2. The bytes were right and the scale
+   * was a number written in this file.
+   *
+   * So it is taken from the table instead, which describes itself: the two
+   * non-zero values in a Gen 2-shaped chart are a half and a double, so the
+   * smallest is half of neutral and the largest is twice it. Both are used
+   * and they must agree -- the largest exactly four times the smallest --
+   * because one of them alone cannot tell a half from a quarter.
+   *
+   * A chart that does not answer that shape keeps the profile's declared
+   * value rather than a guess derived from it. That is the conservative
+   * direction: the declared 10 is right for every cartridge that ships the
+   * Gen 2 table, and a chart with three distinct multipliers in it is a
+   * chart this reader was not written for either way.
+   */
+  chartUnit() {
+    if (this._unit !== undefined) return this._unit;
+    const declared = this.e.damage.neutral;
+    const table = this.matchups();
+    if (!table) return (this._unit = declared);
+    const seen = [...new Set([...table.values()])].filter((v) => v > 0);
+    if (!seen.length) return (this._unit = declared);
+    const half = Math.min(...seen);
+    const double = Math.max(...seen);
+    if (double !== half * 4) return (this._unit = declared);
+    return (this._unit = half * 2);
   }
 
   /**

@@ -683,7 +683,7 @@ and in `bootstrap.js`, with nothing able to notice if they drifted.
 
 ### `romdata.js` — what the cartridge knows
 
-<!-- covers: gen2/romdata.js @ 9d1c6c57bb4c -->
+<!-- covers: gen2/romdata.js @ f618fc7c00d6 -->
 
 Species names, item names, move names, wild-encounter tables, move power, the
 type chart, and what a species turns into. All read out of the ROM, not shipped
@@ -1697,7 +1697,7 @@ mechanism's evidence spans two runs rather than one.
 
 ### The bigger number is not the harder hit
 
-<!-- covers: gen2/romdata.js gen2/engine.js gen2/battle.js @ d491a81a4749 -->
+<!-- covers: gen2/romdata.js gen2/engine.js gen2/battle.js @ 896424ae50b4 -->
 
 For twenty-three passes the pilot ranked its moves by one number: the `power`
 byte out of the cartridge's move table. `romdata.move()` had been returning the
@@ -1741,6 +1741,18 @@ to read it wrongly and get a chart out rather than an error:
   gap. That is why `matchups()` hands back the map and lets `matchup()` decide
   what a miss means, instead of trying to fill in a grid of 289 pairs it was
   never told about.
+- **Which is *this* cartridge's scale, and it is measured rather than assumed.**
+  Polished Crystal writes the same chart in Q4 fixed point — its own constants
+  are `NOT_VERY_EFFECTIVE EQU 0.5q4 ; $08` and `SUPER_EFFECTIVE EQU 2.0q4 ;
+  $20` — and read as tenths those came out as a multiplier of 0.8 and one of
+  3.2. The bytes were right; the ten was a number written in this repository.
+  `chartUnit()` takes it off the table instead, which describes itself: the two
+  non-zero values in a chart of this shape are a half and a double, so the
+  smaller is half of neutral and the larger is twice it. **Both are used and
+  they have to agree** — the larger exactly four times the smaller — because
+  one of them alone cannot tell a half from a quarter. A chart that answers no
+  such shape keeps the profile's declared 10, which is right for every
+  cartridge that ships the real table.
 - **`$fe` is one byte where every row is three.** It marks the rows Foresight
   cancels. Read it as a row and it swallows the row behind it — `NORMAL` on
   `GHOST` — and shifts everything after by two bytes. Which is silent: what
@@ -2194,7 +2206,7 @@ fainted.
 
 ## 7. Catching something
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ a843644deb2d -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ ea942c223f46 -->
 
 Catching is the most involved loop, because a Poké Ball's odds turn on how much
 HP is left. Throwing at a full-health target is mostly throwing balls away.
@@ -3442,7 +3454,7 @@ after](#8d-a-route-the-game-itself-refuses).
 
 ## 8b. Asking the cartridge what its places are called
 
-<!-- covers: gen2/romdata.js gen2/world.js @ 63c4dc2d81cf -->
+<!-- covers: gen2/romdata.js gen2/world.js @ 67c7e442bab8 -->
 
 The one table that **retires** hand-written data rather than adding to it. A map
 used to be called whatever the title profile said, and everything else was
@@ -3976,7 +3988,7 @@ sent the reader at it.
 
 ## 8h. What a species becomes, and when
 
-<!-- covers: gen2/romdata.js gen2/engine.js @ a7f9664c3495 -->
+<!-- covers: gen2/romdata.js gen2/engine.js @ bf35b35e3cd7 -->
 
 Two questions a party entry cannot answer: *what will this turn into*, and
 *what is it about to learn*. Both are in one table, because in Gen 2 they are
@@ -4068,7 +4080,7 @@ file says they do.
 
 ## 8i. Reaching an hour
 
-<!-- covers: gen2/jobs.js gen2/engine.js gen2/romdata.js gen2/state.js gbcore/saves.js app/rows.js @ fe9b79e21f3c -->
+<!-- covers: gen2/jobs.js gen2/engine.js gen2/romdata.js gen2/state.js gbcore/saves.js app/rows.js @ 6145f89b60cb -->
 
 A third of Johto's grass is behind the clock. HOOTHOOT is on Route 29 after
 dark and nowhere on it at noon, and for four versions the usage guide said the
@@ -4930,7 +4942,7 @@ before a step is taken, so a stopped walk does not move at all.
 
 ### What is behind the Gym door, before you open it
 
-<!-- covers: gen2/romdata.js gen2/engine.js app/rows.js @ 739604267509 -->
+<!-- covers: gen2/romdata.js gen2/engine.js app/rows.js @ 9c1373e2aab6 -->
 
 The Gym row could say where the Gym is and who is in it. **Whether it is worth
 going** is two facts the cartridge has had all along, and neither of them
@@ -4991,10 +5003,33 @@ get a plausible table out:
   table holds 67 classes — which is the cross-check, since pokecrystal16 did
   not add classes, it widened the pointers to them.
 - **A `dba` entry's bank is honoured rather than assumed.** Such a table exists
-  so it *can* cross banks; on the one cartridge measured every entry names the
-  table's own bank, which is exactly the state in which an assumption survives
-  being tested. A class whose successor lives in another bank is unbounded, the
-  way the last one is, because two addresses in different banks do not compare.
+  so it *can* cross banks; on pokecrystal16 every entry names the table's own
+  bank, which is exactly the state in which an assumption survives being
+  tested. A class whose successor lives in another bank is unbounded, the way
+  the last one is, because two addresses in different banks do not compare.
+- **And a table that really does cross banks is refused, not counted.** Both
+  Polished Crystal and PokemonAmbrosia put their trainer data in far banks —
+  `dba` into `$7d` and `$34` — and then the first pointer is not the end of the
+  table, it is an address somewhere the table cannot see. The arithmetic that
+  gives 67 classes on pokecrystal16 gives **404** on Polished Crystal, not one
+  of them holding a trainer. So a width whose bank byte is not the table's own
+  is rejected, and the answer is *cannot read this table*.
+
+  There is no bound to substitute, and that was measured rather than assumed.
+  The symbol file knows — the next label in the bank ends it — but the app is
+  built to run from a 45-symbol digest as well as a whole `.sym`, and a reader
+  that finds trainers on a desktop and not in a room is worse than one that
+  finds none anywhere. Scanning for the last plausible pointer fails on the
+  cartridge that motivated it: **Polished Crystal's 123rd class points at
+  `$c90f`, which the symbol file calls `wInverGroup` — a party built in WRAM
+  at run time.** A table that can point into another bank can point out of the
+  ROM altogether.
+- **Nothing decoded is not an index.** The reader used to answer an empty map
+  there, and every caller believes an empty map: the Gym row would have said
+  the room ahead was empty rather than unreadable. Null is what the rest of
+  the app is already written to handle. One class that will not decode is
+  still only skipped — the three behind it are answers — and it is *none of
+  them decoding* that loses the table.
 
 **Independently confirmed twice over**, which is the point of deriving it
 rather than copying it. Classes 1 to 8 all come out `LEADER`, 9 is `RIVAL`, 11
@@ -5020,7 +5055,7 @@ is the noise this list exists to replace.
 
 ### Leading with the one that can answer the room
 
-<!-- covers: gen2/romdata.js gen2/menus.js gen2/journey.js @ d220e4e61b24 -->
+<!-- covers: gen2/romdata.js gen2/menus.js gen2/journey.js @ ab50b7b2d468 -->
 
 **Gen 2 sends out slot one and asks nobody.** So the party's order decides the
 first battle of a Gym — and since the pass before, the pilot has known exactly

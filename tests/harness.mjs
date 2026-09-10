@@ -704,6 +704,10 @@ export function fakeRom({ moves = {}, species = {}, items = {}, chart = [],
     outlook: RomData.prototype.outlook,
     bestLead: RomData.prototype.bestLead,
     matchups() { return CHART; },
+    // Borrowed, not stubbed: what neutral *is* is measured off the chart the
+    // fake hands back, so a test that builds a chart on another scale gets
+    // the same arithmetic the cartridge does.
+    chartUnit: RomData.prototype.chartUnit,
     matchup: RomData.prototype.matchup,
     effectiveness: RomData.prototype.effectiveness,
     hitPower: RomData.prototype.hitPower,
