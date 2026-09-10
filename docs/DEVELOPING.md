@@ -136,7 +136,7 @@ flowchart BT
     T -.-> V
     M -.->|"survivors, by file"| R(["the suite is load-bearing"])
     K -.->|"35 of 35 bite"| R2(["the groups are awake"])
-    V -.->|"62%, and where"| R3(["the gaps are known"])
+    V -.->|"63%, and where"| R3(["the gaps are known"])
 ```
 
 The two on the right are the same idea pointed at different subjects, and the

@@ -4377,7 +4377,7 @@ cartridge will not say which hours are which.
 
 ## 8j. A cartridge that changed everything it could
 
-<!-- covers: titles/polished.js gen2/engine.js gen2/romdata.js gen2/state.js gen2/menus.js @ 651d2883aca9 -->
+<!-- covers: titles/polished.js gen2/engine.js gen2/romdata.js gen2/state.js gen2/menus.js @ 8eda7a266f56 -->
 
 Polished Crystal is the profile in `docs/DEVELOPING.md`'s hack table described
 as "the generic fallback, and the hardest thing to support properly". It is
@@ -4712,6 +4712,28 @@ instructions to reading this one's: `--set 0x2e4` lands on
 the object list read right and `places` measured, standing in Violet City
 discovers six Centers and four Marts — Violet's own doors among them at
 (31,25) and (9,17), which are the same two tiles on Crystal.
+
+**And it has the same gate, found by asking rather than by knowing.**
+`titles/crystal.js` worked that one out by hand over several passes: decode
+the blocker's script, find the event it checks, search the whole ROM for what
+sets it, ask the symbol file whose script that landed in. With this
+cartridge's own script opcodes derived, `tools/rom-events --map Route32`
+does all four in one command and answers
+
+```
+checkevent $0033  at Route32CooltrainerMTrigger+6
+    set by VioletPokeCenter1FElmsAideScript.AskTakeEgg+9
+```
+
+— the same man on the same tile (18,8) wanting the same Egg, at event `$33`
+where Crystal numbers it `$2d`, from an aide who stands at (10,2) rather than
+(4,3). `check-app gates` holds the whole claim as one: *the thing that sets
+this event stands on this tile on this map*.
+
+Three of the four hits for `$0033` resolve to bare offsets like `$19f5e2`,
+which is the clearest data there is — the label function only answers that
+when a pointer landed nowhere near a symbol — so those are labelled data now
+rather than listed beside the real setter.
 
 **And five grassy maps, which are the one list here that is not derived.**
 Every map with a grass table is a correct answer to "where is there grass",

@@ -628,7 +628,12 @@ def verify(cart):
 # straight in. Crystal names all of its; a profile whose eight gyms came out
 # of `--findgyms` in one paste has no reason to name sixteen maps once each,
 # and `tools/route --reach` already reads both forms for the same reason.
-MAP_REF = r'(\w+|key\(\d+,\s*\d+\))'
+# **The written form has to come first.** As `(\w+|key(...))` the plain-name
+# alternative matched the four letters of `key` and stopped, which a gym
+# survived only because a comma follows and forces a backtrack. A gate's
+# `at:` has no comma after it, so every gate on a generated profile read as
+# a map called "key".
+MAP_REF = r'(key\(\d+,\s*\d+\)|\w+)'
 GYM = re.compile(r'\{\s*map:\s*' + MAP_REF + r',\s*inside:\s*' + MAP_REF
                  + r',\s*door:\s*\[(\d+),\s*(\d+)\],'
                  r'\s*\n?\s*leader:\s*[\'"](\w+)[\'"],\s*leaderAt:\s*\[(\d+),\s*(\d+)\],'
@@ -1697,10 +1702,10 @@ def load():
 # silently did nothing. These objects nest no braces, so `[^{}]*` is exact and
 # cannot run past the end of one.
 GATE = re.compile(r'\{[^{}]*?\bevent:\s*(0x[0-9a-f]+)[^{}]*\}', re.S)
-GATE_FROM = re.compile(r'\bfrom:\s*(\w+)')
-GATE_TO = re.compile(r'\bto:\s*(\w+)')
+GATE_FROM = re.compile(r'\bfrom:\s*' + MAP_REF)
+GATE_TO = re.compile(r'\bto:\s*' + MAP_REF)
 GATE_NEEDS = re.compile(r'\bneeds:\s*[\'"]([^\'"]*)[\'"]')
-GATE_AT = re.compile(r'\bat:\s*(\w+)')
+GATE_AT = re.compile(r'\bat:\s*' + MAP_REF)
 
 
 class _Blank:
@@ -1729,7 +1734,12 @@ GATE_ERRAND = re.compile(r'\berrand:\s*[\'"](\w+)[\'"]')
 # So this labels rather than judges. Naming every hit and letting a person read
 # the list is the honest tool; a filter that silently drops a real setter would
 # be worse than the noise.
-DATA_ISH = re.compile(r'Frames|Gfx|Palette|Tiles|Anim')
+#
+# A hit that resolves to a bare `$0abcde` is the clearest case of all: the
+# label function only answers that when the pointer landed nowhere near any
+# symbol, which is not somewhere a script lives. Three of Polished Crystal's
+# four hits for `$0033` are those, in the middle of its data banks.
+DATA_ISH = re.compile(r'Frames|Gfx|Palette|Tiles|Anim|^\$[0-9a-f]+$')
 
 
 def gates(cart, name_of=None):
@@ -1778,7 +1788,14 @@ def gates(cart, name_of=None):
             # the event.
             if not (tile and where and name_of):
                 continue
-            room = keys.get(where.group(1))
+            # A named constant or a written `key(g, n)`, the same two forms
+            # `gyms` and `marts` take -- a profile whose maps came out of the
+            # cartridge in one paste has no `const` for any of them.
+            ref = where.group(1)
+            written = INLINE_KEY.fullmatch(ref)
+            room = keys.get(ref) or (
+                (int(written.group(1)), int(written.group(2)))
+                if written else None)
             room_name = name_of(room) if room else None
             if not room_name:
                 print(f'  ?? no symbol for the map named by `at`')

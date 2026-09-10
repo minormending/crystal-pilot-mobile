@@ -445,6 +445,36 @@ export const polished = {
     { map: key(26, 4), reach: 'healAtCenter',
       inside: key(26, 6), door: [29,3], nurse: [5,1] }, // Cherrygrove
   ],
+  // **The same road, the same man, and the same Egg — found by asking rather
+  // than by knowing.** `titles/crystal.js` worked this gate out by hand over
+  // several passes: decode the blocker's script, find the event it checks,
+  // search the whole ROM for what sets it, ask the symbol file whose script
+  // that landed in. `tools/rom-events --map Route32` does all four in one
+  // command, and on this cartridge it answers:
+  //
+  //     checkevent $0033  at Route32CooltrainerMTrigger+6
+  //         set by VioletPokeCenter1FElmsAideScript.AskTakeEgg+9
+  //
+  // Event `$33` here where Crystal numbers it `$2d`, and every other field
+  // read off the same cartridge: the trigger is the coord event at (18,8) on
+  // Route 32, the same tile Crystal's man stands on, and the aide is object 1
+  // of Violet's Center at **(10,2)** — a script object, whose own script is
+  // the only thing in the ROM that sets the bit.
+  //
+  // That last claim is what `check-app gates` holds: *the thing that sets
+  // this event stands on this tile on this map*. It is one entry so it can be
+  // checked as one.
+  //
+  // The pilot cannot take the Egg for you — the aide asks a yes-or-no and
+  // that is a conversation, not a walk — so `talkToOpen` turns the road's own
+  // refusal into an instruction. It names a method on the driver the way
+  // `reach` does on a healer, and nothing in it knows which cartridge it is
+  // on: it takes the door out of the Center this profile already declares.
+  gates: [
+    { from: key(10, 3), to: key(10, 1), event: 0x33,
+      needs: 'the Egg from Elm’s aide', at: key(10, 8),
+      tile: [10, 2], errand: 'talkToOpen' },
+  ],
   // Where to go looking for grass when there is none underfoot. Five early
   // Johto routes, the same fallback `titles/crystal.js` declares three of.
   //
