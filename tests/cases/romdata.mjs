@@ -1164,6 +1164,44 @@ test('a type says its own name, out of the cartridge', async (t) => {
   t.eq(rom.typeName(1), 'FIGHTING', 'the longest one still fits');
 });
 
+test('a relative name table is read as one, without being told', async (t) => {
+  // Polished Crystal writes `TypeNames` as `dr`, which assembles as
+  // `db X - @`: one byte per entry, an offset from that entry's *own*
+  // address. Read as Crystal's `dw` it gives an address in the wrong part of
+  // the bank and every name comes back empty -- which is what it did.
+  const names = ['NORMAL', 'FIGHTING', 'FLYING'];
+  const enc = (t2) => [...t2].map((c) => 0x80 + c.charCodeAt(0) - 65);
+  // Entries first, then the strings behind them, and each entry holds the
+  // distance from itself to its own string.
+  const bytes = [];
+  let at = names.length;
+  for (let i = 0; i < names.length; i++) {
+    bytes.push(at - i);
+    at += names[i].length + 1;
+  }
+  for (const n of names) bytes.push(...enc(n), 0x50);
+  const rom = romReading({}, { typeNames: bytes });
+  t.eq(rom.typeName(0), 'NORMAL', 'the first');
+  t.eq(rom.typeName(1), 'FIGHTING', 'the second, from its own origin');
+  t.eq(rom.typeName(2), 'FLYING', 'and the third');
+});
+
+test('the terminator is measured off the table, not written here', async (t) => {
+  // Polished Crystal ends a string with $53 where Crystal ends it with $50 --
+  // its whole charmap is shifted. A name table lays its strings end to end,
+  // so the second entry starts one byte past the first one's terminator, and
+  // the table says what that byte is.
+  const addr = symbols().addr('TypeNames');
+  const enc = (t2) => [...t2].map((c) => 0x80 + c.charCodeAt(0) - 65);
+  const first = addr + 4, second = first + 7;
+  const bytes = [first & 0xff, first >> 8, second & 0xff, second >> 8,
+                 ...enc('NORMAL'), 0x53, ...enc('FIGHTING'), 0x53];
+  const rom = romReading({}, { typeNames: bytes });
+  t.eq(rom.terminator(), 0x53, 'measured, not assumed');
+  t.eq(rom.typeName(0), 'NORMAL', 'and the name ends where it ends');
+  t.eq(rom.typeName(1), 'FIGHTING', 'both of them');
+});
+
 test('a cartridge that will not name its types says nothing, not "type 20"',
      async (t) => {
   const rom = romReading({}, {});
@@ -1175,7 +1213,11 @@ test('a type nobody asked about is not type zero', async (t) => {
   // ask -- and zero is falsy, so the guard has to name null and undefined
   // rather than testing the id for truth.
   const sym = symbols();
-  const rom = romReading({}, { typeNames: typeNameRegion({ 0: 'NORMAL' }, sym) });
+  // Two names, because one is not a table: the reader proves the shape by
+  // reading entry 0 and entry 1 as a pair, which is also how it measures the
+  // terminator. A single-entry fixture tests a cartridge that cannot exist.
+  const rom = romReading({}, {
+    typeNames: typeNameRegion({ 0: 'NORMAL', 1: 'FIGHTING' }, sym) });
   t.eq(rom.typeName(0), 'NORMAL', 'zero is a real type id');
   t.eq(rom.typeName(null), '', 'null is not');
   t.eq(rom.typeName(undefined), '', 'nor is nothing at all');

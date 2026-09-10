@@ -212,6 +212,13 @@ export const gen2 = {
   // thing about it a hack could change, and because a dex entry that says
   // "type 20" has not answered the question.
   typeNameMax: 12,
+  // How an entry of `TypeNames` points at its name, in order of preference.
+  // Crystal writes `dw`: two bytes, an address in the table's own bank.
+  // Polished Crystal writes `dr`, which assembles as `db X - @` -- one byte,
+  // an offset from the entry's *own* address, so the table is a third the
+  // size and every entry has a different origin. Which one a cartridge uses
+  // is derived rather than declared; see `_typeNameKind`.
+  typeNamePointers: ['dw', 'dr'],
 
   // --- names ---------------------------------------------------------------
   // PokemonNames is fixed-width; ItemNames is packed with a terminator between

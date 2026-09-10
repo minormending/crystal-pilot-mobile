@@ -58,6 +58,23 @@ const PACKED_NAME_MAX = 24;
 // "CIANWOOD CITY" is the longest in Johto at thirteen.
 const LANDMARK_BYTES = 4, LANDMARK_NAME = 2, LANDMARK_NAME_MAX = 24;
 
+/**
+ * Whether a byte could be part of a name -- a letter, a digit, a space, a
+ * line break or one of the punctuation marks above.
+ *
+ * Used to tell a name table from bytes that merely decode into one. It says
+ * nothing about *which* character: two cartridges can disagree about that and
+ * still agree that $8d is a letter, which is all this is asked.
+ *
+ * Not exported: the only caller is `_nameRun` two hundred lines down, and an
+ * export nothing outside the module reads is a wider surface for nothing.
+ */
+function isNameByte(b) {
+  return (b >= 0x80 && b <= 0xb9) || b === 0x7f || LINE_BREAKS.has(b)
+    || b === POKE_LIGATURE || PUNCTUATION[b] !== undefined
+    || (b >= 0xf6 && b <= 0xff && b !== TABLE_END);
+}
+
 /** The game's own character encoding, as far as names use it. */
 export function decodeText(bytes) {
   let out = '';
@@ -242,9 +259,10 @@ export class RomData {
   _terminatedName({ bank, addr }, ptr, max) {
     if (!ptr) return '';
     const bytes = [];
+    const end = this._term === undefined ? NAME_TERMINATOR : this._term;
     for (let i = 0; i < max; i++) {
       const b = this.gb.romByte(bank, ptr + i);
-      if (b === NAME_TERMINATOR) return decodeText(bytes);
+      if (b === end || b === NAME_TERMINATOR) return decodeText(bytes);
       if (b === undefined) return '';
       bytes.push(b);
     }
@@ -854,12 +872,99 @@ export class RomData {
     if (!this.typeNames || id === undefined || id === null) return '';
     if (!this._typeNames) this._typeNames = new Map();
     if (this._typeNames.has(id)) return this._typeNames.get(id);
-    const { bank, addr } = this.typeNames;
-    const ptr = this.gb.romByte(bank, addr + id * 2)
-      | (this.gb.romByte(bank, addr + id * 2 + 1) << 8);
-    const name = this._terminatedName(this.typeNames, ptr, this.e.typeNameMax);
+    const kind = this._typeNameKind();
+    const name = kind ? this._typeNameAt(kind, id) : '';
     this._typeNames.set(id, name);
     return name;
+  }
+
+  /** Where entry `id` of `TypeNames` points, the way `kind` says it does. */
+  _typeNameTarget(kind, id) {
+    const { bank, addr } = this.typeNames;
+    // `dr` is one byte from the entry's own address; `dw` is two bytes
+    // holding an address. The origin differs as much as the width does,
+    // which is why this is not a width like the trainer table's.
+    const at = addr + id * (kind === 'dr' ? 1 : 2);
+    return kind === 'dr'
+      ? at + this.gb.romByte(bank, at)
+      : this.gb.romByte(bank, at) | (this.gb.romByte(bank, at + 1) << 8);
+  }
+
+  /** One entry of `TypeNames`, read the way `kind` says it points. */
+  _typeNameAt(kind, id) {
+    return this._terminatedName(this.typeNames,
+                                this._typeNameTarget(kind, id),
+                                this.e.typeNameMax);
+  }
+
+  /**
+   * How this cartridge's `TypeNames` points at its names, or null.
+   *
+   * **Derived, and the table proves itself.** A wrong reading of it does not
+   * fail, it returns `????????????` for every type -- which is what Polished
+   * Crystal gave for eleven ids until this existed, because it writes `dr`
+   * where Crystal writes `dw`.
+   *
+   * The test is that the first two entries both decode to a terminated name
+   * inside the bound, and that the second one starts after the first one
+   * ends. One entry alone is not enough: a byte pair read as an address can
+   * land on a name that belongs to something else, and one name is a
+   * coincidence a table cannot be told apart from. Two consecutive ones in
+   * the right order is the shape of a name table and nothing else's.
+   */
+  _typeNameKind() {
+    if (this._typeKind !== undefined) return this._typeKind;
+    this._typeKind = null;
+    for (const kind of this.e.typeNamePointers) {
+      const run = this._nameRun(this._typeNameTarget(kind, 0),
+                               this._typeNameTarget(kind, 1));
+      if (run) {
+        this._typeKind = kind;
+        this._term = run.terminator;
+        break;
+      }
+    }
+    return this._typeKind;
+  }
+
+  /**
+   * Two adjacent names, checked as a pair, and the byte that separates them.
+   *
+   * A name table lays its strings end to end, so the *second* entry starts
+   * one byte after the first one's terminator -- which means the table says
+   * what its terminator is, and nobody has to write it down. Polished
+   * Crystal ends a string with **`$53`** where Crystal ends it with `$50`;
+   * its whole charmap is shifted, and read with Crystal's terminator every
+   * type name ran to its bound and came back empty.
+   *
+   * Checked as a pair because one name is a coincidence: a byte pair read as
+   * an address lands on letters often enough. Two, in order, with only
+   * letters between them and one byte left over, is the shape of a name
+   * table and not much else's.
+   */
+  _nameRun(from, to) {
+    const { bank } = this.typeNames;
+    const len = to - from - 1;
+    if (len <= 0 || len >= this.e.typeNameMax) return null;
+    for (let i = 0; i < len; i++) {
+      const b = this.gb.romByte(bank, from + i);
+      if (b === undefined || !isNameByte(b)) return null;
+    }
+    return { terminator: this.gb.romByte(bank, to - 1) };
+  }
+
+  /**
+   * The byte this cartridge ends a name with.
+   *
+   * Measured off `TypeNames` and used for every name in the ROM, because a
+   * cartridge has one alphabet: species, items, moves, landmarks and trainer
+   * classes all end the same way. The profile's `$50` stands where there is
+   * no such table to measure -- which is the state Crystal itself is
+   * indistinguishable from, since `$50` is what it would measure.
+   */
+  terminator() {
+    this._typeNameKind();
+    return this._term === undefined ? NAME_TERMINATOR : this._term;
   }
 
   /**
