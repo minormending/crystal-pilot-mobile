@@ -2,7 +2,8 @@
 // about. Cheap to test and worth testing, because everything downstream trusts
 // it -- a misread here shows up much later as a bad decision.
 import { FakeGameBoy, blindTo, markSaved, symbols, test, worldRam } from '../harness.mjs';
-import { dvsOf, GameState, statusOf } from '../../gen2/state.js';
+import { dvsOf, GameState, monLayout, statusOf } from '../../gen2/state.js';
+import { Symbols } from '../../gen2/symbols.js';
 import { gen2 } from '../../gen2/engine.js';
 
 test('a party is read back with levels, HP and moves intact', async (t) => {
@@ -563,4 +564,87 @@ test('the time of day is in the snapshot, not fetched on the side', async (t) =>
   const blind = new GameState(blindTo(sym, 'wTimeOfDay'));
   t.eq(blind.read(worldRam(sym, { timeOfDay: 2 })).timeOfDay, null,
        'and null where the cartridge will not say');
+});
+
+
+// --- where the fields of a party entry are --------------------------------
+//
+// Polished Crystal moves five of them: six one-byte EVs where Crystal has
+// five 16-bit counters, so the DVs land at 0x11 and PP, happiness and caught
+// data shift down behind them. Nothing had to be written down for it, because
+// the symbol file names every field on both cartridges.
+
+/** A symbol table naming a party entry laid out like this. */
+const laidOut = (fields) => new Symbols(
+  ['01:d000 wPartyMon1',
+   ...Object.entries(fields).map(([name, at]) =>
+     `01:${(0xd000 + at).toString(16)} wPartyMon1${name}`)].join('\n'));
+
+test('the party layout is read off the symbol file, not the profile',
+     async (t) => {
+  // Crystal's own offsets, and they are the profile's too -- which is the
+  // point: the derivation has to agree with the number it replaces before it
+  // is allowed to replace it anywhere else.
+  const crystal = laidOut({ Species: 0, Item: 1, Moves: 2, Exp: 8, StatExp: 0x0b,
+                            DVs: 0x15, PP: 0x17, Happiness: 0x1b,
+                            CaughtData: 0x1d, Level: 0x1f, Status: 0x20,
+                            HP: 0x22, MaxHP: 0x24, Stats: 0x26 });
+  const got = monLayout(crystal, gen2);
+  t.eq(got.dvs, gen2.mon.dvs, 'DVs where the profile says');
+  t.eq(got.statExp, gen2.mon.statExp, 'and the counters');
+  t.eq(got.dvBytes, 2, 'two bytes of DVs');
+  t.eq(got.statExpBytes, 10, 'and ten of effort — five counters of two');
+});
+
+test('a cartridge that moved them is followed, not corrected', async (t) => {
+  // Polished Crystal's, measured off its own build.
+  const polished = laidOut({ Species: 0, Item: 1, Moves: 2, Exp: 8, EVs: 0x0b,
+                             DVs: 0x11, Personality: 0x14, PP: 0x16,
+                             Happiness: 0x1a, CaughtData: 0x1c, Level: 0x1f,
+                             Status: 0x20, HP: 0x22, MaxHP: 0x24, Stats: 0x26 });
+  const got = monLayout(polished, gen2);
+  t.eq(got.dvs, 0x11, 'DVs four bytes earlier than Crystal keeps them');
+  t.eq(got.pp, 0x16, 'PP behind them');
+  t.eq(got.happiness, 0x1a, 'and happiness');
+  t.eq(got.caught, 0x1c, 'and the caught data');
+  t.eq(got.statExp, 0x0b, 'effort starts in the same place');
+  t.eq(got.statExpBytes, 6, 'but is six bytes, not ten');
+  // The width is the whole reason `Personality` is looked up at all: it sits
+  // between the DVs and the PP, and without it the DV field measures five.
+  t.eq(got.dvBytes, 3, 'three bytes of DVs');
+});
+
+test('a symbol file that names no field keeps the profile', async (t) => {
+  // The state every cartridge was in before this, and the one a digest built
+  // by an older build arrives in.
+  const bare = new Symbols('01:d000 wPartyMon1');
+  const got = monLayout(bare, gen2);
+  t.eq(got.dvs, gen2.mon.dvs, 'the declared offset');
+  t.eq(got.dvBytes, 2, 'and a width off the declared offsets');
+});
+
+test('a field outside the entry is not the entry\'s field', async (t) => {
+  // A symbol file aimed at another build: the offset comes out enormous, and
+  // an enormous offset reads another Pokemon's bytes rather than failing.
+  const astray = laidOut({ DVs: gen2.partyStride + 4 });
+  t.eq(monLayout(astray, gen2).dvs, gen2.mon.dvs, 'refused, profile kept');
+});
+
+test('three bytes of DVs is a nibble a stat, and HP is one of them',
+     async (t) => {
+  // Gen 2 stores four DVs and assembles HP out of their low bits. Polished
+  // Crystal stores six -- `MON_HP_ATK_DV`, `MON_DEF_SPE_DV`,
+  // `MON_SAT_SDF_DV` -- so assembling one would invent a number the game does
+  // not use.
+  const got = dvsOf(0xf12345, gen2, 3);
+  t.eq(got.hp, 0xf, 'HP is stored, not derived');
+  t.eq(got.atk, 0x1, 'and shares its byte with attack');
+  t.eq(got.def, 0x2, 'defence');
+  t.eq(got.spd, 0x3, 'speed');
+  t.eq(got.satk, 0x4, 'special attack');
+  t.eq(got.sdef, 0x5, 'and special defence, which Gen 2 does not split');
+  // The Gen 2 reading of the same field, unchanged.
+  const two = dvsOf(0x1234, gen2, 2);
+  t.eq(two.atk, 0x1, 'two bytes still reads four nibbles');
+  t.eq(two.hp, 0b1010, 'with HP assembled from their low bits');
 });

@@ -40,6 +40,32 @@ export class Symbols {
     return e.addr;
   }
 
+  /**
+   * The address of whichever of these names this cartridge uses.
+   *
+   * One thing, several words for it. Polished Crystal keeps the battle
+   * menu's selection in `wBattleMenuCursorBuffer` and Crystal keeps it in
+   * `wBattleMenuCursorPosition`; both hold 1 FIGHT, 2 PKMN, 3 PACK, 4 RUN,
+   * and asking for one name threw on arrival and took the whole app with it
+   * -- `GameState`'s constructor reads it, so a cartridge that had renamed
+   * one variable could not be opened at all.
+   *
+   * The order is the order of preference, and the first *present* name wins
+   * rather than the first that resolves to something: a name that is not in
+   * the file is not an address, and there is nothing to prefer about it.
+   *
+   * Failing names all of them, because "symbol not in this .sym file:
+   * wBattleMenuCursorPosition" sends whoever reads it looking for a symbol
+   * that was never going to be there.
+   */
+  pick(...names) {
+    for (const name of names) if (this.map.has(name)) return this.addr(name);
+    throw new Error(`no symbol in this .sym file for any of: ${names.join(', ')}`);
+  }
+
+  /** Whether any of these names is one this cartridge uses. */
+  hasAny(...names) { return names.some((n) => this.map.has(n)); }
+
   /** The ROM bank a symbol lives in -- needed to find it in the cartridge. */
   bank(name) {
     const e = this.map.get(name);
@@ -137,7 +163,7 @@ export class Symbols {
  * Every symbol this app reads, by name.
  *
  * It exists so a device with a ROM and no .sym can be handed the addresses
- * instead of the file: 80 lines is about a kilobyte, against 1.8MB, and it
+ * instead of the file: 100 lines is about a kilobyte, against 1.8MB, and it
  * fits in a room with space for a save beside it.
  *
  * Written down rather than discovered, because nothing at run time can know
@@ -151,7 +177,7 @@ export const SHARED_SYMBOLS = [
   'BaseData',
   'CollisionPermissionTable', 'ItemNames', 'JohtoGrassWildMons',
   'KantoGrassWildMons', 'Landmarks', 'MapGroupPointers',
-  'MoveNames', 'Moves', 'PokemonNames', 'sCheckValue1', 'sCheckValue2', 'wBalls', 'wBattleMenuCursorPosition',
+  'MoveNames', 'Moves', 'PokemonNames', 'sCheckValue1', 'sCheckValue2', 'wBalls', 'wBattleMenuCursorPosition', 'wBattleMenuCursorBuffer',
   'wBattleMode', 'wBattleMonHP', 'wBattleMonMaxHP', 'wCurItem', 'wCurPocket',
   'TrainerClassNames', 'TrainerGroups', 'TypeMatchups', 'TypeNames',
   // Which hours are morning, day and night. Optional, and it is what turns
@@ -186,6 +212,17 @@ export const SHARED_SYMBOLS = [
   'wNumItems',
   'wObjectStructs',
   'wOverworldMapBlocks', 'wPartyCount', 'wPartyMon1', 'wPlayerBGMapOffsetX',
+  // Every field of a party entry, because where they are is the cartridge's
+  // to say and not this app's -- see `monLayout` in state.js. Polished
+  // Crystal moves five of them, and a layout read off the .sym on one device
+  // and defaulted from the profile on another is two different dex cards.
+  // `digest()` skips a name a cartridge does not use, so the pairs here cost
+  // a build that has only one of them nothing.
+  'wPartyMon1Species', 'wPartyMon1Item', 'wPartyMon1Moves', 'wPartyMon1Exp',
+  'wPartyMon1StatExp', 'wPartyMon1EVs', 'wPartyMon1DVs',
+  'wPartyMon1Personality', 'wPartyMon1PP', 'wPartyMon1Happiness',
+  'wPartyMon1CaughtData', 'wPartyMon1Level', 'wPartyMon1Status',
+  'wPartyMon1HP', 'wPartyMon1MaxHP', 'wPartyMon1Stats', 'wPartyMon1Attack',
   // The game's own record of what has been seen and caught, one bit per
   // species. Optional in `state.js` and shared for the same reason the ROM
   // tables above are: a device with a digest and no .sym reads work RAM
@@ -193,7 +230,8 @@ export const SHARED_SYMBOLS = [
   'wPokedexCaught', 'wPokedexSeen',
   'wPlayerBGMapOffsetY', 'wPlayerTileCollision', 'wScriptMode',
   'wTilemap',
-  'wTilesetCollisionAddress', 'wTilesetCollisionBank', 'wTimeOfDay',
+  'wTilesetCollisionAddress', 'wTilesetCollisionBank', 'wTilesetDataBank',
+  'wTimeOfDay',
   'wWindowStackSize', 'wXCoord', 'wYCoord',
 ];
 

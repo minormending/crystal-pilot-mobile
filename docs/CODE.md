@@ -114,7 +114,7 @@ of the subtleties in sections 6 and 7.
 
 ## 2. The shape of it
 
-<!-- covers-api: app/main.js gen2/journey.js titles/crystal.js gen2/tasks.js gen2/nav.js gen2/world.js gen2/collision.js gen2/state.js gen2/romdata.js gen2/symbols.js gbcore/gb.js @ 991be5a25b0d -->
+<!-- covers-api: app/main.js gen2/journey.js titles/crystal.js gen2/tasks.js gen2/nav.js gen2/world.js gen2/collision.js gen2/state.js gen2/romdata.js gen2/symbols.js gbcore/gb.js @ a4094a7d799c -->
 
 Twenty-nine modules, in four directories, and the directories are the design:
 **an import may point down this list and never up.**
@@ -436,10 +436,23 @@ watching.
 
 ### `symbols.js` — where things live
 
-<!-- covers: gen2/symbols.js @ 996daa14d172 -->
+<!-- covers: gen2/symbols.js @ 447959461815 -->
 
 Parses the `.sym` file into `name → { bank, addr }`. First definition wins;
 later duplicates are aliases and locals.
+
+`pick(...names)` is **one thing a cartridge might call more than one word**.
+Polished Crystal keeps the battle menu's selection in
+`wBattleMenuCursorBuffer` where Crystal keeps it in
+`wBattleMenuCursorPosition`; both hold 1 FIGHT, 2 PKMN, 3 PACK, 4 RUN. Asking
+for one name threw on arrival and took the whole app with it, because
+`GameState`'s constructor reads it — a cartridge that had renamed one variable
+could not be opened at all. The first *present* name wins, and failing names
+all of them, since "symbol not in this .sym file:
+wBattleMenuCursorPosition" sends whoever reads it looking for a symbol that
+was never going to be there. `wTilesetCollisionBank` is the other one:
+Polished Crystal's tileset struct puts a single `wTilesetDataBank` in front of
+the blocks, the collision and the attributes together.
 
 `require(names)` is the gate a symbol table has to pass before the app will use
 it, and it asks two questions rather than one:
@@ -474,13 +487,45 @@ enforces it, so it is a fact about the build rather than a habit.
 
 ### `state.js` — what the game is doing right now
 
-<!-- covers: gen2/state.js @ 36840a4f2bf0 -->
+<!-- covers: gen2/state.js @ 4972c1e2fc24 -->
 
 One snapshot, many answers: `inBattle`, `party`, `pos`, `onGrass`,
 `worldLoaded`, `menu`, `balls`, `items`, each party member's `status`, the
 enemy's HP and **types**, the field Pokémon's own types, and `badges`. Events are read on demand rather than in `read()`,
 because a snapshot is taken several times a second and nothing wants the whole
 flag table that often — a gate asks about one bit when it is asked about.
+
+**Where those fields are is the cartridge's to say.** For eleven passes
+`engine.mon` was the only answer, and it is Crystal's: species at 0, DVs at
+0x15, the five stat-experience counters at 0x0b. Polished Crystal moves five
+of them — six one-byte EVs where Crystal has five 16-bit counters, so the DVs
+land at 0x11 and PP, happiness and caught data shift down behind them — and
+read at Crystal's offsets its dex card showed a Pokémon's *gender byte* as its
+DVs.
+
+Nothing had to be written down for it. **The symbol file names every field**:
+`wPartyMon1DVs` is in both, and subtracting `wPartyMon1` gives 0x15 on one
+cartridge and 0x11 on the other. `monLayout()` asks it, and the profile
+becomes the fallback for a name a cartridge does not use rather than the
+source. An offset that lands outside one entry is refused and the declared one
+kept, because a symbol file aimed at another build reads another Pokémon's
+bytes rather than failing.
+
+The **widths** come from the same place and matter as much as the offsets. A
+DV field of two bytes is Gen 2's four nibbles with HP assembled from their low
+bits; one of three bytes is a nibble per stat with HP stored like any other,
+and assembling one there would invent a number the game does not use. Ten
+bytes of effort is five 16-bit counters with Special shared, six is a byte per
+stat. Each field's width is the distance to the next field along, which is why
+`wPartyMon1Personality` is looked up at all — it sits between the DVs and the
+PP on the cartridge that needed this, and without it the DV field measures
+five bytes wide.
+
+Every one of those names is in `SHARED_SYMBOLS`, and that is not incidental: a
+layout read off the `.sym` on one device and defaulted from the profile on
+another is two different dex cards for one Pokémon. `digest()` skips a name a
+cartridge does not use, so carrying both `wPartyMon1StatExp` and
+`wPartyMon1EVs` costs a build with only one of them nothing.
 
 **A party entry is read twice, at two different depths, and that is deliberate
 rather than untidy.** The struct is 0x30 bytes and the pilot flies on five of
@@ -944,7 +989,7 @@ noticing at all.
 
 ### `collision.js` — what you can walk on
 
-<!-- covers: gen2/collision.js @ c72c09795b79 -->
+<!-- covers: gen2/collision.js @ 688cb36fac59 -->
 
 Decodes the loaded map into "can I stand on this tile", and does breadth-first
 pathfinding over the result. This is what turns walking from trial and error
@@ -1177,7 +1222,7 @@ Route 30's door to it at `(17,5)`.
 
 ## 4. Taking one step, and planning a walk
 
-<!-- covers: gen2/nav.js gen2/collision.js @ 2cffb1323b27 -->
+<!-- covers: gen2/nav.js gen2/collision.js @ 98427e03f6bb -->
 
 ### One step
 
@@ -1499,7 +1544,7 @@ and a Pokémon Center restores PP, so the grind treats it as a trip it already
 knew how to make. See [the tiles that run a
 script](#8g-the-tiles-that-run-a-script-and-saying-hello) for the walk half.
 
-<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ d95d0e12f98b -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 19da243cbb95 -->
 
 ### Which move, and which question
 
@@ -2640,7 +2685,7 @@ said *trainer battle: lost* **seven times**. One loss, reported seven ways.
 
 ## 7d. The counter, and the money it takes
 
-<!-- covers: gen2/menus.js gen2/state.js titles/crystal.js @ 712c75dc6ae5 -->
+<!-- covers: gen2/menus.js gen2/state.js titles/crystal.js @ 60ee75b18150 -->
 
 Everything the pilot could do until now used what it found. **Shop** walks to a
 mart and buys, which is the first thing it does that spends rather than
@@ -2749,7 +2794,7 @@ counter and came away with **five potions and ¥1800**, in 49 seconds.
 
 ## 7b. Saving, and getting the save out
 
-<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ d95d0e12f98b -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 19da243cbb95 -->
 
 ```mermaid
 flowchart TD
@@ -3613,7 +3658,7 @@ by, which is the only leg it can measure.
 
 ## 8d. A route the game itself refuses
 
-<!-- covers: gen2/journey.js gen2/state.js @ 8ce7b3462010 -->
+<!-- covers: gen2/journey.js gen2/state.js @ 584f8f1803fa -->
 
 The pass before this one taught the walk to *quote* the man who turns it back.
 This is the pilot doing something about it.
@@ -3821,7 +3866,7 @@ costs however long it takes somebody to notice their money is gone.
 
 ## 8f. Going and winning a badge
 
-<!-- covers: gen2/journey.js gen2/state.js titles/crystal.js @ 34c993a0bbc0 -->
+<!-- covers: gen2/journey.js gen2/state.js titles/crystal.js @ 46387a28d10c -->
 
 The pilot has been turned back from Route 32 since the pass it learned to find
 Pokémon Centers. `reopen` throws away every written-off road the moment a badge
@@ -4080,7 +4125,7 @@ file says they do.
 
 ## 8i. Reaching an hour
 
-<!-- covers: gen2/jobs.js gen2/engine.js gen2/romdata.js gen2/state.js gbcore/saves.js app/rows.js @ 6145f89b60cb -->
+<!-- covers: gen2/jobs.js gen2/engine.js gen2/romdata.js gen2/state.js gbcore/saves.js app/rows.js @ d6064b21c56f -->
 
 A third of Johto's grass is behind the clock. HOOTHOOT is on Route 29 after
 dark and nowhere on it at noon, and for four versions the usage guide said the
@@ -5235,7 +5280,7 @@ reads all seven out of both files and compares them, which is the repair for
 
 ### Gates: asking the cartridge what it wants
 
-<!-- covers: gen2/state.js gen2/journey.js titles/crystal.js @ 34c993a0bbc0 -->
+<!-- covers: gen2/state.js gen2/journey.js titles/crystal.js @ 46387a28d10c -->
 
 Two kinds of closed road, and the difference is everything:
 
@@ -5992,7 +6037,7 @@ this needed upstream rather than in the vendored copy.
 The options went through this room first on purpose: the small half, standing up
 the whole path — config, rules, anonymous sign-in, merge, debounce — with a
 slider position at stake rather than a save. Three things travel this way, and
-all three merge: the remembered options, the 80 addresses out of the symbol
+all three merge: the remembered options, the 100 addresses out of the symbol
 file, and the notes two devices use to introduce their screens to each other.
 The save goes over the same room and does *not* merge, which is the next
 section.
@@ -6461,16 +6506,16 @@ and change what a past handover said.
 
 ### The symbol file stops travelling
 
-The `.sym` is 1.8MB and this app looks up **80 symbols in it**. So the room
-carries those 80 lines — about a kilobyte, `{name: [bank, addr]}` — and a
+The `.sym` is 1.8MB and this app looks up **100 symbols in it**. So the room
+carries those 100 lines — about a kilobyte, `{name: [bank, addr]}` — and a
 second device needs the ROM and nothing else. `Symbols.fromDigest` builds a
 table that behaves like the parsed file; `size` is the only honest difference,
-and it reports 80 because that is how many symbols it has.
+and it reports 100 because that is how many symbols it has.
 
 ```mermaid
 flowchart LR
     F["the .sym file<br/>1.8MB, 58,456 symbols"] --> S["Symbols<br/>the parsed table"]
-    S -->|"digest(SHARED_SYMBOLS)"| D["{name: [bank, addr]}<br/>80 entries, ~1KB"]
+    S -->|"digest(SHARED_SYMBOLS)"| D["{name: [bank, addr]}<br/>100 entries, ~1KB"]
     D --> R[["the room"]]
     R --> D2["the same 47 entries"]
     D2 -->|"Symbols.fromDigest"| T["a table that behaves<br/>like the parsed file"]
@@ -6798,7 +6843,7 @@ about that code did not.
 
 ### The other checks
 
-<!-- covers: tools/check-app @ 737941867735 -->
+<!-- covers: tools/check-app @ 1ceb6877bede -->
 
 `tools/check-app` runs everything that can be verified without a ROM:
 

@@ -329,14 +329,20 @@ export function symbols() {
  * The failure is the wrong way round, which is what makes it worth a helper. A
  * fake that claims to have everything makes an app *more* confident than the
  * real thing, so the tests it breaks are the ones nobody was changing.
+ *
+ * It is a **real `Symbols` over a smaller table**, not three functions shaped
+ * like one, and that is the second version of this. The first listed the
+ * methods it forwarded, so the day `Symbols` grew `pick` -- one lookup, several
+ * names, for a cartridge that renamed a variable -- twelve tests died on
+ * `symbols.pick is not a function` in code that was not what they were about.
+ * A copy of an interface has to be maintained; a narrower instance of it does
+ * not.
  */
 export function blindTo(sym, ...names) {
   const gone = new Set(names);
-  return {
-    has: (n) => !gone.has(n) && sym.has(n),
-    addr: (n) => sym.addr(n),
-    bank: (n) => sym.bank(n),
-  };
+  const out = Object.create(Symbols.prototype);
+  out.map = new Map([...sym.map].filter(([n]) => !gone.has(n)));
+  return out;
 }
 
 // --- a Game Boy that is not there -------------------------------------------

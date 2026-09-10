@@ -86,7 +86,10 @@ export class CollisionMap {
       blocks: symbols.addr('wOverworldMapBlocks'),
       mapWidth: symbols.addr('wMapWidth'),
       mapHeight: symbols.addr('wMapHeight'),
-      tilesetBank: symbols.addr('wTilesetCollisionBank'),
+      // Crystal gives the collision data its own bank byte; Polished
+      // Crystal's tileset struct has one `wTilesetDataBank` in front of the
+      // blocks, the collision and the attributes together.
+      tilesetBank: symbols.pick('wTilesetCollisionBank', 'wTilesetDataBank'),
       tilesetAddr: symbols.addr('wTilesetCollisionAddress'),
       playerTile: symbols.addr('wPlayerTileCollision'),
       x: symbols.addr('wXCoord'),

@@ -53,8 +53,23 @@ export function statusOf(byte, engine = gen2) {
  * are known, and none has been read here yet -- so this is the same kind of
  * gap as `statusBits`, written down rather than glossed.
  */
-export function dvsOf(word, engine = gen2) {
+export function dvsOf(word, engine = gen2, bytes = 2) {
   const names = engine.dvNames || [];
+  // Wider than Gen 2's two bytes means a nibble per stat and nothing
+  // derived. Polished Crystal writes three -- `MON_HP_ATK_DV`,
+  // `MON_DEF_SPE_DV`, `MON_SAT_SDF_DV` -- so HP has a DV of its own there,
+  // and assembling one out of low bits would invent a number the game does
+  // not use. Which case applies is the *width* of the field, and the symbol
+  // file says what that is; see `monLayout`.
+  if (bytes > 2) {
+    const wide = engine.statNames || [];
+    const out = {};
+    wide.forEach((key, i) => {
+      const byte = (word >> ((bytes - 1 - (i >> 1)) * 8)) & 0xff;
+      out[key] = i % 2 === 0 ? byte >> 4 : byte & 0x0f;
+    });
+    return out;
+  }
   const out = {};
   names.forEach((key, i) => {
     // Nibble `i`, counting down from the top of the word, so the list's order
@@ -62,6 +77,78 @@ export function dvsOf(word, engine = gen2) {
     out[key] = (word >> ((names.length - 1 - i) * 4)) & 0x0f;
   });
   out.hp = names.reduce((n, key) => (n << 1) | (out[key] & 1), 0);
+  return out;
+}
+
+/**
+ * Where each field of a party entry is, asked of the symbol file.
+ *
+ * `engine.mon` says where Crystal keeps them, and for eleven passes that was
+ * the only answer. **Polished Crystal moves five of them**: six one-byte EVs
+ * where Crystal has five 16-bit counters, so DVs land at 0x11 instead of
+ * 0x15, and PP, happiness and caught data each shift down with them. Read at
+ * Crystal's offsets its dex card showed a Pokemon's gender byte as its DVs.
+ *
+ * But nothing had to be written down for it, because **the symbol file names
+ * every field** -- `wPartyMon1DVs` is in both, and subtracting `wPartyMon1`
+ * gives 0x15 on one cartridge and 0x11 on the other. The profile becomes the
+ * fallback for a name a cartridge does not use rather than the source.
+ *
+ * The *widths* come from the same place and matter as much as the offsets: a
+ * DV field of two bytes is Gen 2's four nibbles with HP assembled from their
+ * low bits, and one of three is a nibble per stat with HP stored like any
+ * other. `wPartyMon1Personality` is read for no other reason -- it is what
+ * sits between the DVs and the PP on the cartridge that needed this, and
+ * without it the DV field measures five bytes wide.
+ *
+ * Every name here travels in `SHARED_SYMBOLS`, which is not incidental: a
+ * layout derived from the `.sym` and defaulted from the profile would
+ * otherwise give a phone with the file one dex card and a phone with a
+ * digest another.
+ */
+const MON_FIELDS = {
+  species: ['wPartyMon1Species'],
+  item: ['wPartyMon1Item'],
+  moves: ['wPartyMon1Moves'],
+  exp: ['wPartyMon1Exp'],
+  statExp: ['wPartyMon1StatExp', 'wPartyMon1EVs'],
+  dvs: ['wPartyMon1DVs'],
+  personality: ['wPartyMon1Personality'],
+  pp: ['wPartyMon1PP'],
+  happiness: ['wPartyMon1Happiness'],
+  caught: ['wPartyMon1CaughtData'],
+  level: ['wPartyMon1Level'],
+  status: ['wPartyMon1Status'],
+  hp: ['wPartyMon1HP'],
+  maxHp: ['wPartyMon1MaxHP'],
+  stats: ['wPartyMon1Stats', 'wPartyMon1Attack'],
+};
+
+export function monLayout(symbols, engine = gen2) {
+  const out = { ...engine.mon };
+  const stride = engine.partyStride;
+  if (symbols.has('wPartyMon1')) {
+    const base = symbols.addr('wPartyMon1');
+    for (const [field, names] of Object.entries(MON_FIELDS)) {
+      if (!symbols.hasAny(...names)) continue;
+      const at = symbols.pick(...names) - base;
+      // A layout that does not fit inside one entry is not this entry's
+      // layout, and a symbol file pointing somewhere else is the way that
+      // happens. The profile's number is wrong on such a cartridge too, but
+      // it is wrong in a way somebody has read.
+      if (at >= 0 && at < stride) out[field] = at;
+    }
+  }
+  // Each field runs to the next one along. Read off the offsets rather than
+  // stated, so the two lists cannot disagree.
+  const marks = [...new Set(Object.values(out).filter((n) => Number.isInteger(n)))]
+    .sort((a, b) => a - b);
+  const widthOf = (at) => {
+    const next = marks.find((m) => m > at);
+    return (next === undefined ? stride : next) - at;
+  };
+  out.dvBytes = widthOf(out.dvs);
+  out.statExpBytes = widthOf(out.statExp);
   return out;
 }
 
@@ -129,7 +216,8 @@ export class GameState {
       tile: symbols.addr('wPlayerTileCollision'),
       menuX: symbols.addr('wMenuCursorX'),
       menuY: symbols.addr('wMenuCursorY'),
-      battleCursor: symbols.addr('wBattleMenuCursorPosition'),
+      battleCursor: symbols.pick('wBattleMenuCursorPosition',
+                                 'wBattleMenuCursorBuffer'),
       enemySpecies: symbols.addr('wEnemyMonSpecies'),
       enemyLevel: symbols.addr('wEnemyMonLevel'),
       enemyHp: symbols.addr('wEnemyMonHP'),
@@ -195,6 +283,10 @@ export class GameState {
       // when it draws a box -- so it costs nothing to read.
       menuLeft: symbols.addr('wMenuBorderLeftCoord'),
     };
+    // Where the fields of a party entry are, asked of the same symbol file
+    // the addresses came from rather than taken from the profile. See
+    // `monLayout`: Polished Crystal moves five of them.
+    this.mon = monLayout(symbols, this.e);
     // One small window covering every byte the name-menu check needs, so that
     // check can run after every press without a snapshot behind it.
     const watched = [this.a.menuItems, this.a.menuTop, this.a.menuRight,
@@ -597,7 +689,8 @@ export class GameState {
    * card, which is when they are being looked at.
    */
   _mon(wram, slot) {
-    const { partyStride, mon } = this.e;
+    const { partyStride } = this.e;
+    const mon = this.mon;
     const base = this.a.partyMon1 + slot * partyStride;
     return {
       slot,
@@ -630,7 +723,8 @@ export class GameState {
    */
   monDetail(wram, slot) {
     if (!(slot >= 0) || slot >= this.partyCount(wram)) return null;
-    const { partyStride, mon, statExpNames, statNames } = this.e;
+    const { partyStride, statExpNames, statNames } = this.e;
+    const mon = this.mon;
     const base = this.a.partyMon1 + slot * partyStride;
     // The six the game stores: maxHp is the first of them and already read, so
     // the other five run from `mon.stats`.
@@ -645,12 +739,58 @@ export class GameState {
       exp: (b(wram, base + mon.exp) << 16) | (b(wram, base + mon.exp + 1) << 8)
         | b(wram, base + mon.exp + 2),
       stats,
-      statExp: Object.fromEntries(statExpNames.map(
-        (key, i) => [key, w(wram, base + mon.statExp + i * 2)])),
-      dvs: dvsOf(w(wram, base + mon.dvs), this.e),
+      // Five 16-bit counters on Crystal, and on Polished Crystal six single
+      // bytes -- one per stat, Special no longer shared. The field's own
+      // width says which, and the names follow from that: a counter per
+      // stat is named by `statNames`, and Gen 2's shared pair by
+      // `statExpNames`.
+      statExp: this._effortAt(wram, base),
+      dvs: dvsOf(this._packed(wram, base + mon.dvs, mon.dvBytes),
+                 this.e, mon.dvBytes),
       happiness: b(wram, base + mon.happiness),
       caught: this._caughtAt(wram, base),
     };
+  }
+
+  /**
+   * A packed field of `bytes` bytes as one number, most significant first.
+   *
+   * The DV field is two bytes on Crystal and three on Polished Crystal, and
+   * `dvsOf` wants it as a single number either way -- there is one place that
+   * knows how wide it is, and it is the layout, not the decoder.
+   */
+  _packed(wram, at, bytes) {
+    let out = 0;
+    for (let i = 0; i < bytes; i++) out = (out << 8) | b(wram, at + i);
+    return out;
+  }
+
+  /**
+   * The effort a Pokemon has accumulated, however this cartridge counts it.
+   *
+   * Gen 2 keeps **five 16-bit counters** and spends the Special one on two
+   * stats, which is why the list is `statExpNames` and not `statNames`.
+   * Polished Crystal keeps **one byte per stat**, six of them, Special split
+   * the way every generation after Gen 2 splits it. The field's width settles
+   * which, and the width came from the symbol file: ten bytes is five words,
+   * six is six bytes.
+   *
+   * A width that is neither is answered as neither -- an empty object rather
+   * than a column of plausible numbers off a layout nobody has read.
+   */
+  _effortAt(wram, base) {
+    const { statExpNames, statNames } = this.e;
+    const mon = this.mon;
+    const at = base + mon.statExp;
+    if (mon.statExpBytes === statExpNames.length * 2) {
+      return Object.fromEntries(statExpNames.map(
+        (key, i) => [key, w(wram, at + i * 2)]));
+    }
+    if (mon.statExpBytes === statNames.length) {
+      return Object.fromEntries(statNames.map(
+        (key, i) => [key, b(wram, at + i)]));
+    }
+    return {};
   }
 
   /**
@@ -663,7 +803,8 @@ export class GameState {
    * printed, which is what an unverified reading has to earn.
    */
   _caughtAt(wram, base) {
-    const { caughtData, caughtTimes, mon } = this.e;
+    const { caughtData, caughtTimes } = this.e;
+    const mon = this.mon;
     const first = b(wram, base + mon.caught);
     const second = b(wram, base + mon.caught + 1);
     // **The mask is the upper bound, so there is not a second one here.** Six

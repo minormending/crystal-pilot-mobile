@@ -516,7 +516,18 @@ def check_wiring():
 SYMBOL_USE = re.compile(
     r"\b(?:symbols|sym)\.(?:addr|bank|has)\('([A-Za-z_]\w*)'\)"
     r"|\bat\('([A-Za-z_]\w*)'\)")
-SYMBOL_LIST = re.compile(r"const NEEDED_SYMBOLS = \[(.*?)\];|require\(\[(.*?)\]\)", re.S)
+# `pick` and `hasAny` take several names -- one thing a cartridge might call
+# more than one word -- so every argument is a lookup and the pattern above,
+# which stops at the first, would share one name of each pair.
+SYMBOL_PICK = re.compile(
+    r"\b(?:symbols|sym)\.(?:pick|hasAny)\(([^)]*)\)", re.S)
+SYMBOL_LIST = re.compile(
+    r"const NEEDED_SYMBOLS = \[(.*?)\];|require\(\[(.*?)\]\)"
+    # The party layout is asked for through a table of names rather than at
+    # a call site, and every one of them has to travel: a layout derived from
+    # the .sym and defaulted from the profile gives a phone with the file one
+    # dex card and a phone with a digest another.
+    r"|const MON_FIELDS = \{(.*?)\};", re.S)
 
 
 def check_symbols():
@@ -545,8 +556,10 @@ def check_symbols():
         text = path.read_text()
         for a, b in SYMBOL_USE.findall(text):
             used.add(a or b)
-        for a, b in SYMBOL_LIST.findall(text):
-            used |= set(re.findall(r"'([A-Za-z_]\w*)'", a or b))
+        for group in SYMBOL_PICK.findall(text):
+            used |= set(re.findall(r"'([A-Za-z_]\w*)'", group))
+        for parts in SYMBOL_LIST.findall(text):
+            used |= set(re.findall(r"'([A-Za-z_]\w*)'", "".join(parts)))
 
     # One direction only. A name in the list that nothing looks up costs about
     # twenty-five bytes in a digest; a name looked up that is not in the list
