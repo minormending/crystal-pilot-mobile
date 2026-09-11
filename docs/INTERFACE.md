@@ -806,7 +806,7 @@ shell and a shell does not rearrange.
 | --- | --- | --- |
 | **Portrait phone** | full width, letterboxed on short phones | bar and pad below, the menu opens over the screen |
 | **Landscape phone** | between your thumbs | D-pad left, A/B right, the menu a column beside |
-| **Tablet** | an integer 3× — 480 × 432 | the menu alongside, permanently |
+| **Tablet** | an integer 3× — 480 × 432 — while the height allows it | the menu alongside, permanently |
 
 ```
  landscape phone, 844 x 390          tablet, 820 x 1180
@@ -829,6 +829,14 @@ A door exists because a phone has no room for both the game and the menu. A
 tablet has, and so does a phone held sideways, so in both of those the sheet is
 a column that never closes and the chevron is hidden: an affordance for a door
 that is not there is worse than no affordance.
+
+**The 3× is a cap now rather than a command**, and the difference showed up as
+the pad being drawn over the tap hint. The screen used to be given its 432px
+whatever the window's height was, and the pad got the remainder — which on a
+short, wide window was 125px for 254px of pad. The pad and the strip are
+furniture with a natural height; the picture is the thing that can letterbox. So
+the picture takes what is left over, up to 480 × 432. A window with the room
+still gets exactly 3×.
 
 Landscape was not cramped before this work, it was unusable: at 844 × 390 the
 page ran to six screens and the pad started at 575px, so the game and the
@@ -1318,4 +1326,4 @@ So this page carries a marker naming the files it describes and the hash they
 had when it was last read against them. `tools/docs-check` reports it when they
 move, and the pre-commit hook blocks on that report.
 
-<!-- covers: index.html app/main.js app/rows.js @ 017844ced6d9 -->
+<!-- covers: index.html app/main.js app/rows.js @ 193b6416688b -->

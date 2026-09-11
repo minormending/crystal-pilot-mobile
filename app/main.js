@@ -300,6 +300,18 @@ function paintGear() {
                           String(!!panel && pane === 'set'));
 }
 
+/**
+ * A key on the strip, dimmed when the pane behind it holds nothing.
+ *
+ * The same rule the job keys follow, and pressable for the same reason: the
+ * pane is where *no party yet* belongs, and a key you cannot press cannot take
+ * you to the sentence explaining why it is dim.
+ */
+function dimPane(pane, empty) {
+  const key = $('#modes').querySelector(`[data-pane="${pane}"]`);
+  if (key) key.classList.toggle('dim', !!empty);
+}
+
 function showPane(want) {
   if (!PANES.includes(want)) return;
   pane = want;
@@ -2066,6 +2078,10 @@ function paintDex(s) {
     ? Array.from({ length: state.e.speciesCount }, (_, i) => i + 1)
     : (dex ? (dex.caught || []) : []);
   const species = findSpecies(all, dexFind, (id) => romdata.speciesName(id));
+  // `all`, not `species`: a search that matches nothing is a filter with no
+  // hits, not an empty Pokedex, and dimming the key for it would say the
+  // cartridge has nothing in it because you typed three letters.
+  dimPane('dex', !all.length);
   $('#dexline').textContent = describeDexTotals(dex, {
     engine: state.e, mode: dexMode, started: s.worldLoaded,
   });
@@ -2150,6 +2166,7 @@ async function refresh() {
   // Nothing to summarise and nothing to expand: the hint under the offers
   // already says that most jobs want a Pokemon along.
   paintLens(s);
+  dimPane('party', !s.party.length);
   $('#panel').classList.toggle('hide', !s.party.length);
   $('#leadline').textContent = describeParty(s, { rom: romdata });
   // The other half of the same staleness: a smaller party leaves `dexSlot`

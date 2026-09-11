@@ -363,6 +363,19 @@
        box-shadow:inset 0 2px 0 rgba(255,255,255,.30),
                   inset 0 -4px 0 rgba(0,0,0,.22),
                   0 0 0 1px var(--line),0 6px 18px rgba(0,0,0,.45)}
+  /* **Pico's container, out-specified.** Pico's classless build styles
+     `body>main` as a page container and caps it -- 510px at its small
+     breakpoint, 700px above that -- and `body>main` is two elements against
+     this sheet's one, so a bare `main{max-width:...}` loses the tie however far
+     down the file it sits. Measured on a 1000px viewport: the app laid itself
+     out in 700 and left 300 empty, which on the tablet layout is taken entirely
+     out of the panel beside the screen. The sheet came to 204px, the chips
+     stacked one per line, and the five keys on the strip broke their own words
+     in half -- "JOB S", "SET UP".
+
+     Both of the app's own caps are written at this specificity now, so the
+     number in force is the one written here. */
+  body>main{max-width:560px}
   .stage{grid-area:stage;display:flex;flex-direction:column;gap:6px;min-height:0}
   /* The wrap is the canvas's box, exactly, and it works out its own size from
      the room the stage has.
@@ -422,12 +435,26 @@
 
      A key each instead. The stack is gone, the second overlay is gone with it,
      and the z-index that existed only to let one cover the other went too. */
-  .modes{flex:0 0 auto;display:grid;grid-template-columns:repeat(5,1fr);gap:5px}
-  .modes button{min-width:0;min-height:42px;padding:0 2px;border-radius:8px;
+  /* Five across while five fit, and fewer rather than narrower when they do
+     not. `repeat(5,1fr)` divided whatever it was given, so a 188px panel gave
+     each key 34px and every label broke in half -- "JOB S", "SET UP". A key
+     whose name is cut is worse than a key on a second row, and `auto-fit`
+     picks the count instead of being told it. */
+  .modes{flex:0 0 auto;display:grid;gap:5px;
+         grid-template-columns:repeat(auto-fit,minmax(58px,1fr))}
+  .modes button{min-width:0;min-height:42px;padding:0 4px;border-radius:8px;
                 font-size:10.5px;font-weight:700;letter-spacing:.05em;
-                text-transform:uppercase;
+                white-space:nowrap;text-transform:uppercase;
                 background:var(--raise);color:var(--raise-ink);
                 border:1px solid var(--line)}
+  /* A key whose pane holds nothing, dimmed the same way a job key is and
+     pressable for the same reason: the pane itself is where "no party yet"
+     belongs, and a key you cannot press cannot take you to the sentence
+     explaining why. Written *before* the selected rule below so that selecting
+     an empty pane still lights its key -- the two are the same specificity and
+     source order is the tie-break. */
+  .modes button.dim{color:var(--dim);border-color:var(--line);
+                    box-shadow:none;opacity:.9}
   /* The chosen one is a lit key rather than a darker one: the strip is the
      only thing on the panel that says where you are, so the signal has to be
      the strongest thing on it. */
@@ -941,12 +968,18 @@
   /* Capped and centred: on a wide screen space-between alone flings the cross
      and the face buttons to opposite edges, and a gamepad with 240px of gap
      down the middle stops reading as one thing. */
+  /* **One well, not two.** This used to draw its own -- a raised box with a
+     border, so the keys sat *in* something rather than floating on a card. The
+     chassis moulds that recess into `#ctrls` itself, and for one release both
+     were drawn: a 330px bordered box centred inside a full-width bordered box,
+     which is the tell that a container was inherited rather than chosen. The
+     layout is all that is left here.
+
+     `max-width` stays, because 330px is what the `space-between` was tuned
+     against: let it fill a 480px column and the D-pad and the face buttons go
+     to opposite edges with a hand's width of nothing between them. */
   .gamepad{display:flex;align-items:center;justify-content:space-between;
-           gap:10px;padding:14px 12px 10px;max-width:330px;margin:0 auto;
-           /* A well, so the keys sit *in* something. Without it the pad floated
-              on the card and the whole PLAY section read as an unfinished form. */
-           background:var(--raise);border:1px solid var(--line);
-           border-radius:calc(var(--pico-border-radius) + 4px)}
+           gap:10px;padding:4px 0 0;max-width:330px;margin:0 auto}
 
   /* A connected cross, not four loose boxes. The cells touch and only the
      outer tips are rounded, which is what makes it read as a D-pad. */
@@ -1092,7 +1125,8 @@
        `height:100%` with `width:auto` gave a 220x267 box on a 160x144 picture,
        squashing it, because a column narrower than the ratio wants clips the
        width and leaves the height alone. */
-    main{max-width:none;padding:6px 8px 8px;gap:8px;border-radius:14px;
+    body>main{max-width:none}
+    main{padding:6px 8px 8px;gap:8px;border-radius:14px;
          grid-template:"brow brow   brow brow" auto
                        "dpad screen face sheet" minmax(0,1fr)
                        "dpad bar    face sheet" auto
@@ -1130,26 +1164,39 @@
      Guarded on height as well as width so a phone in landscape, which is also
      wide, keeps the layout above. */
   @media (min-width:760px) and (min-height:620px){
-    main{max-width:none;padding:16px;gap:16px;
+    /* **The screen is what gives, not the pad.** The rows used to be
+       `stage auto / bar auto / pad 1fr`, which hands the screen whatever it
+       asks for and the pad the remainder -- and the screen asks for 432px
+       unconditionally. Measured at 1000x802 the pad's row came to 125px for
+       254px of pad, and with `align-self:end` it overflowed *upward*: the tap
+       hint and the top of the pad well were drawn over each other, and the
+       well ran up behind the strip.
+       The priority is the other way round. The pad and the strip are fixed
+       furniture with a natural height; the picture is the thing that can
+       letterboard. So the stage takes the slack and the other two are `auto`. */
+    body>main{max-width:none}
+    main{padding:16px;gap:16px;
          grid-template:"brow  brow" auto
-                       "stage sheet" auto
+                       "stage sheet" minmax(0,1fr)
                        "bar   sheet" auto
-                       "pad   sheet" minmax(0,1fr)
+                       "pad   sheet" auto
                        /minmax(0,480px) minmax(0,1fr)}
-    /* The one layout where the screen is told its size rather than working it
-       out: 3x is 480x432, and a Game Boy picture at 2.7x has visibly uneven
-       pixels. A row sized `auto` also has no height for `cqh` to measure, so
-       the width has to come first here and the ratio derives the height. */
-    .shot{container-type:normal}
-    #screenwrap{width:min(100%,480px)}
+    /* 3x -- 480x432 -- while there is room for it, because a Game Boy picture
+       at 2.7x has visibly uneven pixels. The cap is a `min` of three things now
+       rather than one: the column, the integer scale, and *the height the row
+       actually has*. The third is what was missing, and it is only measurable
+       because the stage row above is `1fr` and therefore has a definite height
+       for `cqh` to read. A window with the room still gets exactly 3x; one
+       without gets a smaller picture instead of a pad drawn over the hint. */
+    #screenwrap{width:min(100%,480px,calc(100cqh * 160 / 144))}
     .sheet,.sheet:not(.open){display:flex;grid-area:sheet}
     /* Both at once here, so the stage is never the thing being covered. */
     body.menuopen .stage{visibility:visible}
     .chev{display:none}
-    /* As wide as the screen rather than as wide as the tablet, and at the
-       bottom of its column: a tablet is held in two hands and the thumbs are
-       nowhere near the middle. */
-    .padwrap{max-width:480px;width:100%;align-self:end}
+    /* As wide as the screen rather than as wide as the tablet. It no longer
+       needs `align-self:end` -- its row hugs it now, so there is no slack in
+       the row for it to sit at the bottom of. */
+    .padwrap{max-width:480px;width:100%}
   }
 </style>
 </head>
@@ -1476,7 +1523,10 @@
        every one `describeOffers` had not ranked. Nothing new had to be said;
        the display just stopped discarding it. -->
   <div class="display" id="display">
-    <div class="dname" id="keyname">Send the pilot</div>
+    <!-- Not "Send the pilot": that is the card's own heading two lines up, and
+         a panel that says the same thing twice before the first paint reads as
+         a rendering fault. -->
+    <div class="dname" id="keyname">&mdash;</div>
     <!-- Ten state lines and ten sets of buttons live here, and `paintJobs`
          shows the armed one. They are not rebuilt per key: every id, handler
          and disabled state is exactly where it was when these were rows, which

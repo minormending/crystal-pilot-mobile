@@ -4808,7 +4808,7 @@ This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ 9a6e21da40ab -->
+<!-- covers: app/main.js index.html @ 9e93862392f2 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -4942,6 +4942,50 @@ Three things in that path are worth writing down, because each of them decodes
 One painter does both. `paintSprite` takes a decoded sprite and a side, and the
 rule it exists to hold is that palette index 0 stays transparent — the lens
 would get a square on a circle and the dex card a white block on a panel.
+
+**Pico's container was capping the whole app, and `main` could not out-argue
+it.** Pico's classless build styles `body>main` as a page container with a
+max-width per breakpoint — 510px, then 700px. That is two elements against this
+sheet's one, so `main{max-width:none}` in a media query loses the tie however
+far down the file it sits, and media queries add no specificity to help.
+
+Measured at 1000×802: the app laid itself out in 700px and left 300 empty, and
+because the tablet grid gives the screen a fixed 480 the entire shortfall came
+out of the panel beside it. The sheet came to **204px** — the chips stacked one
+per line, and the five keys on the strip broke their own words in half, *JOB S*
+and *SET UP*. Both of the app's caps are written at `body>main` now.
+
+**The screen is what gives, not the pad.** The tablet rows were
+`stage auto / bar auto / pad minmax(0,1fr)`, which hands the screen whatever it
+asks for and the pad the remainder — and the screen asks for 432px
+unconditionally. At 1000×802 the pad's row came to 125px for 254px of pad, and
+with `align-self:end` it overflowed *upward*: the tap hint and the top of the
+pad well drew over each other. The priority is the other way round, because the
+pad and the strip are furniture with a natural height and the picture is the
+thing that can letterbox. The stage takes the slack now and the other two are
+`auto`.
+
+That also let the integer scale come back as a *cap* rather than a command.
+`#screenwrap` is `min(100%, 480px, calc(100cqh * 160 / 144))` — the column, the
+3× scale, and the height the row actually has. The third was missing, and it is
+only measurable because the stage row is `1fr` and therefore has a definite
+height for `cqh` to read. A window with the room still gets exactly 480×432; one
+without gets a smaller picture instead of a pad drawn over the hint.
+
+**And `.modes` picks its own column count.** `repeat(5,1fr)` divides whatever it
+is given, which is how 188px became five 34px keys with broken labels.
+`repeat(auto-fit,minmax(58px,1fr))` puts five across when five fit and wraps to
+two rows when they do not: a key on a second row is better than a key whose name
+is cut.
+
+**One well, not two.** `.gamepad` drew its own raised box — a border and a fill,
+so the keys sat *in* something rather than floating on a card. The chassis
+moulds that recess into `#ctrls`, and for one release both were drawn: a 330px
+bordered box centred inside a full-width bordered box, which is what an
+inherited container looks like when nobody chose it. `max-width:330px` stays,
+because that is what the pad's `space-between` was tuned against — let it fill a
+480px column and the D-pad and the face buttons sit at opposite edges with a
+hand's width of nothing between them.
 
 **A bare element rule is a rule about elements nobody has added yet.** The
 picture's styling was written as `canvas{...}` when the game's screen was the
@@ -5522,7 +5566,7 @@ seconds by a page whose loop was supposedly running.
 
 ### One thing at a time
 
-<!-- covers: app/main.js @ e8ceb2a12dd2 -->
+<!-- covers: app/main.js @ 0cae4bf4ac20 -->
 
 One Game Boy, one joypad, one canvas — so a great deal of this app is about
 making sure two things are never driving them at once. There are three claims,
@@ -6076,7 +6120,7 @@ a conversation.
 
 ### The card behind a party row
 
-<!-- covers: app/rows.js app/main.js index.html @ 017844ced6d9 -->
+<!-- covers: app/rows.js app/main.js index.html @ 193b6416688b -->
 
 Two questions the game itself will not answer about a Pokémon you are
 carrying — *what is this made of* and *what is it about to become* — and both
@@ -6165,7 +6209,7 @@ at body size.
 
 ### Running the list
 
-<!-- covers: app/rows.js app/main.js @ 397ee1503591 -->
+<!-- covers: app/rows.js app/main.js @ a6b99c9f457a -->
 
 The app has spent forty passes learning to answer one question — *what can the
 pilot do here, and which of those is worth most?* — and twenty showing the
@@ -6289,7 +6333,7 @@ to deposit your last Pokémon.
 
 ### The settings and the save card
 
-<!-- covers: index.html app/main.js @ 9a6e21da40ab -->
+<!-- covers: index.html app/main.js @ 9e93862392f2 -->
 
 The pilot's own list got a glyph column, shorter names and a slot to fill in
 v165. These two cards did not, and reading them found that they had a different
@@ -6929,7 +6973,7 @@ they have been installed.
 
 ### Watching the other device's screen
 
-<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ 54ceb3abcaf0 -->
+<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ fc89e31bacd8 -->
 
 One device shows its screen; the other watches it, and plays it if the first
 one says so. The picture goes straight between them over WebRTC and never
