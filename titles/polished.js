@@ -72,7 +72,7 @@ export const polished = {
     // told that; see `baseStats`. `hatch` is null because the hatch cycles
     // are a nibble beside the gender ratio rather than a byte of their own.
     baseField: { id: null, stats: 0, types: 6, catchRate: 8, baseExp: 9,
-                 gender: 12, hatch: null, growth: 16 },
+                 gender: 12, hatch: null, picSize: null, growth: 16 },
     // Four, in this order, against Crystal's six. Bulbasaur's growth byte is
     // 1, which is MEDIUM_SLOW here and would read as "slightly fast" on
     // Crystal's list — a wrong word rather than a missing one, which is the

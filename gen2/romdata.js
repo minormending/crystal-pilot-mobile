@@ -251,13 +251,24 @@ export class RomData {
    */
   speciesPic(id) {
     if (!this.pics || !this.base || !id || id < 1) return null;
+    // **Where the tile count lives is a profile's fact, and not every profile
+    // has it.** Polished Crystal replaces `baseField` outright -- its stats
+    // come before its types and its entry is 34 bytes -- so `picSize` is simply
+    // not in it, and `picsFix` inherited from the stock numbers would be
+    // Crystal's constant applied to a cartridge that never agreed to it. This
+    // already declined, but by arithmetic rather than by decision: the
+    // undefined offset made a NaN address, which read as undefined, which
+    // failed the size guard below. Saying so here is the difference between
+    // a reader that refuses and one that happens not to work.
+    const where = this.e.baseField.picSize;
+    if (typeof where !== 'number' || typeof this.e.picsFix !== 'number') return null;
     const e = this.pics.addr + (id - 1) * 6;
     const bank = this.gb.romByte(this.pics.bank, e) + (this.e.picsFix || 0);
     const addr = this.gb.romByte(this.pics.bank, e + 1)
                  | (this.gb.romByte(this.pics.bank, e + 2) << 8);
     const size = this.gb.romByte(this.base.bank,
                                  this.base.addr + (id - 1) * this.e.baseBytes
-                                 + this.e.baseField.picSize);
+                                 + where);
     const w = size >> 4;
     const h = size & 15;
     if (!w || !h || w > 8 || h > 8 || w !== h) return null;
