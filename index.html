@@ -353,7 +353,7 @@
      flat fill reads as a coloured rectangle; what makes moulded plastic is the
      light catching the top edge and the underside falling away, which is
      exactly what the two `inset` shadows are. */
-  main{padding:9px 10px 11px;max-width:560px;margin:0 auto;width:100%;
+  main{margin:0 auto;width:100%;
        flex:1 1 auto;min-height:0;display:grid;gap:9px;
        grid-template:"brow" auto "stage" minmax(0,1fr)
                      "bar" auto "pad" auto/minmax(0,1fr);
@@ -363,19 +363,27 @@
        box-shadow:inset 0 2px 0 rgba(255,255,255,.30),
                   inset 0 -4px 0 rgba(0,0,0,.22),
                   0 0 0 1px var(--line),0 6px 18px rgba(0,0,0,.45)}
-  /* **Pico's container, out-specified.** Pico's classless build styles
-     `body>main` as a page container and caps it -- 510px at its small
-     breakpoint, 700px above that -- and `body>main` is two elements against
-     this sheet's one, so a bare `main{max-width:...}` loses the tie however far
-     down the file it sits. Measured on a 1000px viewport: the app laid itself
-     out in 700 and left 300 empty, which on the tablet layout is taken entirely
-     out of the panel beside the screen. The sheet came to 204px, the chips
-     stacked one per line, and the five keys on the strip broke their own words
-     in half -- "JOB S", "SET UP".
+  /* **Pico's container, out-specified -- the whole box, not one number.**
+     Pico's classless build owns `body>main` and sets six things on it across
+     five breakpoints: width, both margins, padding, and a max-width that steps
+     510 → 700 → 950 → 1200 → 1450. `body>main` is two elements against this
+     sheet's one, so every bare `main{...}` here lost the tie however far down
+     the file it sat, and a media query adds no specificity to help.
 
-     Both of the app's own caps are written at this specificity now, so the
-     number in force is the one written here. */
-  body>main{max-width:560px}
+     It was found one number at a time, which is the lesson. First the
+     max-width: on a 1000px viewport the app laid itself out in 700 and left
+     300 empty, and because the tablet grid pins the screen at 480 the whole
+     shortfall came out of the panel beside it -- a 204px sheet, chips stacked
+     one per line, and five keys breaking their own words in half. Moving *that*
+     one declaration fixed what could be seen and left the rest of the rule
+     losing silently. The one still losing was `padding`, which Pico zeroes
+     horizontally above its small breakpoint: the shell had **no side padding
+     at all**, so the screen's frame -- drawn as a shadow *outside* its box --
+     hung over the left edge of the chassis and was clipped by the window, and
+     the panel on the right ended exactly on the shell's edge.
+
+     So the box is written here in one place, at the specificity that wins. */
+  body>main{max-width:560px;padding:9px 10px 11px}
   .stage{grid-area:stage;display:flex;flex-direction:column;gap:6px;min-height:0}
   /* The wrap is the canvas's box, exactly, and it works out its own size from
      the room the stage has.
@@ -392,8 +400,14 @@
      the ratio derives the width; `max-width:100%` clamps it on a narrow phone
      and the height follows back down. `align-self:center` rather than the
      default `stretch`, because a stretched item has no height to derive from. */
+  /* Room for the frame, which is a shadow and so takes no part in layout --
+     that is what lets `#screenwrap` stay exactly the canvas's box, and it is
+     also why nothing was reserving the 10px it draws into. Put on the parent
+     rather than the wrap, so the measured box and the tap marker's percentages
+     are untouched: `100%` and `100cqh` both read this padded content box, so
+     the picture and its moulding fit inside the layout together. */
   .shot{flex:1 1 auto;min-height:0;display:flex;justify-content:center;
-        container-type:size}
+        padding:10px;container-type:size}
   /* The frame and the bezel are drawn with `box-shadow`, deliberately, and
      not with padding or a wrapper. This box has to stay *exactly* the canvas's
      box: the tap marker is positioned in percentages of it -- one tile is 10%
@@ -1125,16 +1139,20 @@
        `height:100%` with `width:auto` gave a 220x267 box on a 160x144 picture,
        squashing it, because a column narrower than the ratio wants clips the
        width and leaves the height alone. */
-    body>main{max-width:none}
-    main{padding:6px 8px 8px;gap:8px;border-radius:14px;
+    body>main{max-width:none;padding:6px 8px 8px}
+    main{gap:8px;border-radius:14px;
          grid-template:"brow brow   brow brow" auto
                        "dpad screen face sheet" minmax(0,1fr)
                        "dpad bar    face sheet" auto
                        "dpad menus  face sheet" auto
                        /auto minmax(0,1fr) auto minmax(0,13rem)}
     /* Held sideways there is no height to spare, so the lens shrinks rather
-       than the screen doing it. */
+       than the screen doing it -- and the frame thins with it, because 10px of
+       moulding on each side of a 157px picture is a tenth of the game. */
     .lens{width:30px;height:30px}
+    .shot{padding:6px}
+    #screenwrap{box-shadow:0 0 0 2px var(--bezel),0 0 0 5px var(--frame),
+                           0 0 0 6px var(--line),inset 0 0 0 1px rgba(0,0,0,.8)}
     .brow{gap:8px}
     /* :not(.hide) matters: this selector outweighs `.hide{display:none}`, and
        without the guard the pad would be on screen before a ROM is picked. */
@@ -1174,13 +1192,19 @@
        The priority is the other way round. The pad and the strip are fixed
        furniture with a natural height; the picture is the thing that can
        letterboard. So the stage takes the slack and the other two are `auto`. */
-    body>main{max-width:none}
-    main{padding:16px;gap:16px;
+    body>main{max-width:none;padding:16px}
+    /* 500, not 480: the column holds the picture *and* its moulding. At 480 the
+       screen filled the column edge to edge and the frame drew into whatever
+       was outside it -- the shell's padding on one side and the grid gap on the
+       other, which is why it looked centred until the padding turned out to be
+       zero. At 500 the frame's outer edge lands exactly on the column, so it
+       lines up with the strip and the pad below it. */
+    main{gap:16px;
          grid-template:"brow  brow" auto
                        "stage sheet" minmax(0,1fr)
                        "bar   sheet" auto
                        "pad   sheet" auto
-                       /minmax(0,480px) minmax(0,1fr)}
+                       /minmax(0,500px) minmax(0,1fr)}
     /* 3x -- 480x432 -- while there is room for it, because a Game Boy picture
        at 2.7x has visibly uneven pixels. The cap is a `min` of three things now
        rather than one: the column, the integer scale, and *the height the row
@@ -1193,10 +1217,10 @@
     /* Both at once here, so the stage is never the thing being covered. */
     body.menuopen .stage{visibility:visible}
     .chev{display:none}
-    /* As wide as the screen rather than as wide as the tablet. It no longer
-       needs `align-self:end` -- its row hugs it now, so there is no slack in
-       the row for it to sit at the bottom of. */
-    .padwrap{max-width:480px;width:100%}
+    /* Nothing to say here any more: the column is the cap, and the pad filling
+       it is what puts its edges on the same two lines as the strip above it and
+       the screen's moulding above that. It also no longer needs
+       `align-self:end` -- its row hugs it now. */
   }
 </style>
 </head>

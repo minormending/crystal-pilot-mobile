@@ -4808,7 +4808,7 @@ This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ 9e93862392f2 -->
+<!-- covers: app/main.js index.html @ bbacd8305c12 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -4943,17 +4943,37 @@ One painter does both. `paintSprite` takes a decoded sprite and a side, and the
 rule it exists to hold is that palette index 0 stays transparent — the lens
 would get a square on a circle and the dex card a white block on a panel.
 
-**Pico's container was capping the whole app, and `main` could not out-argue
-it.** Pico's classless build styles `body>main` as a page container with a
-max-width per breakpoint — 510px, then 700px. That is two elements against this
-sheet's one, so `main{max-width:none}` in a media query loses the tie however
-far down the file it sits, and media queries add no specificity to help.
+**Pico owns `main`'s box, and every rule here that touched it was losing
+silently.** Pico's classless build styles `body>main` with width, both margins,
+padding, and a max-width that steps 510 → 700 → 950 → 1200 → 1450 across five
+breakpoints. `body>main` is two elements against this sheet's one, so every bare
+`main{...}` in it lost the tie however far down the file it sat — and a media
+query adds no specificity to help.
 
-Measured at 1000×802: the app laid itself out in 700px and left 300 empty, and
-because the tablet grid gives the screen a fixed 480 the entire shortfall came
-out of the panel beside it. The sheet came to **204px** — the chips stacked one
-per line, and the five keys on the strip broke their own words in half, *JOB S*
-and *SET UP*. Both of the app's caps are written at `body>main` now.
+It was found one declaration at a time, which is the part worth recording.
+First the **max-width**: measured at 1000×802 the app laid itself out in 700px
+and left 300 empty, and because the tablet grid pins the screen at 480 the whole
+shortfall came out of the panel beside it. The sheet came to **204px** — chips
+stacked one per line, and five keys on the strip breaking their own words in
+half, *JOB S* and *SET UP*.
+
+Moving that single declaration fixed what could be seen and left the rest of the
+rule losing. The one still losing was **padding**, which Pico zeroes
+horizontally above its small breakpoint — so the shell had *no side padding at
+all*. That is invisible for anything with a border box, and not invisible at all
+for the screen: its frame is drawn as a shadow **outside** its box, so it hung
+over the left edge of the chassis and was clipped by the window, while the panel
+on the right ended exactly on the shell's edge. The whole box is written at
+`body>main` now, in one place.
+
+**And the frame needed room reserved for it.** Drawing it as a shadow is what
+lets `#screenwrap` stay exactly the canvas's box — the tap marker's percentages
+depend on that — but it also means 10px per side that no parent was accounting
+for. `.shot` carries that as padding: it is the parent, so the measured box and
+the marker are untouched, and both `100%` and `100cqh` read the padded content
+box, so the picture and its moulding fit inside the layout together. The tablet
+column went 480 → **500** to match, and with that the frame's outer edge, the
+strip and the pad all land on the same two lines.
 
 **The screen is what gives, not the pad.** The tablet rows were
 `stage auto / bar auto / pad minmax(0,1fr)`, which hands the screen whatever it
@@ -6120,7 +6140,7 @@ a conversation.
 
 ### The card behind a party row
 
-<!-- covers: app/rows.js app/main.js index.html @ 193b6416688b -->
+<!-- covers: app/rows.js app/main.js index.html @ a7f9fc535fe0 -->
 
 Two questions the game itself will not answer about a Pokémon you are
 carrying — *what is this made of* and *what is it about to become* — and both
@@ -6333,7 +6353,7 @@ to deposit your last Pokémon.
 
 ### The settings and the save card
 
-<!-- covers: index.html app/main.js @ 9e93862392f2 -->
+<!-- covers: index.html app/main.js @ bbacd8305c12 -->
 
 The pilot's own list got a glyph column, shorter names and a slot to fill in
 v165. These two cards did not, and reading them found that they had a different
