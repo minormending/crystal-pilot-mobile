@@ -4808,7 +4808,7 @@ This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ f51eed54570b -->
+<!-- covers: app/main.js index.html @ 9a6e21da40ab -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -4942,6 +4942,25 @@ Three things in that path are worth writing down, because each of them decodes
 One painter does both. `paintSprite` takes a decoded sprite and a side, and the
 rule it exists to hold is that palette index 0 stays transparent — the lens
 would get a square on a circle and the dex card a white block on a panel.
+
+**A bare element rule is a rule about elements nobody has added yet.** The
+picture's styling was written as `canvas{...}` when the game's screen was the
+only canvas in the app — black, bordered, 8px-rounded, stretched to fill its
+box, every one of which is right for a Game Boy screen and wrong for a sprite.
+The lens and the dex portrait are canvases, and v210 shipped the lens as a
+black square sitting in a blue ring: neither of their own rules had any reason
+to override a background their author did not know they were inheriting. It is
+`#screen` now.
+
+Pico had a quieter version of the same thing underneath it. It gives every
+canvas a 1px border, and with `box-sizing:border-box` that leaves 30 pixels of
+content for a 16-pixel picture — 1.875×, which is exactly the uneven scaling
+the tablet layout spends a whole integer step avoiding. Both sprite canvases
+reset it explicitly rather than relying on nothing else claiming them.
+
+Neither was caught by anything in `check-app`, and that is the honest summary:
+`dead_css` knows when a rule *cannot* apply and `markers` knows when two rules
+draw the same thing, but nothing here knows what a rule is **for**.
 
 **The strip carries its own inks.** `--ink` and `--dim` are tuned against
 `--panel`; the strip is dark glass with light green on it, which is a different
@@ -6057,7 +6076,7 @@ a conversation.
 
 ### The card behind a party row
 
-<!-- covers: app/rows.js app/main.js index.html @ 2a42b142fecd -->
+<!-- covers: app/rows.js app/main.js index.html @ 017844ced6d9 -->
 
 Two questions the game itself will not answer about a Pokémon you are
 carrying — *what is this made of* and *what is it about to become* — and both
@@ -6270,7 +6289,7 @@ to deposit your last Pokémon.
 
 ### The settings and the save card
 
-<!-- covers: index.html app/main.js @ f51eed54570b -->
+<!-- covers: index.html app/main.js @ 9a6e21da40ab -->
 
 The pilot's own list got a glyph column, shorter names and a slot to fill in
 v165. These two cards did not, and reading them found that they had a different

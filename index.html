@@ -207,10 +207,14 @@
   .lens .spec{position:absolute;left:17%;top:12%;width:21%;height:15%;
               border-radius:50%;background:rgba(255,255,255,.62);
               pointer-events:none}
-  /* 16x16 out of the cartridge, drawn at 32 so every pixel is exactly four. */
+  /* 16x16 out of the cartridge, drawn at 32 so every pixel is exactly two.
+     `border:0` is what makes that true rather than nearly true: Pico gives
+     every canvas a 1px border, and with `box-sizing:border-box` that leaves 30
+     pixels of content for a 16-pixel picture -- 1.875x, which is exactly the
+     uneven scaling the tablet layout takes a whole integer step to avoid. */
   .lens .mon{position:absolute;left:50%;top:50%;width:32px;height:32px;
              transform:translate(-50%,-50%);image-rendering:pixelated;
-             pointer-events:none}
+             border:0;background:none;pointer-events:none}
   /* Two lamps, not the reference picture's three. A third for "a ROM is
      loaded" was drawn and then cut: until one is, the gateway cards are on the
      screen saying so in words, which is louder than any lamp. */
@@ -522,7 +526,18 @@
                              0 1px 0 rgba(255,255,255,.16);
                   padding:10px 12px 12px;margin:0}
 
-  canvas{width:100%;height:100%;background:#000;display:block;
+  /* **`#screen`, not `canvas`.** This was a bare element rule written when the
+     game's picture was the only canvas in the app, and it is black, bordered,
+     rounded and stretched to fill its box -- every one of which is right for a
+     Game Boy screen and wrong for a sprite. The lens and the dex portrait are
+     canvases now, and on the deployed build the lens came out as a black
+     square sitting in a blue ring: `background:#000` is not something either
+     of their own rules had any reason to override, because neither author knew
+     they were inheriting it.
+
+     A bare-element rule is a rule about every element of that kind, including
+     the ones nobody has added yet. */
+  #screen{width:100%;height:100%;background:#000;display:block;
          border:1px solid var(--line);border-radius:8px;
          image-rendering:pixelated;cursor:crosshair;
          /* Taps go straight through as clicks: without this a phone waits to
@@ -768,7 +783,8 @@
      Boy sprite scaled by anything but a whole number has visibly uneven pixels,
      and this one is small enough that 1x is the honest size. Floated so the
      entry's lines wrap round it rather than starting below it. */
-  .dexcard .pic{float:left;margin:0 10px 6px 0;image-rendering:pixelated}
+  .dexcard .pic{float:left;margin:0 10px 6px 0;image-rendering:pixelated;
+                border:0;background:none}
   .dexbox .chips{padding-bottom:8px}
   .dexbox .chips button{min-height:32px;padding:5px 10px;font-size:12px}
   /* Open, it needs an edge: the first offer below it wears no top rule, being
