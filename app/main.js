@@ -273,15 +273,43 @@ const setStatus = (text, kind = '') => {
  * chevron, so this still runs there and simply has nothing to move for 'menu'.
  */
 let panel = 'menu';
+/**
+ * Which pane the strip is showing.
+ *
+ * Separate from whether the panel is open at all, which it was not: one value
+ * used to carry three states -- null, 'menu', 'settings' -- and that shape
+ * cannot say "open, on the jobs" and "open, on settings" are the same kind of
+ * thing. It could also not say what the strip needs to know, which is where you
+ * are *while the panel is shut*.
+ */
+let pane = 'jobs';
+const PANES = ['jobs', 'party', 'dex', 'save', 'set'];
+
 function showPanel(which) {
   panel = which;
-  $('#sheet').classList.toggle('open', which === 'menu');
-  $('#setsheet').classList.toggle('open', which === 'settings');
+  $('#sheet').classList.toggle('open', !!which);
   document.body.classList.toggle('menuopen', !!which);
-  $('#door').setAttribute('aria-expanded', which === 'menu' ? 'true' : 'false');
-  $('#chev').textContent = which === 'menu' ? 'Close ▾' : 'Menu ▴';
+  $('#door').setAttribute('aria-expanded', which ? 'true' : 'false');
+  $('#chev').textContent = which ? 'Close ▾' : 'Menu ▴';
+  paintGear();
+}
+
+/** The gear is pressed when settings is the pane *and* the panel is open. */
+function paintGear() {
   $('#gear').setAttribute('aria-expanded',
-                          which === 'settings' ? 'true' : 'false');
+                          String(!!panel && pane === 'set'));
+}
+
+function showPane(want) {
+  if (!PANES.includes(want)) return;
+  pane = want;
+  for (const key of PANES) {
+    $(`#pane-${key}`).classList.toggle('hide', key !== want);
+  }
+  for (const b of $('#modes').querySelectorAll('button')) {
+    b.setAttribute('aria-pressed', String(b.dataset.pane === pane));
+  }
+  paintGear();
 }
 /**
  * Which door of the fork is open, or the fork itself when nothing is passed.
@@ -461,6 +489,9 @@ async function reallyStart() {
   $('#speedbox').classList.remove('hide');
   $('#huntcard').classList.remove('hide');
   $('#savecard').classList.remove('hide');
+  // Before a game there are three gateway cards and nothing to switch between,
+  // and a strip of empty rooms is worse than no strip.
+  $('#modes').classList.remove('hide');
   paintSlots();
   paintUndo();
   $('#screenwrap').classList.remove('hide');
@@ -3205,8 +3236,22 @@ $('#travel').onclick = async () => {
   });
 };
 
-$('#door').onclick = () => showPanel(panel === 'menu' ? null : 'menu');
-$('#gear').onclick = () => showPanel(panel === 'settings' ? null : 'settings');
+$('#door').onclick = () => showPanel(panel ? null : 'menu');
+// The gear is a shortcut to one key on the strip rather than a second door.
+// Pressing it when settings is already showing closes the panel, which is what
+// it did when settings *was* a panel -- the affordance is unchanged, and what
+// it opens onto is now one of five things rather than one of two.
+$('#gear').onclick = () => {
+  if (panel && pane === 'set') { showPanel(null); return; }
+  showPane('set');
+  showPanel('menu');
+};
+// Delegated, so five keys are one listener and an unknown one is ignored
+// rather than switching to a pane that does not exist.
+$('#modes').onclick = (ev) => {
+  const want = ev.target.closest('button');
+  if (want) showPane(want.dataset.pane);
+};
 // The log's card starts empty, and nothing paints it until a job runs.
 paintStatusCard();
 

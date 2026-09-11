@@ -4808,7 +4808,7 @@ This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ 4700e3ed7de2 -->
+<!-- covers: app/main.js index.html @ 004982f1f55d -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -4842,7 +4842,7 @@ which shares the stage's area on purpose:
 flowchart TD
     M["main — the shell, display:grid"] --> BR["<b>brow</b><br/>.lens · .lamps · .badge<br/>#update #gear"]
     M --> ST["<b>stage</b><br/>.shot → #screenwrap → canvas<br/>#taphint"]
-    M --> SH["<b>stage</b>, again<br/>.sheet — the menu<br/>.setsheet — settings"]
+    M --> SH["<b>stage</b>, again<br/>.sheet → .panes — five panes<br/>.modes — the strip"]
     M --> BA["<b>bar</b> — the strip<br/>.lcdtop: #where #purse<br/>.barline: #dot #status #steps #chev, #stopRun<br/>#battlebar · #handoffrow"]
     M --> PA["<b>pad</b><br/>.gamepad → .dpad .face · .menus"]
     ST -. "same area, higher z-index" .- SH
@@ -5020,19 +5020,38 @@ Nothing is deleted: the line is a `<summary>` and the bars are one tap below it.
 With no party the whole box is hidden rather than summarising nothing — the hint
 under the offers already says that most jobs want a Pokémon along.
 
-**Two doors, and never two panels.** Colour, the room, this device's name, the
-kept files and *How this works* are preferences and mechanisms — set once and
-then read never — and they were the first card in the menu, so opening the
-pilot's list meant scrolling past the colour theme. They move behind a ⚙ in the
-header, into a second overlay that shares the first one's grid area and sits a
-layer above it, because in the tablet and landscape layouts the menu is a column
-that never closes and settings has to cover it.
+**One door, and a strip of five keys.** The menu was a stack of five cards you
+scrolled through, and settings was not even in it: speed, the room, this
+device's name, the kept files and *How this works* sat on a *second* overlay
+behind ⚙, sharing the first one's grid area at a higher z-index — which existed
+solely so it could cover a menu that never closes in the two wide layouts. Two
+mechanisms answering one question.
 
-`showPanel` takes one of `'menu'`, `'settings'` or `null` rather than keeping two
-open flags: "both open" is a state with no meaning, and two booleans would let it
-happen. Both doors are also visible with no game loaded — the device that most
-needs the room code is the one with no ROM on it yet, which is the same reason
-the version display moved into the header in v71.
+`.modes` replaces both. The stack is gone, the second overlay is gone with it,
+and so is the z-index that only ever existed to let one cover the other. Party
+and Pokédex were folds *inside* the offers card; they are keys now, because a
+party is something you go and look at rather than a preamble to a list.
+
+**The strip is outside the scroller, and that is the point of it.** `.sheet`
+used to be the scrolling box; `.panes` is, and `.modes` sits below it as a
+sibling. A row of keys inside a scrolling box scrolls away from the panes it
+switches, which is the same defect as a pad that scrolls away from the screen
+it drives — the one this layout was rebuilt around. Getting that wrong once cost
+a debugging pass: the settings pane was closed one `</div>` early and became a
+*sibling* of the scroller rather than a child, so it stacked below an empty box
+instead of filling it.
+
+**Open, and which key, are two values now.** `showPanel` used to take one of
+`'menu'`, `'settings'` or `null`, and that shape cannot express that *open on
+the jobs* and *open on settings* are the same kind of thing — nor the thing the
+strip needs, which is which key is lit while the panel is shut. `showPanel`
+holds the first question and `showPane` the second. ⚙ survives as a shortcut to
+one key rather than as a door: pressing it while Setup shows closes the panel,
+exactly as it did when Setup was a panel. The strip is also drawn only once a
+game is loaded, because before that the three gateway cards are the only thing
+to look at and a strip of empty rooms is worse than no strip — while ⚙ itself
+stays reachable, since the device that most needs the room code is the one with
+no ROM on it yet.
 
 `openGate` is the same idea one level out, and for a sharper reason. The menu's
 first card was a file picker, which is the right first question for one of the
@@ -5040,7 +5059,7 @@ three people who open this page and the wrong one for the other two — badly
 wrong for the one whose other device is already playing, since watching needs
 nothing from this device at all. It takes `'files'`, `'watch'`, `'about'` or
 `null` for the fork itself, and toggles four cards from that one value for the
-same reason `showPanel` holds one: three doors open at once is a state with no
+same reason `showPane` holds one: three of them open at once is a state with no
 meaning. `closeGateway` is the separate word for *a game is running, so none of
 the three questions applies*, which is what `reallyStart` calls — the fork does
 not have a fifth value for "not applicable", because that is not a door.
@@ -5381,7 +5400,7 @@ seconds by a page whose loop was supposedly running.
 
 ### One thing at a time
 
-<!-- covers: app/main.js @ 65de8f98f5d1 -->
+<!-- covers: app/main.js @ e532ae4229a1 -->
 
 One Game Boy, one joypad, one canvas — so a great deal of this app is about
 making sure two things are never driving them at once. There are three claims,
@@ -5935,7 +5954,7 @@ a conversation.
 
 ### The card behind a party row
 
-<!-- covers: app/rows.js app/main.js index.html @ 14d5c3a11709 -->
+<!-- covers: app/rows.js app/main.js index.html @ f476c9f55f25 -->
 
 Two questions the game itself will not answer about a Pokémon you are
 carrying — *what is this made of* and *what is it about to become* — and both
@@ -6024,7 +6043,7 @@ at body size.
 
 ### Running the list
 
-<!-- covers: app/rows.js app/main.js @ c2d1761534c3 -->
+<!-- covers: app/rows.js app/main.js @ 8a87bb4e02b2 -->
 
 The app has spent forty passes learning to answer one question — *what can the
 pilot do here, and which of those is worth most?* — and twenty showing the
@@ -6148,7 +6167,7 @@ to deposit your last Pokémon.
 
 ### The settings and the save card
 
-<!-- covers: index.html app/main.js @ 4700e3ed7de2 -->
+<!-- covers: index.html app/main.js @ 004982f1f55d -->
 
 The pilot's own list got a glyph column, shorter names and a slot to fill in
 v165. These two cards did not, and reading them found that they had a different
@@ -6788,7 +6807,7 @@ they have been installed.
 
 ### Watching the other device's screen
 
-<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ c9a9c29104a6 -->
+<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ 52f4b450fdce -->
 
 One device shows its screen; the other watches it, and plays it if the first
 one says so. The picture goes straight between them over WebRTC and never

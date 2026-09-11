@@ -671,22 +671,43 @@ point of it rather than a detail: a card that only got you as far as Settings
 would have moved the confusion rather than removed it. Both surfaces are painted
 from one `describeScreen`, so they cannot disagree about what is happening.
 
-## Two doors, and never two panels
+## One door, and a strip of five keys
 
-There are exactly two things behind doors, and they are behind different ones:
+There used to be two doors and two overlays. The status line opened the menu;
+⚙ opened settings onto a *second* sheet at its own z-index, which existed
+purely so it could cover a menu that never closes in the two wide layouts. Two
+mechanisms answering one question, and behind the first of them a stack of five
+cards you scrolled through to reach the fourth.
 
-| door | opens | holds |
-| --- | --- | --- |
-| the status line | the menu | the offers, the picker, the save, the party |
-| ⚙ on the brow | settings | speed, the room, this device's name, kept files, *How this works* |
+One door now, and a key each:
 
-Settings used to be the *first* card in the menu, so opening the pilot's list
-meant scrolling past the colour theme to reach the thing you opened it for. It
-is a preference: set once and then read never, which is what a door is for. The
-colour theme it was named after is gone, and the speed slider has arrived in its
-place from the header — the same argument, applied the other way round.
+| key | holds |
+| --- | --- |
+| **Jobs** | what the pilot is doing, and what it can be sent to do |
+| **Party** | who is being flown, and the numbers behind each of them |
+| **Dex** | the record — everything this cartridge has ever caught |
+| **Save** | the game save, export and import, undo, the slots |
+| **Setup** | speed, the room, this device's name, kept files, *How this works* |
 
-Both doors are reachable with no game loaded — the device that most needs the
+Party and Dex were folds *inside* the offers card, above the two jobs those
+facts decide. They are keys because a party is something you go and look at
+rather than a preamble to a list. Settings is a key for the reason it was a
+door: a preference is set once and read never. What it is no longer is a second
+overlay — the z-index that existed only so one sheet could cover another went
+with the stack it was covering.
+
+**The strip does not scroll, and that is the whole of why it is a strip.** The
+sheet used to be the scroller; now the panes are, and the strip sits below
+them. A row of keys inside a scrolling box scrolls away from the panes it
+switches, which is the same bug as a pad that scrolls away from the screen it
+drives.
+
+⚙ survives as a shortcut to one of the five rather than as a second door.
+Pressing it when Setup is already showing closes the panel, which is exactly
+what it did when Setup *was* a panel: the affordance is unchanged, and what it
+opens onto is now one of five things rather than one of two.
+
+Both ways in are reachable with no game loaded — the device that most needs the
 room code is the one with no ROM on it yet, which is also why the version
 display lives on the brow. `check-app`'s `version` group asserts the two that
 can regress silently: that the version display is on the brow, and that the
@@ -694,26 +715,26 @@ settings card does not carry `hide`. The rule did not change when the `<header>`
 did — the number still has to be somewhere you can reach before there is a
 game — so the group was re-pointed rather than relaxed.
 
-One panel value rather than two open flags, because "both open" is a state with
-no meaning that two booleans would let happen. Opening either closes the other:
+**Open, and which key, are two questions now.** They used to be one value with
+three states — `null`, `'menu'`, `'settings'` — and that shape cannot say that
+*open on the jobs* and *open on settings* are the same kind of thing. It also
+could not say the thing the strip needs to know, which is where you are while
+the panel is shut.
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Menu: no game yet
-    Menu --> Nothing: a game loads
-    Nothing --> Menu: tap the status line
-    Menu --> Nothing: tap it again, or start a job
-    Nothing --> Settings: tap ⚙
-    Settings --> Nothing: tap ⚙ again
-    Menu --> Settings: tap ⚙
-    Settings --> Menu: tap the status line
-    note right of Nothing
-        the screen, the bar and the pad
+    [*] --> Open: no game yet
+    Open --> Shut: a game loads
+    Shut --> Open: tap the status line, or ⚙
+    Open --> Shut: tap it again, or start a job
+    note right of Shut
+        the screen, the strip and the pad
         the only state a job runs in
     end note
-    note right of Menu
+    note right of Open
         pinned open on a tablet
         and in landscape
+        the strip says which of five
     end note
 ```
 
@@ -1248,4 +1269,4 @@ So this page carries a marker naming the files it describes and the hash they
 had when it was last read against them. `tools/docs-check` reports it when they
 move, and the pre-commit hook blocks on that report.
 
-<!-- covers: index.html app/main.js app/rows.js @ 14d5c3a11709 -->
+<!-- covers: index.html app/main.js app/rows.js @ f476c9f55f25 -->

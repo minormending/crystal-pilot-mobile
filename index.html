@@ -372,17 +372,43 @@
      opening it costs the screen nothing and moves neither the bar nor the pad.
      A phone has no room for both the game and the menu; that is why there is a
      door at all, and why the tablet and landscape rules below take it away. */
-  .sheet,.setsheet{grid-area:stage;z-index:3;background:var(--bg);
-         min-height:0;overflow-y:auto;overscroll-behavior:contain;
+  .sheet{grid-area:stage;z-index:3;background:var(--bg);
+         min-height:0;display:flex;flex-direction:column;gap:8px;
+         border-radius:12px;padding:8px 8px 8px;
+         box-shadow:inset 0 0 0 1px var(--line)}
+  .sheet:not(.open){display:none}
+  /* The sheet itself no longer scrolls: the strip at its foot has to stay put,
+     and a strip inside a scroller scrolls away from the panes it switches. So
+     the scrolling moved in one level, onto the panes, and the fade went with
+     it -- a card cut off mid-button should read as "there is more below"
+     rather than as a rendering fault. */
+  .panes{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;
          display:flex;flex-direction:column;gap:10px;padding-bottom:2px;
-         /* The bottom edge fades, so a card cut off mid-button reads as "there
-            is more below" rather than as a rendering fault. */
          mask-image:linear-gradient(to bottom,#000 calc(100% - 14px),transparent);
          -webkit-mask-image:linear-gradient(to bottom,#000 calc(100% - 14px),transparent)}
-  .sheet:not(.open),.setsheet:not(.open){display:none}
-  /* Above the menu rather than beside it, because in the two wide layouts the
-     menu is a column that never closes and this has to cover it. */
-  .setsheet{z-index:4}
+  .pane{display:flex;flex-direction:column;gap:10px}
+  /* --- the strip of keys at the foot of the panel -------------------------
+     What used to be a stack you scrolled through. Five cards sat on top of one
+     another -- what the pilot is doing, the offers, the party, the Pokedex,
+     the save -- with settings on a *second* overlay above them at its own
+     z-index, because it had to cover a menu that never closes in the two wide
+     layouts. Two mechanisms for one question.
+
+     A key each instead. The stack is gone, the second overlay is gone with it,
+     and the z-index that existed only to let one cover the other went too. */
+  .modes{flex:0 0 auto;display:grid;grid-template-columns:repeat(5,1fr);gap:5px}
+  .modes button{min-width:0;min-height:42px;padding:0 2px;border-radius:8px;
+                font-size:10.5px;font-weight:700;letter-spacing:.05em;
+                text-transform:uppercase;
+                background:var(--raise);color:var(--raise-ink);
+                border:1px solid var(--line)}
+  /* The chosen one is a lit key rather than a darker one: the strip is the
+     only thing on the panel that says where you are, so the signal has to be
+     the strongest thing on it. */
+  .modes button[aria-pressed=true]{background:var(--action);
+                                   color:var(--action-ink);
+                                   border-color:var(--line);
+                                   box-shadow:inset 0 -2px 0 rgba(0,0,0,.22)}
   /* The fade at the sheet's bottom edge is a mask, which makes the sheet
      transparent there -- over the page background that reads as "more below",
      and over the running game it read as the game bleeding through the menu.
@@ -981,7 +1007,6 @@
        to do: the sheet is a column and stays open. The chevron goes with it --
        an affordance for a door that is not there is worse than no affordance. */
     .sheet,.sheet:not(.open){display:flex;grid-area:sheet}
-    .setsheet{grid-area:sheet}
     /* Both at once here, so the stage is never the thing being covered. */
     body.menuopen .stage{visibility:visible}
     .chev{display:none}
@@ -1011,8 +1036,6 @@
     .shot{container-type:normal}
     #screenwrap{width:min(100%,480px)}
     .sheet,.sheet:not(.open){display:flex;grid-area:sheet}
-    .setsheet{grid-area:sheet}
-    .sheet{padding-right:2px}
     /* Both at once here, so the stage is never the thing being covered. */
     body.menuopen .stage{visibility:visible}
     .chev{display:none}
@@ -1134,7 +1157,7 @@
     <!-- Not hidden behind a loaded game, like the card it opens: the device
          that most needs the room code is the one with no ROM on it yet. -->
     <button class="themebtn gear" id="gear" aria-label="Settings"
-            aria-expanded="false" aria-controls="setsheet">&#9881;</button>
+            aria-expanded="false" aria-controls="sheet">&#9881;</button>
   </div>
   <!-- The machine. The screen and the pad hold their places on the page; the
        flow between them is the only thing that scrolls. Before this the pad was
@@ -1204,6 +1227,7 @@
   <div class="sheet open" id="sheet">
 
   <!-- Three ways to arrive, and only one of them wants a file picker. -->
+  <div class="panes" id="panes">
   <div class="card" id="gateway">
     <h2>What brings you here</h2>
     <div class="gates">
@@ -1306,6 +1330,9 @@
     <footer><button class="backlink" id="backfromwatch">&larr; the other two things you might be here for</button></footer>
   </div>
 
+  <!-- What the pilot is doing, and what it can be sent to do. One pane rather
+       than two cards, because the second answers the first. -->
+  <div class="pane" id="pane-jobs">
   <div class="card" id="statuscard">
     <ol class="runlog hide" id="runlog"></ol>
     <div class="row hide" id="bootrow">
@@ -1318,42 +1345,6 @@
 
   <div class="card hide" id="huntcard">
     <h2>Send the pilot</h2>
-
-    <!-- Who leads and who is hurt, above the two jobs those facts decide. Open
-         it and the per-member bars are still there: this replaces a card of six
-         rows with the two lines of it a pilot acts on, and hides nothing. -->
-    <details class="partybox hide" id="panel">
-      <summary id="leadline">no party yet</summary>
-      <div id="party"></div>
-    </details>
-
-    <!-- Everything this cartridge has ever caught, which is a different list
-         from the six being carried: the party box above is what the pilot is
-         flying, and this is the record. Hidden until the game keeps one. -->
-    <details class="partybox dexbox hide" id="dexpanel">
-      <summary id="dexline">no Pokédex yet</summary>
-      <!-- Two segments rather than one button that cycles, which is the lesson
-           the Colour row already paid for: a control that prints its own state
-           and changes on press tells you neither how many states there are nor
-           which way round. These say both at rest, and the second one is the
-           whole answer to "let me look something up without carrying it". -->
-      <div class="dexrow">
-        <div class="seg dexseg" id="dexmode" role="group"
-             aria-label="Which Pokémon to list">
-          <button type="button" data-mode="caught" aria-pressed="true">Caught</button>
-          <button type="button" data-mode="all" aria-pressed="false">All</button>
-        </div>
-        <!-- Labelled as well as prompted. An unlabelled box whose placeholder
-             could pass for real content reads as a value somebody already
-             entered, which is the mistake the room-code field made for four
-             versions: "name or number" cannot be mistaken for a Pokémon. -->
-        <input type="search" id="dexfind" class="find" autocomplete="off"
-               placeholder="name or number"
-               aria-label="Find a Pokémon by name or number">
-      </div>
-      <div class="chips" id="dexchips"></div>
-      <div class="dexcard hide" id="dexentry"></div>
-    </details>
 
     <!-- The six rows sit in their own flex column so the pilot can rank them
          with `order` without dragging the picker and the presets below into the
@@ -1514,6 +1505,61 @@
        *as well* -- "Save the game" beside a button saying Save, "Undo the last
        job" beside a button saying Undo -- so the row was read twice to learn
        one thing. The name is the noun now and the button is the only verb. -->
+  </div>
+
+  <!-- Who is being flown. It was a fold inside the offers card, above the two
+       jobs it decides; it is a key on the strip now, because a party is a thing
+       you go and look at rather than a preamble to the list. -->
+  <div class="pane hide" id="pane-party">
+  <div class="card">
+    <h2>Your party</h2>
+    <!-- Who leads and who is hurt, above the two jobs those facts decide. Open
+         it and the per-member bars are still there: this replaces a card of six
+         rows with the two lines of it a pilot acts on, and hides nothing. -->
+    <details class="partybox hide" id="panel" open>
+      <summary id="leadline">no party yet</summary>
+      <div id="party"></div>
+    </details>
+
+  </div>
+  </div>
+
+  <!-- And the record, which is a different list from the six being carried. -->
+  <div class="pane hide" id="pane-dex">
+  <div class="card">
+    <h2>Pokédex</h2>
+    <!-- Everything this cartridge has ever caught, which is a different list
+         from the six being carried: the party box above is what the pilot is
+         flying, and this is the record. Hidden until the game keeps one. -->
+    <details class="partybox dexbox hide" id="dexpanel" open>
+      <summary id="dexline">no Pokédex yet</summary>
+      <!-- Two segments rather than one button that cycles, for the reason a cycling
+           button never worked anywhere in this app: a control that prints its own state
+           and changes on press tells you neither how many states there are nor
+           which way round. These say both at rest, and the second one is the
+           whole answer to "let me look something up without carrying it". -->
+      <div class="dexrow">
+        <div class="seg dexseg" id="dexmode" role="group"
+             aria-label="Which Pokémon to list">
+          <button type="button" data-mode="caught" aria-pressed="true">Caught</button>
+          <button type="button" data-mode="all" aria-pressed="false">All</button>
+        </div>
+        <!-- Labelled as well as prompted. An unlabelled box whose placeholder
+             could pass for real content reads as a value somebody already
+             entered, which is the mistake the room-code field made for four
+             versions: "name or number" cannot be mistaken for a Pokémon. -->
+        <input type="search" id="dexfind" class="find" autocomplete="off"
+               placeholder="name or number"
+               aria-label="Find a Pokémon by name or number">
+      </div>
+      <div class="chips" id="dexchips"></div>
+      <div class="dexcard hide" id="dexentry"></div>
+    </details>
+
+  </div>
+  </div>
+
+  <div class="pane hide" id="pane-save">
   <div class="card hide" id="savecard">
     <h2>Your save</h2>
 
@@ -1588,11 +1634,11 @@
 
   </div>
 
-  <!-- Behind the gear. Everything in here is a preference or a mechanism: set
-       once and then read never, which is what a door is for. It was the first
-       card in the menu, so opening the pilot's list meant scrolling past the
-       colour theme to reach it. -->
-  <div class="setsheet" id="setsheet">
+  <!-- Everything in here is a preference or a mechanism: set once and then
+       read never. It spent a while on a second overlay of its own, at its own
+       z-index, purely so it could cover a menu that never closes in the two
+       wide layouts -- two mechanisms answering one question. It is a key. -->
+  <div class="pane hide" id="pane-set">
   <!-- Reachable with no game loaded, which the version display learnt the same
        way: the theme, what this device is called, which room it is in and which
        files it keeps are all true before a ROM is picked, and the device that
@@ -1687,6 +1733,21 @@
         uploaded: the ROM never leaves this device, and a save travels only
         while you are sharing.</p>
     </details>
+  </div>
+  </div>
+  </div>
+
+  <!-- The strip. Five keys, and the lit one is where you are: it is the only
+       thing on the panel that says so, which is why the chosen key is brighter
+       than the rest rather than darker. Hidden until a game is loaded, because
+       before that the three gateway cards above are the only thing to look at
+       and a strip of empty rooms is worse than no strip. -->
+  <div class="modes hide" id="modes" role="group" aria-label="What to show">
+    <button type="button" data-pane="jobs" aria-pressed="true">Jobs</button>
+    <button type="button" data-pane="party" aria-pressed="false">Party</button>
+    <button type="button" data-pane="dex" aria-pressed="false">Dex</button>
+    <button type="button" data-pane="save" aria-pressed="false">Save</button>
+    <button type="button" data-pane="set" aria-pressed="false">Setup</button>
   </div>
   </div>
 
