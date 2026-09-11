@@ -181,14 +181,36 @@
      than a filled circle -- an off-centre radial gradient with a specular
      highlight over it, which is the whole of what stops a circle reading as a
      button somebody forgot to label. */
-  .lens{position:relative;overflow:hidden;flex:0 0 auto;
-        width:46px;height:46px;border-radius:50%;
-        background:radial-gradient(circle at 34% 28%,#9fd4ff 0%,#3f7fd0 42%,
-                   #17407e 78%,#0b2448 100%);
-        box-shadow:0 0 0 3px var(--frame),0 0 0 5px var(--line),
-                   inset 0 -4px 8px rgba(0,0,0,.55)}
-  .lens .glass{position:absolute;left:22%;top:16%;width:32%;height:23%;
-               border-radius:50%;background:rgba(255,255,255,.78)}
+  /* The rim is the gauge: a conic sweep clipped to an annulus, so the ring is
+     the lens's own frame rather than a second circle drawn around it. `--hp` is
+     a bare number the painter sets, because `conic-gradient` wants a percentage
+     and a custom property holding `40%` cannot be arithmetic'd later. */
+  .lens{--hp:0;--ring:var(--ok);
+        position:relative;flex:0 0 auto;width:52px;height:52px;
+        border-radius:50%;padding:0;border:0;cursor:pointer;
+        background:conic-gradient(from -90deg,
+                   var(--ring) calc(var(--hp) * 1%), rgba(0,0,0,.5) 0);
+        box-shadow:0 0 0 2px var(--line)}
+  .lens.low{--ring:var(--mark)}
+  .lens.out{--ring:var(--bad)}
+  /* The glass, inside the rim. Off-centre radial plus a specular highlight,
+     which is the whole of what stops a circle reading as a button somebody
+     forgot to label -- and it is a button now, so the glass has to work
+     harder rather than less. */
+  .lens .glass{position:absolute;inset:5px;border-radius:50%;
+               background:radial-gradient(circle at 34% 28%,#9fd4ff 0%,
+                          #3f7fd0 42%,#17407e 78%,#0b2448 100%);
+               box-shadow:inset 0 -4px 8px rgba(0,0,0,.55)}
+  /* Up at the rim rather than over the middle. Centred nearer the glass's own
+     centre it sat squarely on the lead's face, which is a reflection drawn on
+     top of the thing the lens exists to show. */
+  .lens .spec{position:absolute;left:17%;top:12%;width:21%;height:15%;
+              border-radius:50%;background:rgba(255,255,255,.62);
+              pointer-events:none}
+  /* 16x16 out of the cartridge, drawn at 32 so every pixel is exactly four. */
+  .lens .mon{position:absolute;left:50%;top:50%;width:32px;height:32px;
+             transform:translate(-50%,-50%);image-rendering:pixelated;
+             pointer-events:none}
   /* Two lamps, not the reference picture's three. A third for "a ROM is
      loaded" was drawn and then cut: until one is, the gateway cards are on the
      screen saying so in words, which is louder than any lamp. */
@@ -1205,10 +1227,16 @@
        material; two are readings and belong on the strip with the other
        readings, and one is a preference and belongs in Settings. -->
   <div class="brow">
-    <!-- Decorative for now, and deliberately so: the party lead and its HP ring
-         move in here later, and a lens that is a button before it is anything
-         is a button nobody can guess the meaning of. -->
-    <div class="lens" aria-hidden="true"><span class="glass"></span></div>
+    <!-- Who is being flown, and how hurt they are. A job runs for ninety
+         seconds with the panel shut, and "is my lead dying" was three taps away
+         behind the party fold for all of it. A circle wants a ring gauge, and
+         this is the only round moulding on the panel with no game function. -->
+    <button class="lens" id="lens" aria-label="Your party">
+      <span class="glass" aria-hidden="true"></span>
+      <canvas class="mon" id="lensmon" width="16" height="16"
+              aria-hidden="true"></canvas>
+      <span class="spec" aria-hidden="true"></span>
+    </button>
     <div class="lamps" aria-hidden="true">
       <span class="lamp" id="lamprun"></span>
       <span class="lamp link" id="lamplink"></span>

@@ -36,7 +36,7 @@ places, one opens over them, and the page itself never scrolls at all:
 
 | | holds | scrolls |
 | --- | --- | --- |
-| the brow | the lens, the lamps, the name and the version | never |
+| the brow | the lens — your lead, with its HP round the rim | never |
 | the stage | the screen and the tap hint | never |
 | the bar | what is happening, Stop, and the door | never |
 | the sheet | the offers, the save, the party, settings | yes, and only this |
@@ -49,7 +49,12 @@ paragraph. Three of them turned out not to be header material at all once there
 was somewhere better to put them. Where you are and how much money you have are
 *readings*, so they are on the strip with the other readings; the speed slider
 is a preference you set once, so it is in Settings with the other preferences.
-What is left is what a device has moulded into its top edge.
+What is left is what a device has moulded into its top edge — and the lens,
+which is the largest moulding on the panel and was the only one with nothing to
+do. It holds the party lead, drawn out of your own cartridge, with its HP as a
+ring round the rim. That is the fact this app spends most of its time unable to
+answer: a job runs for ninety seconds with the panel shut, and *is my lead
+dying* was three taps away behind the party fold for all of it.
 
 ```
  ┌───────────────────────┐   ┌───────────────────────┐
@@ -1313,4 +1318,4 @@ So this page carries a marker naming the files it describes and the hash they
 had when it was last read against them. `tools/docs-check` reports it when they
 move, and the pre-commit hook blocks on that report.
 
-<!-- covers: index.html app/main.js app/rows.js @ fd8f555b9319 -->
+<!-- covers: index.html app/main.js app/rows.js @ 7d137a5bd2a8 -->

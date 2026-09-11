@@ -172,7 +172,7 @@ export class Symbols {
  * Every symbol this app reads, by name.
  *
  * It exists so a device with a ROM and no .sym can be handed the addresses
- * instead of the file: 100 lines is about a kilobyte, against 1.8MB, and it
+ * instead of the file: 104 lines is about a kilobyte, against 1.8MB, and it
  * fits in a room with space for a save beside it.
  *
  * Written down rather than discovered, because nothing at run time can know
@@ -199,6 +199,14 @@ export const SHARED_SYMBOLS = [
   // with a digest and no .sym reads the ROM through these addresses, so a
   // name missing here is a dex that works on one device and not the other.
   'EvosAttacksPointers',
+  // The party icon, and the two colours the game paints it in. Four names for
+  // one picture, because Gen 2 keeps it in four places: a byte per species
+  // saying which icon, a pointer per icon, the tiles themselves, and the
+  // palette. All four are optional in `romdata.js` and all four have to
+  // travel for the same reason `EvosAttacksPointers` does -- a second phone
+  // with a digest and no .sym reads the ROM through these addresses, so a
+  // name missing here is a lens that is empty on one device and not the other.
+  'MonMenuIcons', 'IconPointers', 'Icons', 'PokemonPalettes',
   'wBattleMonType1', 'wBattleMonType2',
   'wEnemyMonHP', 'wEnemyMonLevel', 'wEnemyMonMaxHP', 'wEnemyMonSpecies',
   'wEnemyMonType1', 'wEnemyMonType2',

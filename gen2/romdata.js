@@ -158,6 +158,81 @@ export class RomData {
     // started, so anything wanting to say *night begins at 18:00* had to write
     // it down.
     this.times = symbols.has('TimesOfDay') ? this.at('TimesOfDay') : null;
+    // The party icon. Four names for one picture, because Gen 2 keeps it in
+    // four places -- a byte per species saying which icon, a pointer per icon,
+    // the tiles, and the palette -- so it is all-or-nothing: a cartridge
+    // missing any of the three graphics names has no icon to draw, and one
+    // missing only the palette can still draw it in grey.
+    this.icons = ['MonMenuIcons', 'IconPointers', 'Icons'].every(
+      (n) => symbols.has(n))
+      ? { menu: this.at('MonMenuIcons'), pointers: this.at('IconPointers'),
+          gfx: this.at('Icons') }
+      : null;
+    this.monPalettes = symbols.has('PokemonPalettes')
+      ? this.at('PokemonPalettes') : null;
+  }
+
+  /**
+   * The two colours this cartridge paints a species in, as `#rrggbb`.
+   *
+   * **Indexed by `species`, not `species - 1`.** Every other per-species table
+   * in this file is zero-based off the id; this one has a leading entry, so the
+   * usual minus-one reads the previous species' palette -- which is not an
+   * error anywhere, just the wrong colours. Measured rather than reasoned:
+   * with the minus-one, Pikachu decodes purple.
+   */
+  speciesColours(id) {
+    if (!this.monPalettes || !id || id < 1) return null;
+    const { bank, addr } = this.monPalettes;
+    const base = addr + id * 8;
+    const word = (o) => this.gb.romByte(bank, base + o)
+                        | (this.gb.romByte(bank, base + o + 1) << 8);
+    // BGR555, five bits a channel, low bits first.
+    const hex = (v) => '#' + [v & 31, (v >> 5) & 31, (v >> 10) & 31]
+      .map((c) => Math.round(c * 255 / 31).toString(16).padStart(2, '0')).join('');
+    return [hex(word(0)), hex(word(2))];
+  }
+
+  /**
+   * A species' 16x16 party icon: 256 palette indices, and the colours for them.
+   *
+   * Two things here are not guessable from the table layout and both look like
+   * working code when wrong. The tiles are in **row-major** order within a
+   * frame -- top-left, top-right, bottom-left, bottom-right -- rather than the
+   * column-major order a Game Boy 8x16 sprite uses. And an icon is eight tiles,
+   * not four: two animation frames of 2x2, the second at `+64`.
+   *
+   * The shape is a *family* rather than a species. This cartridge maps 251
+   * species onto 37 distinct icons, the most-used covering thirty of them and
+   * only six species having one to themselves, so what tells a Chikorita from a
+   * Bellsprout here is the palette rather than the outline.
+   */
+  speciesIcon(id, frame = 0) {
+    if (!this.icons || !id || id < 1) return null;
+    const iconId = this.gb.romByte(this.icons.menu.bank,
+                                   this.icons.menu.addr + id - 1);
+    const pa = this.icons.pointers.addr + iconId * 2;
+    const addr = this.gb.romByte(this.icons.pointers.bank, pa)
+                 | (this.gb.romByte(this.icons.pointers.bank, pa + 1) << 8);
+    const bank = this.icons.gfx.bank;
+    const pixels = new Uint8Array(256);
+    const CELLS = [[0, 0], [1, 0], [0, 1], [1, 1]];
+    for (let t = 0; t < CELLS.length; t++) {
+      const tile = this._read(bank, addr + frame * 64 + t * 16, 16);
+      const [tx, ty] = CELLS[t];
+      for (let row = 0; row < 8; row++) {
+        const lo = tile[row * 2];
+        const hi = tile[row * 2 + 1];
+        for (let col = 0; col < 8; col++) {
+          const bit = 7 - col;
+          pixels[(ty * 8 + row) * 16 + tx * 8 + col] =
+            ((hi >> bit) & 1) * 2 + ((lo >> bit) & 1);
+        }
+      }
+    }
+    // Index 0 is the transparent one, then light, dark, black.
+    const pal = this.speciesColours(id) || ['#b9b9c4', '#4a4a55'];
+    return { pixels, colours: [null, pal[0], pal[1], '#000000'] };
   }
 
   _read(bank, addr, length) {

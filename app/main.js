@@ -1402,6 +1402,7 @@ function setMode(piloting) {
   // long enough to press either and exactly the window Stop exists for.
   const on = piloting || autoOn;
   document.body.classList.toggle('piloting', on);
+  lensBob(on);
   $('#stopRun').classList.toggle('hide', !on);
   // Asking for a job is asking to watch it. Only one way: a job that ends does
   // not re-open the menu, because the person may well be reading the screen.
@@ -1831,6 +1832,80 @@ const DEX_CHIPS = 24;
 let dexFolded = true;
 
 /** One party member: who it is, how close it is to fainting, and what it is. */
+// Which animation frame the lens is showing. Gen 2 keeps two per icon and the
+// party menu bobs between them; this only runs while a job does, because a
+// lens that bobs at rest is a moving thing on a page that is otherwise still.
+let lensFrame = 0;
+let lensTimer = 0;
+// What is currently drawn, so a refresh four times a second is not four ROM
+// reads and four canvas writes a second for a picture that has not changed.
+let lensDrawn = null;
+
+/**
+ * The party lead in the lens, with its HP round the rim.
+ *
+ * The rim is the point of it: a job runs for ninety seconds with the panel
+ * shut, and until now "is my lead dying" was three taps away behind the party
+ * fold for the whole of that.
+ */
+function paintLens(s) {
+  const lens = $('#lens');
+  const lead = s.party && s.party[0];
+  const frac = lead && lead.maxHp ? lead.hp / lead.maxHp : 0;
+  lens.style.setProperty('--hp', String(Math.round(frac * 100)));
+  lens.classList.toggle('out', !!lead && lead.hp === 0);
+  lens.classList.toggle('low', !!lead && lead.hp > 0 && frac < 0.34);
+  lastSnapSpecies = lead ? lead.species : null;
+  drawLensMon(lastSnapSpecies);
+}
+
+/** The lead's icon, out of the cartridge, into the 16x16 canvas. */
+function drawLensMon(species) {
+  const key = species === null ? null : `${species}:${lensFrame}`;
+  if (key === lensDrawn) return;
+  const cv = $('#lensmon');
+  const ctx = cv.getContext('2d');
+  ctx.clearRect(0, 0, 16, 16);
+  lensDrawn = key;
+  if (species === null || !romdata) return;
+  // A cartridge whose symbol file does not name the icon tables answers null
+  // here, and the lens is then a lens with nothing in it -- which is what it
+  // was before this, and is the right amount of nothing.
+  const icon = romdata.speciesIcon(species, lensFrame);
+  if (!icon) return;
+  const img = ctx.createImageData(16, 16);
+  for (let i = 0; i < 256; i++) {
+    const hex = icon.colours[icon.pixels[i]];
+    // Index 0 is the transparent one, and it has to stay transparent: the
+    // glass is behind this and painting it white would put a square on a
+    // circle.
+    if (!hex) continue;
+    img.data[i * 4] = parseInt(hex.slice(1, 3), 16);
+    img.data[i * 4 + 1] = parseInt(hex.slice(3, 5), 16);
+    img.data[i * 4 + 2] = parseInt(hex.slice(5, 7), 16);
+    img.data[i * 4 + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+}
+
+/** Bob the lead while a job runs, the way the party menu does. */
+function lensBob(on) {
+  clearInterval(lensTimer);
+  lensTimer = 0;
+  if (!on) {
+    if (lensFrame !== 0) { lensFrame = 0; lensDrawn = null; }
+    return;
+  }
+  lensTimer = setInterval(() => {
+    lensFrame = lensFrame ? 0 : 1;
+    lensDrawn = null;
+    const species = lastSnapSpecies;
+    if (species !== null) drawLensMon(species);
+  }, 400);
+}
+// The lead the lens last drew, kept so the bob can redraw without a snapshot.
+let lastSnapSpecies = null;
+
 function monRow(m, snap) {
   const frac = m.maxHp ? m.hp / m.maxHp : 0;
   const name = romdata ? romdata.speciesName(m.species) : `#${m.species}`;
@@ -2040,6 +2115,7 @@ async function refresh() {
   purse.textContent = `¥${(s.money || 0).toLocaleString('en')}`;
   // Nothing to summarise and nothing to expand: the hint under the offers
   // already says that most jobs want a Pokemon along.
+  paintLens(s);
   $('#panel').classList.toggle('hide', !s.party.length);
   $('#leadline').textContent = describeParty(s, { rom: romdata });
   // The other half of the same staleness: a smaller party leaves `dexSlot`
@@ -3288,6 +3364,10 @@ $('#modes').onclick = (ev) => {
 // Delegated over the grid, so ten keys are one listener. A key *arms* rather
 // than runs: what a job would do, and why it cannot, is a sentence the display
 // has room for and a 65px key has not.
+// The lens is the party, which is what it is drawing. A round window showing
+// your lead that does nothing when pressed is a worse affordance than a plain
+// one, because it looks like it should.
+$('#lens').onclick = () => { showPane('party'); showPanel('menu'); };
 $('#jobs').onclick = (ev) => {
   const key = ev.target.closest('.key');
   if (!key) return;
