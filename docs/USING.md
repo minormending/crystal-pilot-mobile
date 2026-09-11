@@ -1580,16 +1580,16 @@ went.
 
 ## A note on updates
 
-**The header shows which build you are running**, next to the app's name: the
-version number on its own, and when the server has a newer one both numbers as
-`v96 → v97` with an Update button beside them. That button is deliberately heavy-handed — it unregisters the service
+**The brow shows which build you are running**, silkscreened next to the app's
+name: the version number on its own, and when the server has a newer one both
+numbers as `v96 → v97` with an Update button beside them. That button is deliberately heavy-handed — it unregisters the service
 worker, deletes every cache, and only then reloads — because a plain reload is
 exactly what does not always work, and it is the sequence I ended up typing by
 hand over and over while building this.
 
 **It asks first if a game is loaded**, which it did not have to when it sat two
-screens down in the settings card. Next to the app's name it is a thumb's width
-from the title, and what it does is close the game. With the files kept, the
+screens down in the settings card. On the brow it is a thumb's width from the
+title, and what it does is close the game. With the files kept, the
 reload brings them and your last save back, so the cost is the current moment —
 steps since you saved, a battle in progress. Without them it is that plus two
 file pickers, and the question says which. With no ROM picked there is nothing
@@ -1633,7 +1633,7 @@ deployed, which is not the question you are asking when a bug you saw fixed is
 still in front of you. `tools/check-app` asserts that number matches the service
 worker's cache name, because a version display that lies is worse than none.
 
-<!-- covers: sw.js @ 2a4a1f476824 -->
+<!-- covers: sw.js @ c1d5f59e08ed -->
 
 The worker fetches **network first, falling back to the cache**. That is the
 opposite of the usual offline-first advice, on purpose.
