@@ -4808,7 +4808,7 @@ This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ bbacd8305c12 -->
+<!-- covers: app/main.js index.html @ 257cb5b74894 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -4898,6 +4898,20 @@ is a bare number rather than a percentage because `conic-gradient` needs
 `calc(var(--hp) * 1%)` and a property already holding `40%` cannot be
 multiplied. The picture is a 16×16 canvas drawn at 32, so every cartridge pixel
 is exactly four.
+
+**The draw is cached on what came back, not on what was asked for**, and the
+difference is a bug that shipped. A refresh runs four times a second and the
+picture rarely changes, so `drawLensMon` keys on `species:frame` and returns
+early when it matches. The key used to be recorded *before* the sprite was
+fetched — so a single call that found no reader wrote the species into the cache
+having painted nothing, every later refresh matched it and returned early, and
+the lens stayed empty for the rest of the session. The ring beside it went on
+tracking HP perfectly, because that half never consulted a cache, which is what
+made it look like a drawing problem rather than a bookkeeping one.
+
+A cache keyed on the request rather than the result cannot tell *already done*
+from *tried once and failed*. It records the key only when there is a sprite
+now, so a failed attempt is retried on the next refresh.
 
 Where the picture comes from is in `romdata.js` — `speciesIcon`, four optional
 symbols, and two facts that are not guessable and look like working code when
@@ -5586,7 +5600,7 @@ seconds by a page whose loop was supposedly running.
 
 ### One thing at a time
 
-<!-- covers: app/main.js @ 0cae4bf4ac20 -->
+<!-- covers: app/main.js @ f111dd86a115 -->
 
 One Game Boy, one joypad, one canvas — so a great deal of this app is about
 making sure two things are never driving them at once. There are three claims,
@@ -6140,7 +6154,7 @@ a conversation.
 
 ### The card behind a party row
 
-<!-- covers: app/rows.js app/main.js index.html @ a7f9fc535fe0 -->
+<!-- covers: app/rows.js app/main.js index.html @ 84a8453dd829 -->
 
 Two questions the game itself will not answer about a Pokémon you are
 carrying — *what is this made of* and *what is it about to become* — and both
@@ -6229,7 +6243,7 @@ at body size.
 
 ### Running the list
 
-<!-- covers: app/rows.js app/main.js @ a6b99c9f457a -->
+<!-- covers: app/rows.js app/main.js @ 026856147f0d -->
 
 The app has spent forty passes learning to answer one question — *what can the
 pilot do here, and which of those is worth most?* — and twenty showing the
@@ -6353,7 +6367,7 @@ to deposit your last Pokémon.
 
 ### The settings and the save card
 
-<!-- covers: index.html app/main.js @ bbacd8305c12 -->
+<!-- covers: index.html app/main.js @ 257cb5b74894 -->
 
 The pilot's own list got a glyph column, shorter names and a slot to fill in
 v165. These two cards did not, and reading them found that they had a different
@@ -6993,7 +7007,7 @@ they have been installed.
 
 ### Watching the other device's screen
 
-<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ fc89e31bacd8 -->
+<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ 51b579a365af -->
 
 One device shows its screen; the other watches it, and plays it if the first
 one says so. The picture goes straight between them over WebRTC and never

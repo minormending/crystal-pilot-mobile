@@ -1898,13 +1898,23 @@ function paintSprite(cv, sprite, side) {
 function drawLensMon(species) {
   const key = species === null ? null : `${species}:${lensFrame}`;
   if (key === lensDrawn) return;
-  lensDrawn = key;
   // A cartridge whose symbol file does not name the icon tables answers null
   // here, and the lens is then a lens with nothing in it -- which is what it
   // was before this, and is the right amount of nothing.
-  paintSprite($('#lensmon'),
-              species === null || !romdata
-                ? null : romdata.speciesIcon(species, lensFrame), 16);
+  const sprite = species === null || !romdata
+    ? null : romdata.speciesIcon(species, lensFrame);
+  // **Only a picture that was drawn counts as drawn.** The key used to be
+  // recorded one line earlier, before there was any sprite to record it about
+  // -- so a single call that found no reader wrote the *species* into the
+  // cache, and every refresh after it matched that key and returned early. One
+  // failed paint and the lens was empty for the rest of the session, with the
+  // ring still tracking HP beside it because that half never consulted a cache.
+  //
+  // This is the shape of the bug rather than a guard against a specific cause:
+  // a cache keyed on what was *asked for* rather than on what came back cannot
+  // tell "already done" from "tried once and failed".
+  lensDrawn = species === null || sprite ? key : null;
+  paintSprite($('#lensmon'), sprite, 16);
 }
 
 /**
