@@ -4808,7 +4808,7 @@ This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ be7c4d45ea41 -->
+<!-- covers: app/main.js index.html @ 4700e3ed7de2 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -4840,9 +4840,10 @@ which shares the stage's area on purpose:
 
 ```mermaid
 flowchart TD
-    M["main — display:grid"] --> ST["<b>stage</b><br/>.shot → #screenwrap → canvas<br/>#taphint"]
+    M["main — the shell, display:grid"] --> BR["<b>brow</b><br/>.lens · .lamps · .badge<br/>#update #gear"]
+    M --> ST["<b>stage</b><br/>.shot → #screenwrap → canvas<br/>#taphint"]
     M --> SH["<b>stage</b>, again<br/>.sheet — the menu<br/>.setsheet — settings"]
-    M --> BA["<b>bar</b><br/>.barline: #dot #status #steps #chev, #stopRun<br/>#battlebar · #handoffrow"]
+    M --> BA["<b>bar</b> — the strip<br/>.lcdtop: #where #purse<br/>.barline: #dot #status #steps #chev, #stopRun<br/>#battlebar · #handoffrow"]
     M --> PA["<b>pad</b><br/>.gamepad → .dpad .face · .menus"]
     ST -. "same area, higher z-index" .- SH
 ```
@@ -4857,18 +4858,41 @@ that palette is contrast-checked and two colour systems would be
 two answers to one question. See [The
 interface](INTERFACE.md#the-stylesheet-is-somebody-elses-and-the-colours-are-not).
 
-**The machine is furniture; only the middle moves.** `main` is a three-row grid
-— the screen, the status line, the pad — sized in `dvh`, and the page itself
+**The machine is furniture; only the middle moves.** `main` is a four-row grid
+— the brow, the screen, the strip, the pad — sized in `dvh`, and the page itself
 does not scroll at all. Before this the pad was a card among cards, so on a
 short phone the buttons scrolled away from the screen they drive, and in
 landscape the two could not both be on screen at any scroll position.
 
 | | holds | scrolls |
 | --- | --- | --- |
+| `.brow` | the lens, the lamps, the name and the version | never |
 | `.stage` | the screen and the tap hint | never |
-| `.bar` | what is happening, Stop, and the door | never |
+| `.bar` | what is happening, where you are, Stop, and the door | never |
 | `.sheet` | the jobs, the save, the party, settings | yes, and only this |
 | `.padwrap` | the eight buttons | never |
+
+**`main` *is* the shell** rather than a container holding one. With the
+`<header>` gone there is nothing else at that level, so a wrapper element would
+only be a second name for the same box. The moulding is three gradient stops
+and two `inset` shadows: a flat fill reads as a coloured rectangle, and what
+makes plastic is the light catching the top edge while the underside falls away.
+
+**The frame around the picture is a `box-shadow`, and that is load-bearing
+rather than a shortcut.** `#screenwrap` has to stay *exactly* the canvas's box:
+the tap marker is positioned in percentages of it — one tile is 10% across and
+11.111% down — and its width is derived from `100cqh` against the stage.
+Padding would break the first, and a wrapper element would change what `cqh` is
+measuring. A shadow takes no part in layout at all, so the bezel and the frame
+can be drawn around the picture without either sum moving.
+
+**The strip carries its own inks.** `--ink` and `--dim` are tuned against
+`--panel`; the strip is dark glass with light green on it, which is a different
+problem, so it has `--lcd-ink` and `--lcd-dim` checked against `--lcd` the same
+way. The one place this bit was the tap hint, which kept `--dim` through the
+chassis work and ended up at **2.28:1** on the shell — an ink chosen for a card,
+reading against moulded plastic. That is the standing hazard of turning a page
+into an object: text that never moved is suddenly on a different background.
 
 The switch that used to reorder the pad is gone with it: a task dims the pad
 rather than moving it, because it no longer has anywhere to move and a thumb
@@ -5357,7 +5381,7 @@ seconds by a page whose loop was supposedly running.
 
 ### One thing at a time
 
-<!-- covers: app/main.js @ bb09e89f9a54 -->
+<!-- covers: app/main.js @ 65de8f98f5d1 -->
 
 One Game Boy, one joypad, one canvas — so a great deal of this app is about
 making sure two things are never driving them at once. There are three claims,
@@ -5911,7 +5935,7 @@ a conversation.
 
 ### The card behind a party row
 
-<!-- covers: app/rows.js app/main.js index.html @ 23d5d291d99c -->
+<!-- covers: app/rows.js app/main.js index.html @ 14d5c3a11709 -->
 
 Two questions the game itself will not answer about a Pokémon you are
 carrying — *what is this made of* and *what is it about to become* — and both
@@ -6000,7 +6024,7 @@ at body size.
 
 ### Running the list
 
-<!-- covers: app/rows.js app/main.js @ bdd382d25486 -->
+<!-- covers: app/rows.js app/main.js @ c2d1761534c3 -->
 
 The app has spent forty passes learning to answer one question — *what can the
 pilot do here, and which of those is worth most?* — and twenty showing the
@@ -6124,7 +6148,7 @@ to deposit your last Pokémon.
 
 ### The settings and the save card
 
-<!-- covers: index.html app/main.js @ be7c4d45ea41 -->
+<!-- covers: index.html app/main.js @ 4700e3ed7de2 -->
 
 The pilot's own list got a glyph column, shorter names and a slot to fill in
 v165. These two cards did not, and reading them found that they had a different
@@ -6764,7 +6788,7 @@ they have been installed.
 
 ### Watching the other device's screen
 
-<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ 332aa3601975 -->
+<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ c9a9c29104a6 -->
 
 One device shows its screen; the other watches it, and plays it if the first
 one says so. The picture goes straight between them over WebRTC and never
@@ -7377,7 +7401,7 @@ about that code did not.
 
 ### The other checks
 
-<!-- covers: tools/check-app @ 7be124b43933 -->
+<!-- covers: tools/check-app @ 78aa77155d56 -->
 
 `tools/check-app` runs everything that can be verified without a ROM:
 

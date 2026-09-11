@@ -3519,6 +3519,10 @@ function paintRoom() {
     code: room ? room.code : null,
   });
   $('#roomstate').textContent = said.text;
+  // And the lamp on the brow, which is the same fact from across the room:
+  // the settings card has to be opened to read the row, and the point of a
+  // lamp is that it does not.
+  $('#lamplink').classList.toggle('on', !!(room && room.code));
   const btn = $('#share');
   btn.textContent = said.button || 'Share';
   btn.classList.toggle('hide', !said.button);

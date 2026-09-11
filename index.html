@@ -75,7 +75,23 @@
           /* The pad is a device, so its keys carry their own ink and their own
              drawn edge. The edge is the guarded pair rather than the fill:
              what has to be visible is where a key ends. */
-          --key:#2a1218; --key-ink:#f3e4e8; --key-edge:#b38e99; }
+          --key:#2a1218; --key-ink:#f3e4e8; --key-edge:#b38e99;
+
+          /* The screen assembly. An off-white frame with a green bezel inside
+             it, which is the one part of the reference picture that is not a
+             control: it is the moulding the glass sits in. The bezel is
+             #5f8054 rather than the lighter green it started as, because
+             against the frame that read 2.82:1 -- under the 3:1 an edge needs
+             to be seen at all. */
+          --frame:#e8e2d8; --bezel:#5f8054;
+
+          /* And the strip below it, which is a display rather than a surface:
+             dark glass with light green on it, the way a backlit LCD actually
+             looks. The app's ordinary inks are wrong here -- they are tuned
+             for --panel -- so the strip carries its own three, checked against
+             the glass the same way. */
+          --lcd:#12301c; --lcd-ink:#7ef2a0; --lcd-dim:#4fbf76;
+          --lcd-bad:#ffb0ae; }
 
   /* --- Pico, pointed at this app's palette -------------------------------
      Pico ships its own colours and its own light/dark switch. Both are
@@ -144,81 +160,66 @@
           fallbacks and the Windows faces this list did not. */
        font-family:var(--pico-font-family-sans-serif);
        font-size:15px;line-height:var(--pico-line-height);
-       padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
-  /* Wraps rather than clipping. Five things share this row once a game is
-     loaded and a newer version exists -- name, version, Update, location,
-     speed -- and at 375px they add up to more than fits. Without a wrap the
-     last one loses: the speed slider's `1x` was cut in half by the right
-     edge, which is a worse outcome than a header that is briefly two rows
-     tall. Nothing wraps in the normal case, because nothing has to. */
-  /* Six things now, and the gear made it seven at 375px -- so the gap and the
-     slider gave up the width rather than the row giving up and wrapping. The
-     wrap is still there for the case it was built for: a game running and a
-     newer build to announce. */
-  header{display:flex;flex-wrap:wrap;gap:6px;align-items:baseline;
-         padding:10px 12px;border-bottom:1px solid var(--line)}
-  header h1{font-size:15px;margin:0;flex:0 0 auto;white-space:nowrap}
+       /* A little room at the sides now, because the shell has an outside
+          edge and an object with no gap around it is a background. */
+       padding:calc(env(safe-area-inset-top) + 6px) 6px
+               calc(env(safe-area-inset-bottom) + 6px)}
+  /* --- the brow -----------------------------------------------------------
+     What was a `<header>` is moulded into the top of the shell instead.
+
+     Six things used to share that row -- a name, a version, Update, where you
+     are, the money and a gear -- and at 375px they measured 397, so it wrapped
+     to two rows and the app opened with a paragraph. Three of them have a
+     better home on a chassis than a header ever was. Where you are and how
+     much money you have are *readings*, so they moved onto the LCD with the
+     other readings; speed is a preference, so it moved into Settings with the
+     other preferences. What is left is what a device has moulded into its top
+     edge: a lens, two lamps, and the name silkscreened beside them. */
+  .brow{grid-area:brow;display:flex;align-items:center;gap:10px;padding:0 2px}
+  /* The lens: the largest moulding on the panel and the only one with no game
+     function, which is why the app's own identity sits in it. Glass rather
+     than a filled circle -- an off-centre radial gradient with a specular
+     highlight over it, which is the whole of what stops a circle reading as a
+     button somebody forgot to label. */
+  .lens{position:relative;overflow:hidden;flex:0 0 auto;
+        width:46px;height:46px;border-radius:50%;
+        background:radial-gradient(circle at 34% 28%,#9fd4ff 0%,#3f7fd0 42%,
+                   #17407e 78%,#0b2448 100%);
+        box-shadow:0 0 0 3px var(--frame),0 0 0 5px var(--line),
+                   inset 0 -4px 8px rgba(0,0,0,.55)}
+  .lens .glass{position:absolute;left:22%;top:16%;width:32%;height:23%;
+               border-radius:50%;background:rgba(255,255,255,.78)}
+  /* Two lamps, not the reference picture's three. A third for "a ROM is
+     loaded" was drawn and then cut: until one is, the gateway cards are on the
+     screen saying so in words, which is louder than any lamp. */
+  .lamps{flex:0 0 auto;display:flex;flex-direction:column;gap:6px}
+  .lamp{width:9px;height:9px;border-radius:50%;background:var(--shell-lo);
+        box-shadow:inset 0 1px 2px rgba(0,0,0,.55)}
+  /* The running lamp needs no JavaScript: `body.piloting` is already the one
+     fact it reports, and a second source for it could only ever disagree with
+     the first. */
+  body.piloting #lamprun{background:var(--ok);box-shadow:0 0 7px var(--ok)}
+  .lamp.link.on{background:var(--accent);box-shadow:0 0 7px var(--accent)}
+  /* Silkscreened, which is why it is white: 5.10:1 on the shell, and the
+     measurement that chose the shell red in the first place. */
+  .badge{flex:1 1 auto;min-width:0;display:flex;align-items:baseline;gap:7px}
+  .badge h1{flex:0 0 auto;margin:0;font-size:14px;white-space:nowrap;
+            color:var(--shell-ink);letter-spacing:.03em}
   /* The version belongs with the app's name, not in a card. What it answers --
      which build is this? -- is asked before a ROM is picked as often as after,
-     and the settings card does not exist until a game is loaded.
-
-     Terse on purpose: this row is shared with the location, and at 375px there
-     is no width for a sentence. The number alone is the whole answer when there
-     is no news, and the two states that *are* news get words -- a newer
-     version, or a server that could not be reached. */
-  header .vnum{flex:0 0 auto;font-size:12px;color:var(--dim);
+     and the settings card does not exist until a game is loaded. */
+  .badge .vnum{flex:0 0 auto;font-size:12px;white-space:nowrap;
+               color:var(--shell-ink);opacity:.72;
                font-variant-numeric:tabular-nums}
-  /* Bold ink rather than a colour. --mark reads 1.90:1 on a card in the light
-     theme, which the contrast check caught -- and the signal should not have
-     been colour alone regardless: the text names the newer version and the
-     Update button appears next to it. */
-  header .vnum.stale{color:var(--ink);font-weight:700}
-  /* Narrower than the same button in a card: the header is crowded on a
-     phone, and `min-width:5.2em` there -- which keeps Auto and Light the
-     same width as each other -- was 79px of a 375px row for the word Update.
-     Written `header button.themebtn` so it wins on specificity rather than on
-     being further down the file. */
-  header button.themebtn{min-width:0;padding:5px 10px;font-size:11px}
-  /* min-width:0 so this is what gives when the row is full. A flex item will
-     not shrink below its own text otherwise, and the location is the one item
-     here that reads fine truncated -- the title is the app's name, and a
-     version with letters missing is a version that lies. */
-  /* Beside the place and shrinking with it. `.where` had `margin-left:auto`,
-     which put every later item in the header on the far side of a spring --
-     so adding one more pushed the gear onto a second line and made the header
-     twenty pixels taller. The spring belongs on the *pair*, so the two facts
-     about the whole app travel together and the controls stay put. */
-  header .purse{flex:0 0 auto;font-size:12px;color:var(--dim);
-      font-family:var(--pico-font-family-monospace);
-      font-variant-numeric:tabular-nums}
-  /* **Wrapping, on purpose, and the pair wraps together.** One line was tried
-     and cost more than it saved: with a name, a version, a place, the money, a
-     speed slider and a gear to fit on a 375px phone, forcing one row truncated
-     the place to "RO…" and then wrapped the version to "v16 / 4". Something has
-     to give on a narrow screen, and the honest answer is a row of height rather
-     than a fact chopped in half.
-     
-     What matters is that the place and the money stay *adjacent*: they are the
-     two things true of the whole app rather than of one offer, and a spring
-     between them would put them on opposite sides of the header. So they share
-     a container and the spring is in front of it. The version keeps `nowrap`
-     because it is a number, and a number split across two lines is not one. */
-  header .here{display:flex;align-items:baseline;gap:6px;margin-left:auto;
-      min-width:0;flex:0 1 auto}
-  header .tools{display:flex;align-items:center;gap:8px;flex:0 0 auto;
-      margin-left:auto}
-  header .vnum{white-space:nowrap}
-  header .where{min-width:0;color:var(--dim);
-                font-size:13px;white-space:nowrap;overflow:hidden;
-                text-overflow:ellipsis}
-  /* Speed is status, not a task: it belongs beside where you are, not wedged
-     between the screen and the buttons you press. */
-  /* Not in the header: that row is for where you are and how fast the game is
-     running, and a theme is neither -- it is set once. Adding it there also
-     overflowed 375px, wrapping the title and truncating the location.
-     It says which of the three states is in force rather than showing a
-     symbol to be guessed at. */
-  /* `.param.slots`, not `.slots`: the label and the rows have to stack, and
+  /* Bold rather than a colour. The signal should not have been colour alone
+     regardless: the text names the newer version and Update appears beside it. */
+  .badge .vnum.stale{opacity:1;font-weight:700}
+  /* Narrower than the same button in a card, and dark-on-pale so it reads as
+     a moulded key rather than as a hole in the shell. */
+  .brow button.themebtn{min-width:0;padding:5px 10px;font-size:11px;
+                        background:var(--frame);color:var(--line);
+                        border-color:var(--line)}
+    /* `.param.slots`, not `.slots`: the label and the rows have to stack, and
      `.param` sets `display:flex` two hundred lines further down this sheet.
      Same specificity, later in the file, so it won -- and "SLOTS" had spent its
      whole life beside the *middle* row of three, reading as that row's name.
@@ -273,9 +274,9 @@
               font-size:12px;font-weight:600;letter-spacing:.04em;
               text-transform:uppercase;color:var(--dim);background:var(--panel)}
   .seg button[aria-pressed=true]{background:var(--raise);color:var(--ink)}
-  /* Last in the header and pushed to the edge, so it is in the same place
-     whether or not a game is loaded and whatever the location line says. */
-  header button.gear{min-width:0;padding:6px 9px;font-size:15px;line-height:1}
+  /* Last on the brow and hard against the edge, so it is in the same place
+     whether or not a game is loaded. */
+  .brow button.gear{min-width:0;padding:6px 9px;font-size:15px;line-height:1}
   /* What would add to the list, when that is worth saying. Deliberately quiet:
      it is the one line left of what used to be four rows of apology. */
   .offerhint{margin:8px 2px 0;font-size:12px;color:var(--dim);line-height:1.4}
@@ -297,12 +298,17 @@
                   letter-spacing:.06em;text-transform:uppercase;font-weight:600;
                   color:var(--ink);background:var(--raise);border-radius:7px;
                   border:1px solid var(--line);min-width:5.2em}
-  header .speed{display:flex;align-items:center;gap:6px;flex:0 0 auto}
-  header .speed input[type=range]{width:56px;accent-color:var(--accent);
-                                  background:transparent;margin:0}
-  header .speed .x{font-variant-numeric:tabular-nums;font-weight:700;
-                   font-size:12px;color:var(--dim);min-width:2.2em;
-                   text-align:right}
+  /* Speed is a preference, and it is in Settings with the other preferences.
+     It spent a long time in the header on the grounds that it is status -- but
+     it is a thing you set, once, and the header it was justified by no longer
+     exists. */
+  .themerow .speed{display:flex;align-items:center;gap:6px;flex:1 1 auto}
+  .themerow .speed input[type=range]{width:auto;flex:1 1 auto;
+                                     accent-color:var(--accent);
+                                     background:transparent;margin:0}
+  .themerow .speed .x{font-variant-numeric:tabular-nums;font-weight:700;
+                      font-size:12px;color:var(--dim);min-width:2.2em;
+                      text-align:right}
   /* A column flex, so the order of the cards is a decision rather than
      whatever the source happens to say. The app does two different jobs --
      you play it by hand, or you send the pilot off to work for ninety
@@ -313,9 +319,24 @@
      because mobile browser chrome comes and goes: against `100vh` the pad
      sits under the address bar exactly when a thumb reaches for it. */
   body{display:flex;flex-direction:column;height:100dvh;overflow:hidden}
-  main{padding:10px 12px;max-width:560px;margin:0 auto;width:100%;
-       flex:1 1 auto;min-height:0;display:grid;gap:10px;
-       grid-template:"stage" minmax(0,1fr) "bar" auto "pad" auto/minmax(0,1fr)}
+  /* `main` *is* the shell: the panel, not a container holding one. There is
+     nothing else left at this level now the header has gone, so a wrapper div
+     would be a second name for the same box.
+
+     The gloss is three stops and two insets rather than an image. A single
+     flat fill reads as a coloured rectangle; what makes moulded plastic is the
+     light catching the top edge and the underside falling away, which is
+     exactly what the two `inset` shadows are. */
+  main{padding:9px 10px 11px;max-width:560px;margin:0 auto;width:100%;
+       flex:1 1 auto;min-height:0;display:grid;gap:9px;
+       grid-template:"brow" auto "stage" minmax(0,1fr)
+                     "bar" auto "pad" auto/minmax(0,1fr);
+       border-radius:20px;
+       background:linear-gradient(180deg,var(--shell-hi) 0,var(--shell) 9%,
+                  var(--shell) 74%,var(--shell-lo) 100%);
+       box-shadow:inset 0 2px 0 rgba(255,255,255,.30),
+                  inset 0 -4px 0 rgba(0,0,0,.22),
+                  0 0 0 1px var(--line),0 6px 18px rgba(0,0,0,.45)}
   .stage{grid-area:stage;display:flex;flex-direction:column;gap:6px;min-height:0}
   /* The wrap is the canvas's box, exactly, and it works out its own size from
      the room the stage has.
@@ -334,8 +355,18 @@
      default `stretch`, because a stretched item has no height to derive from. */
   .shot{flex:1 1 auto;min-height:0;display:flex;justify-content:center;
         container-type:size}
+  /* The frame and the bezel are drawn with `box-shadow`, deliberately, and
+     not with padding or a wrapper. This box has to stay *exactly* the canvas's
+     box: the tap marker is positioned in percentages of it -- one tile is 10%
+     across and 11.111% down -- and the width is derived from `100cqh` against
+     the stage. Padding would change the first; a wrapper would change what
+     `cqh` is measuring. A shadow takes no part in layout at all, so the
+     moulding can be drawn around the picture without either sum moving. */
   #screenwrap{align-self:center;aspect-ratio:160/144;
-              width:min(100%,calc(100cqh * 160 / 144))}
+              width:min(100%,calc(100cqh * 160 / 144));
+              box-shadow:0 0 0 3px var(--bezel),0 0 0 9px var(--frame),
+                         0 0 0 10px var(--line),
+                         inset 0 0 0 1px rgba(0,0,0,.8)}
   /* The menu, over the game rather than under it. It shares the stage's grid
      area -- two items in one area overlap, which is the whole trick -- so
      opening it costs the screen nothing and moves neither the bar nor the pad.
@@ -364,32 +395,52 @@
      anything. It is a row of two buttons rather than one tappable card: Stop
      has to be reachable without the door opening under the thumb that meant to
      press it. */
+  /* The strip: a display, not a card. It carries what is happening, what the
+     game is saying, where you are and how much money you have -- four
+     readings, which is why the last two moved here off the header. Its inks
+     are its own because the app's are tuned for `--panel`, and a card's ink on
+     dark glass is not the same problem. */
   .bar{grid-area:bar;display:flex;flex-direction:column;align-items:stretch;
-       gap:6px;background:var(--panel);border:1px solid var(--line);
-       border-radius:12px;padding:4px 8px 4px 10px}
+       gap:4px;background:linear-gradient(180deg,#0c2415 0,var(--lcd) 40%);
+       border:1px solid var(--line);border-radius:9px;
+       padding:4px 9px 5px 10px;color:var(--lcd-ink);
+       box-shadow:inset 0 2px 6px rgba(0,0,0,.55),
+                  0 1px 0 rgba(255,255,255,.18)}
+  /* Where you are and what you have, on one line above the pilot's. Kept
+     adjacent because they are the two facts true of the whole app rather than
+     of any one offer -- which is the reason they shared a container in the
+     header too. */
+  .lcdtop{display:flex;align-items:baseline;gap:8px;min-width:0;
+          border-bottom:1px solid rgba(126,242,160,.18);padding-bottom:3px}
+  .lcdtop .where{flex:1 1 auto;min-width:0;font-size:12px;
+                 color:var(--lcd-dim);white-space:nowrap;overflow:hidden;
+                 text-overflow:ellipsis}
+  .lcdtop .purse{flex:0 0 auto;font-size:12px;color:var(--lcd-ink);
+                 font-family:var(--pico-font-family-monospace);
+                 font-variant-numeric:tabular-nums}
   .barline{display:flex;align-items:center;gap:6px}
   /* One line, because it appears between the screen and the pad and everything
      it takes there comes off the picture. The foe truncates before the buttons
      do: you can see the battle, and the buttons are the point. */
   .battlebar,.barextra{display:flex;align-items:center;gap:6px;padding:2px 0 4px;
-                       border-top:1px solid var(--line)}
+                       border-top:1px solid rgba(126,242,160,.18)}
   /* Spelled out because `.jstate` is styled inside `.job`, and these two are
      not rows any more. Same face and size as every other state line. */
   .battlebar .jstate,.barextra .jstate{flex:0 1 auto;min-width:0;overflow:hidden;
                      text-overflow:ellipsis;white-space:nowrap;
                      font-family:ui-monospace,Menlo,monospace;font-size:12px;
-                     color:var(--dim)}
+                     color:var(--lcd-dim)}
   .battlebar .jgo,.barextra .jgo{flex:0 0 auto;min-height:38px;padding:8px 16px}
   .battlebar #battle,.barextra #takeover{margin-left:auto}
   /* One caption at a time. Both of them at 375px gave "wild PIDGE... no Poke
      Bal...", two truncations where one sentence would do -- and when Throw is
      refusing, the reason is the half worth reading: the foe is on the screen
      above it either way. */
-  .battlebar .why{color:var(--bad)}
+  .battlebar .why{color:var(--lcd-bad)}
   .battlebar .jstate:empty{display:none}
   button.door{flex:1 1 auto;min-width:0;display:flex;align-items:center;gap:2px;
               min-height:40px;padding:6px 2px;background:none;border:0;
-              box-shadow:none;text-align:left;color:var(--ink)}
+              box-shadow:none;text-align:left;color:var(--lcd-ink)}
   .door .lines{flex:1 1 auto;min-width:0}
   .door #status,.door #steps,.door #saying{display:block;overflow:hidden;
                              text-overflow:ellipsis;white-space:nowrap}
@@ -397,22 +448,31 @@
      ninety seconds and the log is behind the door it just closed; without this
      the only sign of life would be a busy dot. */
   .door #steps{font-family:ui-monospace,Menlo,monospace;font-size:12px;
-               color:var(--dim);margin-top:2px}
+               color:var(--lcd-dim);margin-top:2px}
   .door #steps:empty{display:none}
   /* And what the *game* is saying, which is a different thing from what the
      pilot is doing. Quoted rather than labelled -- the bar has no room for
      "the game says" -- and italic, so the two lines read as two voices without
      a third ink to keep legible in three palettes. */
   .door #saying{font-family:ui-monospace,Menlo,monospace;font-size:12px;
-                color:var(--dim);margin-top:2px;font-style:italic}
+                color:var(--lcd-dim);margin-top:2px;font-style:italic}
   .door #saying:empty{display:none}
   /* The word matters as much as the arrow. A chevron alone at 11px was a mark
      nobody would read as a door, and this line is the only way into the menu. */
-  .chev{flex:0 0 auto;color:var(--dim);font-size:12px;font-weight:600;
+  .chev{flex:0 0 auto;color:var(--lcd-dim);font-size:12px;font-weight:600;
         letter-spacing:.04em;padding-left:8px;white-space:nowrap}
 
 
   .padwrap{grid-area:pad}
+  /* The pad sits in a recess moulded into the shell rather than on a card.
+     Same keys, same geometry -- what changes is that the surface behind them
+     is below the plastic instead of on top of it, which is the difference
+     between a control panel and a list of buttons. */
+  .padwrap #ctrls{background:linear-gradient(180deg,#20101a 0,var(--panel) 70%);
+                  border:1px solid var(--line);border-radius:14px;
+                  box-shadow:inset 0 3px 8px rgba(0,0,0,.5),
+                             0 1px 0 rgba(255,255,255,.16);
+                  padding:10px 12px 12px;margin:0}
 
   canvas{width:100%;height:100%;background:#000;display:block;
          border:1px solid var(--line);border-radius:8px;
@@ -434,7 +494,13 @@
   #remote{width:100%;display:block;image-rendering:pixelated;
           background:#000;aspect-ratio:160/144}
 
-  .tiphint{color:var(--dim);font-size:12px;margin:8px 2px 0;text-align:center}
+  /* Silkscreen, because it sits on the shell rather than on a surface. It
+     kept `--dim` through the chassis work and measured 2.28:1 there -- an ink
+     chosen for `--panel` reading against moulded plastic, which is the one
+     hazard of turning a page into an object: text that never moved is suddenly
+     on a different background. */
+  .tiphint{color:var(--shell-ink);opacity:.82;font-size:12px;
+           margin:6px 2px 0;text-align:center}
 
   /* The fork, in the same shape as the pilot's job rows and for the same
      reason: several things you might be here for, exactly one of which is
@@ -893,22 +959,21 @@
        `height:100%` with `width:auto` gave a 220x267 box on a 160x144 picture,
        squashing it, because a column narrower than the ratio wants clips the
        width and leaves the height alone. */
-    main{max-width:none;padding:6px 8px;gap:8px;
-         grid-template:"dpad screen face sheet" minmax(0,1fr)
+    main{max-width:none;padding:6px 8px 8px;gap:8px;border-radius:14px;
+         grid-template:"brow brow   brow brow" auto
+                       "dpad screen face sheet" minmax(0,1fr)
                        "dpad bar    face sheet" auto
                        "dpad menus  face sheet" auto
                        /auto minmax(0,1fr) auto minmax(0,13rem)}
+    /* Held sideways there is no height to spare, so the lens shrinks rather
+       than the screen doing it. */
+    .lens{width:30px;height:30px}
+    .brow{gap:8px}
     /* :not(.hide) matters: this selector outweighs `.hide{display:none}`, and
        without the guard the pad would be on screen before a ROM is picked. */
     .padwrap,#ctrls:not(.hide),.gamepad{display:contents}
     .stage{grid-area:screen;justify-content:center;overflow:hidden}
     #screenwrap{align-self:center}
-    /* `display:contents` promotes every child of the card, heading included --
-       and an unplaced grid item auto-fills the first free cell, which is the
-       D-pad's. That is why the screen appeared in the wrong column: it was
-       sharing it with the word "Play". A card that is no longer a card has no
-       use for its label. */
-    #ctrls>h2{display:none}
     .dpad{grid-area:dpad;align-self:center}
     .face{grid-area:face;align-self:center;flex-direction:column}
     .menus{grid-area:menus;margin:0}
@@ -934,7 +999,8 @@
      wide, keeps the layout above. */
   @media (min-width:760px) and (min-height:620px){
     main{max-width:none;padding:16px;gap:16px;
-         grid-template:"stage sheet" auto
+         grid-template:"brow  brow" auto
+                       "stage sheet" auto
                        "bar   sheet" auto
                        "pad   sheet" minmax(0,1fr)
                        /minmax(0,480px) minmax(0,1fr)}
@@ -1045,37 +1111,31 @@
      stroke-linecap="round" stroke-linejoin="round">
     <path d="M4.2 4.4 8.8 9l-4.6 4.6"/><path d="M9.8 4.4 14.4 9l-4.6 4.6"/></g>
 </defs></svg>
-<header>
-  <h1>crystal-pilot</h1>
-  <span class="vnum" id="version">&mdash;</span>
-  <button class="themebtn hide" id="update">Update</button>
-  <!-- The two facts that are true of the whole app rather than of one offer,
-       kept adjacent so they wrap as a pair. The money was printed inside the
-       Shop row and the Duel row both -- the same number twice, clutter in each,
-       and neither of them is where somebody looks to find out how much money
-       they have. -->
-  <span class="here">
-    <span class="where" id="where">no ROM loaded</span>
-    <span class="purse hide" id="purse"></span>
-  </span>
-  <!-- The controls, grouped so they wrap *together*. A name, a version, a
-       place, the money, a speed slider and a gear do not fit across 375px --
-       measured at 397 -- so on a phone the header is two rows, and which two
-       is the choice being made here: the facts, then the things you press.
-       Left ungrouped the gear wrapped alone and read as a mistake. -->
-  <span class="tools">
-    <span class="speed hide" id="speedbox">
-      <input type="range" id="speed" min="0" max="4" step="1" value="0"
-             aria-label="Emulator speed">
-      <span class="x" id="speedx">1×</span>
+<main>
+  <!-- The top edge of the shell. What a `<header>` was, moulded in: a lens, the
+       lamps and the name. The three things that used to be here and are not --
+       where you are, the money, and the speed slider -- were never header
+       material; two are readings and belong on the strip with the other
+       readings, and one is a preference and belongs in Settings. -->
+  <div class="brow">
+    <!-- Decorative for now, and deliberately so: the party lead and its HP ring
+         move in here later, and a lens that is a button before it is anything
+         is a button nobody can guess the meaning of. -->
+    <div class="lens" aria-hidden="true"><span class="glass"></span></div>
+    <div class="lamps" aria-hidden="true">
+      <span class="lamp" id="lamprun"></span>
+      <span class="lamp link" id="lamplink"></span>
+    </div>
+    <span class="badge">
+      <h1>crystal-pilot</h1>
+      <span class="vnum" id="version">&mdash;</span>
     </span>
+    <button class="themebtn hide" id="update">Update</button>
     <!-- Not hidden behind a loaded game, like the card it opens: the device
          that most needs the room code is the one with no ROM on it yet. -->
     <button class="themebtn gear" id="gear" aria-label="Settings"
-            aria-expanded="false" aria-controls="setsheet">⚙</button>
-  </span>
-</header>
-<main>
+            aria-expanded="false" aria-controls="setsheet">&#9881;</button>
+  </div>
   <!-- The machine. The screen and the pad hold their places on the page; the
        flow between them is the only thing that scrolls. Before this the pad was
        a card among cards, so on a short phone the buttons scrolled away from
@@ -1102,6 +1162,13 @@
        scroll to read is fine and a page you must scroll to stop the pilot is
        not, and Stop lived in a card that scrolled. -->
   <div class="bar" id="bar">
+    <!-- Two readings, kept adjacent: they are true of the whole app rather
+         than of any one offer, which is why they shared a container in the
+         header too. -->
+    <div class="lcdtop">
+      <span class="where" id="where">no ROM loaded</span>
+      <span class="purse hide" id="purse"></span>
+    </div>
     <div class="barline">
       <button class="door" id="door" aria-expanded="true" aria-controls="sheet">
         <span class="dot" id="dot"></span>
@@ -1537,6 +1604,18 @@
          read as a field somebody had already filled in -- the placeholder
          `K7M2P` looks exactly like a code. The box is behind the Join button
          now, indented under the row it belongs to, and labelled. -->
+    <!-- A preference, with the other preferences. It spent a long time in the
+         header on the grounds that it is status rather than a task -- but it
+         is a thing you set once, and the row that justified it is gone. -->
+    <div class="themerow hide" id="speedbox">
+      <svg class="jicon" viewBox="0 0 18 18" aria-hidden="true"><use href="#i-screen"/></svg>
+      <span class="lvlabel">Speed</span>
+      <span class="speed">
+        <input type="range" id="speed" min="0" max="4" step="1" value="0"
+               aria-label="Emulator speed">
+        <span class="x" id="speedx">1&times;</span>
+      </span>
+    </div>
     <div class="themerow">
       <svg class="jicon" viewBox="0 0 18 18" aria-hidden="true"><use href="#i-devices"/></svg>
       <span class="lvlabel">Devices</span>
@@ -1613,7 +1692,6 @@
 
   <div class="padwrap">
   <div class="card hide" id="ctrls">
-    <h2>Play</h2>
     <div class="gamepad">
       <div class="dpad">
         <button class="u" data-btn="UP" aria-label="Up">▲</button>

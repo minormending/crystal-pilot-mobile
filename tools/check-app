@@ -155,12 +155,20 @@ def check_markup():
     # style block, where a `{` inside a comment would be a different bug and
     # one this has never seen.
     s = re.sub(r"<!--.*?-->", "", s, flags=re.S)
+    # **And a CSS comment is prose too.** Stripping only `<!-- -->` left a gap
+    # exactly the size of this file's own lesson: the stylesheet explains why
+    # the `<header>` element was replaced by a moulded brow, writing the tag
+    # name to say so, and the tag count read that sentence as an unclosed
+    # element. Fifth time. The comment strip and the brace count are separate
+    # sources now, because a `{` inside a CSS comment is a different bug and
+    # the count below should go on seeing it.
+    tags_src = re.sub(r"/\*.*?\*/", "", s, flags=re.S)
     void = {"br", "img", "link", "meta", "input", "hr", "source", "area",
             "base", "col", "embed", "param", "track", "wbr", "use", "path",
             "circle", "rect", "line", "polyline", "polygon", "ellipse",
             "stop"}
-    opened = re.findall(r"<([a-zA-Z][a-zA-Z0-9]*)[^>]*?(?<!/)>", s)
-    closed = re.findall(r"</([a-zA-Z][a-zA-Z0-9]*)\s*>", s)
+    opened = re.findall(r"<([a-zA-Z][a-zA-Z0-9]*)[^>]*?(?<!/)>", tags_src)
+    closed = re.findall(r"</([a-zA-Z][a-zA-Z0-9]*)\s*>", tags_src)
     counts = {}
     for t in opened:
         if t.lower() not in void:
@@ -617,14 +625,19 @@ def check_version():
     # ROM and a symbol file first, to read a number the page knew on its first
     # frame. That is not a wording problem or a layout preference: a version
     # display you cannot reach when you want it is the same as not having one,
-    # and nothing else here would have noticed. The header is the one part of
-    # the app that is always there.
-    head = re.search(r"<header>(.*?)</header>", INDEX.read_text(), re.S)
-    if not head:
-        return fail("index.html has no <header> to show the version in")
-    missing = [i for i in ("version", "update") if f'id="{i}"' not in head.group(1)]
+    # and nothing else here would have noticed.
+    #
+    # The `<header>` this used to name is gone -- it is moulded into the top of
+    # the shell now -- so what the rule attaches to is the brow, which is the
+    # part of the app that is always drawn. The rule itself did not change: the
+    # number has to be somewhere you can reach before there is a game.
+    brow = re.search(r'<div class="brow">(.*?)</div>\s*<!-- The machine',
+                     INDEX.read_text(), re.S)
+    if not brow:
+        return fail("index.html has no .brow to show the version in")
+    missing = [i for i in ("version", "update") if f'id="{i}"' not in brow.group(1)]
     if missing:
-        return fail(f"{', '.join(missing)} is not in the header")
+        return fail(f"{', '.join(missing)} is not on the brow")
 
     # And the settings card is reachable before a ROM is, for the same reason
     # one level down. It holds the theme, this device's name, the room and the

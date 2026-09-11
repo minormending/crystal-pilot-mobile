@@ -31,19 +31,29 @@ screen — a real improvement, measured, and still a document. Everything added
 afterwards went onto the same page, and by v85 it was 2,311px. Tidying a menu
 was the wrong answer to a page that should not have had one.
 
-So the app is an appliance rather than a document. Three things hold their
+So the app is an appliance rather than a document. Four things hold their
 places, one opens over them, and the page itself never scrolls at all:
 
 | | holds | scrolls |
 | --- | --- | --- |
+| the brow | the lens, the lamps, the name and the version | never |
 | the stage | the screen and the tap hint | never |
 | the bar | what is happening, Stop, and the door | never |
 | the sheet | the offers, the save, the party, settings | yes, and only this |
 | the pad | the eight buttons | never |
 
+**The brow is what a `<header>` became.** Six things used to share that row — a
+name, a version, Update, where you are, the money and a gear — and at 375px
+they measured 397, so it wrapped to two rows and the app opened with a
+paragraph. Three of them turned out not to be header material at all once there
+was somewhere better to put them. Where you are and how much money you have are
+*readings*, so they are on the strip with the other readings; the speed slider
+is a preference you set once, so it is in Settings with the other preferences.
+What is left is what a device has moulded into its top edge.
+
 ```
  ┌───────────────────────┐   ┌───────────────────────┐
- │ crystal-pilot  v··  ⚙ │   │ crystal-pilot  v··  ⚙ │  ← header, always
+ │ ◉ ∶ crystal-pilot   ⚙ │   │ ◉ ∶ crystal-pilot   ⚙ │  ← the brow, always
  ├───────────────────────┤   ├───────────────────────┤
  │                       │   │ ┌───────────────────┐ │
  │                       │   │ │ Send the pilot    │ │
@@ -52,8 +62,8 @@ places, one opens over them, and the page itself never scrolls at all:
  │                       │   │ └───────────────────┘ │
  │  Tap to walk there.   │   │ ┌───────────────────┐ │
  ├───────────────────────┤   │ │ Your save         │ │
- │ ● ready       Menu ▴  │   ├───────────────────────┤
- ├───────────────────────┤   │ ● ready      Close ▾  │  ← the bar, always
+ │ Route 30      ¥1200   │   ├───────────────────────┤
+ │ ● ready       Menu ▴  │   │ ● ready      Close ▾  │  ← the strip, always
  │   ▲                   │   ├───────────────────────┤
  │ ◀ ● ▶       B     A   │   │   ▲                   │
  │   ▼                   │   │ ◀ ● ▶       B     A   │  ← the pad, always
@@ -668,17 +678,21 @@ There are exactly two things behind doors, and they are behind different ones:
 | door | opens | holds |
 | --- | --- | --- |
 | the status line | the menu | the offers, the picker, the save, the party |
-| ⚙ in the header | settings | colour, the room, this device's name, kept files, *How this works* |
+| ⚙ on the brow | settings | speed, the room, this device's name, kept files, *How this works* |
 
 Settings used to be the *first* card in the menu, so opening the pilot's list
 meant scrolling past the colour theme to reach the thing you opened it for. It
-is a preference: set once and then read never, which is what a door is for.
+is a preference: set once and then read never, which is what a door is for. The
+colour theme it was named after is gone, and the speed slider has arrived in its
+place from the header — the same argument, applied the other way round.
 
 Both doors are reachable with no game loaded — the device that most needs the
 room code is the one with no ROM on it yet, which is also why the version
-display lives in the header. `check-app`'s `version` group asserts the two that
-can regress silently: that the version display is inside `<header>`, and that
-the settings card does not carry `hide`.
+display lives on the brow. `check-app`'s `version` group asserts the two that
+can regress silently: that the version display is on the brow, and that the
+settings card does not carry `hide`. The rule did not change when the `<header>`
+did — the number still has to be somewhere you can reach before there is a
+game — so the group was re-pointed rather than relaxed.
 
 One panel value rather than two open flags, because "both open" is a state with
 no meaning that two booleans would let happen. Opening either closes the other:
@@ -715,6 +729,9 @@ session is precisely the noise the rest of this was rewritten to remove.
 
 The furniture is the same in all three; what changes is how it is arranged.
 
+The brow spans the full width in all three, because it is the top edge of the
+shell and a shell does not rearrange.
+
 | | screen | the rest |
 | --- | --- | --- |
 | **Portrait phone** | full width, letterboxed on short phones | bar and pad below, the menu opens over the screen |
@@ -724,6 +741,7 @@ The furniture is the same in all three; what changes is how it is arranged.
 ```
  landscape phone, 844 x 390          tablet, 820 x 1180
  ┌────────────────────────────┐      ┌──────────────────────────┐
+ │ ◉ crystal-pilot          ⚙ │      │ ◉ crystal-pilot         ⚙│
  │  ▲    ┌────────┐    B  A   │      │ ┌────────────┐  ┌───────┐│
  │◀ ● ▶  │ screen │           │      │ │            │  │ Send  ││
  │  ▼    └────────┘           │      │ │   screen   │  │  the  ││
@@ -1230,4 +1248,4 @@ So this page carries a marker naming the files it describes and the hash they
 had when it was last read against them. `tools/docs-check` reports it when they
 move, and the pre-commit hook blocks on that report.
 
-<!-- covers: index.html app/main.js app/rows.js @ 23d5d291d99c -->
+<!-- covers: index.html app/main.js app/rows.js @ 14d5c3a11709 -->
