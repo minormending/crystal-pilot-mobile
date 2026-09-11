@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#16161c" media="(prefers-color-scheme: dark)">
-<meta name="theme-color" content="#eef0f4" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#16161c" id="themecolor">
+<!-- One colour, because the app is one object. The pair that used to sit
+     here followed the phone, and there is nothing left for them to follow. -->
+<meta name="theme-color" content="#cc1144">
 <link rel="manifest" href="./manifest.webmanifest">
 <title>crystal-pilot mobile</title>
 <!-- Pico CSS, MIT, vendored rather than linked from a CDN -- see
@@ -25,100 +25,70 @@
 <link rel="stylesheet" href="./vendor/pico.classless.min.css">
 <style>
   /* Named by the job the colour does, not by where it happened to be used
-     first. One --accent used to mean six unrelated things -- the primary
-     action, a selected chip, a selected level, a held key, where you tapped,
-     and something running -- so the blue had stopped signalling anything.
-     Every pair below is checked: no text combination is under 4.5:1 and no
-     meaningful edge under its 3:1.
+     first. Every pair below is checked by `tools/check-app contrast`: no text
+     combination is under 4.5:1 and no meaningful edge under its 3:1.
 
-     Surfaces, each a step up from the one it sits on. Ordinary buttons used to
-     be filled with --panel -- the exact colour of the card holding them, 1.00:1
-     -- and leaned on a 1.27:1 border to be visible at all. The comment that
-     used to live here said "a button the same colour as its container reads as
-     a label" and applied that only to the D-pad; --raise is that lesson applied
-     to every pressable thing. */
-  :root { --bg:#16161c; --panel:#23232c; --raise:#343442;
-          --line:#3d3d4a;
+     **One palette, because the app is one object now.** It used to carry two:
+     a dark base, a genuine light second palette, a segmented control to pick
+     between them and the phone's own setting behind that. A Pokedex is moulded
+     plastic and it is the same colour in every room, so the control, both
+     switches and the whole `--l-*` mirror went with it. What that removes is
+     not only code -- it removes the class of bug the two blocks kept making,
+     where a token added to one was forgotten in the other, and the theme most
+     people got was the one that was wrong.
 
-          /* Ink. --dim is legible on --bg and --panel but only reaches 4.41:1
-             on a raised surface, which is where Select and Start live, so
-             those get their own step. */
-          --ink:#f2f2f5; --dim:#9a9aa8; --raise-ink:#a8a8b6;
+     The shell first, which is the plastic itself rather than a surface
+     anything is read against. The red is measured rather than picked: white
+     silkscreen on it is 5.10:1, and it is deliberately the darker of two
+     candidate crimsons, because this hue has a trough where black ink is too
+     weak and white ink is not yet strong enough -- #e0114e fails both ways at
+     4.36:1 and 3.92:1. */
+  :root { --shell:#cc1144; --shell-hi:#eb3a68; --shell-lo:#8d0a2e;
+          --shell-ink:#fff0f4;
 
-          /* Anything filled that carries a label: white on the old #4f7fe8 was
-             3.80:1, so every Start button in the app failed. This passes at
-             5.13:1 and still steps clear of a card at 3.04:1. */
-          --action:#4269c9;
+          /* Surfaces, each a step up from the one below: the recess the
+             chassis is moulded around, an inset panel, and a pressable. */
+          --bg:#1b0a10; --panel:#2e1a21; --raise:#43272f;
+          --line:#0d0407;
 
-          /* Highlight, for things with no text on them: the running dot, the
-             slider, focus rings. Brighter than --action on purpose. */
-          --accent:#5b86ee;
+          /* Ink. --dim is legible on --bg and --panel both, and --raise-ink is
+             the step up for a label sitting on a raised key. */
+          --ink:#fdf2f4; --dim:#c49aa6; --raise-ink:#e8ccd4;
 
-          /* Where you tapped. Deliberately not a control colour -- as the
-             accent blue it read as one more button sitting on the map. */
+          /* The blue keys, and the dark label they carry. That pairing is the
+             reason the old `WHITE_ON` check became an ordinary pair: a pale
+             key with a white label is the one combination this palette cannot
+             do, and a check that assumed white was the label colour would have
+             gone on passing while asserting nothing. */
+          --action:#7fa9e8; --action-ink:#0a1830;
+
+          /* The disc, and the things that carry no text at all: the running
+             lamp, the slider, focus rings. */
+          --accent:#ffc94d;
+
+          /* Where you tapped. Deliberately not a control colour -- it sits on
+             the game's own picture, not on any surface of ours. */
           --mark:#f0b055;
 
-          --ok:#46b06a; --bad:#e0706f;
-          /* The HP bar's track, so the bar does not depend on --line being
-             visible to be read as a bar. */
+          --ok:#5fd083; --bad:#ff8e8c;
           --track:var(--line);
-          /* The pad's own fill. Not an alias any more: it is drawn as one
-             connected cross with no borders, so the fill is the only thing
-             telling it from the card and light needs a bigger step than the
-             ordinary buttons do. */
           /* The pad is a device, so its keys carry their own ink and their own
-             drawn edge. The edge is the guarded pair rather than the fill: two
-             dark greys a card apart cannot reach 3:1, and a real handheld at
-             night does not either -- what has to be visible is where a key
-             ends. */
-          --key:#2e2e3a; --key-ink:#e8e8f0; --key-edge:#8a8aa2;
-
-          /* The light palette lives here, once, and the two places that switch
-             to it below only *map* these. It used to be written out twice --
-             once for `[data-theme="light"]` and once for the media query -- and
-             the two drifted the first time anything touched them: a new key
-             token went into one, the other kept the old value, and the theme
-             most people get is the one that was wrong. `check-app contrast`
-             now asserts the two mappings are identical, so the duplication
-             that is left is a checked invariant rather than a hazard. */
-          --l-bg:#eef0f4; --l-panel:#ffffff; --l-raise:#f1f4f9;
-          --l-line:#c2c9d5; --l-ink:#171a1f; --l-dim:#5c6470;
-          --l-raise-ink:#4e5663; --l-action:#3358cc; --l-accent:#3a61d6;
-          --l-ok:#1f7a47; --l-bad:#c0392f; --l-track:#d7dce4;
-          --l-key:#e3e9f2; --l-key-ink:#242a38; --l-key-edge:#7d8798; }
-
-  /* Light.
-     Dark is the base above, because that is what this app is: a Game Boy
-     screen looked at in the evening. Light is for the people whose phone is
-     set that way, and it is a genuine second palette rather than an inversion
-     -- checked to the same standard, no text pair under 4.5:1.
-     Two things do not simply flip. A pressable cannot be *lighter* than a
-     white card, so on light the fill steps down and the border carries more of
-     the affordance. And --mark stays exactly as it is in both: it sits on the
-     game's own picture, not on any surface of ours, so it is not the theme's
-     business. */
-  :root[data-theme="light"] {
-      --bg:var(--l-bg); --panel:var(--l-panel); --raise:var(--l-raise);
-      --line:var(--l-line); --ink:var(--l-ink); --dim:var(--l-dim);
-      --raise-ink:var(--l-raise-ink); --action:var(--l-action);
-      --accent:var(--l-accent); --ok:var(--l-ok); --bad:var(--l-bad);
-      --track:var(--l-track); --key:var(--l-key); --key-ink:var(--l-key-ink);
-      --key-edge:var(--l-key-edge);
-  }
+             drawn edge. The edge is the guarded pair rather than the fill:
+             what has to be visible is where a key ends. */
+          --key:#2a1218; --key-ink:#f3e4e8; --key-edge:#b38e99; }
 
   /* --- Pico, pointed at this app's palette -------------------------------
      Pico ships its own colours and its own light/dark switch. Both are
      replaced here rather than used, because the palette above is *measured*:
-     every pair in it is checked by `tools/check-app contrast` in both themes,
-     and one of them exists only because white on the old blue came to 3.80:1
-     and every Start button in the app failed. Adopting a second colour system
-     would mean two sources of truth for one question, and a check watching
-     only one of them.
+     every pair in it is checked by `tools/check-app contrast`, and one of them
+     exists only because white on the old blue came to 3.80:1 and every Start
+     button in the app failed. Adopting a second colour system would mean two
+     sources of truth for one question, and a check watching only one of them.
 
      So Pico supplies what was actually missing -- a type scale, control
      styling, focus rings, a spacing rhythm -- and takes its colours from here.
-     Set on :root because the tokens on the right are themselves theme-swapped,
-     so one mapping serves both. */
+     Pico ships a light/dark switch of its own, and that half is simply unused
+     now: there is one palette, and it is mapped once. */
   :root {
     --pico-background-color: var(--bg);
     --pico-color: var(--ink);
@@ -129,7 +99,8 @@
     --pico-primary-border: var(--action);
     --pico-primary-hover-background: var(--accent);
     --pico-primary-hover-border: var(--accent);
-    --pico-primary-inverse: #fff;
+    /* Dark, not white: these fill with --action, which is a pale key. */
+    --pico-primary-inverse: var(--action-ink);
     --pico-primary-focus: color-mix(in srgb, var(--accent) 35%, transparent);
     --pico-secondary: var(--dim);
     --pico-secondary-background: var(--raise);
@@ -166,17 +137,6 @@
     --pico-border-radius: 10px;
     --pico-typography-spacing-vertical: 0.75rem;
     --pico-line-height: 1.45;
-  }
-  /* Follows the phone unless someone has said otherwise. */
-  @media (prefers-color-scheme: light) {
-    :root:not([data-theme="dark"]) {
-      --bg:var(--l-bg); --panel:var(--l-panel); --raise:var(--l-raise);
-      --line:var(--l-line); --ink:var(--l-ink); --dim:var(--l-dim);
-      --raise-ink:var(--l-raise-ink); --action:var(--l-action);
-      --accent:var(--l-accent); --ok:var(--l-ok); --bad:var(--l-bad);
-      --track:var(--l-track); --key:var(--l-key); --key-ink:var(--l-key-ink);
-      --key-edge:var(--l-key-edge);
-    }
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
   body{margin:0;background:var(--bg);color:var(--ink);
@@ -1065,10 +1025,6 @@
   <g id="i-undo" fill="none" stroke="currentColor" stroke-width="1.8"
      stroke-linecap="round" stroke-linejoin="round">
     <path d="M4 7.4h6.4a4 4 0 0 1 0 8H7"/><path d="M6.7 4.5 3.6 7.4l3.1 2.9"/></g>
-  <g id="i-colour" fill="none" stroke="currentColor" stroke-width="1.8"
-     stroke-linecap="round" stroke-linejoin="round">
-    <circle cx="9" cy="9" r="6"/>
-    <path d="M9 3a6 6 0 0 1 0 12Z" fill="currentColor" stroke="none"/></g>
   <g id="i-devices" fill="none" stroke="currentColor" stroke-width="1.8"
      stroke-linecap="round" stroke-linejoin="round">
     <path d="M2.6 4.4h6.6v9.6H2.6Z"/><path d="M11.2 7.2h4.2v7.4h-4.2Z"/></g>
@@ -1576,18 +1532,6 @@
        most needs the room is the one with no game on it yet. -->
   <div class="card" id="speedcard">
     <h2>Settings</h2>
-    <!-- Three segments rather than one cycling button; the reasoning is with
-         `.seg` in the stylesheet. `role="group"` is Pico's, and it is what
-         joins them into one control. -->
-    <div class="themerow">
-      <svg class="jicon" viewBox="0 0 18 18" aria-hidden="true"><use href="#i-colour"/></svg>
-      <span class="lvlabel">Colour</span>
-      <div class="seg" id="theme" role="group" aria-label="Colour theme">
-        <button data-theme="auto" aria-pressed="true">Auto</button>
-        <button data-theme="light" aria-pressed="false">Light</button>
-        <button data-theme="dark" aria-pressed="false">Dark</button>
-      </div>
-    </div>
     <!-- Two ways in, side by side: start a room, or join one. Join used to be
          a code box sitting on its own row underneath with no label on it, which
          read as a field somebody had already filled in -- the placeholder

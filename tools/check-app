@@ -206,8 +206,19 @@ PAIRS = [
     ("link on a card",         "accent", "panel", 4.5),
     ("running dot on a card",  "accent", "panel", 3.0),
     ("filled control vs card", "action", "panel", 3.0),
+    # **The label on a filled control, rather than white on it.** This was
+    # `WHITE_ON` and it hard-coded #ffffff as the label colour -- true while
+    # the filled control was a deep blue, and a silent lie the moment it
+    # became a pale Pokedex key with dark lettering. A check that names the
+    # foreground token cannot go on asserting a colour the app stopped using.
+    ("label on a filled control", "action-ink", "action", 4.5),
+    # The shell is not a surface anything is read against except its own
+    # silkscreen -- the name and the version, moulded into the plastic.
+    ("silkscreen on the shell",   "shell-ink", "shell", 4.5),
+    # And the shell has to be seen against the recess it is moulded around,
+    # which is an edge carrying meaning rather than text.
+    ("the shell against its recess", "shell", "bg", 3.0),
 ]
-WHITE_ON = [("white label on a filled control", "action", 4.5)]
 
 
 def _lum(hex_):
@@ -262,53 +273,46 @@ def _resolve(tokens, base):
 
 
 def check_contrast():
+    """Every measured pair still meets its ratio, and there is still one palette.
+
+    There used to be two, and half of this group's work was holding them to
+    each other: the explicit `[data-theme="light"]` block and the
+    `prefers-color-scheme` media query said the same thing in two places and
+    drifted the first time anything touched them. Both are gone -- a Pokedex is
+    moulded plastic and is the same colour in every room -- so the comparison
+    they needed is replaced by the invariant that replaced them. A second
+    palette creeping back in is the thing to catch, because it would arrive
+    unchecked: `_tokens` only ever reads the first block, so a light theme
+    added below would be applied by the browser and invisible here.
+    """
     s = INDEX.read_text()
     css = s.split("<style>")[1].split("</style>")[0]
     root = _tokens(css.split(":root {")[1].split("}")[0])
-    dark = _resolve(root, root)
-    # The *selector*, brace and all. Splitting on `[data-theme="light"]` alone
-    # matched a comment in the stylesheet that mentions it -- so `light_block`
-    # became the tail of `:root` and the comparison below reported fifteen
-    # phantom mismatches. Prose about code reads like code, which is the third
-    # time that has cost this repository something.
-    light_block = css.split(':root[data-theme="light"] {')[1].split("}")[0]
-    merged = dict(root)
-    merged.update(_tokens(light_block))
-    light = _resolve(merged, root)
-
-    # **The two light switches have to say the same thing.** There are two --
-    # the explicit `[data-theme="light"]` and the `prefers-color-scheme` media
-    # query -- because CSS cannot put a media query in a selector list. Only
-    # one of them can be read above, so the other is held to it by comparison:
-    # the theme most people get is the media query, and it is the one that was
-    # silently wrong when these were written out separately.
-    media = css.split(':root:not([data-theme="dark"]) {')[1].split("}")[0]
-    if _tokens(media) != _tokens(light_block):
-        only_a = sorted(set(_tokens(light_block)) - set(_tokens(media)))
-        only_b = sorted(set(_tokens(media)) - set(_tokens(light_block)))
-        print("        the two light theme blocks do not match"
-              + (f"; only in [data-theme]: {', '.join(only_a)}" if only_a else "")
-              + (f"; only in the media query: {', '.join(only_b)}" if only_b else ""))
-        return fail("the light palette is written two different ways")
+    theme = _resolve(root, root)
 
     problems = []
-    for label, themes in (("dark", dark), ("light", light)):
-        for name, fg, bg, need in PAIRS:
-            if fg not in themes or bg not in themes:
-                problems.append(f"{label}: no token for {fg} or {bg} ({name})")
-                continue
-            r = _ratio(themes[fg], themes[bg])
-            if r < need:
-                problems.append(f"{label}: {name} is {r:.2f}:1, needs {need}")
-        for name, fg, need in WHITE_ON:
-            r = _ratio("#ffffff", themes[fg])
-            if r < need:
-                problems.append(f"{label}: {name} is {r:.2f}:1, needs {need}")
+    # Comments are not rules. The stylesheet explains at some length why the
+    # second palette was removed, and that prose names both switches -- so a
+    # check reading the raw text would find exactly what it is looking for in
+    # the paragraph saying it is gone. Fourth time in this file.
+    bare = re.sub(r"/\*.*?\*/", "", css, flags=re.S)
+    for banned, what in (('[data-theme', 'a theme attribute selector'),
+                         ('prefers-color-scheme', 'a colour-scheme media query')):
+        if banned in bare:
+            problems.append(f"{what} is back in the stylesheet: "
+                            f"there is meant to be one palette")
+
+    for name, fg, bg, need in PAIRS:
+        if fg not in theme or bg not in theme:
+            problems.append(f"no token for {fg} or {bg} ({name})")
+            continue
+        r = _ratio(theme[fg], theme[bg])
+        if r < need:
+            problems.append(f"{name} is {r:.2f}:1, needs {need}")
     for p in problems:
         print(f"        {p}")
-    n = (len(PAIRS) + len(WHITE_ON)) * 2
     return fail(f"{len(problems)} contrast failure(s)") if problems \
-        else ok(f"{n} colour pairs meet contrast, both themes")
+        else ok(f"{len(PAIRS)} colour pairs meet contrast, and one palette sets them")
 
 
 def check_no_game_files():

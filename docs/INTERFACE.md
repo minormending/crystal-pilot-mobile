@@ -770,23 +770,21 @@ reaches for it.
 
 ## Colour
 
-Two palettes, named by the job each colour does. Dark is the base, because that
-is what this app is: a Game Boy screen looked at in the evening. Light is for
-the people whose phone is set that way.
+**One palette, named by the job each colour does.** It is a Pokedex: moulded
+plastic, the same colour in every room. There is no control for it any more,
+and that is the point of the section rather than a footnote to it.
 
-There is no palette switcher for the *screen*, and that is deliberate: this
-ROM's header reads `0xc0`, Game Boy Color only, so Crystal supplies its own
-colours and uses them to tell things apart. A DMG green wash would destroy
-information, and the core exposes no palette API to do it with anyway.
+There is no palette switcher for the *screen* either, and that has always been
+deliberate: this ROM's header reads `0xc0`, Game Boy Color only, so Crystal
+supplies its own colours and uses them to tell things apart. A DMG green wash
+would destroy information, and the core exposes no palette API to do it with
+anyway.
 
-The interface theme is a different question, and the order mattered. A second
-theme multiplies a palette rather than resolving one, and this palette had four
-measurable failures in it — so those were fixed first, on one palette, and the
-light set was derived afterwards from the roles rather than from the old
-values. Doing it the other way round would have doubled the work and shipped
-both halves broken.
+### What the two palettes cost, and what removing them returned
 
-What was actually wrong:
+The app carried two for a long time, and the work that produced them was real.
+It found four measurable failures, and they are worth keeping on the record
+because every one of them is a mistake that is easy to make again:
 
 * **Ordinary buttons were filled with `--panel`** — the exact colour of the card
   holding them, 1.00:1 — and leaned on a 1.27:1 border to be visible at all.
@@ -794,8 +792,7 @@ What was actually wrong:
   container reads as a label"*, and applied it only to the D-pad keys. `--raise`
   is that lesson applied to everything pressable.
 * **White on the accent was 3.80:1**, so the label on every Start button in the
-  app failed. `--action` at `#4269c9` passes at 5.13:1 and still steps clear of
-  a card at 3.04:1. Darker blues pass more easily and go muddy.
+  app failed.
 * **Stop read at 3.93:1** — the one control you want in a hurry.
 * **Select and Start read at 4.41:1**: `--dim` is legible on the page and on a
   card, but not on a raised key, which is where those two live. They have their
@@ -804,36 +801,47 @@ What was actually wrong:
 And one thing that was not a contrast problem at all: **`--accent` meant six
 unrelated things** — the primary action, a selected species, a selected level, a
 held key, where you tapped, and something running. When everything important is
-the same blue, blue has stopped signalling anything. Filled controls that carry
-a label are `--action`; `--accent` is now only used where there is no text on it
-(the running dot, the slider, links); and where you tapped is `--mark`, a warm
-amber, deliberately not a control colour — as the accent blue it read as one
-more button sitting on the map.
+the same blue, blue has stopped signalling anything. That split into `--action`
+for filled controls carrying a label, `--accent` for things with no text on them,
+and `--mark` for where you tapped.
 
-Every pair is checked in both themes: no text combination under 4.5:1, no
-meaningful edge under 3:1. Removing the old under-the-screen `.speed` block also
-fixed a cascade collision it was causing — it still set `margin-top:10px`, which
-the header rule did not override, so the header's speed control carried a stray
-margin.
+What the *second* palette cost was a standing invariant that had to be checked
+by machine. There were two light switches, because CSS cannot put a media query
+in a selector list: an explicit `[data-theme="light"]` block and a
+`prefers-color-scheme` one. They said the same thing in two places and drifted
+the first time anything touched them — a new token went into one, the other kept
+the old value, and the theme most people get is the one that was wrong. The
+check grew a comparison to hold them together, and that comparison was itself
+subtle enough to go silently blind once.
 
-Three things about light are not simply the dark values flipped:
+All of that is gone. `check-app contrast` reads one block, and what it asserts
+in place of the comparison is the invariant that replaced it: **no
+`[data-theme]` selector and no `prefers-color-scheme` query in the stylesheet
+at all.** That is the failure worth catching, because a second palette would
+arrive unchecked — the reader only ever looks at the first block, so a light
+theme added below it would be applied by the browser and invisible to the check.
 
-* **A pressable cannot be lighter than a white card.** On dark, `--raise` steps
-  up and carries the affordance on its own. On light it steps *down* and the
-  border does more of the work.
-* **The gamepad needs a bigger step than the buttons do**, because it is drawn
-  as one connected cross with no borders at all — the fill is the only thing
-  separating it from the card. `--key` stopped being an alias of `--raise` for
-  that reason. The first attempt gave each cell its own outline instead, which
-  worked and was wrong: it turned the cross back into the four loose boxes the
-  original CSS says it is not.
-* **`--mark` is identical in both.** Where you tapped sits on the game's own
-  picture, not on any surface of ours, so it is not the theme's business.
+### The shell red is measured, not picked
 
-The control is three-state — auto, light, dark — and lives in the card with
-*How this works* rather than the header. The header is for where you are and
-how fast the game is running; a theme is neither, and it is set once. Putting it
-there also overflowed 375px, wrapping the title and truncating the location.
+The body colour is the one place where the reference picture and the contrast
+bar actually argue, and the argument is worth writing down.
+
+A crimson at this hue sits in a trough. Black ink on the hot pink of the
+reference is 4.94:1 and passes, but that pink is too light for the recessed
+surfaces to read against. Step it down toward a deeper red and black ink fails
+while white ink is not yet strong enough: `#e0114e` gives **4.36:1 with white
+and 3.92:1 with black**, which is a colour with no legible lettering at all.
+
+`#cc1144` is the resolution — white silkscreen at **5.10:1**, and still 3.40:1
+against the recess it is moulded around. Both of those are pairs in the check
+now, along with the one that matters most for the keys:
+
+**The label on a filled control is dark, not white.** That check used to be
+`WHITE_ON`, and it hard-coded `#ffffff` as the label colour. True while a filled
+control was a deep blue; a silent lie the moment it became a pale Pokedex key
+with dark lettering — the check would have gone on passing while asserting
+nothing about the app. It names `--action-ink` now, so the thing being measured
+is the colour the app actually paints.
 
 ## The stylesheet is somebody else's, and the colours are not
 
@@ -1222,4 +1230,4 @@ So this page carries a marker naming the files it describes and the hash they
 had when it was last read against them. `tools/docs-check` reports it when they
 move, and the pre-commit hook blocks on that report.
 
-<!-- covers: index.html app/main.js app/rows.js @ fa8954634fd0 -->
+<!-- covers: index.html app/main.js app/rows.js @ 23d5d291d99c -->

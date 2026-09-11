@@ -10,8 +10,9 @@ and — set out in one table — what leaves the device at all.
 ## What the page remembers
 
 Three choices survive a reload, in one localStorage key: the **speed step**,
-which **grind preset** was tapped, and **what was being hunted**. The colour
-theme has its own, older key. That is the whole list — everything else is
+which **grind preset** was tapped, and **what was being hunted**. That is the
+whole list — the colour theme used to keep its own, older key and no longer
+needs one; everything else is
 either derived, or too big for localStorage, or nobody's choice to begin with.
 
 The ball is a good example of the third: nobody picks it. `refreshBag` derives

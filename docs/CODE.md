@@ -4808,7 +4808,7 @@ This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ 9a3d50cbf618 -->
+<!-- covers: app/main.js index.html @ be7c4d45ea41 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -4853,7 +4853,7 @@ shell — a CDN link would be a stylesheet served from the network in an
 offline-first app. The *classless* build, so it styles bare elements and imposes
 no containers over a grid tuned around a self-measuring canvas. Its forty-odd
 colour variables are mapped onto the palette below rather than used, because
-that palette is contrast-checked in both themes and two colour systems would be
+that palette is contrast-checked and two colour systems would be
 two answers to one question. See [The
 interface](INTERFACE.md#the-stylesheet-is-somebody-elses-and-the-colours-are-not).
 
@@ -5357,7 +5357,7 @@ seconds by a page whose loop was supposedly running.
 
 ### One thing at a time
 
-<!-- covers: app/main.js @ d99320335879 -->
+<!-- covers: app/main.js @ bb09e89f9a54 -->
 
 One Game Boy, one joypad, one canvas — so a great deal of this app is about
 making sure two things are never driving them at once. There are three claims,
@@ -5911,7 +5911,7 @@ a conversation.
 
 ### The card behind a party row
 
-<!-- covers: app/rows.js app/main.js index.html @ fa8954634fd0 -->
+<!-- covers: app/rows.js app/main.js index.html @ 23d5d291d99c -->
 
 Two questions the game itself will not answer about a Pokémon you are
 carrying — *what is this made of* and *what is it about to become* — and both
@@ -6000,7 +6000,7 @@ at body size.
 
 ### Running the list
 
-<!-- covers: app/rows.js app/main.js @ cbd27dc7b848 -->
+<!-- covers: app/rows.js app/main.js @ bdd382d25486 -->
 
 The app has spent forty passes learning to answer one question — *what can the
 pilot do here, and which of those is worth most?* — and twenty showing the
@@ -6124,7 +6124,7 @@ to deposit your last Pokémon.
 
 ### The settings and the save card
 
-<!-- covers: index.html app/main.js @ 9a3d50cbf618 -->
+<!-- covers: index.html app/main.js @ be7c4d45ea41 -->
 
 The pilot's own list got a glyph column, shorter names and a slot to fill in
 v165. These two cards did not, and reading them found that they had a different
@@ -6235,15 +6235,21 @@ off by the very edit it is meant to police is worse than no group.
 
 ### Colour
 
-Two palettes, named by the job each colour does — `--action` for filled controls
-that carry a label, `--accent` only where no text sits on it, `--mark` for where
-you tapped, `--raise` for anything pressable. Dark is the base; light is a real
-second palette, not an inversion. The control is three-state — auto, light,
-dark — and all three states are on the row: it was one button that printed the
-state it was in and cycled on press, so nothing about it said there were three,
-which they were, or which way round. `role="group"` is Pico's own segmented
-idiom, and `aria-pressed` is both what paints the chosen one and what a screen
-reader reads.
+**One palette**, named by the job each colour does — `--action` for filled
+controls that carry a label, `--action-ink` for the label on one, `--accent`
+only where no text sits on it, `--mark` for where you tapped, `--raise` for
+anything pressable, and `--shell` for the moulded plastic everything else sits
+in. There is no control: a Pokedex is an object, and an object is the same
+colour in every room.
+
+There were two palettes and a three-state control until the chassis. What that
+cost was an invariant no reader could hold on their own — CSS cannot put a media
+query in a selector list, so *light* was written twice, once as
+`[data-theme="light"]` and once as `prefers-color-scheme`, and the two drifted
+the first time anything touched them. `check-app contrast` grew a comparison to
+hold them together, and that comparison went silently blind once on its own.
+Both blocks and the comparison are gone; what the group asserts in their place is
+that neither selector is in the stylesheet at all.
 
 <details>
 <summary><b>Advanced detail:</b> what the role split fixed</summary>
@@ -6265,12 +6271,18 @@ The button fill is the instructive one: the stylesheet already carried the
 comment *"a button the same colour as its container reads as a label"* and had
 applied it only to the D-pad.
 
-Three things do not flip between themes. A pressable cannot be *lighter* than a
-white card, so on light the fill steps down and the border does more of the
-work. The gamepad needs a bigger step than ordinary buttons because it is drawn
-as one connected cross with no borders — the fill is all that separates it from
-the card. And `--mark` is identical in both, because where you tapped sits on the
-game's own picture, not on a surface of ours.
+A fifth failure was waiting in the check rather than in the app, and only the
+chassis exposed it. The pair was written `WHITE_ON` — white, hard-coded, on a
+filled control — which was true while a filled control was a deep blue. A pale
+Pokedex key carries *dark* lettering, so from the moment the palette changed
+that pair was measuring a colour the app does not paint, and would have gone on
+passing while asserting nothing. It names `--action-ink` now.
+
+The shell red is the other thing worth recording, because the reference picture
+and the contrast bar genuinely disagree. This hue has a trough in it: `#e0114e`
+is **4.36:1 with white and 3.92:1 with black**, which is a plastic with no
+legible lettering at all. `#cc1144` clears white silkscreen at 5.10:1 and still
+stands 3.40:1 clear of the recess it is moulded around.
 
 </details>
 
@@ -6337,9 +6349,10 @@ reach, which is the other half of the fix.
 Storage throws rather than returning null — private windows, cleared site data
 — and in Node there is no `localStorage` binding at all, so reading it is a
 `ReferenceError` and not something a `try` around the *value* would catch. One
-accessor answers "nothing remembered" for all of it. The colour theme keeps its
-own older key: moving it would cost a migration for people who have already
-chosen and buy nothing.
+accessor answers "nothing remembered" for all of it. The colour theme used to
+keep its own older key, kept separate because moving it would have cost a
+migration and bought nothing; with one palette there is nothing left to
+remember, and the key is simply no longer written.
 
 **The ROM, the .sym and the battery are kept too, in IndexedDB.** 2MB and
 1.8MB against a localStorage budget of about five, in strings, settles where.
@@ -6426,7 +6439,6 @@ Four places, and knowing which is which is most of understanding *Forget*:
 | where | holds | written by | whose cartridge it is |
 | --- | --- | --- | --- |
 | `localStorage` — `crystal-pilot-opts` | speed, grind preset, hunted species, and a stamp | `remember.js` | nobody's — preferences outlive cartridges |
-| `localStorage` — the theme key, older | light / dark / auto | the theme button | nobody's |
 | IndexedDB `crystal-pilot-files`, store `kept` | `rom`, `sym`, `battery`, `meta` | `remember.js` | `meta.tag`, the ROM's fingerprint |
 | IndexedDB `crystal-pilot`, store `slots` | five records and five `:about` summaries | `saves.js` | `rec.tag` on every slot |
 | IndexedDB `wasmboy`, store `keyval` | the library's own per-cartridge record | WasmBoy, and `saves.install` | the key *is* the identity: ROM bytes `0x134`–`0x14E` |
@@ -6752,7 +6764,7 @@ they have been installed.
 
 ### Watching the other device's screen
 
-<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ 69a3342e622d -->
+<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ 332aa3601975 -->
 
 One device shows its screen; the other watches it, and plays it if the first
 one says so. The picture goes straight between them over WebRTC and never
@@ -7365,7 +7377,7 @@ about that code did not.
 
 ### The other checks
 
-<!-- covers: tools/check-app @ 366a79240f4d -->
+<!-- covers: tools/check-app @ 7be124b43933 -->
 
 `tools/check-app` runs everything that can be verified without a ROM:
 
@@ -7381,7 +7393,7 @@ tools/check-app contrast     # or one group
 | `shell` | the service worker's cached list matches what is on disk, both ways |
 | `markup` | `index.html` tags and CSS braces balance |
 | `builtmarkup` | tags built in a JavaScript template close in the function that opens them |
-| `contrast` | the palette still meets contrast, in both themes |
+| `contrast` | the one palette still meets contrast, and is still the only one |
 | `gamefiles` | no ROM, save or symbol file has been committed |
 | `buttons` | every button name handed to `press`/`hold`/`release` is one the core knows |
 | `layers` | every import points down `gbcore → gen2 → titles → app`, never up |

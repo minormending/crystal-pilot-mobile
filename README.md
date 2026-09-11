@@ -65,7 +65,7 @@ how to run it. Everything else has a page of its own.
 | | |
 | --- | --- |
 | **[Using it](docs/USING.md)** | the controls, tap-to-walk, starting a game, grinding, hunting and what the hour changes, the Pokédex, travel, healing, your save, slots and undo, updates |
-| **[The interface](docs/INTERFACE.md)** | why it is shaped like a Game Boy: the fixed screen and pad, the ranked offers, the two doors, three layouts, colour |
+| **[The interface](docs/INTERFACE.md)** | why it is shaped like a Game Boy: the fixed screen and pad, the ranked offers, the two doors, three layouts, the one palette |
 | **[Two devices, one game](docs/DEVICES.md)** | what the page remembers, room codes, handing the save over, watching the other screen, and what leaves the device |
 | **[What is proven](docs/PROVEN.md)** | the engineering log — what has been run and measured, what broke, the eighty-six defects twenty-six audits found, and the traps in the emulator core |
 | **[Developing it](docs/DEVELOPING.md)** | the tests, the checks that run without a ROM, and serving it locally |
@@ -147,7 +147,7 @@ pre-commit hook runs it; enable it once per clone with
 
 `tools/check-app` runs the rest of what can be checked without a ROM: that every
 module parses, that the offline shell matches what is on disk, that the markup
-closes, that the palette still meets contrast in both themes, and that no game
+closes, that the one palette still meets contrast, and that no game
 file has been committed. CI runs both on every push — and nothing more, because
 driving the game needs a ROM built from the disassembly and none is
 distributed.

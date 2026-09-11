@@ -237,58 +237,6 @@ let undoPoint = null;
 // looking like no job has run.
 let undoRefused = null;
 
-// --- colour theme -----------------------------------------------------------
-// Three states, not two: "auto" follows the phone, and the other two override
-// it. Dark is what the app is -- a Game Boy screen looked at in the evening --
-// so it is the base palette, and light is a real second one rather than an
-// inversion. A phone set to light still gets light by default; this exists so
-// that following the phone is not the same as being stuck with it.
-const THEMES = ['auto', 'light', 'dark'];
-const THEME_KEY = 'crystal-pilot-theme';
-let themeChoice = 'auto';
-
-function readTheme() {
-  // Private windows and cleared site data both throw rather than return null.
-  try {
-    const saved = localStorage.getItem(THEME_KEY);
-    if (THEMES.includes(saved)) return saved;
-  } catch (e) { /* no storage: auto is a fine answer */ }
-  return 'auto';
-}
-
-function applyTheme(choice) {
-  themeChoice = choice;
-  const root = document.documentElement;
-  if (choice === 'auto') root.removeAttribute('data-theme');
-  else root.setAttribute('data-theme', choice);
-  // Every segment says whether it is the one in force, which is both what
-  // paints it and what a screen reader reads. The old control wrote the state
-  // into its own label -- a button called `dark` that made it light.
-  for (const b of document.querySelectorAll('#theme button')) {
-    b.setAttribute('aria-pressed', String(b.dataset.theme === choice));
-  }
-  // The address bar has its own copy of the ground colour, and the media-query
-  // pair in the head cannot know about an override.
-  const meta = $('#themecolor');
-  if (meta) {
-    const dark = choice === 'dark' || (choice === 'auto'
-      && matchMedia('(prefers-color-scheme: dark)').matches);
-    meta.setAttribute('content', dark ? '#16161c' : '#eef0f4');
-  }
-  try { localStorage.setItem(THEME_KEY, choice); } catch (e) { /* fine */ }
-}
-
-applyTheme(readTheme());
-matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
-  if (themeChoice === 'auto') applyTheme('auto');   // refresh the address bar
-});
-// Delegated, so the three segments are one listener and an unknown one is
-// ignored rather than cycling the theme by accident.
-$('#theme').onclick = (ev) => {
-  const want = ev.target.closest('button');
-  if (want && THEMES.includes(want.dataset.theme)) applyTheme(want.dataset.theme);
-};
-
 /**
  * Hide the run log's card when there is no log and no offer in it.
  *
