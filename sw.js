@@ -90,7 +90,24 @@ self.addEventListener('fetch', (e) => {
       return fetch(e.request);
     }
     try {
-      const fresh = await fetch(e.request);
+      // **`cache: 'reload'`, or "network first" is a lie.** A plain
+      // `fetch(request)` uses the default cache mode, which consults the
+      // browser's own HTTP cache *before* the network -- and GitHub Pages
+      // serves this app with `cache-control: max-age=600`. So for ten minutes
+      // after a deploy this worker asked "the network" and was answered from a
+      // cache it does not control, one file at a time, independently. That is
+      // the mixing this file's own comment above warns about, arriving through
+      // a door it did not cover: `version.js` fresh from the network while
+      // `romdata.js` came out of the HTTP cache at an older revision, so the
+      // page reported a build it was not entirely running. Measured as a lens
+      // that stayed empty because the module behind it predated the method the
+      // page was calling.
+      //
+      // Fetched by URL rather than by passing an init alongside `e.request`:
+      // constructing a Request from a navigation request throws, and `./` and
+      // `./index.html` are both in the shell.
+      const fresh = await fetch(url.href,
+                                { cache: 'reload', credentials: 'same-origin' });
       // `ok` is not enough on its own. A captive portal -- hotel wifi, an
       // airline -- answers *every* request with 200 and its own login page, so
       // caching on `ok` alone overwrites index.html and every module with that

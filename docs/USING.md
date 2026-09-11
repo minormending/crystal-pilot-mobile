@@ -1633,7 +1633,7 @@ deployed, which is not the question you are asking when a bug you saw fixed is
 still in front of you. `tools/check-app` asserts that number matches the service
 worker's cache name, because a version display that lies is worse than none.
 
-<!-- covers: sw.js @ f57d996508b0 -->
+<!-- covers: sw.js @ d0ae1ab7b74d -->
 
 The worker fetches **network first, falling back to the cache**. That is the
 opposite of the usual offline-first advice, on purpose.
@@ -1649,6 +1649,20 @@ The staleness was the visible half. The dangerous half was mixing: the match
 was not scoped to the current cache, and a module added in a new version is not
 in the old cache at all, so it gets fetched fresh. Old HTML against new
 JavaScript is a combination nobody has tested.
+
+**And "the network" has to mean the network.** A plain `fetch(request)` uses the
+default cache mode, which consults the browser's *own* HTTP cache before going
+out — and GitHub Pages serves this app with `cache-control: max-age=600`. So
+for ten minutes after a deploy this worker asked the network and was answered
+from a cache it does not control, file by file, each one independently. That is
+the mixing above, arriving through a door the fix did not cover: `version.js`
+fresh from the network while another module came out of the HTTP cache at an
+older revision, so the page reported a build it was not entirely running.
+
+It was found as a lens that stayed empty. The code behind it was correct, the
+deployed file was correct, and the page said v214 — but the module the page was
+actually executing predated the method it was calling. The worker fetches with
+`cache: 'reload'` now, which is what "network first" was supposed to mean.
 
 It still works with no network — that is what the fallback is for.
 
