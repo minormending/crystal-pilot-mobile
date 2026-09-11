@@ -4808,7 +4808,7 @@ This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ 004982f1f55d -->
+<!-- covers: app/main.js index.html @ 78cb9bc0d3ad -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -4843,6 +4843,7 @@ flowchart TD
     M["main — the shell, display:grid"] --> BR["<b>brow</b><br/>.lens · .lamps · .badge<br/>#update #gear"]
     M --> ST["<b>stage</b><br/>.shot → #screenwrap → canvas<br/>#taphint"]
     M --> SH["<b>stage</b>, again<br/>.sheet → .panes — five panes<br/>.modes — the strip"]
+    M --> KE["<b>stage</b>, in the sheet<br/>#display — the armed key<br/>#jobs → ten .key cells"]
     M --> BA["<b>bar</b> — the strip<br/>.lcdtop: #where #purse<br/>.barline: #dot #status #steps #chev, #stopRun<br/>#battlebar · #handoffrow"]
     M --> PA["<b>pad</b><br/>.gamepad → .dpad .face · .menus"]
     ST -. "same area, higher z-index" .- SH
@@ -5116,8 +5117,27 @@ four of them were usually greyed out with a line each explaining why: *not in a
 battle*, *not in a battle*, *no party yet*, *pick something below*. That is the
 app scanning the game's memory on your behalf and then making you scan the
 result anyway. `describeOffers` inverts the same answers `describeRows` already
-computes — a row that cannot start is not drawn, and the rest are sorted by how
-likely you are to want them.
+computes. A row that could not start was not drawn, and the rest were sorted by
+how likely you were to want them.
+
+**The chassis reverses the drawing half and keeps the ranking half.** There are
+ten keys in fixed cells, always all ten, and one that cannot run is dimmed
+rather than removed — so a key is in the same place every time you reach for it,
+which a list that reorders itself can never offer. The old objection was to
+*four rows of apology*, each carrying a line explaining itself, and that
+objection survives intact: a dim key is a glyph in a cell rather than a row of
+prose, and the sentence saying why appears in the display for the one key you
+asked about. One explanation on demand instead of four unbidden.
+
+It also cost almost nothing to build, which is the part worth recording.
+`describeRows` has always described **all eleven jobs on every refresh**, reasons
+included; `paintJobs` computed them and threw away everything `describeOffers`
+had not ranked. One `rank !== undefined` came out and the sentences were already
+there.
+
+`describeOffers` still decides which key is armed when the panel opens and which
+wears the accent. Every rule in it is a fact about the state rather than a
+preference:
 
 Every rule in the ranking is a fact about the state rather than a preference:
 
@@ -5128,9 +5148,36 @@ Every rule in the ranking is a fact about the state rather than a preference:
 | a species is picked | Catch, Hunt | the specific intent beats the general one |
 | otherwise | Grind | the job that needs nothing but a party |
 
-Ranking is a `style.order` and a `hide`, not generated markup: every row keeps
-its id, its handler and its line in `check-app`'s wiring check, and what changed
-is which are drawn and in what order.
+Nothing is generated markup, then or now: every job keeps its id, its handler
+and its line in `check-app`'s wiring check. `style.order` is gone with the
+reordering it served — a fixed cell needs no sort — and `hide` became `dim` for
+the ten, while `wait`, which is a row and not a key, still hides.
+
+**Ten cells, eleven jobs**, and the one left out is chosen by a rule rather than
+by arithmetic: `wait` is the only offer about the *hour* rather than about a
+place you can walk to, which is the same fact that gave it a clock for a glyph
+and put it last in the ranking. `GRID_KEYS` names the ten, and it is the list
+`paintJobs` branches on.
+
+**An armed key stays armed when it stops being able to run.** `paintJobs` re-arms
+only when nothing is armed, because the reason a job cannot run is precisely what
+the display exists to show — re-arming under the reader would take that sentence
+away at the moment it became worth reading.
+
+**The display holds one key's line and one key's controls, and holds them by
+hiding the rest.** All ten state spans and all eleven buttons live in it
+permanently; `paintJobs` toggles `hide` on the ones that are not the armed key's.
+That is why this restructure touched no job handler at all — the button the disc
+shows *is* the job's own button, not a proxy that clicks it, so `disabled`,
+`primary` and every `onclick` are where they were.
+
+**The disc is Go and never Stop**, and the reason is a rule this repository
+already wrote down. Both would fit — `runTask` opens with `if (running) return
+null`, so only one of them can ever apply — but starting a job calls
+`showPanel(null)`, which shuts the panel the disc is on for the ninety seconds a
+Stop is wanted in. Stop stays on the strip, which is always drawn. *A page you
+must scroll to stop the pilot is not fine* applies just as well to a page you
+must open.
 
 **And the corollary, which this app has now got wrong twice: a reason written
 into a row is not read when the reason is why the row is hidden.** `enabled` is
@@ -5400,7 +5447,7 @@ seconds by a page whose loop was supposedly running.
 
 ### One thing at a time
 
-<!-- covers: app/main.js @ e532ae4229a1 -->
+<!-- covers: app/main.js @ 0dc70a781d9f -->
 
 One Game Boy, one joypad, one canvas — so a great deal of this app is about
 making sure two things are never driving them at once. There are three claims,
@@ -5954,7 +6001,7 @@ a conversation.
 
 ### The card behind a party row
 
-<!-- covers: app/rows.js app/main.js index.html @ f476c9f55f25 -->
+<!-- covers: app/rows.js app/main.js index.html @ fd8f555b9319 -->
 
 Two questions the game itself will not answer about a Pokémon you are
 carrying — *what is this made of* and *what is it about to become* — and both
@@ -6043,7 +6090,7 @@ at body size.
 
 ### Running the list
 
-<!-- covers: app/rows.js app/main.js @ 8a87bb4e02b2 -->
+<!-- covers: app/rows.js app/main.js @ ddd6ea33ff65 -->
 
 The app has spent forty passes learning to answer one question — *what can the
 pilot do here, and which of those is worth most?* — and twenty showing the
@@ -6167,7 +6214,7 @@ to deposit your last Pokémon.
 
 ### The settings and the save card
 
-<!-- covers: index.html app/main.js @ 004982f1f55d -->
+<!-- covers: index.html app/main.js @ 78cb9bc0d3ad -->
 
 The pilot's own list got a glyph column, shorter names and a slot to fill in
 v165. These two cards did not, and reading them found that they had a different
@@ -6807,7 +6854,7 @@ they have been installed.
 
 ### Watching the other device's screen
 
-<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ 52f4b450fdce -->
+<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ 1282cc9e4d44 -->
 
 One device shows its screen; the other watches it, and plays it if the first
 one says so. The picture goes straight between them over WebRTC and never
@@ -7420,7 +7467,7 @@ about that code did not.
 
 ### The other checks
 
-<!-- covers: tools/check-app @ 78aa77155d56 -->
+<!-- covers: tools/check-app @ 9fd3e16b755e -->
 
 `tools/check-app` runs everything that can be verified without a ROM:
 

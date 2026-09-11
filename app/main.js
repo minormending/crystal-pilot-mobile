@@ -1627,6 +1627,14 @@ document.addEventListener('click', (e) => {
   if (first) first.focus({ preventScroll: true });
 });
 
+// The ten keys, in the order they sit in the grid. `wait` is the eleventh job
+// and deliberately not one of them: there are ten cells, and it is the only
+// offer that is about the hour rather than about a place you can walk to.
+const GRID_KEYS = ['grind', 'hunt', 'catch', 'heal', 'shop', 'take',
+                   'duel', 'errand', 'gym', 'travel'];
+// Which key the display is opened on.
+let armed = null;
+
 const JOB_ROWS = {
   grind: ['#grindstate', '#go', '#job-grind'],
   hunt: ['#huntstate', '#hunt', '#job-hunt'],
@@ -1683,25 +1691,46 @@ function offersNow(s) {
 function paintJobs(s) {
   const { ctx, rows, offers } = offersNow(s);
 
-  // The pilot's rows are reordered and hidden rather than rebuilt. Every one of
-  // them keeps its id, its handler and its place in check-app's wiring check;
-  // what changes is which are drawn and in what order, which is the whole of
-  // the difference between presenting six things and offering three.
+  // Whatever ranks first, until a key is pressed. An armed key then *stays*
+  // armed even when it stops being able to run: the reason it cannot is the
+  // thing the display exists to show, and re-arming under the reader would
+  // take that sentence away at the moment it became worth reading.
+  if (!armed || !GRID_KEYS.includes(armed)) {
+    armed = offers.offered.find((k) => GRID_KEYS.includes(k)) || GRID_KEYS[0];
+  }
+
+  // The keys keep their places and dim; `wait`, which is a row, still hides.
+  // Every id, handler and disabled state is where it was when these were all
+  // rows -- what changed is which of them is drawn, not what any of them is.
   for (const [key, [state, button, row]] of Object.entries(JOB_ROWS)) {
     const rank = offers.rank[key];
-    $(row).classList.toggle('hide', rank === undefined);
+    const grid = GRID_KEYS.includes(key);
+    if (grid) {
+      $(row).classList.toggle('dim', rank === undefined);
+      $(row).classList.toggle('armed', key === armed);
+      // One state line and one set of buttons showing, both belonging to the
+      // armed key. They all live in the display; this is which is on top.
+      $(state).classList.toggle('hide', key !== armed);
+      $(button).classList.toggle('hide', key !== armed);
+    } else {
+      $(row).classList.toggle('hide', rank === undefined);
+    }
     $(row).classList.toggle('lead', rank === 1);
-    $(row).style.order = rank === undefined ? '' : rank;
     // The accent follows the ranking rather than sitting on Grind forever.
     // Grind wore it in the markup, which was true of a fixed list and became a
     // lie the moment the list could put something else first.
     $(button).classList.toggle('primary', rank === 1);
-    if (rank !== undefined) {
-      paintRow(key === 'catch' && rows.catch.needsBalls
-                 ? { ...rows.catch, lit: true } : rows[key],
-               state, button, row);
-    }
+    // Painted whether or not it is offered, which is the one line this whole
+    // step turned on. `describeRows` has always described all eleven -- the
+    // sentence saying why a job cannot run was being computed every refresh and
+    // thrown away by the `rank !== undefined` this replaces.
+    paintRow(key === 'catch' && rows.catch.needsBalls
+               ? { ...rows.catch, lit: true } : rows[key],
+             state, button, row);
   }
+  // The same word the runner announces, derived the same way -- `check-app`'s
+  // `labels` group is what keeps the two spellings from drifting.
+  $('#keyname').textContent = armed[0].toUpperCase() + armed.slice(1);
   $('#offerhint').textContent = offers.hint;
 
   // Drawn only when it can run. The reason it cannot is worth saying *after*
@@ -1737,7 +1766,11 @@ function paintJobs(s) {
   // row, two buttons, and its own enable -- hidden rather than greyed where
   // there is nobody else on the map to clear, because a second button that
   // does what the first does is a choice nobody can make well.
-  $('#clear').classList.toggle('hide', !rows.duel.clearable);
+  // Duel's second button, and it belongs to Duel: the display shows one key's
+  // controls at a time, so a Clear sitting under an armed Gym would be a button
+  // for a job nobody is looking at.
+  $('#clear').classList.toggle('hide',
+                               !rows.duel.clearable || armed !== 'duel');
   $('#clear').disabled = !rows.duel.clearable;
   // Skip rides on the Wait row the way Clear rides on Duel. Hidden rather than
   // greyed where the cartridge will not say which hours are which, because a
@@ -3251,6 +3284,15 @@ $('#gear').onclick = () => {
 $('#modes').onclick = (ev) => {
   const want = ev.target.closest('button');
   if (want) showPane(want.dataset.pane);
+};
+// Delegated over the grid, so ten keys are one listener. A key *arms* rather
+// than runs: what a job would do, and why it cannot, is a sentence the display
+// has room for and a 65px key has not.
+$('#jobs').onclick = (ev) => {
+  const key = ev.target.closest('.key');
+  if (!key) return;
+  armed = key.id.slice('job-'.length);
+  refresh();
 };
 // The log's card starts empty, and nothing paints it until a job runs.
 paintStatusCard();

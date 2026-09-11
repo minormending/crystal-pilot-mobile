@@ -226,6 +226,19 @@ PAIRS = [
     # And the shell has to be seen against the recess it is moulded around,
     # which is an edge carrying meaning rather than text.
     ("the shell against its recess", "shell", "bg", 3.0),
+    # The strip under the screen is a display rather than a surface, so it
+    # carries its own inks: the app's are tuned against --panel, and a card's
+    # ink on dark glass is a different problem.
+    ("lcd text on the glass",     "lcd-ink", "lcd", 4.5),
+    ("quiet lcd text",            "lcd-dim", "lcd", 4.5),
+    ("a warning on the glass",    "lcd-bad", "lcd", 4.5),
+    ("the screen frame on the shell", "frame", "shell", 3.0),
+    ("the bezel inside the frame",    "bezel", "frame", 3.0),
+    # A key that cannot run is dimmed rather than removed, which makes its
+    # label a state somebody reads rather than decoration.
+    ("a dim key's label",    "raise-ink",  "raise",  4.5),
+    # And the one control the display ever shows.
+    ("the disc's label",     "action-ink", "accent", 4.5),
 ]
 
 

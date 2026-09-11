@@ -109,9 +109,36 @@ memory, which is the entire point of it. It knows there is no battle, that
 nobody is hurt and that there are no Poké Balls. Printing all four conclusions
 is the app scanning on your behalf and then making you scan the result anyway.
 
-**A job that cannot run is not drawn.** Not greyed out, not collapsed — not
-drawn. The rest arrive in the order you are most likely to want them, and every
-rule in that order is a fact about the game rather than a preference:
+**A job that cannot run was not drawn.** Not greyed out, not collapsed — not
+drawn. That was the rule from v95, and the chassis reverses it: there are ten
+keys, they are always all ten, and the ones that cannot run are dimmed in place.
+
+It is worth being plain about which of the two arguments actually won, because
+the old one is not wrong. What it objected to was *four rows of apology* — four
+greyed rows each carrying a line explaining itself, which is the app scanning on
+your behalf and then making you scan the result anyway. That objection is intact.
+What has changed is where the explanation goes: a dim key is a **glyph in a
+fixed cell**, not a row of prose, and the sentence saying why lives in the
+display and only for the key you asked about. One explanation on demand instead
+of four unbidden.
+
+What the fixed grid buys is the thing a reordering list can never have: **a key
+is in the same place every time you reach for it.** Catch is the third cell in
+the top row whether or not there is a battle on. The old list moved Catch,
+Grind and Heal past one another as the game changed, so the target under your
+thumb depended on facts you had not looked at yet.
+
+And it cost less than it looked like it would, which is worth recording because
+it is the kind of thing that decides an argument. `describeRows` has always
+described **all eleven jobs on every refresh** — *finish the battle first*,
+*nobody here wants a battle*, *nobody fit to send out* — and `paintJobs` threw
+away every one `describeOffers` had not ranked. The sentences a dim key needs
+were being computed and discarded. Nothing new had to be written; one
+`rank !== undefined` came out.
+
+The ranking did not go anywhere. It decides which key is armed when the panel
+opens, and which one wears the accent — and every rule in it is a fact about the
+game rather than a preference:
 
 | when | first | why |
 | --- | --- | --- |
@@ -127,6 +154,18 @@ the same rule read the other way. The accent follows whatever ranks first: it
 used to be nailed to Grind in the markup, which was true of a fixed list and a
 lie the moment something else could lead.
 
+**An armed key stays armed even when it stops being able to run.** That is
+deliberate and it is the whole point of arming: the reason a job cannot run is
+what the display is for, and re-arming under the reader would take that sentence
+away at exactly the moment it became worth reading.
+
+**Ten cells, eleven jobs.** *Wait* is the one that is not a key, and the rule
+picking it is not arithmetic — it is the only offer that is about the hour
+rather than about a place you can walk to, which is the same fact that gave it a
+clock for a glyph and put it last in the ranking. It is a row under the grid.
+*Run the list* is not a key either, for the reason it was never a ranked row: it
+is an action *over* the list rather than one competing with it.
+
 Catch owns its prerequisite. The errand used to be a peer button *below* Catch,
 beside bag advice that contradicted it — and it is a one-time thing anyway: run
 it twice and it reports *already carrying 5 ball(s)* without moving. It is
@@ -135,10 +174,15 @@ fetches them, and that row stays on the list when the only thing missing is the
 balls. Hiding it would hide the way out of the state it describes.
 
 **And a row earns its place while it is waiting to be chosen for**, which was
-missing and was a dead end rather than an untidiness. The pickers under the list
-— the species chips, the level presets, the destinations — are drawn only when
-the row that reads them is *on* the list. So a row that appears only once a
-choice has been made can never be chosen for.
+missing and was a dead end rather than an untidiness. The pickers — the species
+chips, the level presets, the destinations — are drawn only when the job that
+reads them is available. So a row that appears only once a choice has been made
+can never be chosen for.
+
+The display is where that rule stopped needing to be implemented. The pickers,
+the quiet line and the seen tally were five separate `hidden` toggles, each
+reimplementing "is the job that reads this in play?"; they live inside the
+display now, which opens on the armed key. The rule became the geometry.
 
 Measured with Poké Balls in the bag and no species picked: the offers were
 `{grind}` alone, the species picker was not drawn, and the line underneath still
@@ -1269,4 +1313,4 @@ So this page carries a marker naming the files it describes and the hash they
 had when it was last read against them. `tools/docs-check` reports it when they
 move, and the pre-commit hook blocks on that report.
 
-<!-- covers: index.html app/main.js app/rows.js @ f476c9f55f25 -->
+<!-- covers: index.html app/main.js app/rows.js @ fd8f555b9319 -->

@@ -751,6 +751,70 @@
   /* Three columns now: the glyph, the name and state, the action. The glyph
      column is what makes the name skippable -- a person who has used this once
      finds Heal by its shape and never reads the word again. */
+  /* --- the display, and the ten keys under it ----------------------------
+     The keys hold fixed places and dim when they cannot run, which reverses
+     what v95 measured and chose. The argument on both sides is in
+     INTERFACE.md; what it buys is that a key is in the same place every time
+     you reach for it, and what it costs is that a key which cannot run is
+     drawn. The cost is smaller than it looks because the sentence explaining
+     why was already being computed and thrown away every refresh.
+
+     The display is where that sentence goes, along with everything the keys
+     shed: the quiet line, the species chips, the destinations, the level
+     presets and the seen tally. All of them were already conditional on which
+     job was in play, so an area that opens on the chosen key *is* that rule
+     rather than five `hidden` toggles that each reimplement it. */
+  .display{background:linear-gradient(180deg,#160a0f 0,var(--panel) 62%);
+           border:1px solid var(--line);border-radius:10px;
+           padding:9px 11px 11px;display:flex;flex-direction:column;gap:7px;
+           box-shadow:inset 0 2px 7px rgba(0,0,0,.5)}
+  .dname{font-size:10.5px;font-weight:700;letter-spacing:.09em;
+         text-transform:uppercase;color:var(--dim)}
+  .dstate{display:flex;min-height:1.3em}
+  .dstate .jstate{font-family:var(--pico-font-family-monospace);font-size:12.5px;
+                  color:var(--ink);line-height:1.45}
+  .dacts{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  /* The disc, and there is one at a time: it is the armed key's own button,
+     not a proxy that clicks it, so every handler and every disabled state is
+     exactly where it was when these were rows.
+
+     **Go alone, never Stop.** The plan had this carrying both, on the grounds
+     that `runTask` opens with `if (running) return null` so only one of them
+     can ever apply. That is true and it is not enough: starting a job calls
+     `showPanel(null)`, so this whole panel is shut for the ninety seconds a
+     Stop would be wanted in. Stop stays on the strip, which is always drawn --
+     the repository's own rule, that a page you must scroll to stop the pilot is
+     not fine, applies just as well to a page you must open. */
+  .dacts .jgo{flex:0 0 auto;min-height:46px;min-width:104px;padding:0 20px;
+              border-radius:999px;font-weight:700;letter-spacing:.04em;
+              background:var(--accent);color:var(--action-ink);
+              border:1px solid var(--line);
+              box-shadow:inset 0 -3px 0 rgba(0,0,0,.24),
+                         0 2px 5px rgba(0,0,0,.35)}
+  .dacts .jgo[disabled]{background:var(--raise);color:var(--raise-ink);
+                        box-shadow:none;opacity:.6}
+  .keys{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+  .key{display:flex;flex-direction:column;align-items:center;
+       justify-content:center;gap:4px;min-height:54px;padding:6px 2px;
+       border-radius:9px;cursor:pointer;
+       background:var(--action);color:var(--action-ink);
+       border:1px solid var(--line);
+       box-shadow:inset 0 -2px 0 rgba(0,0,0,.22),0 1px 0 rgba(255,255,255,.14)}
+  .key .jicon{width:17px;height:17px;flex:0 0 auto}
+  .key .jname{font-size:9.5px;font-weight:700;letter-spacing:.02em;
+              text-transform:uppercase;line-height:1}
+  /* Out, not gone. A key that cannot run keeps its cell so the grid is the
+     same shape every time, which is the whole of what a fixed grid buys. */
+  .key.dim{background:var(--raise);color:var(--raise-ink);
+           box-shadow:none;opacity:.75}
+  /* The armed key is the one the display is talking about, so it is ringed
+     rather than recoloured: its colour is already saying whether it can run,
+     and a second meaning on the same channel would cost the first. */
+  .key.armed{outline:2px solid var(--accent);outline-offset:2px}
+  .key.lead .jicon{color:var(--accent)}
+  @media (prefers-reduced-motion:no-preference){
+    .key{transition:background .12s ease,opacity .12s ease}
+  }
   .job{display:grid;grid-template-columns:auto 1fr auto;gap:10px;
        align-items:center;
        padding:10px 0 10px 11px;border-top:1px solid var(--line);
@@ -1349,131 +1413,50 @@
     <!-- The six rows sit in their own flex column so the pilot can rank them
          with `order` without dragging the picker and the presets below into the
          same sort. -->
-    <div class="jobs" id="jobs">
-    <div class="job" id="job-grind">
-      <svg class="jicon" viewBox="0 0 18 18" aria-hidden="true"><use href="#i-grind"/></svg>
-      <div class="what">
-        <span class="jname">Grind</span>
+    <!-- --- the display, and the ten keys under it ---------------------------
+       The keys are in fixed places and stay there. That reverses what v95
+       measured and chose, and the reasoning on both sides is in
+       INTERFACE.md -- what a fixed grid buys is that a key is in the same
+       place every time you reach for it, and what it costs is that a key
+       which cannot run is now drawn.
+
+       The cost is smaller than it looks, because the sentence explaining why
+       was already being written. `describeRows` has always described all
+       eleven jobs on every refresh -- "finish the battle first", "nobody here
+       wants a battle", "nobody fit to send out" -- and `paintJobs` threw away
+       every one `describeOffers` had not ranked. Nothing new had to be said;
+       the display just stopped discarding it. -->
+  <div class="display" id="display">
+    <div class="dname" id="keyname">Send the pilot</div>
+    <!-- Ten state lines and ten sets of buttons live here, and `paintJobs`
+         shows the armed one. They are not rebuilt per key: every id, handler
+         and disabled state is exactly where it was when these were rows, which
+         is why this restructure touched no job handler at all. -->
+    <div class="dstate">
         <span class="jstate" id="grindstate">—</span>
-      </div>
-      <button class="jgo" id="go">Start</button>
+        <span class="jstate hide" id="huntstate">pick something below</span>
+        <span class="jstate hide" id="catchstate">pick something below</span>
+        <span class="jstate hide" id="healstate">—</span>
+        <span class="jstate hide" id="shopstate">—</span>
+        <span class="jstate hide" id="takestate">—</span>
+        <span class="jstate hide" id="duelstate">—</span>
+        <span class="jstate hide" id="errandstate">&mdash;</span>
+        <span class="jstate hide" id="gymstate">—</span>
+        <span class="jstate hide" id="travelstate">—</span>
     </div>
-
-    <div class="job" id="job-hunt">
-      <svg class="jicon" viewBox="0 0 18 18" aria-hidden="true"><use href="#i-hunt"/></svg>
-      <div class="what">
-        <span class="jname">Hunt</span>
-        <span class="jstate" id="huntstate">pick something below</span>
-      </div>
-      <button class="jgo" id="hunt" disabled>Start</button>
+    <div class="dacts">
+        <button class="jgo" id="go">Start</button>
+        <button class="jgo hide" id="hunt" disabled>Start</button>
+        <button class="jgo hide" id="catch" disabled>Start</button>
+        <button class="jgo hide" id="heal" disabled>Go</button>
+        <button class="jgo hide" id="shop" disabled>Restock</button>
+        <button class="jgo hide" id="take" disabled>Pick up</button>
+        <button class="jgo hide" id="duel" disabled>Fight</button>
+        <button class="jgo hide" id="clear" disabled>Clear</button>
+        <button class="jgo hide" id="runerrand">Go</button>
+        <button class="jgo hide" id="gym" disabled>Go</button>
+        <button class="jgo hide" id="travel" disabled>Walk</button>
     </div>
-
-    <div class="job" id="job-catch">
-      <svg class="jicon" viewBox="0 0 18 18" aria-hidden="true"><use href="#i-catch"/></svg>
-      <div class="what">
-        <span class="jname">Catch</span>
-        <span class="jstate" id="catchstate">pick something below</span>
-      </div>
-      <button class="jgo" id="catch" disabled>Start</button>
-    </div>
-
-    <div class="job" id="job-heal">
-      <svg class="jicon" viewBox="0 0 18 18" aria-hidden="true"><use href="#i-heal"/></svg>
-      <div class="what">
-        <span class="jname">Heal</span>
-        <span class="jstate" id="healstate">—</span>
-      </div>
-      <button class="jgo" id="heal" disabled>Go</button>
-    </div>
-
-    <div class="job" id="job-shop">
-      <svg class="jicon" viewBox="0 0 18 18" aria-hidden="true"><use href="#i-shop"/></svg>
-      <div class="what">
-        <span class="jname">Shop</span>
-        <span class="jstate" id="shopstate">—</span>
-      </div>
-      <button class="jgo" id="shop" disabled>Restock</button>
-    </div>
-
-    <div class="job" id="job-take">
-      <svg class="jicon" viewBox="0 0 18 18" aria-hidden="true"><use href="#i-take"/></svg>
-      <div class="what">
-        <span class="jname">Take</span>
-        <span class="jstate" id="takestate">—</span>
-      </div>
-      <button class="jgo" id="take" disabled>Pick up</button>
-    </div>
-
-    <div class="job" id="job-duel">
-      <svg class="jicon" viewBox="0 0 18 18" aria-hidden="true"><use href="#i-duel"/></svg>
-      <div class="what">
-        <span class="jname">Duel</span>
-        <span class="jstate" id="duelstate">—</span>
-      </div>
-      <button class="jgo" id="duel" disabled>Fight</button>
-      <button class="jgo" id="clear" disabled>Clear</button>
-    </div>
-
-    <!-- A scripted trip that unlocks something. Generic on purpose: what it
-         fetches is in the line, not in the name, because the ball errand is
-         the same shape and the next cartridge will have its own. -->
-    <div class="job" id="job-errand">
-      <svg class="jicon" viewBox="0 0 18 18" aria-hidden="true"><use href="#i-errand"/></svg>
-      <div class="what">
-        <span class="jname">Errand</span>
-        <span class="jstate" id="errandstate">&mdash;</span>
-      </div>
-      <button class="jgo" id="runerrand">Go</button>
-    </div>
-
-    <div class="job" id="job-gym">
-      <svg class="jicon" viewBox="0 0 18 18" aria-hidden="true"><use href="#i-gym"/></svg>
-      <div class="what">
-        <span class="jname">Gym</span>
-        <span class="jstate" id="gymstate">—</span>
-      </div>
-      <button class="jgo" id="gym" disabled>Go</button>
-    </div>
-
-    <div class="job" id="job-travel">
-      <svg class="jicon" viewBox="0 0 18 18" aria-hidden="true"><use href="#i-travel"/></svg>
-      <div class="what">
-        <span class="jname">Travel</span>
-        <span class="jstate" id="travelstate">—</span>
-      </div>
-      <button class="jgo" id="travel" disabled>Walk</button>
-    </div>
-
-    <div class="job" id="job-wait">
-      <svg class="jicon" viewBox="0 0 18 18" aria-hidden="true"><use href="#i-wait"/></svg>
-      <div class="what">
-        <span class="jname">Wait</span>
-        <span class="jstate" id="waitstate">—</span>
-      </div>
-      <button class="jgo" id="skip" disabled>Skip</button>
-      <button class="jgo" id="wait" disabled>Wait</button>
-    </div>
-    </div>
-
-    <!-- The list, run for you. Deliberately *below* the nine rows rather than
-         above them: it is an action over the list, so it reads as the list's
-         own footer, and the row wearing the accent stays the first thing the
-         eye lands on. Not ranked either -- it is not an offer competing with
-         the offers, and giving it a rank would have it wearing the rail some
-         refreshes and not others.
-
-         Drawn only when it can run, which is the list's own first rule. What
-         it would do is on the row before you press it, because a control that
-         does several things has to say where it starts. -->
-    <div class="job hide" id="job-auto">
-      <svg class="jicon" viewBox="0 0 18 18" aria-hidden="true"><use href="#i-auto"/></svg>
-      <div class="what">
-        <span class="jname">Run the list</span>
-        <span class="jstate" id="autostate">&mdash;</span>
-      </div>
-      <button class="jgo" id="keepgoing">Start</button>
-    </div>
-
     <p class="offerhint" id="offerhint"></p>
 
     <div class="param" id="pick">
@@ -1498,6 +1481,81 @@
       <span class="v" id="lvl" hidden>5</span>
     </div>
     <div class="seen" id="seen"></div>
+  </div>
+
+  <div class="keys" id="jobs">
+      <div class="key" id="job-grind">
+        <svg class="jicon" viewBox="0 0 18 18" aria-hidden="true"><use href="#i-grind"/></svg>
+        <span class="jname">Grind</span>
+      </div>
+      <div class="key" id="job-hunt">
+        <svg class="jicon" viewBox="0 0 18 18" aria-hidden="true"><use href="#i-hunt"/></svg>
+        <span class="jname">Hunt</span>
+      </div>
+      <div class="key" id="job-catch">
+        <svg class="jicon" viewBox="0 0 18 18" aria-hidden="true"><use href="#i-catch"/></svg>
+        <span class="jname">Catch</span>
+      </div>
+      <div class="key" id="job-heal">
+        <svg class="jicon" viewBox="0 0 18 18" aria-hidden="true"><use href="#i-heal"/></svg>
+        <span class="jname">Heal</span>
+      </div>
+      <div class="key" id="job-shop">
+        <svg class="jicon" viewBox="0 0 18 18" aria-hidden="true"><use href="#i-shop"/></svg>
+        <span class="jname">Shop</span>
+      </div>
+      <div class="key" id="job-take">
+        <svg class="jicon" viewBox="0 0 18 18" aria-hidden="true"><use href="#i-take"/></svg>
+        <span class="jname">Take</span>
+      </div>
+      <div class="key" id="job-duel">
+        <svg class="jicon" viewBox="0 0 18 18" aria-hidden="true"><use href="#i-duel"/></svg>
+        <span class="jname">Duel</span>
+      </div>
+      <div class="key" id="job-errand">
+        <svg class="jicon" viewBox="0 0 18 18" aria-hidden="true"><use href="#i-errand"/></svg>
+        <span class="jname">Errand</span>
+      </div>
+      <div class="key" id="job-gym">
+        <svg class="jicon" viewBox="0 0 18 18" aria-hidden="true"><use href="#i-gym"/></svg>
+        <span class="jname">Gym</span>
+      </div>
+      <div class="key" id="job-travel">
+        <svg class="jicon" viewBox="0 0 18 18" aria-hidden="true"><use href="#i-travel"/></svg>
+        <span class="jname">Travel</span>
+      </div>
+  </div>
+
+  <!-- The one offer about the hour rather than the map, which is why it is not
+       a key: ten cells, eleven jobs, and this is the one that is not a place
+       you can walk to. -->
+  <div class="job" id="job-wait">
+      <svg class="jicon" viewBox="0 0 18 18" aria-hidden="true"><use href="#i-wait"/></svg>
+      <div class="what">
+        <span class="jname">Wait</span>
+        <span class="jstate" id="waitstate">—</span>
+      </div>
+      <button class="jgo" id="skip" disabled>Skip</button>
+      <button class="jgo" id="wait" disabled>Wait</button>
+  </div>
+
+    <!-- The list, run for you. Deliberately *below* the keys rather than
+         among them: it is an action over the list, so it reads as the grid's
+         own footer, and it is not a place you can walk to either. Not ranked either -- it is not an offer competing with
+         the offers, and giving it a rank would have it wearing the rail some
+         refreshes and not others.
+
+         Drawn only when it can run, which is the list's own first rule. What
+         it would do is on the row before you press it, because a control that
+         does several things has to say where it starts. -->
+    <div class="job hide" id="job-auto">
+      <svg class="jicon" viewBox="0 0 18 18" aria-hidden="true"><use href="#i-auto"/></svg>
+      <div class="what">
+        <span class="jname">Run the list</span>
+        <span class="jstate" id="autostate">&mdash;</span>
+      </div>
+      <button class="jgo" id="keepgoing">Start</button>
+    </div>
   </div>
 
   <!-- The same three columns the pilot's list uses, for the same reason: a
