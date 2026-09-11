@@ -4682,9 +4682,9 @@ What carries over unchanged is the hard-won lesson underneath: **read the live
 cursor and step toward the target**. Gen 2 menus wrap, so counting presses from
 an assumed starting position silently picks the wrong thing.
 
-## Two traps worth knowing
+## Three traps worth knowing
 
-Both cost real time here, and both fail quietly rather than loudly:
+The first two cost real time here, and both fail quietly rather than loudly:
 
 1. `_getWasmMemorySection(start, end)` does not reliably honour its range — it
    was observed returning the core's entire ~10 MB linear memory instead of the
@@ -4694,3 +4694,26 @@ Both cost real time here, and both fail quietly rather than loudly:
    loaded. Fetch it during `config()` and every later read is silently empty.
 
 `gbcore/gb.js` guards against both.
+
+The third fails loudly and is not ours to fix, which is the reason to write it
+down rather than chase it again. **The core's worker RPC times out after one
+second and rejects with nothing.** `postMessage` sets a 1000ms `setTimeout`
+that logs `Message dropped {type: …}` and calls `reject()` with no argument, so
+a slow reply from the worker arrives in the console as:
+
+```
+Message dropped {type: FORCE_OUTPUT_FRAME}
+Uncaught (in promise) undefined
+```
+
+Two things about it are worth knowing before spending an evening on it. The
+rejection is unhandled because the call is inside the *core's own*
+`requestAnimationFrame` render loop, not in anything this app awaits — so there
+is no `catch` of ours to add, and swallowing it globally would hide real
+rejections along with it. And the app's rAF shim appears in that stack trace
+only as a pass-through: it substitutes a timer while the page is hidden, and
+delegates to the real `requestAnimationFrame` when it is not.
+
+It means a frame was genuinely dropped rather than merely complained about, and
+it happens when the main thread or the worker is busy enough to miss a
+one-second window — which a pilot job driving frames flat out will do.

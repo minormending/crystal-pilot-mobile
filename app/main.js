@@ -1914,7 +1914,42 @@ function drawLensMon(species) {
   // a cache keyed on what was *asked for* rather than on what came back cannot
   // tell "already done" from "tried once and failed".
   lensDrawn = species === null || sprite ? key : null;
+  if (species !== null && !sprite) lensWhyEmpty(species);
   paintSprite($('#lensmon'), sprite, 16);
+}
+
+// Said once per session, because the caller runs four times a second.
+let lensComplained = false;
+
+/**
+ * Why the lens has a lead and no picture.
+ *
+ * An empty circle is the one failure here that looks like a *drawing* problem
+ * from the outside and is almost never one -- twice now it has been the module
+ * behind it rather than the canvas in front. There are only three answers and
+ * the app knows all three, so it should say which rather than leave it to be
+ * bisected from the console.
+ */
+function lensWhyEmpty(species) {
+  if (lensComplained) return;
+  lensComplained = true;
+  if (!romdata) {
+    console.warn('lens: no cartridge reader yet');
+  } else if (!romdata.icons) {
+    // Either this .sym does not name them, or -- far more likely, and the
+    // reason this message exists -- the page is running an older `romdata.js`
+    // than the one it was served, in which case the field is `undefined`
+    // rather than the `null` the constructor writes.
+    console.warn('lens: no icon tables on this cartridge. romdata.icons is '
+                 + `${romdata.icons === null ? 'null' : typeof romdata.icons}`
+                 + (romdata.icons === undefined
+                    ? ' — this build of romdata.js predates them, so the page is'
+                      + ' running a stale module. Hard-reload once.'
+                    : ' — this .sym does not name MonMenuIcons, IconPointers'
+                      + ' and Icons.'));
+  } else {
+    console.warn(`lens: no icon for species ${species}`);
+  }
 }
 
 /**
