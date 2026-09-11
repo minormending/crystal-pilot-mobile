@@ -532,7 +532,8 @@ async function reallyStart() {
   // Said once, and only when it is worth saying: a cartridge the pilot has no
   // description of behaves correctly in a way that reads as broken.
   // Whether the *cartridge* names its maps, which a profile need not.
-  const known = describeTitle(title, { named: !!romdata.landmarks });
+  const known = describeTitle(title, { named: !!romdata.landmarks,
+                                      icons: !!romdata.icons });
   $('#titlerow').classList.toggle('hide', !known.show);
   $('#titlestate').textContent = known.text;
   shareSymbols();
@@ -4289,6 +4290,11 @@ window.PILOT = {
   get world() { return world; },
   get nav() { return nav; },
   get romdata() { return romdata; },
+  // Here for the same reason the rest are, and added the third time an
+  // empty lens turned out to be a question about the symbol file rather
+  // than about the canvas: `symbols.has('Icons')` is the whole answer and
+  // there was no way to ask it.
+  get symbols() { return symbols; },
   get boot() { return boot; },
   // Here for the same reason the rest are, and added the pass a verification
   // run lost a game to a page reload: the emulator's own battery is flushed on

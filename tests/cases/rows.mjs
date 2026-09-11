@@ -1322,6 +1322,20 @@ test('a profile with names but no healers is still worth a sentence',
          'and it says where the names come from');
   t.true(noNames.show, 'and so does one with no names');
   t.ne(noHealers.text, noNames.text, 'and the two do not say the same thing');
+
+  // **A fully described cartridge whose .sym does not name the icon tables.**
+  // The lens draws your lead out of the cartridge, and a symbol file without
+  // them leaves it an empty circle -- drawn, doing nothing, explaining
+  // nothing, which is the shape this app exists to not have. It is a fact
+  // about the file rather than the profile, so it defaults to present and
+  // only the caller that reads `romdata.icons` ever passes it.
+  const noIcons = describeTitle({ id: 'crystal', names: { '3.1': 'ROUTE 30' },
+                                  healers: [{}], drive: class { async run() {} } },
+                                { icons: false });
+  t.true(noIcons.show, 'a .sym with no icon tables is worth saying');
+  t.true(/party icons/.test(noIcons.text), 'and it says which thing is missing');
+  t.false(/nowhere to heal|no scripted start/.test(noIcons.text),
+          'without claiming anything else is wrong');
 });
 
 test('the offer hint says two things at most', async (t) => {

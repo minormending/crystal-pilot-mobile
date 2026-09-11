@@ -1146,7 +1146,7 @@ export function describeUndo(point, refused) {
  * names and no healers is somebody's half-finished file, which is worth saying
  * differently because it is a file to go and finish.
  */
-export function describeTitle(title, { named = false } = {}) {
+export function describeTitle(title, { named = false, icons = true } = {}) {
   if (!title) return { text: '', show: false };
   // **A map can be named without a profile naming it.** Since the landmark
   // table is read out of the cartridge, a profile with no `names` at all
@@ -1159,7 +1159,13 @@ export function describeTitle(title, { named = false } = {}) {
   const healers = (title.healers || []).length;
   const scripted = typeof title.drive === 'function'
     && typeof title.drive.prototype.run === 'function';
-  if (names && healers && scripted) return { text: '', show: false };
+  // **`icons` defaults to present**, because it is a fact about the symbol
+  // file rather than about the profile and every caller that does not know
+  // about it is asking the older question. It is here at all because a
+  // cartridge whose `.sym` does not name the icon tables draws an empty lens
+  // and says nothing anywhere -- which is the one shape this app is supposed
+  // never to have: a control that is drawn, does nothing, and never explains.
+  if (names && healers && scripted && icons) return { text: '', show: false };
   if (!names) {
     return {
       show: true,
@@ -1170,6 +1176,7 @@ export function describeTitle(title, { named = false } = {}) {
   const missing = [];
   if (!healers) missing.push('nowhere to heal');
   if (!scripted) missing.push('no scripted start');
+  if (!icons) missing.push('no party icons in this .sym');
   const own = Object.keys(title.names || {}).length;
   return {
     show: true,
