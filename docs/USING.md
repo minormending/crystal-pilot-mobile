@@ -616,7 +616,17 @@ which fact is missing rather than pretending the job is impossible.
 
 ## The Pokédex: what it is made of, and what it will become
 
-Tap a Pokémon in the party list and it opens.
+Tap a Pokémon in the party list and it opens. Look one up from the **Dex** key
+and its entry comes with the species' own picture at the head of it —
+decompressed out of your cartridge, at one screen pixel per cartridge pixel, so
+it is the picture this build draws rather than a picture of a Pokémon.
+
+The lens at the top left carries the smaller version of the same idea: your
+lead, with its HP as a ring round the rim, so the one thing worth knowing while
+a job runs is on screen while the panel is shut. That one is the *party menu*
+icon, and Gen 2 shares 37 of those across all 251 species — so the outline is a
+family and the colours are the species. The dex entry gets the real portrait
+because it is the pane you opened on purpose.
 
 ```
 CYNDAQUIL Lv13 ▴                                 35/37

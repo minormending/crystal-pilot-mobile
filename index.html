@@ -764,6 +764,11 @@
                 padding:7px 9px;border-radius:8px;
                 border:1px solid var(--line);background:var(--panel);
                 color:var(--ink)}
+  /* The species' own picture, at one screen pixel per cartridge pixel: a Game
+     Boy sprite scaled by anything but a whole number has visibly uneven pixels,
+     and this one is small enough that 1x is the honest size. Floated so the
+     entry's lines wrap round it rather than starting below it. */
+  .dexcard .pic{float:left;margin:0 10px 6px 0;image-rendering:pixelated}
   .dexbox .chips{padding-bottom:8px}
   .dexbox .chips button{min-height:32px;padding:5px 10px;font-size:12px}
   /* Open, it needs an edge: the first offer below it wears no top rule, being

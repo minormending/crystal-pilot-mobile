@@ -94,6 +94,15 @@ export function normalise(name) {
   return name.toLowerCase().replace(/é/g, 'e').replace(/\s+/g, ' ').trim();
 }
 
+// Every byte with its bits the other way round, for the one LZ command that
+// mirrors what it copies. A table rather than arithmetic per byte: it is built
+// once and read a few hundred times per picture.
+const REVERSED = Array.from({ length: 256 }, (_, b) => {
+  let v = 0;
+  for (let i = 0; i < 8; i++) if (b & (1 << i)) v |= 1 << (7 - i);
+  return v;
+});
+
 import { gen2 } from './engine.js';
 import { GameBoy } from '../gbcore/gb.js';
 
@@ -170,6 +179,107 @@ export class RomData {
       : null;
     this.monPalettes = symbols.has('PokemonPalettes')
       ? this.at('PokemonPalettes') : null;
+    // The front pics. Optional like the rest, and it needs `BaseData` as well
+    // as its own table -- how many tiles a pic is lives in the base-stats
+    // record, not beside the picture.
+    this.pics = symbols.has('PokemonPicPointers')
+      ? this.at('PokemonPicPointers') : null;
+  }
+
+  /**
+   * Gen 2's LZ, one species' picture at a time.
+   *
+   * Seven commands in three bytes' worth of header, and the awkward one is the
+   * back-reference: a high bit on the first offset byte means *this many bytes
+   * back from where we are*, and its absence means an absolute position in the
+   * output so far. Getting that the wrong way round still decodes -- it
+   * produces a picture, just not this one -- which is the reason this was
+   * checked against a rendered sprite rather than against a byte count.
+   */
+  _unlz(bank, addr) {
+    const at = (i) => this.gb.romByte(bank, addr + i);
+    const out = [];
+    let i = 0;
+    // A terminator that never arrives would otherwise read to the end of the
+    // cartridge. A 7x7 pic is 784 bytes uncompressed, so this is slack rather
+    // than a limit anything real approaches.
+    const CAP = 8192;
+    while (out.length < CAP) {
+      const b = at(i);
+      if (b === 0xFF || b === undefined) break;
+      let cmd = b >> 5;
+      let n;
+      if (cmd === 7) {
+        cmd = (b >> 2) & 7;
+        n = ((b & 3) << 8) + at(i + 1) + 1;
+        i += 2;
+      } else {
+        n = (b & 0x1F) + 1;
+        i += 1;
+      }
+      if (cmd === 0) {
+        for (let j = 0; j < n; j++) out.push(at(i + j));
+        i += n;
+      } else if (cmd === 1) {
+        const v = at(i); i += 1;
+        for (let j = 0; j < n; j++) out.push(v);
+      } else if (cmd === 2) {
+        const a = at(i); const c = at(i + 1); i += 2;
+        for (let j = 0; j < n; j++) out.push(j & 1 ? c : a);
+      } else if (cmd === 3) {
+        for (let j = 0; j < n; j++) out.push(0);
+      } else {
+        let from;
+        if (at(i) & 0x80) { from = out.length - (at(i) & 0x7F) - 1; i += 1; }
+        else { from = (at(i) << 8) + at(i + 1); i += 2; }
+        for (let j = 0; j < n; j++) {
+          const k = cmd === 6 ? from - j : from + j;
+          const v = out[k];
+          out.push(cmd === 5 ? REVERSED[v] : v);
+        }
+      }
+    }
+    return out;
+  }
+
+  /**
+   * A species' front pic: `{ pixels, side, colours }`, or null.
+   *
+   * `side` is in pixels and varies -- Gen 2 pics are 5x5, 6x6 or 7x7 tiles and
+   * the game centres them in a 7x7 box. The tiles are in **column-major** order
+   * within the picture, which is the opposite of the menu icon's.
+   */
+  speciesPic(id) {
+    if (!this.pics || !this.base || !id || id < 1) return null;
+    const e = this.pics.addr + (id - 1) * 6;
+    const bank = this.gb.romByte(this.pics.bank, e) + (this.e.picsFix || 0);
+    const addr = this.gb.romByte(this.pics.bank, e + 1)
+                 | (this.gb.romByte(this.pics.bank, e + 2) << 8);
+    const size = this.gb.romByte(this.base.bank,
+                                 this.base.addr + (id - 1) * this.e.baseBytes
+                                 + this.e.baseField.picSize);
+    const w = size >> 4;
+    const h = size & 15;
+    if (!w || !h || w > 8 || h > 8 || w !== h) return null;
+    const data = this._unlz(bank, addr);
+    if (data.length < w * h * 16) return null;
+    const side = w * 8;
+    const pixels = new Uint8Array(side * side);
+    for (let t = 0; t < w * h; t++) {
+      const tx = Math.floor(t / h);
+      const ty = t % h;
+      for (let row = 0; row < 8; row++) {
+        const lo = data[t * 16 + row * 2];
+        const hi = data[t * 16 + row * 2 + 1];
+        for (let col = 0; col < 8; col++) {
+          const bit = 7 - col;
+          pixels[(ty * 8 + row) * side + tx * 8 + col] =
+            ((hi >> bit) & 1) * 2 + ((lo >> bit) & 1);
+        }
+      }
+    }
+    const pal = this.speciesColours(id) || ['#b9b9c4', '#4a4a55'];
+    return { pixels, side, colours: [null, pal[0], pal[1], '#000000'] };
   }
 
   /**

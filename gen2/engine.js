@@ -189,7 +189,14 @@ export const gen2 = {
   // the cartridge's own answer and not the same one for everybody. The same
   // failure as the five-stats-instead-of-six above, one field along.
   baseField: { id: 0, stats: 1, types: 7, catchRate: 9, baseExp: 10,
-               gender: 13, hatch: 15, growth: 0x16 },
+               gender: 13, hatch: 15, picSize: 0x11, growth: 0x16 },
+  // **The one constant in reaching a front pic.** `PokemonPicPointers` stores a
+  // bank byte with a fixed offset subtracted, because the pics live above bank
+  // $36 and the assembler's macro takes the difference so the table fits the
+  // byte. Nothing in the ROM says what the offset is, so it is a cartridge fact
+  // and belongs here: measured on pokecrystal, where the table's first entry
+  // reads bank $1d and `BulbasaurFrontpic` is at $53 -- a difference of $36.
+  picsFix: 0x36,
   // data/growth_rates.asm, in the order `GrowthRates` has them. Keys rather
   // than prose for the same reason `takeable` uses them: what to call a curve
   // on screen is the interface's business.

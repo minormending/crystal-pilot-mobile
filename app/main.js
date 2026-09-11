@@ -1859,26 +1859,20 @@ function paintLens(s) {
   drawLensMon(lastSnapSpecies);
 }
 
-/** The lead's icon, out of the cartridge, into the 16x16 canvas. */
-function drawLensMon(species) {
-  const key = species === null ? null : `${species}:${lensFrame}`;
-  if (key === lensDrawn) return;
-  const cv = $('#lensmon');
+/**
+ * A decoded sprite onto a canvas, at one canvas pixel per cartridge pixel.
+ *
+ * Shared by the lens and the dex card because they differ only in size: index 0
+ * is the transparent one in both and has to stay transparent, or the lens gets
+ * a square on a circle and the dex entry gets a white block on a card.
+ */
+function paintSprite(cv, sprite, side) {
   const ctx = cv.getContext('2d');
-  ctx.clearRect(0, 0, 16, 16);
-  lensDrawn = key;
-  if (species === null || !romdata) return;
-  // A cartridge whose symbol file does not name the icon tables answers null
-  // here, and the lens is then a lens with nothing in it -- which is what it
-  // was before this, and is the right amount of nothing.
-  const icon = romdata.speciesIcon(species, lensFrame);
-  if (!icon) return;
-  const img = ctx.createImageData(16, 16);
-  for (let i = 0; i < 256; i++) {
-    const hex = icon.colours[icon.pixels[i]];
-    // Index 0 is the transparent one, and it has to stay transparent: the
-    // glass is behind this and painting it white would put a square on a
-    // circle.
+  ctx.clearRect(0, 0, side, side);
+  if (!sprite) return;
+  const img = ctx.createImageData(side, side);
+  for (let i = 0; i < side * side; i++) {
+    const hex = sprite.colours[sprite.pixels[i]];
     if (!hex) continue;
     img.data[i * 4] = parseInt(hex.slice(1, 3), 16);
     img.data[i * 4 + 1] = parseInt(hex.slice(3, 5), 16);
@@ -1886,6 +1880,45 @@ function drawLensMon(species) {
     img.data[i * 4 + 3] = 255;
   }
   ctx.putImageData(img, 0, 0);
+}
+
+/** The lead's icon, out of the cartridge, into the 16x16 canvas. */
+function drawLensMon(species) {
+  const key = species === null ? null : `${species}:${lensFrame}`;
+  if (key === lensDrawn) return;
+  lensDrawn = key;
+  // A cartridge whose symbol file does not name the icon tables answers null
+  // here, and the lens is then a lens with nothing in it -- which is what it
+  // was before this, and is the right amount of nothing.
+  paintSprite($('#lensmon'),
+              species === null || !romdata
+                ? null : romdata.speciesIcon(species, lensFrame), 16);
+}
+
+/**
+ * The species' own picture at the head of its dex entry.
+ *
+ * The icon in the lens is a *family* -- this cartridge maps 251 species onto 37
+ * of them -- which is fine for a thing you glance at and wrong for the pane you
+ * opened deliberately to look one up. This is the front pic: per species, and
+ * decompressed out of the cartridge rather than fetched.
+ */
+function drawDexPic(host, species) {
+  const card = host.querySelector('.dexcard');
+  if (!card || !romdata) return;
+  const pic = romdata.speciesPic(species);
+  if (!pic) return;
+  const cv = document.createElement('canvas');
+  cv.className = 'pic';
+  cv.width = pic.side;
+  cv.height = pic.side;
+  // Gen 2 pics are 5x5, 6x6 or 7x7 tiles and the game centres them in a 7x7
+  // box, so the drawn size has to follow the picture rather than be fixed --
+  // a 40px Pikachu stretched to a 56px square is a fat Pikachu.
+  cv.style.width = `${pic.side}px`;
+  cv.style.height = `${pic.side}px`;
+  paintSprite(cv, pic, pic.side);
+  card.insertBefore(cv, card.firstChild);
 }
 
 /** Bob the lead while a job runs, the way the party menu does. */
@@ -2093,6 +2126,7 @@ function paintDex(s) {
     // a level of zero -- and answers with the half it can, which is what a
     // Pokédex entry is: what this *is*, not what yours happens to be.
     entry.innerHTML = dexCard({ species: dexSpecies, level: 0, moves: [], pp: [] });
+    drawDexPic(entry, dexSpecies);
   }
 }
 
