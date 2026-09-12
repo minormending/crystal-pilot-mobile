@@ -7,10 +7,10 @@ import { GameBoy } from '../gbcore/gb.js';
 import { Symbols, sharedNames } from '../gen2/symbols.js';
 import { runSequence, sequenceSaid } from './runner.js';
 import {
-  describeAuto, describeDex, describeDexTotals, describeHandoff, describeOffers,
-  describeParty, describeReplaced, describeRoom, describeRows, describeSaying,
-  describeScreen, describeSlot, describeTitle, describeUndo, findSpecies,
-  hoursLine, joinFailure, otherHour,
+  describeAge, describeAuto, describeDex, describeDexTotals, describeHandoff,
+  describeKept, describeOffers, describeParty, describeReplaced, describeRoom,
+  describeRows, describeSaying, describeScreen, describeSlot, describeTitle,
+  describeUndo, findSpecies, hoursLine, joinFailure, otherHour,
 } from './rows.js';
 import { VERSION } from '../gbcore/version.js';
 import { adoptable, forgetKept, keepBattery, keepRom, keepSym, keptMeta,
@@ -173,6 +173,8 @@ let grindRestored = false;
 // maybeStart runs so that the one place which decides "are we in the world
 // now?" can see it.
 let pendingBattery = null;
+// And when it was kept, for the one line that has to say which save this is.
+let pendingBatteryAt = 0;
 
 /**
  * Keep this device's battery, stamped with the cartridge it came from.
@@ -561,7 +563,13 @@ async function reallyStart() {
     // would be a lie the moment the page is looked at again.
     setStatus('your game is waiting to be put back…', 'busy');
     await whenVisible();
-    setStatus('putting your game back…', 'busy');
+    // Which save, not just that there is one. This line is the app choosing
+    // between the game already in the machine and the game it kept, and until
+    // it said the age there was nothing on screen to tell you it had chosen
+    // wrong: a save from three weeks ago goes back in looking exactly like a
+    // save from this morning.
+    const age = describeAge(pendingBatteryAt);
+    setStatus(`putting back your save${age ? ` from ${age}` : ''}…`, 'busy');
     try {
       // Installing re-loads the ROM, and a core still coming up will not take
       // one -- see gb.awake. Nothing else in the app asks for a re-load this
@@ -658,8 +666,8 @@ async function saveIsInCartridge() {
 async function paintFiles() {
   const el = $('#filestate'), btn = $('#forget'), row = $('#filerow');
   if (!el) return;
-  const meta = await keptMeta();
-  if (!meta || !meta.romName || !meta.symName) {
+  const said = describeKept(await keptMeta());
+  if (!said.show) {
     // No row at all, rather than a row saying nothing is kept. It said
     // "re-picked each session" beside a hidden button: a fact with no action
     // beside it, on the one screen somebody opens in order to change
@@ -672,32 +680,74 @@ async function paintFiles() {
     return;
   }
   row.classList.remove('hide');
-  const mb = meta.romBytes ? ` · ${(meta.romBytes / 1048576).toFixed(1)} MB` : '';
-  el.textContent = `${meta.romName}, ${meta.symName}`
-    + (meta.battery ? ' and your last save' : '') + mb;
+  el.textContent = said.text;
   btn.classList.remove('hide');
 }
 
 /**
- * Copy the battery out of the cartridge, if there is a save in it.
+ * Copy the battery out of the cartridge into everything that keeps one.
  *
  * Called when the app knows the bytes have just moved -- a save it drove, a
  * .sav it installed, a slot it loaded -- rather than on a timer. There is no
  * event for "the game saved" in a browser, and polling 32KB forever to catch
  * something the app itself caused would be silly.
+ *
+ * **Two stores, not one, and that is the fix rather than a detail.** The app
+ * keeps its own copy under `remember.js`, and the emulator keeps a record of
+ * its own that it reads `cartridgeRam` out of whenever a ROM loads. Only
+ * `saves.install` ever wrote the second one, so it held the last save somebody
+ * *installed* -- a handoff, a .sav -- while every in-game save since moved only
+ * the first. Two copies of one thing that nothing compared, and the difference
+ * showed up as the app coming back on a weeks-old game: whenever the kept copy
+ * did not go back in, what was left in the machine was that frozen record.
+ *
+ * **And every way this can fail is now said out loud.** It used to answer
+ * `false` for all of them and no caller looked, so a .sav that loaded
+ * perfectly, reported the right place, and was never kept read as a complete
+ * success -- and the next time the app opened it quietly brought back an older
+ * game with nothing anywhere saying why.
  */
 async function keepGame() {
   if (!gb.rom || !state) return false;
+  let bytes;
   try {
-    const bytes = await gb.batterySave();
-    if (!state.saveIsPresent(bytes)) return false;
-    const ok = await keepBatteryFor(bytes);
-    paintFiles();
-    await shareGame(bytes);
-    return ok;
+    bytes = await gb.batterySave();
   } catch (e) {
-    return false;
+    return notKept(`the cartridge's battery could not be read (${e && e.message
+      ? e.message : e})`);
   }
+  if (!state.saveIsPresent(bytes)) {
+    return notKept('the cartridge has no save in it to keep');
+  }
+  if (!await keepBatteryFor(bytes)) {
+    return notKept('this browser would not store it');
+  }
+  // After the app's own copy, because that is the one the restore reads first
+  // and the one worth having if only one of the two lands. A machine that
+  // refuses this is still a machine with the save kept.
+  try {
+    await saves.persist(bytes);
+  } catch (e) {
+    progress(`the emulator would not take a copy of this save (${e && e.message
+      ? e.message : e}) — it is kept, but a restore that cannot put it back `
+      + 'will land on an older game');
+  }
+  await paintFiles();
+  await shareGame(bytes);
+  return true;
+}
+
+/**
+ * Say that a save was not kept, and what that will cost.
+ *
+ * The consequence is the half worth writing, and it is not guessable from the
+ * cause: nothing about "the battery could not be read" tells you that the next
+ * time you open the app you will be somewhere else entirely.
+ */
+function notKept(why) {
+  progress(`${why} — this game has not been kept, so reopening the app will `
+           + 'bring back the last one that was');
+  return false;
 }
 
 /**
@@ -4296,6 +4346,7 @@ $('#exportsav').onclick = async () => {
                + 'where it is rather than loaded');
     } else {
       pendingBattery = kept.battery;
+      pendingBatteryAt = kept.meta.batteryAt || 0;
     }
     restoredSession = true;
   } catch (e) {

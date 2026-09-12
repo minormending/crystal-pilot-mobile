@@ -7,7 +7,8 @@
 import { fakeRom, symbols, test, worldRam } from '../harness.mjs';
 import { GameState } from '../../gen2/state.js';
 import { readCode } from '../../gbcore/room.js';
-import { describeHandoff, describeOffers, describeParty, describeReplaced,
+import { describeAge, describeHandoff, describeKept, describeOffers,
+         describeParty, describeReplaced,
          describeRoom, describeScreen, joinFailure, describeRows, describeSlot,
          betterGrind, betterHour, hoursLine, otherHour,
          describeUndo, describeSaying, describeAuto, describeDex,
@@ -2174,4 +2175,68 @@ test('a species with no name is skipped rather than throwing', async (t) => {
 test('a query that matches nothing matches nothing', async (t) => {
   t.eq(findSpecies(IDS, 'mewtwo', named), [], 'not in this list');
   t.eq(findSpecies(IDS, '999', named), [], 'nor is that number');
+});
+
+// --- how old the kept save is ------------------------------------------------
+//
+// The Files row said "and your last save" off a flag that is set once and never
+// cleared, so a save kept forty seconds ago and one kept three weeks ago read
+// exactly alike. That is the state somebody is in when the app keeps bringing
+// back a game they do not recognise, and the row was the one place that could
+// have told them and did not.
+
+const NOW = 1789000000000;
+const ago = (ms) => NOW - ms;
+
+test('an age is the largest unit that still says something', async (t) => {
+  t.eq(describeAge(ago(5000), NOW), 'just now', 'seconds are not a number anyone wants');
+  t.eq(describeAge(ago(120e3), NOW), '2 minutes ago', 'minutes');
+  t.eq(describeAge(ago(3600e3), NOW), '1 hour ago', 'and one of them is singular');
+  t.eq(describeAge(ago(26 * 3600e3), NOW), '26 hours ago', 'still hours at a day');
+  t.eq(describeAge(ago(5 * 86400e3), NOW), '5 days ago', 'days after that');
+});
+
+test('a save from the future is a save from about now', async (t) => {
+  // Not a hypothetical: a save kept on a device whose clock is ahead, or a
+  // phone correcting itself overnight. "in 42 minutes" would read as a bug in
+  // the app rather than as a difference between two clocks.
+  t.eq(describeAge(NOW + 60e3, NOW), 'just now', 'a minute ahead');
+  t.eq(describeAge(NOW + 3600e3, NOW), 'just now', 'an hour ahead');
+});
+
+test('nothing is not a time', async (t) => {
+  for (const v of [0, null, undefined, NaN, Infinity, 'yesterday']) {
+    t.eq(describeAge(v, NOW), '', `${JSON.stringify(v) ?? 'undefined'} is no age`);
+  }
+});
+
+test('the Files row says when the kept save is from', async (t) => {
+  const said = describeKept({ romName: 'pokecrystal.gbc', symName: 'pokecrystal.sym',
+                              romBytes: 2097152, battery: true,
+                              batteryAt: ago(5 * 86400e3) }, NOW);
+  t.eq(said.show, true, 'there is a row');
+  t.contains(said.text, '5 days ago', 'and it says how old the save is');
+  t.contains(said.text, 'pokecrystal.gbc', 'beside what it belongs to');
+});
+
+test('a kept save with no timestamp says so rather than nothing', async (t) => {
+  // Records written before the age was recorded. The honest answer is that it
+  // is from an earlier session, not that it is from just now.
+  const said = describeKept({ romName: 'a.gbc', symName: 'a.sym', battery: true }, NOW);
+  t.contains(said.text, 'an earlier session', 'no stamp, and it does not invent one');
+});
+
+test('files kept with no save do not claim one', async (t) => {
+  const said = describeKept({ romName: 'a.gbc', symName: 'a.sym' }, NOW);
+  t.eq(said.show, true, 'the files are still kept');
+  t.eq(said.text.includes('save'), false, 'and the row does not mention one');
+});
+
+test('half a record is no row at all', async (t) => {
+  // The ROM and the symbol file are kept under separate keys, so one without
+  // the other is a real state -- and a row naming a file that cannot start
+  // anything is worse than no row.
+  t.eq(describeKept(null, NOW).show, false, 'nothing kept');
+  t.eq(describeKept({ romName: 'a.gbc' }, NOW).show, false, 'a ROM with no symbols');
+  t.eq(describeKept({ symName: 'a.sym' }, NOW).show, false, 'symbols with no ROM');
 });

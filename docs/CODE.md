@@ -2980,7 +2980,7 @@ Tackle and Leer. Two emulators, two implementations, one save file.
 
 ## 7c. Slots, undo, and bringing a save in
 
-<!-- covers: gbcore/saves.js @ 0157c6742be4 -->
+<!-- covers: gbcore/saves.js @ 797955295a1d -->
 
 **There is one way to load a slot, and that is the point.** `loadSlot` in
 `main.js` reads the record, refuses it if its ROM fingerprint is not this
@@ -3093,6 +3093,42 @@ upgrade callback.** Naming a version means a `VersionError` the day the library
 bumps its own, and an upgrade callback would have us inventing its schema —
 creating a database it then finds already there and wrong. Our own database is
 the only one we version.
+
+**Two stores hold one save, and only one of them was being kept up.** The app
+keeps its own copy under `remember.js`; the library keeps the record above. For
+a long time `install` was the *only* writer of the library's — measured and
+written down in `remember.js`: "the library only persists a cartridge when
+something asks it to, and nothing here was asking". So that record held the last
+save somebody **installed** — a handoff taken, a `.sav` imported — and every
+in-game save after it moved the app's copy and left the library's exactly where
+it was. Two copies of one thing, drifting, with nothing comparing them.
+
+That is invisible for as long as the app's copy always goes back in. The moment
+it does not — a restore refused on a hidden page, a kept save whose ROM
+fingerprint no longer matches, a keep that failed — the game comes up on the
+library's record instead, which is a save from whenever something was last
+installed. Weeks earlier, silently, and reading as though the app had simply
+lost your progress. `keepGame` writes both now, through `Saves.persist`: the
+half of `install` that writes the record without restarting the machine, and
+therefore without `install`'s reload or the hidden-page refusal that goes with
+it.
+
+**And every way a keep can fail is said out loud.** `keepGame` used to answer
+`false` for all of them — battery unreadable, no save in the cartridge, storage
+refused — and not one of its seven callers looked at the answer. A `.sav` that
+installed perfectly, reached the world, and reported the right place was a
+complete success on screen and was never kept; the next time the app opened it
+brought back an older game with nothing anywhere saying why. `notKept` names the
+cause *and the consequence*, because the second is not guessable from the first:
+nothing about "the battery could not be read" tells you that reopening the app
+will put you somewhere else.
+
+**The Files row says how old the kept save is**, for the same reason. It read
+"and your last save" off a flag that is set once and never cleared, so forty
+seconds and three weeks looked identical — on the one row that could have told
+somebody the app was about to restore a game they had finished with. `describeAge`
+gives the largest unit that still means something, and a clock that has gone
+backwards answers *just now* rather than inventing a save from the future.
 
 **`install` refuses on a hidden page.** Re-loading the ROM goes through the
 library's `pause()`, which awaits an animation frame, and a hidden page is given
@@ -4210,7 +4246,7 @@ file says they do.
 
 ## 8i. Reaching an hour
 
-<!-- covers: gen2/jobs.js gen2/engine.js gen2/romdata.js gen2/state.js gbcore/saves.js app/rows.js @ 2e88f9c6a8aa -->
+<!-- covers: gen2/jobs.js gen2/engine.js gen2/romdata.js gen2/state.js gbcore/saves.js app/rows.js @ f95f036fd3b8 -->
 
 A third of Johto's grass is behind the clock. HOOTHOOT is on Route 29 after
 dark and nowhere on it at noon, and for four versions the usage guide said the
@@ -4808,7 +4844,7 @@ This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ f3330812c8a2 -->
+<!-- covers: app/main.js index.html @ 3664786a462a -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -5313,12 +5349,19 @@ rather than removing it. `check-app`'s wiring group counts every one of the ids,
 so a control that gets added to one surface and forgotten on the other is named
 rather than discovered.
 
-The gear made the header seven items wide, and at 375px the row wrapped: flex
-lays items onto lines *before* it shrinks them, so an item that does not fit
-takes a new line rather than squeezing the ones beside it. The gap went 8→6, the
-speed slider 74→56, and the row measures 50px tall at both 375 and 390 with
-everything on one line. The wrap is still there for the case it was built for — a
-game running with a newer build to announce.
+The gear made that row seven items wide, and at 375px it wrapped: flex lays
+items onto lines *before* it shrinks them, so an item that does not fit takes a
+new line rather than squeezing the ones beside it. The gap went 8→6, the speed
+slider 74→56, and the row measured 50px tall at both 375 and 390 with
+everything on one line.
+
+**That row is gone, and its wrap went with it.** The chassis redesign replaced
+`<header>` with `.brow`, which is a plain `display:flex` with no `flex-wrap` at
+all — the lens took the app's identity, the speed slider moved into Setup, and
+what is left is short enough that there is nothing to wrap. The sums above are
+kept because the *reasoning* is what gets reached for the next time a row grows
+an item: flex chooses lines before it chooses widths, so the fix is the gap and
+the widest item, not `min-width` on the one that looks biggest.
 
 **The handoff is the one sharing state that interrupts.** *Your other device has
 the newer save* is the only thing the room can say that changes what you should
@@ -5522,14 +5565,16 @@ Two rows used to set their `blocked` class by reading their own button's
 class and the button could in principle disagree; both now come from one flag,
 and the browser was checked to confirm they agree on every row.
 
-**The running version sits in the header, with the app's name.** Everything
+**The running version sits in the brow, with the app's name.** Everything
 else in the app needs a game; this does not, and the question it answers — is
 this the build I just deployed? — is asked most often when there is no ROM
 loaded at all. It spent three versions in the settings card, which `maybeStart`
-reveals, so reading it cost picking a 2MB ROM and a symbol file first. `check-app`
-asserts the markup is inside `<header>` for that reason.
+reveals, so reading it cost picking a 2MB ROM and a symbol file first.
+`check-app` asserts the markup is inside `.brow` for that reason — it named
+`<header>` until the chassis redesign moulded that strip into the top of the
+shell, and the rule it attaches to did not change with the element.
 
-The header wraps rather than clips. Name, version, Update, location and speed
+The brow wraps rather than clips. Name, version, Update, location and speed
 come to more than 375px once a game is running and a newer build exists, and
 without `flex-wrap` the speed slider's `1×` was cut in half by the right edge.
 Nothing wraps in the ordinary case; `.where` carries `min-width:0` so the
@@ -5684,7 +5729,7 @@ seconds by a page whose loop was supposedly running.
 
 ### One thing at a time
 
-<!-- covers: app/main.js @ 8ea436eaca03 -->
+<!-- covers: app/main.js @ 8ac520363f96 -->
 
 One Game Boy, one joypad, one canvas — so a great deal of this app is about
 making sure two things are never driving them at once. There are three claims,
@@ -5826,7 +5871,7 @@ before a step is taken, so a stopped walk does not move at all.
 
 ### What is behind the Gym door, before you open it
 
-<!-- covers: gen2/romdata.js gen2/engine.js app/rows.js @ 3c0f2b1a2f26 -->
+<!-- covers: gen2/romdata.js gen2/engine.js app/rows.js @ 3bae6af9165c -->
 
 The Gym row could say where the Gym is and who is in it. **Whether it is worth
 going** is two facts the cartridge has had all along, and neither of them
@@ -6238,7 +6283,7 @@ a conversation.
 
 ### The card behind a party row
 
-<!-- covers: app/rows.js app/main.js index.html @ 77af9cdc3411 -->
+<!-- covers: app/rows.js app/main.js index.html @ cb7a8a4a52de -->
 
 Two questions the game itself will not answer about a Pokémon you are
 carrying — *what is this made of* and *what is it about to become* — and both
@@ -6327,7 +6372,7 @@ at body size.
 
 ### Running the list
 
-<!-- covers: app/rows.js app/main.js @ d78b780e21a5 -->
+<!-- covers: app/rows.js app/main.js @ 8f3fc8df30c3 -->
 
 The app has spent forty passes learning to answer one question — *what can the
 pilot do here, and which of those is worth most?* — and twenty showing the
@@ -6451,7 +6496,7 @@ to deposit your last Pokémon.
 
 ### The settings and the save card
 
-<!-- covers: index.html app/main.js @ f3330812c8a2 -->
+<!-- covers: index.html app/main.js @ 3664786a462a -->
 
 The pilot's own list got a glyph column, shorter names and a slot to fill in
 v165. These two cards did not, and reading them found that they had a different
@@ -7091,7 +7136,7 @@ they have been installed.
 
 ### Watching the other device's screen
 
-<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ 0af4013bc474 -->
+<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ 0ecb78781d32 -->
 
 One device shows its screen; the other watches it, and plays it if the first
 one says so. The picture goes straight between them over WebRTC and never
@@ -7351,7 +7396,7 @@ none of which need a cartridge — and the device that most needs the room is
 precisely the one with no game yet. Joining a room from a fresh phone was
 impossible through the interface: the button existed and nothing could press
 it. `check-app` asserts the card is not hidden, next to where it asserts the
-version display is in the header.
+version display is on the brow.
 
 The loader card says what is still needed, too. A device in a room where the
 addresses are already shared needs one file, not two, and had no way to know

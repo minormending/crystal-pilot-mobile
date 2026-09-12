@@ -343,6 +343,39 @@ export class Saves {
         + 'restarts the emulator, which a hidden tab cannot do');
     }
 
+    await this.persist(bytes);
+    await this.gb.reloadRom();
+    await this.gb.run(120);
+  }
+
+  /**
+   * Write these bytes into the library's own record, and stop there.
+   *
+   * **The half of `install` that does not restart the machine**, and it is
+   * separate because the app has to be able to do exactly that. The library
+   * reads `cartridgeRam` out of this record when a ROM loads and -- measured,
+   * and written down in `remember.js` -- it never writes the record itself:
+   * "the library only persists a cartridge when something asks it to, and
+   * nothing here was asking".
+   *
+   * So for as long as `install` was the only caller, this record held the last
+   * save somebody *installed* and nothing else. Every in-game save moved the
+   * app's own kept copy and left this one where it was, and the two drifted
+   * apart with nothing comparing them. That is only invisible while the kept
+   * copy always goes back in: the moment it does not -- a refused restore, a
+   * tag that does not match, a keep that failed -- the game comes up on this
+   * record instead, which is a save from whenever a handoff or a .sav was last
+   * put in. Weeks earlier, and silently.
+   *
+   * Nothing about writing the record needs the emulator restarted, so this has
+   * neither the reload nor the hidden-page refusal that goes with it: it is
+   * safe to call after an in-game save, from a backgrounded tab, on every path
+   * that already knows the bytes have moved.
+   */
+  async persist(bytes) {
+    if (!bytes || bytes.length !== 32768) {
+      throw new Error(`a battery save is 32768 bytes, got ${bytes && bytes.length}`);
+    }
     // Prefer the key the library has already filed *this cartridge* under, and
     // derive one when there is none. Both work, but they are not equally well
     // evidenced: writing under an existing key is the path that was watched
@@ -368,9 +401,6 @@ export class Saves {
     const rec = await tx(wdb, WASMBOY_STORE, 'readonly', (os) => wrap(os.get(key)));
     const next = Object.assign({}, rec || {}, { cartridgeRam: Uint8Array.from(bytes) });
     await tx(wdb, WASMBOY_STORE, 'readwrite', (os) => os.put(next, key));
-
-    await this.gb.reloadRom();
-    await this.gb.run(120);
   }
 
   // There is no `restore(slot)` here, and its absence is deliberate.

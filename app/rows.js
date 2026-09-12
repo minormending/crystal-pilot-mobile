@@ -1115,6 +1115,47 @@ export function describeSlot(meta, tag = null) {
 }
 
 /**
+ * How long ago, in the largest unit that still says something.
+ *
+ * "3 days ago" rather than a clock time, because the question this answers is
+ * never what time it was -- it is whether this is the game you were just
+ * playing or one from before you went on holiday.
+ */
+export function describeAge(then, now = Date.now()) {
+  if (!then || !Number.isFinite(then)) return '';
+  const secs = Math.round((now - then) / 1000);
+  // A clock that has gone backwards -- a phone correcting itself, a save kept
+  // on a device an hour ahead -- is not a save from the future. It is a save
+  // from about now, and saying so is better than "in 42 minutes".
+  if (secs < 90) return 'just now';
+  const ago = (n, unit) => `${n} ${unit}${n === 1 ? '' : 's'} ago`;
+  const mins = Math.round(secs / 60);
+  if (mins < 60) return ago(mins, 'minute');
+  const hours = Math.round(mins / 60);
+  if (hours < 36) return ago(hours, 'hour');
+  return ago(Math.round(hours / 24), 'day');
+}
+
+/**
+ * What the Files row says about what is kept.
+ *
+ * **The age is the point of this, and it was the missing word.** The row used
+ * to say "and your last save" from a flag that is set once and never cleared,
+ * so a save kept forty seconds ago and one kept three weeks ago read
+ * identically -- which is exactly the state somebody is in when the app keeps
+ * bringing back a game they do not recognise. The flag says a save is kept; it
+ * cannot say whether it is *this* game, and the timestamp beside it can.
+ */
+export function describeKept(meta, now = Date.now()) {
+  if (!meta || !meta.romName || !meta.symName) return { text: '\u2014', show: false };
+  const mb = meta.romBytes ? ` \u00b7 ${(meta.romBytes / 1048576).toFixed(1)} MB` : '';
+  if (!meta.battery) return { text: `${meta.romName}, ${meta.symName}${mb}`, show: true };
+  const age = describeAge(meta.batteryAt, now);
+  return { text: `${meta.romName}, ${meta.symName} and your save from `
+                 + `${age || 'an earlier session'}${mb}`, show: true };
+}
+
+/**
  * The undo row.
  *
  * Three states, not two, and the third is the one that matters: a job that
