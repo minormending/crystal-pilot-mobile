@@ -1626,14 +1626,15 @@ a single button press until something presses through the script it wakes in.
 The refusal is doing its job even though what it says about animation frames is
 only half the reason.
 
-It is in the header because that is the one part of the app that is always
-there. For three versions it lived in the settings card, which at the time did
-not exist until a ROM and a symbol file were loaded — so answering "am I running
-what I just deployed?" meant picking two files first, to read a number the page
-knew on its first frame. Settings is reachable with no game now, for the same
-reason one level down, and `check-app` asserts that too. `tools/check-app` now asserts the display is in the header,
-because a version you cannot reach when you want it is much the same as not
-having one.
+It is in the brow — the strip moulded into the top of the shell — because that
+is the one part of the app that is always there. For three versions it lived in
+the settings card, which at the time did not exist until a ROM and a symbol file
+were loaded — so answering "am I running what I just deployed?" meant picking
+two files first, to read a number the page knew on its first frame. Settings is reachable with no game now, for the same
+reason one level down. `tools/check-app` asserts both halves: that the row is in
+the brow, where the `<header>` this section used to name went, and that it is
+not inside the settings card. A version you cannot reach when you want it is
+much the same as not having one.
 
 The wording is short because that row is shared with the location and the speed
 slider, and 375px does not fit a sentence. Up to date says nothing, so it says
@@ -1647,7 +1648,7 @@ deployed, which is not the question you are asking when a bug you saw fixed is
 still in front of you. `tools/check-app` asserts that number matches the service
 worker's cache name, because a version display that lies is worse than none.
 
-<!-- covers: sw.js @ 667a93c971d7 -->
+<!-- covers: sw.js @ 655f150b939f -->
 
 The worker fetches **network first, falling back to the cache**. That is the
 opposite of the usual offline-first advice, on purpose.
