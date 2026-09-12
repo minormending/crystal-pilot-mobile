@@ -178,11 +178,19 @@ export class RomData {
     // the tiles, and the palette -- so it is all-or-nothing: a cartridge
     // missing any of the three graphics names has no icon to draw, and one
     // missing only the palette can still draw it in grey.
-    this.icons = ['MonMenuIcons', 'IconPointers', 'Icons'].every(
-      (n) => symbols.has(n))
-      ? { menu: this.at('MonMenuIcons'), pointers: this.at('IconPointers'),
-          gfx: this.at('Icons') }
-      : null;
+    // -- and which of two table shapes it is in. A cartridge keeping one icon
+    // per species has a single table with everything in it, so it names that
+    // instead of the three above rather than as well; `iconKind` says which
+    // reader to use, because neither can read the other's table at all.
+    this.icons = this.e.iconKind === 'mini'
+      ? (this.e.iconTable && symbols.has(this.e.iconTable)
+         ? { kind: 'mini', table: this.at(this.e.iconTable),
+             entry: this.e.iconEntry || 7 }
+         : null)
+      : (['MonMenuIcons', 'IconPointers', 'Icons'].every((n) => symbols.has(n))
+         ? { kind: 'family', menu: this.at('MonMenuIcons'),
+             pointers: this.at('IconPointers'), gfx: this.at('Icons') }
+         : null);
     this.monPalettes = symbols.has('PokemonPalettes')
       ? this.at('PokemonPalettes') : null;
     // The front pics. Optional like the rest, and it needs `BaseData` as well
@@ -523,15 +531,21 @@ export class RomData {
    * working code when wrong. The tiles are in **row-major** order within a
    * frame -- top-left, top-right, bottom-left, bottom-right -- rather than the
    * column-major order a Game Boy 8x16 sprite uses. And an icon is eight tiles,
-   * not four: two animation frames of 2x2, the second at `+64`.
+   * not four: two animation frames of 2x2, the second at `+64`. Both hold for
+   * either table shape.
    *
-   * The shape is a *family* rather than a species. This cartridge maps 251
-   * species onto 37 distinct icons, the most-used covering thirty of them and
-   * only six species having one to themselves, so what tells a Chikorita from a
-   * Bellsprout here is the palette rather than the outline.
+   * **`family` in the answer is the caller's business and not a detail.**
+   * Crystal's icons are a family: 251 species onto 37 distinct outlines, the
+   * most-used covering thirty of them and only six species having one to
+   * themselves, so what tells a Chikorita from a Bellsprout there is the
+   * palette. Polished Crystal draws one per species. That is the difference
+   * between artwork worth putting in front of somebody and a shape to fall back
+   * on, so it is said rather than left to be rediscovered -- see `_miniIcon`
+   * for the other reader.
    */
   speciesIcon(id, frame = 0) {
     if (!this.icons || !id || id < 1) return null;
+    if (this.icons.kind === 'mini') return this._miniIcon(id, frame);
     const iconId = this.gb.romByte(this.icons.menu.bank,
                                    this.icons.menu.addr + id - 1);
     const pa = this.icons.pointers.addr + iconId * 2;
@@ -555,7 +569,66 @@ export class RomData {
     }
     // Index 0 is the transparent one, then light, dark, black.
     const pal = this.speciesColours(id) || ['#b9b9c4', '#4a4a55'];
-    return { pixels, colours: [null, pal[0], pal[1], '#000000'] };
+    return { pixels, colours: [null, pal[0], pal[1], '#000000'], family: true };
+  }
+
+  /**
+   * The other icon shape: one whole picture per species, compressed, masked.
+   *
+   * Polished Crystal's `MiniIconPointers` is a seven-byte row -- a bank, then
+   * `<Species>Mini`, `<Species>MiniMask` and `<Species>Icon` in it. The first
+   * is what the party menu draws (`LoadMiniForSpeciesAndForm` at `23:64a0`
+   * takes it and asks for eight tiles); the third is a second drawing the app
+   * does not use, because the mask belongs to the first and contradicts it.
+   *
+   * **The mask is the part that cannot be guessed.** These tiles use all four
+   * indices, so colour 0 is a real white *inside* the silhouette and
+   * transparency *outside* it, and nothing in the tile data separates the two.
+   * The mask is 1bpp over the same eight tiles and says which. Without it a
+   * Charmander loses its belly and a Snorlax is mostly hole -- and the front
+   * pic, which has no mask, is exactly that.
+   *
+   * So the pixels come back one index higher than the tile data: 0 is
+   * transparent, then white, light, dark, black. `colours` says so, which is
+   * all the caller reads.
+   *
+   * The colours are the species' own, not the cartridge's. See the note in
+   * `titles/polished.js` for what the cartridge's are and why they are worse
+   * here: one body colour for all 291, which is Crystal's family problem again
+   * in a different coat.
+   */
+  _miniIcon(id, frame = 0) {
+    const { table, entry } = this.icons;
+    const row = table.addr + (id - 1) * entry;
+    const byte = (o) => this.gb.romByte(table.bank, row + o);
+    const bank = byte(0);
+    const at = (n) => byte(1 + n * 2) | (byte(2 + n * 2) << 8);
+    if (!bank || !at(0)) return null;
+    const data = this._unlz(bank, at(0));
+    const mask = this._unlz(bank, at(1));
+    // Eight tiles of picture, two frames of 2x2, and a bit per pixel of mask.
+    // A short read is a wrong table rather than a small icon, so it refuses.
+    if (data.length < 128 || mask.length < 64) return null;
+    const pixels = new Uint8Array(256);
+    const CELLS = [[0, 0], [1, 0], [0, 1], [1, 1]];
+    for (let t = 0; t < CELLS.length; t++) {
+      const ti = (frame & 1) * 4 + t;
+      const [tx, ty] = CELLS[t];
+      for (let row8 = 0; row8 < 8; row8++) {
+        const lo = data[ti * 16 + row8 * 2];
+        const hi = data[ti * 16 + row8 * 2 + 1];
+        const mk = mask[ti * 8 + row8];
+        for (let col = 0; col < 8; col++) {
+          const bit = 7 - col;
+          const v = ((hi >> bit) & 1) * 2 + ((lo >> bit) & 1);
+          pixels[(ty * 8 + row8) * 16 + tx * 8 + col] =
+            (mk >> bit) & 1 ? v + 1 : 0;
+        }
+      }
+    }
+    const pal = this.speciesColours(id) || ['#b9b9c4', '#4a4a55'];
+    return { pixels, colours: [null, '#ffffff', pal[0], pal[1], '#000000'],
+             family: false };
   }
 
   _read(bank, addr, length) {

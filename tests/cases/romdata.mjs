@@ -1456,3 +1456,116 @@ test('a table whose first pointer fits no width at all is not a table',
   t.eq(rom.trainerIndex(), null, 'refused rather than decoded');
   t.eq(rom.trainer('FALKNER'), null, 'and nothing is found through it');
 });
+
+// --- the two shapes a party icon comes in -----------------------------------
+//
+// `speciesIcon` reads two unrelated tables and the app has only ever had one
+// cartridge of each, so both readers are one ROM away from being unexercised.
+// The mini shape is the one with a fact in it that cannot be inferred from the
+// tile data -- colour 0 is white inside the mask and transparency outside it --
+// and getting that backwards produces a picture either way.
+
+/** An LZ literal run, in the command set `picLz: 'gen2'` reads. */
+function literal(bytes) {
+  const out = [];
+  for (let i = 0; i < bytes.length; i += 32) {
+    const run = bytes.slice(i, i + 32);
+    out.push(run.length - 1, ...run);
+  }
+  out.push(0xff);
+  return out;
+}
+
+/** Eight 2bpp tiles from a palette index each, and a 1bpp mask from a flag. */
+const tileBytes = (indices) => indices.flatMap(
+  (v) => Array.from({ length: 8 },
+                    (_, r) => [v & 1 ? 0xff : 0, v & 2 ? 0xff : 0]).flat());
+const maskBytes = (flags) => flags.flatMap(
+  (on) => Array(8).fill(on ? 0xff : 0));
+
+/**
+ * A cartridge with one species in the mini shape.
+ *
+ * `PokemonPalettes` is deliberately absent so the colours are the reader's own
+ * fallback and the assertions are about the *shape* of the answer rather than
+ * about a palette this fake would have had to invent.
+ */
+function miniCartridge({ tiles, mask, at = [0x40, 0x200] } = {}) {
+  const bytes = [];
+  const put = (addr, vals) => vals.forEach((v, i) => { bytes[addr + i] = v; });
+  // The row: a bank, then mini, mask and the icon this reader does not use.
+  put(0, [1, at[0] & 0xff, at[0] >> 8, at[1] & 0xff, at[1] >> 8, 0, 0]);
+  put(at[0], literal(tiles));
+  put(at[1], literal(mask));
+  const gb = { romByte: (bank, addr) => bytes[addr] ?? 0 };
+  const symbols = { has: (n) => n !== 'PokemonPalettes',
+                    bank: () => 0, addr: () => 0 };
+  return new RomData(symbols, gb, [], { ...gen2, iconKind: 'mini',
+                                        iconTable: 'MiniIconPointers',
+                                        iconEntry: 7 });
+}
+
+// Frame 0: a solid quadrant, a transparent one, a *masked-in* zero, and a
+// masked-out one. Frame 1 is the same eight tiles read 64 bytes along.
+const MINI_TILES = tileBytes([3, 0, 0, 0, 0, 1, 1, 1]);
+const MINI_MASK = maskBytes([true, false, true, false, true, true, true, true]);
+
+test('a mini icon comes back one index higher, so 0 can stay transparent',
+     async (t) => {
+  const rom = miniCartridge({ tiles: MINI_TILES, mask: MINI_MASK });
+  const icon = rom.speciesIcon(1, 0);
+  t.eq(icon.colours.length, 5, 'transparent, white, light, dark, black');
+  t.eq(icon.colours[0], null, 'and index 0 is still the transparent one');
+  t.eq(icon.colours[1], '#ffffff', 'white is a colour here, not a hole');
+  t.eq(icon.pixels[0], 4, 'the solid quadrant, shifted up by one');
+  t.eq(icon.pixels[8], 0, 'the quadrant the mask leaves out');
+});
+
+test('the mask is what separates white from nothing', async (t) => {
+  // The whole reason the mask is read. Both quadrants are palette index 0 in
+  // the tile data; only the mask says one of them is a Charmander's belly and
+  // the other is the space beside it.
+  const rom = miniCartridge({ tiles: MINI_TILES, mask: MINI_MASK });
+  const icon = rom.speciesIcon(1, 0);
+  t.eq(icon.pixels[16 * 8], 1, 'masked in: white');
+  t.eq(icon.pixels[16 * 8 + 8], 0, 'masked out: nothing');
+});
+
+test('the second frame is the same eight tiles, 64 bytes along', async (t) => {
+  const rom = miniCartridge({ tiles: MINI_TILES, mask: MINI_MASK });
+  const one = rom.speciesIcon(1, 1);
+  t.eq(one.pixels[0], 1, 'frame one starts at tile four, which is a zero');
+  t.eq(one.pixels[8], 2, 'and its top-right is the light index');
+  t.ne(one.pixels[8], rom.speciesIcon(1, 0).pixels[8],
+       'which is not what frame zero has there -- the bob is real');
+});
+
+test('a stream too short for eight tiles is refused, not drawn', async (t) => {
+  // A wrong table decompresses to *something*. Four tiles is a plausible
+  // amount of data and a completely wrong icon, so the size is checked rather
+  // than trusted.
+  const rom = miniCartridge({ tiles: tileBytes([3, 3, 3, 3]), mask: MINI_MASK });
+  t.eq(rom.speciesIcon(1, 0), null, 'half an icon is not an icon');
+});
+
+test('which shape it is travels with the answer', async (t) => {
+  // `family` is what the lens picks on: Crystal shares 37 outlines across 251
+  // species, so an icon there loses to the portrait, and a per-species one
+  // wins. A reader that did not say which would leave that to be guessed.
+  const mini = miniCartridge({ tiles: MINI_TILES, mask: MINI_MASK });
+  t.eq(mini.speciesIcon(1, 0).family, false, 'one drawing per species');
+  const gb = { romByte: () => 0x11 };
+  const family = new RomData({ has: () => true, bank: () => 0, addr: () => 0 },
+                             gb, [], gen2);
+  t.eq(family.speciesIcon(1, 0).family, true, 'Crystal shape, said so');
+});
+
+test('a cartridge naming no icon table at all answers nothing', async (t) => {
+  const gb = { romByte: () => 0 };
+  const none = new RomData({ has: (n) => n !== 'MiniIconPointers',
+                             bank: () => 0, addr: () => 0 },
+                           gb, [], { ...gen2, iconKind: 'mini',
+                                     iconTable: 'MiniIconPointers' });
+  t.eq(none.icons, null, 'no table, no icons');
+  t.eq(none.speciesIcon(1, 0), null, 'and nothing to draw');
+});

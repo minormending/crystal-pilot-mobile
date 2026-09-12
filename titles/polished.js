@@ -31,22 +31,47 @@ import { Journey } from '../gen2/journey.js';
 const NEW_BARK_TOWN = key(24, 2);
 const PLAYERS_HOUSE_2F = key(24, 5);
 
-// **Its artwork is out of reach, and this is what was measured before giving
-// up on it.** The lens draws a party icon and the dex entry draws a front pic,
-// both straight out of the cartridge, and neither works here. Written down
-// because the symptom -- an empty circle -- looks like a rendering fault and
-// cost a long detour once already.
+// **Its artwork, all of which is reachable and none of which is where Crystal
+// keeps it.** The lens draws a party icon and the dex entry draws a front pic,
+// both straight out of the cartridge. Both were once written off here as
+// impossible; both were wrong, and for the same reason, so the reason is worth
+// keeping: the names were searched for and not found. `MonMenuIcons`,
+// `IconPointers`, `Icons`, `MonIcons`, `PicPointers` -- none of them is in this
+// symbol file, and "none of the names I know is here" was recorded as "there is
+// nothing here". This cartridge calls them `MiniIconPointers` and
+// `PokemonPicPointers`, and a grep for `Icon$` would have found the first in a
+// second. **A missing name is a question about vocabulary, not an answer about
+// capability.**
 //
-// The icons are simply absent. Of `MonMenuIcons`, `IconPointers`, `Icons`,
-// `MonIcons` and `PicPointers`, this cartridge's symbol file has **none**, so
-// there is nothing to rename in a profile and nothing to read. `romdata.icons`
-// is null, and the Game row in Setup says so rather than leaving a blank lens
-// to be puzzled over.
+// The icons are `MiniIconPointers` at `23:68f9`, one **seven-byte row** per
+// species indexed `species - 1`: a bank, then three addresses in that bank --
+// `<Species>Mini`, `<Species>MiniMask`, `<Species>Icon`. Each row was checked
+// against the symbol file, and the cartridge's own reader settles which of the
+// three the party menu draws: `LoadMiniForSpeciesAndForm` at `23:64a0` strides
+// by seven, takes the **first** address and asks for eight tiles. All 291
+// decompress to exactly 128 bytes, and all 291 masks to exactly 64.
 //
-// The pics are *there*, and the table was worked out in full against
-// 3.2.3 before the last step stopped it:
+// Two of the three are the app's: the mini is the picture, and the mask says
+// which of its pixels are there at all -- so colour 0 is white inside the mask
+// and transparent outside it, which is the one thing about this format that a
+// renderer cannot infer. The third, `<Species>Icon`, is a second drawing the
+// app does not use: the mask contradicts it in 222 places across the 291, which
+// is how it was ruled out as the mask's partner, and its light and dark are
+// assigned the other way round, so in the app's palette it comes out inverted.
 //
-//   - `PokemonPicPointers` is at `48:4000`, which is Crystal's address too.
+// **What the cartridge paints them in is deliberately not what the app does.**
+// `OverworldMonIconColors` at `23:6163` holds two bytes a species -- normal and
+// shiny -- each a pair of nibbles indexing `MapObjectPals` at `4a:4348`, which
+// is 28 palettes x 4 times of day. Decoded: every one of the 291 names light 13,
+// whose colour 2 is the same warm tan for every species, so the game draws all
+// of them with one body colour and one species accent. That is a family again,
+// in colour instead of in outline, and the app has a better answer already --
+// `PokemonPalettes`, per species, the same two colours the dex portrait uses.
+// Using the cartridge's would make the lens and the Dex disagree about what
+// colour a Pokemon is. Measured, then declined; see `_miniIcon`.
+//
+// The pics are `PokemonPicPointers` at `48:4000`, which is Crystal's address:
+//
 //   - Entries are **seven bytes**, indexed `species - 1`: a bank, then the
 //     front pic's address, then the back pic's, then a third pointer. The back
 //     pic shares the front's bank, which is what the single bank byte buys.
@@ -57,8 +82,8 @@ const PLAYERS_HOUSE_2F = key(24, 5);
 //     Charmander, Chikorita, Cyndaquil and Totodile: every one lands exactly on
 //     `(species - 1) * 7`.
 //
-// The codec was the last of it, and it is solved: `_Decompress` at `00:0862`
-// was disassembled and the three commands that changed meaning are commented at
+// The codec is shared by both and it is solved: `_Decompress` at `00:0862` was
+// disassembled and the three commands that changed meaning are commented at
 // `_unlz` in `gen2/romdata.js`. The recovered decoder was checked by executing
 // the cartridge's own routine over the same streams -- byte for byte identical.
 //
@@ -127,6 +152,15 @@ export const polished = {
     picsFix: 0,
     picLz: 'polished',
     picSizes: 'PokemonPicSizes',
+    // **And its party icons, which are a whole different table shape.** Not
+    // Crystal's family indirection -- there is no `MonMenuIcons` here and
+    // nothing to point one at. `MiniIconPointers` is one seven-byte row per
+    // species, indexed `species - 1`: a bank, then three addresses in it, the
+    // way `PokemonPicPointers` is laid out. `LoadMiniForSpeciesAndForm` at
+    // `23:64a0` reads the first of the three and asks for eight tiles.
+    iconKind: 'mini',
+    iconTable: 'MiniIconPointers',
+    iconEntry: 7,
     // Four, in this order, against Crystal's six. Bulbasaur's growth byte is
     // 1, which is MEDIUM_SLOW here and would read as "slightly fast" on
     // Crystal's list — a wrong word rather than a missing one, which is the

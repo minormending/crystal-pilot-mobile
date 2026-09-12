@@ -625,14 +625,22 @@ The lens at the top left carries the smaller version of the same idea: your
 lead, with its HP as a ring round the rim, so the one thing worth knowing while
 a job runs is on screen while the panel is shut.
 
-**It is the lead's own portrait, and while a job runs it plays the cartridge's
-idle animation** — the same frames the game uses on its own status screen, out
-of your own ROM. Only while a job runs: a lens that moves at rest is a moving
-thing on a page that is otherwise still, and the layout here is built around
-not having one. The fallback, on a cartridge with no animation for a species,
-is the party menu icon — Gen 2 shares 37 of those across all 251 species, so
-that outline is a family and the colours are the species. Measured: 250 of
-Crystal's 251 animate, and every one of Polished Crystal's 291.
+**It is the lead's own artwork, and while a job runs it moves** — out of your
+own ROM, not a picture of a Pokémon. Only while a job runs: a lens that moves at
+rest is a moving thing on a page that is otherwise still, and the layout here is
+built around not having one.
+
+Which artwork depends on what your cartridge has, and the rule is *whichever
+one is about this species rather than its family*. Stock Crystal shares 37 party
+icons across all 251 species, so an icon there says *something small and green*
+where a portrait says which — the lens plays the portrait's idle animation, the
+same frames the game uses on its own status screen, and drops to the icon only
+where there is no animation (250 of 251 have one; Unown does not). Polished
+Crystal draws a party icon for every one of its 291, so the lens shows that
+instead: it is the picture the game's own party menu uses, it bobs the way the
+game bobs it, and at this size it is sharper than a battle portrait shrunk to
+fit. Either way the colours are the species' own, and the Dex card shows you
+the full portrait when you go looking.
 
 ```
 CYNDAQUIL Lv13 ▴                                 35/37

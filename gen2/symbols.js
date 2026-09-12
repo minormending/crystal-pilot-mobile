@@ -172,7 +172,7 @@ export class Symbols {
  * Every symbol this app reads, by name.
  *
  * It exists so a device with a ROM and no .sym can be handed the addresses
- * instead of the file: 109 lines is about a kilobyte, against 1.8MB, and it
+ * instead of the file: 110 lines is about a kilobyte, against 1.8MB, and it
  * fits in a room with space for a save beside it.
  *
  * Written down rather than discovered, because nothing at run time can know
@@ -207,6 +207,12 @@ export const SHARED_SYMBOLS = [
   // with a digest and no .sym reads the ROM through these addresses, so a
   // name missing here is a lens that is empty on one device and not the other.
   'MonMenuIcons', 'IconPointers', 'Icons', 'PokemonPalettes',
+  // And the one name a cartridge needs instead when it keeps a whole icon per
+  // species rather than a family of them. `MiniIconPointers` is a row per
+  // species with everything in it, so it replaces the first three above rather
+  // than joining them; `iconKind` in the engine profile says which shape a
+  // cartridge has.
+  'MiniIconPointers',
   // And the front pic, which the dex entry draws. It needs `BaseData` too --
   // how many tiles a pic is lives in the base-stats record rather than beside
   // the picture -- and that name is already on this list.

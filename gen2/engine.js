@@ -206,6 +206,22 @@ export const gen2 = {
   picEntry: 6,
   picLz: 'gen2',
   picSizes: null,
+  // **How the party icon is reached, which is a different shape per
+  // cartridge rather than a different number.** Crystal indirects: a byte per
+  // species naming one of thirty-seven families, a pointer per family, and one
+  // bank of uncompressed tiles -- `MonMenuIcons`, `IconPointers`, `Icons`.
+  // Polished Crystal gives every species its own row instead, in a single
+  // table, compressed, with a transparency mask beside it. Neither reader can
+  // read the other's table at all, so this names which one to use rather than
+  // trying to tell from the data.
+  //
+  // `iconTable` and `iconEntry` are the mini shape's table and its stride;
+  // they are null and 0 here because Crystal's three names are the family
+  // shape's and are not configurable -- a cartridge that renamed them is a
+  // cartridge this would have to grow a field for, and none has.
+  iconKind: 'family',
+  iconTable: null,
+  iconEntry: 0,
   // data/growth_rates.asm, in the order `GrowthRates` has them. Keys rather
   // than prose for the same reason `takeable` uses them: what to call a curve
   // on screen is the interface's business.

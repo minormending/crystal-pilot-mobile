@@ -15,7 +15,7 @@ what CI checks and what the pre-commit hook blocks on.
 ```mermaid
 flowchart LR
     E[an edit] --> H{{".githooks/pre-commit"}}
-    H --> T["./run-tests<br/>957 behaviour tests"]
+    H --> T["./run-tests<br/>963 behaviour tests"]
     H --> C["tools/check-app<br/>35 groups"]
     H --> D["tools/docs-check<br/>46 tracked sections"]
     T --> OK[commit]
@@ -39,7 +39,7 @@ git config core.hooksPath .githooks
 ./run-tests -v         # notes and stack lines
 ```
 
-957 tests in 27 files, and what each file is about says more than the count:
+963 tests in 27 files, and what each file is about says more than the count:
 
 | file | tests | what it pins down |
 | --- | --- | --- |
@@ -55,7 +55,7 @@ git config core.hooksPath .githooks
 | `control.mjs` | 30 | the task lifecycle: stopping, failing, undo points, and loops that must end |
 | `state.mjs` | 44 | reading the party, the map, the badges and the battery out of work RAM |
 | `titles.mjs` | 21 | choosing a profile for a cartridge, and falling back to generic |
-| `romdata.mjs` | 91 | the cartridge's own character encoding and tables, byte by byte |
+| `romdata.mjs` | 97 | the cartridge's own character encoding and tables, byte by byte |
 | `remember.mjs` | 14 | which remembered choices are believed, and which dropped |
 | `worker.mjs` | 14 | the idle loop: one step outstanding, and a lost step recovered |
 | `nav.mjs` | 14 | the walk loop: what it decides between two steps, and every reason it stops |
@@ -127,7 +127,7 @@ section gives. Everything by hand runs against a local build.
 
 ```mermaid
 flowchart BT
-    C["the app"] --> T["./run-tests<br/>957 behaviour tests"]
+    C["the app"] --> T["./run-tests<br/>963 behaviour tests"]
     C --> A["tools/check-app<br/>35 groups"]
     C --> D["tools/docs-check<br/>46 tracked sections"]
     C --> V["tools/coverage<br/>what the suite never runs"]
@@ -136,7 +136,7 @@ flowchart BT
     T -.-> V
     M -.->|"survivors, by file"| R(["the suite is load-bearing"])
     K -.->|"35 of 35 bite"| R2(["the groups are awake"])
-    V -.->|"60%, and where"| R3(["the gaps are known"])
+    V -.->|"61%, and where"| R3(["the gaps are known"])
 ```
 
 The two on the right are the same idea pointed at different subjects, and the

@@ -1905,10 +1905,20 @@ function paintSprite(cv, sprite, side) {
 /**
  * Load whatever artwork this cartridge has for a species, best first.
  *
- * The animated portrait is the best answer and is per species. The menu icon
- * is a *family* -- this cartridge maps up to thirty species onto one outline --
- * so it is the fallback rather than the default, and a still portrait is what
- * is left when there is no animation to play.
+ * **Order changed once, and the reason it changed is the interesting part.**
+ * It used to run portrait-then-icon, on the grounds that the icon is a *family*
+ * -- Crystal maps up to thirty species onto one outline, so an icon says
+ * *something small and green* where a portrait says which. That is a fact about
+ * Crystal's table, and it was written down as a fact about icons. Polished
+ * Crystal draws one per species, and there the same rule was picking the worse
+ * picture: a battle-sized portrait shrunk to fit a 40px circle, over artwork
+ * drawn for exactly this size, animated, and at a whole-number scale.
+ *
+ * So the question the order asks is *does this icon identify the species*,
+ * which is what `family` in the answer is for. Where it does, it wins -- the
+ * cartridge's own party menu is showing the same picture for the same reason.
+ * Where it does not, the animated portrait wins, then the family outline, then
+ * a still.
  */
 function lensLoad(species) {
   if (species === lensSpecies) return;
@@ -1916,21 +1926,24 @@ function lensLoad(species) {
   lensStep = 0;
   lensArt = null;
   if (species === null || !romdata) return;
+  // The party menu's own two-frame bob, at its own speed. Built here rather
+  // than at both call sites below, because the family icon plays identically
+  // and only loses the argument about *which* picture.
+  const icon = romdata.speciesIcon(species, 0);
+  const asIcon = () => {
+    const two = romdata.speciesIcon(species, 1) || icon;
+    return { side: 16, colours: icon.colours,
+             frames: [icon.pixels, two.pixels],
+             play: [{ frame: 0, hold: 24 }, { frame: 1, hold: 24 }] };
+  };
+  if (icon && !icon.family) { lensArt = asIcon(); return; }
   const anim = romdata.speciesAnimation(species);
   if (anim) {
     lensArt = { side: anim.side, colours: anim.colours,
                 frames: anim.frames, play: anim.play };
     return;
   }
-  const icon = romdata.speciesIcon(species, 0);
-  if (icon) {
-    const two = romdata.speciesIcon(species, 1) || icon;
-    // The party menu's own two-frame bob, at its own speed.
-    lensArt = { side: 16, colours: icon.colours,
-                frames: [icon.pixels, two.pixels],
-                play: [{ frame: 0, hold: 24 }, { frame: 1, hold: 24 }] };
-    return;
-  }
+  if (icon) { lensArt = asIcon(); return; }
   const pic = romdata.speciesPic(species);
   if (pic) {
     lensArt = { side: pic.side, colours: pic.colours, frames: [pic.pixels],

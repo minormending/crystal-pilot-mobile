@@ -438,7 +438,7 @@ watching.
 
 ### `symbols.js` — where things live
 
-<!-- covers: gen2/symbols.js @ fd8106835b08 -->
+<!-- covers: gen2/symbols.js @ a35ba6450500 -->
 
 Parses the `.sym` file into `name → { bank, addr }`. First definition wins;
 later duplicates are aliases and locals.
@@ -730,7 +730,7 @@ and in `bootstrap.js`, with nothing able to notice if they drifted.
 
 ### `romdata.js` — what the cartridge knows
 
-<!-- covers: gen2/romdata.js @ fab8e9c6e594 -->
+<!-- covers: gen2/romdata.js @ 9486b83e460a -->
 
 Species names, item names, move names, wild-encounter tables, move power, the
 type chart, and what a species turns into. All read out of the ROM, not shipped
@@ -1807,7 +1807,7 @@ mechanism's evidence spans two runs rather than one.
 
 ### The bigger number is not the harder hit
 
-<!-- covers: gen2/romdata.js gen2/engine.js gen2/battle.js @ cfdd13ecfa57 -->
+<!-- covers: gen2/romdata.js gen2/engine.js gen2/battle.js @ ec7daaca5a07 -->
 
 For twenty-three passes the pilot ranked its moves by one number: the `power`
 byte out of the cartridge's move table. `romdata.move()` had been returning the
@@ -1961,7 +1961,7 @@ pilot uses, not a second one beside it. See section 10.
 
 ### Sending out somebody who can touch it
 
-<!-- covers: gen2/battle.js gen2/engine.js @ 4b30583939d0 -->
+<!-- covers: gen2/battle.js gen2/engine.js @ f422ba6eaf41 -->
 
 The pass before could tell that the Pokémon on the field takes nothing off a
 Ghost, and said so. The remedy it named — *a different Pokémon* — was one the
@@ -2316,7 +2316,7 @@ fainted.
 
 ## 7. Catching something
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ 4d6bad6b5576 -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ c98ca9685998 -->
 
 Catching is the most involved loop, because a Poké Ball's odds turn on how much
 HP is left. Throwing at a full-health target is mostly throwing balls away.
@@ -3578,7 +3578,7 @@ after](#8d-a-route-the-game-itself-refuses).
 
 ## 8b. Asking the cartridge what its places are called
 
-<!-- covers: gen2/romdata.js gen2/world.js @ 4442a5ad6d11 -->
+<!-- covers: gen2/romdata.js gen2/world.js @ 4b9aef765f35 -->
 
 The one table that **retires** hand-written data rather than adding to it. A map
 used to be called whatever the title profile said, and everything else was
@@ -4118,7 +4118,7 @@ sent the reader at it.
 
 ## 8h. What a species becomes, and when
 
-<!-- covers: gen2/romdata.js gen2/engine.js @ cb3fc0d08b8d -->
+<!-- covers: gen2/romdata.js gen2/engine.js @ 03d32b3d67f9 -->
 
 Two questions a party entry cannot answer: *what will this turn into*, and
 *what is it about to learn*. Both are in one table, because in Gen 2 they are
@@ -4210,7 +4210,7 @@ file says they do.
 
 ## 8i. Reaching an hour
 
-<!-- covers: gen2/jobs.js gen2/engine.js gen2/romdata.js gen2/state.js gbcore/saves.js app/rows.js @ 3fbcee26c8aa -->
+<!-- covers: gen2/jobs.js gen2/engine.js gen2/romdata.js gen2/state.js gbcore/saves.js app/rows.js @ 2e88f9c6a8aa -->
 
 A third of Johto's grass is behind the clock. HOOTHOOT is on Route 29 after
 dark and nowhere on it at noon, and for four versions the usage guide said the
@@ -4377,7 +4377,7 @@ cartridge will not say which hours are which.
 
 ## 8j. A cartridge that changed everything it could
 
-<!-- covers: titles/polished.js gen2/engine.js gen2/romdata.js gen2/state.js gen2/menus.js @ e28c955dc7c8 -->
+<!-- covers: titles/polished.js gen2/engine.js gen2/romdata.js gen2/state.js gen2/menus.js @ b00ed854948e -->
 
 Polished Crystal is the profile in `docs/DEVELOPING.md`'s hack table described
 as "the generic fallback, and the hardest thing to support properly". It is
@@ -4808,7 +4808,7 @@ This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ c74b6eeffeaa -->
+<!-- covers: app/main.js index.html @ f3330812c8a2 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -4913,20 +4913,54 @@ A cache keyed on the request rather than the result cannot tell *already done*
 from *tried once and failed*. It records the key only when there is a sprite
 now, so a failed attempt is retried on the next refresh.
 
-Where the picture comes from is in `romdata.js` — `speciesIcon`, four optional
-symbols, and two facts that are not guessable and look like working code when
-wrong. Tiles are **row-major** within a frame rather than the column-major order
-a Game Boy 8×16 sprite uses; and `PokemonPalettes` is indexed by **`species`,
-not `species - 1`**, because it has a leading entry. With the usual minus-one
+Where the picture comes from is in `romdata.js` — `speciesIcon`, and two facts
+that are not guessable and look like working code when wrong. Tiles are
+**row-major** within a frame rather than the column-major order a Game Boy 8×16
+sprite uses; and `PokemonPalettes` is indexed by **`species`, not
+`species - 1`**, because it has a leading entry. With the usual minus-one
 Pikachu decodes purple — wrong, but not visibly wrong, which is the kind of
 defect that survives a review.
 
-The shape is a family rather than an individual: this cartridge maps 251 species
-onto 37 distinct icons, the most-used covering thirty of them, and only six
-species have one to themselves. What tells a Chikorita from a Bellsprout in the
-lens is the palette, not the outline. A cartridge whose symbol file does not
-name the tables answers `null` and the lens is simply a lens with nothing in it,
-which is what it was before.
+**There are two icon tables in the wild and neither reader can read the
+other's**, so `iconKind` in the engine profile says which rather than anything
+sniffing the data. Crystal indirects through a family: a byte per species
+naming one of 37 outlines, a pointer per outline, one bank of uncompressed
+tiles. It maps 251 species onto those 37, the most-used covering thirty of them
+and only six species having one to themselves, so what tells a Chikorita from a
+Bellsprout there is the palette. Polished Crystal gives every species its own
+row in one table — `MiniIconPointers`, seven bytes, a bank and three addresses —
+compressed, with a transparency mask beside it. A cartridge whose symbol file
+names neither answers `null` and the lens is a lens with nothing in it.
+
+**The mask is the one thing about the second shape a renderer cannot infer.**
+Those tiles use all four palette indices, so colour 0 is a real white *inside*
+the silhouette and transparency *outside* it, and the tile data does not
+separate the two. The mask is one bit per pixel over the same eight tiles and
+says which. Without it a Charmander loses its belly and a Snorlax is mostly
+hole — which is exactly what the front pic, having no mask, does look like.
+`_miniIcon` therefore returns pixels one index higher than the tile data: 0
+transparent, then white, light, dark, black, with `colours` saying so, because
+that is all `paintSprite` reads.
+
+**The cartridge's own colours were decoded and then declined**, and that is a
+choice rather than an omission. `OverworldMonIconColors` holds two bytes a
+species — normal and shiny — each a nibble pair indexing `MapObjectPals`, 28
+palettes across 4 times of day. Decoding all 291 shows every one of them naming
+light 13, whose colour is the same warm tan for every species: the game draws
+all of them with one body colour and one species accent. That is Crystal's
+family problem again, in colour instead of outline, and there is a better answer
+already in the file — `PokemonPalettes`, per species, the two colours the dex
+portrait uses. Taking the cartridge's would have made the lens and the Dex
+disagree about what colour a Pokémon is.
+
+**And `family` in the answer is why the lens now prefers an icon to a
+portrait.** The order used to run portrait-first, on the grounds that an icon
+says *something small and green* where a portrait says which — true of Crystal's
+table, written down as though true of icons. On a cartridge drawing one per
+species the same rule picked the worse picture: a battle-sized portrait shrunk
+into a 40px circle, over artwork drawn for exactly that size, animated, at a
+whole-number scale. So the order asks whether *this* icon identifies the
+species, and Crystal's answer is unchanged.
 
 **And the dex entry draws the front pic, which is per species.** A family shape
 is fine for a thing you glance at and wrong for the pane you opened deliberately
@@ -4993,7 +5027,10 @@ plus the order to play them. Three things about it are worth keeping:
   what the seventh byte of its entry is. Both are profile facts.
 
 Coverage, measured: 250 of Crystal's 251 animate — only Unown does not, and it
-falls back to the menu icon — and all 291 of Polished's do.
+falls back to the menu icon — and all 291 of Polished's do, though there the
+lens reaches the per-species icon first and the animation is what the Dex card
+would use. All 291 of Polished's icons decompress too, to exactly 128 bytes
+each, and all 291 masks to exactly 64.
 
 **Pico owns `main`'s box, and every rule here that touched it was losing
 silently.** Pico's classless build styles `body>main` with width, both margins,
@@ -5647,7 +5684,7 @@ seconds by a page whose loop was supposedly running.
 
 ### One thing at a time
 
-<!-- covers: app/main.js @ 1dcb21834ca8 -->
+<!-- covers: app/main.js @ 8ea436eaca03 -->
 
 One Game Boy, one joypad, one canvas — so a great deal of this app is about
 making sure two things are never driving them at once. There are three claims,
@@ -5789,7 +5826,7 @@ before a step is taken, so a stopped walk does not move at all.
 
 ### What is behind the Gym door, before you open it
 
-<!-- covers: gen2/romdata.js gen2/engine.js app/rows.js @ bc0302ea4f84 -->
+<!-- covers: gen2/romdata.js gen2/engine.js app/rows.js @ 3c0f2b1a2f26 -->
 
 The Gym row could say where the Gym is and who is in it. **Whether it is worth
 going** is two facts the cartridge has had all along, and neither of them
@@ -5902,7 +5939,7 @@ is the noise this list exists to replace.
 
 ### Leading with the one that can answer the room
 
-<!-- covers: gen2/romdata.js gen2/menus.js gen2/journey.js @ af60a89e792f -->
+<!-- covers: gen2/romdata.js gen2/menus.js gen2/journey.js @ 44ac79abc559 -->
 
 **Gen 2 sends out slot one and asks nobody.** So the party's order decides the
 first battle of a Gym — and since the pass before, the pilot has known exactly
@@ -6201,7 +6238,7 @@ a conversation.
 
 ### The card behind a party row
 
-<!-- covers: app/rows.js app/main.js index.html @ 45babd0a6519 -->
+<!-- covers: app/rows.js app/main.js index.html @ 77af9cdc3411 -->
 
 Two questions the game itself will not answer about a Pokémon you are
 carrying — *what is this made of* and *what is it about to become* — and both
@@ -6290,7 +6327,7 @@ at body size.
 
 ### Running the list
 
-<!-- covers: app/rows.js app/main.js @ 8394cf69fd92 -->
+<!-- covers: app/rows.js app/main.js @ d78b780e21a5 -->
 
 The app has spent forty passes learning to answer one question — *what can the
 pilot do here, and which of those is worth most?* — and twenty showing the
@@ -6414,7 +6451,7 @@ to deposit your last Pokémon.
 
 ### The settings and the save card
 
-<!-- covers: index.html app/main.js @ c74b6eeffeaa -->
+<!-- covers: index.html app/main.js @ f3330812c8a2 -->
 
 The pilot's own list got a glyph column, shorter names and a slot to fill in
 v165. These two cards did not, and reading them found that they had a different
@@ -6861,7 +6898,7 @@ this needed upstream rather than in the vendored copy.
 The options went through this room first on purpose: the small half, standing up
 the whole path — config, rules, anonymous sign-in, merge, debounce — with a
 slider position at stake rather than a save. Three things travel this way, and
-all three merge: the remembered options, the 109 addresses out of the symbol
+all three merge: the remembered options, the 110 addresses out of the symbol
 file, and the notes two devices use to introduce their screens to each other.
 The save goes over the same room and does *not* merge, which is the next
 section.
@@ -7054,7 +7091,7 @@ they have been installed.
 
 ### Watching the other device's screen
 
-<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ 20ac5a15e8a0 -->
+<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ 0af4013bc474 -->
 
 One device shows its screen; the other watches it, and plays it if the first
 one says so. The picture goes straight between them over WebRTC and never
@@ -7330,16 +7367,16 @@ and change what a past handover said.
 
 ### The symbol file stops travelling
 
-The `.sym` is 1.8MB and this app looks up **109 symbols in it**. So the room
-carries those 109 lines — about a kilobyte, `{name: [bank, addr]}` — and a
+The `.sym` is 1.8MB and this app looks up **110 symbols in it**. So the room
+carries those 110 lines — about a kilobyte, `{name: [bank, addr]}` — and a
 second device needs the ROM and nothing else. `Symbols.fromDigest` builds a
 table that behaves like the parsed file; `size` is the only honest difference,
-and it reports 109 because that is how many symbols it has.
+and it reports 110 because that is how many symbols it has.
 
 ```mermaid
 flowchart LR
     F["the .sym file<br/>1.8MB, 58,456 symbols"] --> S["Symbols<br/>the parsed table"]
-    S -->|"digest(SHARED_SYMBOLS)"| D["{name: [bank, addr]}<br/>109 entries, ~1KB"]
+    S -->|"digest(SHARED_SYMBOLS)"| D["{name: [bank, addr]}<br/>110 entries, ~1KB"]
     D --> R[["the room"]]
     R --> D2["the same 47 entries"]
     D2 -->|"Symbols.fromDigest"| T["a table that behaves<br/>like the parsed file"]
