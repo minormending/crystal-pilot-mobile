@@ -31,6 +31,42 @@ import { Journey } from '../gen2/journey.js';
 const NEW_BARK_TOWN = key(24, 2);
 const PLAYERS_HOUSE_2F = key(24, 5);
 
+// **Its artwork is out of reach, and this is what was measured before giving
+// up on it.** The lens draws a party icon and the dex entry draws a front pic,
+// both straight out of the cartridge, and neither works here. Written down
+// because the symptom -- an empty circle -- looks like a rendering fault and
+// cost a long detour once already.
+//
+// The icons are simply absent. Of `MonMenuIcons`, `IconPointers`, `Icons`,
+// `MonIcons` and `PicPointers`, this cartridge's symbol file has **none**, so
+// there is nothing to rename in a profile and nothing to read. `romdata.icons`
+// is null, and the Game row in Setup says so rather than leaving a blank lens
+// to be puzzled over.
+//
+// The pics are *there*, and the table was worked out in full against
+// 3.2.3 before the last step stopped it:
+//
+//   - `PokemonPicPointers` is at `48:4000`, which is Crystal's address too.
+//   - Entries are **seven bytes**, indexed `species - 1`: a bank, then the
+//     front pic's address, then the back pic's, then a third pointer. The back
+//     pic shares the front's bank, which is what the single bank byte buys.
+//   - **The bank is the real bank.** Crystal stores `BANK(pic) - $36` and adds
+//     the difference back; this does not, so `picsFix` is 0 here and Crystal's
+//     $36 must never be applied to it.
+//   - Checked against the symbol file for Bulbasaur, Ivysaur, Venusaur,
+//     Charmander, Chikorita, Cyndaquil and Totodile: every one lands exactly on
+//     `(species - 1) * 7`.
+//
+// What stops it is the codec. The streams end in `$ff` exactly as Crystal's do,
+// and pokecrystal's LZ decoder walks off the start of its own output on every
+// one of them -- so the command encoding is different, not the framing. Reading
+// them needs `_Decompress` at `00:0862` disassembled to recover the command
+// table, which is a project rather than a profile entry.
+//
+// `picSize` is `null` below for the same reason it is honest to say so: this
+// cartridge computes pic geometry at run time (`GetPicSize` and
+// `GetPaddedFrontpicAddress` are functions in its symbol file, not tables), so
+// there is no nibble in the base-stats record to read it from.
 export const polished = {
   id: 'polished',
   // Both tables, under the names Crystal uses for them, which this cartridge
