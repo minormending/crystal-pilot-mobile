@@ -1176,7 +1176,7 @@ export function describeTitle(title, { named = false, icons = true } = {}) {
   const missing = [];
   if (!healers) missing.push('nowhere to heal');
   if (!scripted) missing.push('no scripted start');
-  if (!icons) missing.push('no party icons in this .sym');
+  if (!icons) missing.push('no artwork in this .sym');
   const own = Object.keys(title.names || {}).length;
   return {
     show: true,

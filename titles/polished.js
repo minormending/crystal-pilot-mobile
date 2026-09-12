@@ -57,16 +57,15 @@ const PLAYERS_HOUSE_2F = key(24, 5);
 //     Charmander, Chikorita, Cyndaquil and Totodile: every one lands exactly on
 //     `(species - 1) * 7`.
 //
-// What stops it is the codec. The streams end in `$ff` exactly as Crystal's do,
-// and pokecrystal's LZ decoder walks off the start of its own output on every
-// one of them -- so the command encoding is different, not the framing. Reading
-// them needs `_Decompress` at `00:0862` disassembled to recover the command
-// table, which is a project rather than a profile entry.
+// The codec was the last of it, and it is solved: `_Decompress` at `00:0862`
+// was disassembled and the three commands that changed meaning are commented at
+// `_unlz` in `gen2/romdata.js`. The recovered decoder was checked by executing
+// the cartridge's own routine over the same streams -- byte for byte identical.
 //
-// `picSize` is `null` below for the same reason it is honest to say so: this
-// cartridge computes pic geometry at run time (`GetPicSize` and
-// `GetPaddedFrontpicAddress` are functions in its symbol file, not tables), so
-// there is no nibble in the base-stats record to read it from.
+// `picSize` is `null` below because this cartridge does not keep the size in
+// the base-stats record. `GetPicSize` reads a nibble per species out of
+// `PokemonPicSizes`, which is a named symbol, so `picSizes` names it and
+// nothing here is an address.
 export const polished = {
   id: 'polished',
   // Both tables, under the names Crystal uses for them, which this cartridge
@@ -109,6 +108,25 @@ export const polished = {
     // are a nibble beside the gender ratio rather than a byte of their own.
     baseField: { id: null, stats: 0, types: 6, catchRate: 8, baseExp: 9,
                  gender: 12, hatch: null, picSize: null, growth: 16 },
+    // **Its pictures, every part of which differs.** Entries in
+    // `PokemonPicPointers` are seven bytes rather than six -- a bank, the front
+    // pic's address, the back pic's, and a third pointer, the back sharing the
+    // front's bank -- and the bank byte is the *real* bank, where Crystal
+    // stores `BANK(pic) - $36` and adds the difference back.
+    //
+    // The size is not in the base-stats record here, which is why `picSize`
+    // above is null: `GetPicSize` reads a nibble per species out of
+    // `PokemonPicSizes`, two species to a byte, high nibble first. Measured
+    // against it: Bulbasaur 5, Ivysaur 6, Venusaur 7, all three starters 5 --
+    // which is Gen 2's own set of sizes, so the table is the same fact kept
+    // somewhere else.
+    //
+    // And the compression is its own, which is the part that took a
+    // disassembly. See `_unlz` in `gen2/romdata.js`.
+    picEntry: 7,
+    picsFix: 0,
+    picLz: 'polished',
+    picSizes: 'PokemonPicSizes',
     // Four, in this order, against Crystal's six. Bulbasaur's growth byte is
     // 1, which is MEDIUM_SLOW here and would read as "slightly fast" on
     // Crystal's list — a wrong word rather than a missing one, which is the

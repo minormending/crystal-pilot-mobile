@@ -197,6 +197,15 @@ export const gen2 = {
   // and belongs here: measured on pokecrystal, where the table's first entry
   // reads bank $1d and `BulbasaurFrontpic` is at $53 -- a difference of $36.
   picsFix: 0x36,
+  // How a species' picture is reached, which every part of varies between
+  // cartridges. `picEntry` is the stride in `PokemonPicPointers`; `picsFix` is
+  // what to add to the entry's bank byte; `picLz` names the decompressor,
+  // because a fork can and did change the command set; and `picSizes` is a
+  // symbol naming a table of size nibbles, or null where the size lives in the
+  // base-stats record instead, which is where Crystal keeps it.
+  picEntry: 6,
+  picLz: 'gen2',
+  picSizes: null,
   // data/growth_rates.asm, in the order `GrowthRates` has them. Keys rather
   // than prose for the same reason `takeable` uses them: what to call a curve
   // on screen is the interface's business.

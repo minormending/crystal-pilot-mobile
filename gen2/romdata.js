@@ -97,6 +97,12 @@ export function normalise(name) {
 // Every byte with its bits the other way round, for the one LZ command that
 // mirrors what it copies. A table rather than arithmetic per byte: it is built
 // once and read a few hundred times per picture.
+// The sixteen bytes Polished's `pack16` command indexes with each nibble: a
+// dictionary of the values 2bpp graphics repeat most. Read straight out of the
+// table `pack_lookup` reaches at `00:09c1`.
+const PACK16 = [0x00, 0xff, 0x01, 0x02, 0x03, 0xfe, 0x80, 0x07,
+                0xc0, 0x7f, 0x04, 0x0f, 0x1f, 0x3f, 0x08, 0xfc];
+
 const REVERSED = Array.from({ length: 256 }, (_, b) => {
   let v = 0;
   for (let i = 0; i < 8; i++) if (b & (1 << i)) v |= 1 << (7 - i);
@@ -184,6 +190,8 @@ export class RomData {
     // record, not beside the picture.
     this.pics = symbols.has('PokemonPicPointers')
       ? this.at('PokemonPicPointers') : null;
+    this.picSizes = this.e.picSizes && symbols.has(this.e.picSizes)
+      ? this.at(this.e.picSizes) : null;
   }
 
   /**
@@ -197,6 +205,14 @@ export class RomData {
    * checked against a rendered sprite rather than against a byte count.
    */
   _unlz(bank, addr) {
+    // **Two command sets, not one.** Polished Crystal rewrote this routine, and
+    // three of the seven commands changed meaning while the framing -- the same
+    // `$ff` terminator, the same top-three-bits opcode -- did not. A decoder
+    // built for one walks off the start of its own output on the other, which
+    // is exactly what it did: the stream boundaries came out right and every
+    // byte between them was wrong. Recovered by disassembling `_Decompress` at
+    // `00:0862` and checked against the cartridge's own execution of it.
+    const poli = this.e.picLz === 'polished';
     const at = (i) => this.gb.romByte(bank, addr + i);
     const out = [];
     let i = 0;
@@ -210,9 +226,29 @@ export class RomData {
       let cmd = b >> 5;
       let n;
       if (cmd === 7) {
+        // The long form. Crystal takes two more length bits out of the command
+        // byte; Polished takes one, and discards the other -- `AND B` against
+        // a mask with only bit 0 set, which is visible in the disassembly and
+        // not guessable from the encoding.
         cmd = (b >> 2) & 7;
-        n = ((b & 3) << 8) + at(i + 1) + 1;
+        n = (((b & (poli ? 1 : 3)) << 8) | at(i + 1)) + 1;
         i += 2;
+        if (poli && (b & 0xFC) === 0xFC) {
+          // Three commands Crystal has no equivalent of, and the reason its
+          // decoder cannot read these streams at all. Each unpacks one source
+          // byte into two output bytes, and the count is of *output* bytes.
+          const sub = b & 3;
+          let ln = at(i - 1);
+          ln = ln === 0xFF ? 256 : ln + 1;
+          for (let w = 0; w < ln;) {
+            const x = at(i); i += 1;
+            const pair = sub === 0 ? [x & 0xF0, (x & 0x0F) << 4]
+              : sub === 1 ? [PACK16[(x >> 4) & 15], PACK16[x & 15]]
+                : [x >> 4, x & 0x0F];
+            for (const v of pair) { if (w >= ln) break; out.push(v); w += 1; }
+          }
+          continue;
+        }
       } else {
         n = (b & 0x1F) + 1;
         i += 1;
@@ -221,11 +257,23 @@ export class RomData {
         for (let j = 0; j < n; j++) out.push(at(i + j));
         i += n;
       } else if (cmd === 1) {
+        // Polished writes the byte once *before* falling into the fill loop
+        // that zero-fill jumps straight into, so the same loop serves both and
+        // iterate is one longer than its count says.
         const v = at(i); i += 1;
-        for (let j = 0; j < n; j++) out.push(v);
+        for (let j = 0; j < n + (poli ? 1 : 0); j++) out.push(v);
       } else if (cmd === 2) {
-        const a = at(i); const c = at(i + 1); i += 2;
-        for (let j = 0; j < n; j++) out.push(j & 1 ? c : a);
+        if (poli) {
+          // It writes its two bytes, then repeats *from them* -- so the copy
+          // loop reads what it is writing, two behind, and alternates. Two
+          // bytes longer than the count, for the same reason.
+          out.push(at(i)); out.push(at(i + 1)); i += 2;
+          let p = out.length - 2;
+          for (let j = 0; j < n; j++) { out.push(out[p]); p += 1; }
+        } else {
+          const a = at(i); const c = at(i + 1); i += 2;
+          for (let j = 0; j < n; j++) out.push(j & 1 ? c : a);
+        }
       } else if (cmd === 3) {
         for (let j = 0; j < n; j++) out.push(0);
       } else {
@@ -260,19 +308,37 @@ export class RomData {
     // undefined offset made a NaN address, which read as undefined, which
     // failed the size guard below. Saying so here is the difference between
     // a reader that refuses and one that happens not to work.
-    const where = this.e.baseField.picSize;
-    if (typeof where !== 'number' || typeof this.e.picsFix !== 'number') return null;
-    const e = this.pics.addr + (id - 1) * 6;
-    const bank = this.gb.romByte(this.pics.bank, e) + (this.e.picsFix || 0);
+    // Where the tile count lives is a cartridge's own business. Crystal keeps
+    // it as a nibble pair in the base-stats record; Polished keeps a table of
+    // one nibble per species, two to a byte, high nibble first -- so a profile
+    // naming `picSizes` is asking for the second.
+    let w;
+    if (this.picSizes) {
+      const byte = this.gb.romByte(this.picSizes.bank,
+                                   this.picSizes.addr + ((id - 1) >> 1));
+      if (byte === undefined) return null;
+      w = (id - 1) & 1 ? byte & 0x0F : byte >> 4;
+    } else {
+      const where = this.e.baseField.picSize;
+      if (typeof where !== 'number') return null;
+      const size = this.gb.romByte(this.base.bank,
+                                   this.base.addr + (id - 1) * this.e.baseBytes
+                                   + where);
+      if (size === undefined) return null;
+      w = size >> 4;
+      if ((size & 15) !== w) return null;
+    }
+    if (typeof this.e.picsFix !== 'number') return null;
+    const e = this.pics.addr + (id - 1) * (this.e.picEntry || 6);
+    const bank = this.gb.romByte(this.pics.bank, e) + this.e.picsFix;
     const addr = this.gb.romByte(this.pics.bank, e + 1)
                  | (this.gb.romByte(this.pics.bank, e + 2) << 8);
-    const size = this.gb.romByte(this.base.bank,
-                                 this.base.addr + (id - 1) * this.e.baseBytes
-                                 + where);
-    const w = size >> 4;
-    const h = size & 15;
-    if (!w || !h || w > 8 || h > 8 || w !== h) return null;
+    const h = w;
+    if (!w || w > 8) return null;
     const data = this._unlz(bank, addr);
+    // A stream can hold more than the picture -- Polished follows it with the
+    // animation frames -- so the first `w * h` tiles are what is wanted and the
+    // rest is somebody else's feature.
     if (data.length < w * h * 16) return null;
     const side = w * 8;
     const pixels = new Uint8Array(side * side);

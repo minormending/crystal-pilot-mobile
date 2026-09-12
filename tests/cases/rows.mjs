@@ -1333,7 +1333,7 @@ test('a profile with names but no healers is still worth a sentence',
                                   healers: [{}], drive: class { async run() {} } },
                                 { icons: false });
   t.true(noIcons.show, 'a .sym with no icon tables is worth saying');
-  t.true(/party icons/.test(noIcons.text), 'and it says which thing is missing');
+  t.true(/no artwork/.test(noIcons.text), 'and it says which thing is missing');
   t.false(/nowhere to heal|no scripted start/.test(noIcons.text),
           'without claiming anything else is wrong');
 });

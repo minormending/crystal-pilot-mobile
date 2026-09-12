@@ -438,7 +438,7 @@ watching.
 
 ### `symbols.js` — where things live
 
-<!-- covers: gen2/symbols.js @ 63daab7b34a4 -->
+<!-- covers: gen2/symbols.js @ e8227e39f279 -->
 
 Parses the `.sym` file into `name → { bank, addr }`. First definition wins;
 later duplicates are aliases and locals.
@@ -730,7 +730,7 @@ and in `bootstrap.js`, with nothing able to notice if they drifted.
 
 ### `romdata.js` — what the cartridge knows
 
-<!-- covers: gen2/romdata.js @ 439d2976907c -->
+<!-- covers: gen2/romdata.js @ fb99bd1a9935 -->
 
 Species names, item names, move names, wild-encounter tables, move power, the
 type chart, and what a species turns into. All read out of the ROM, not shipped
@@ -1807,7 +1807,7 @@ mechanism's evidence spans two runs rather than one.
 
 ### The bigger number is not the harder hit
 
-<!-- covers: gen2/romdata.js gen2/engine.js gen2/battle.js @ 0854fd3e1eb1 -->
+<!-- covers: gen2/romdata.js gen2/engine.js gen2/battle.js @ 63233edf2538 -->
 
 For twenty-three passes the pilot ranked its moves by one number: the `power`
 byte out of the cartridge's move table. `romdata.move()` had been returning the
@@ -1961,7 +1961,7 @@ pilot uses, not a second one beside it. See section 10.
 
 ### Sending out somebody who can touch it
 
-<!-- covers: gen2/battle.js gen2/engine.js @ 5da1fa9764f1 -->
+<!-- covers: gen2/battle.js gen2/engine.js @ 4b30583939d0 -->
 
 The pass before could tell that the Pokémon on the field takes nothing off a
 Ghost, and said so. The remedy it named — *a different Pokémon* — was one the
@@ -2316,7 +2316,7 @@ fainted.
 
 ## 7. Catching something
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ 2b57090a7ab8 -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ ab88dbbd0ce8 -->
 
 Catching is the most involved loop, because a Poké Ball's odds turn on how much
 HP is left. Throwing at a full-health target is mostly throwing balls away.
@@ -3578,7 +3578,7 @@ after](#8d-a-route-the-game-itself-refuses).
 
 ## 8b. Asking the cartridge what its places are called
 
-<!-- covers: gen2/romdata.js gen2/world.js @ d3dfd0e907f6 -->
+<!-- covers: gen2/romdata.js gen2/world.js @ 929e82e745eb -->
 
 The one table that **retires** hand-written data rather than adding to it. A map
 used to be called whatever the title profile said, and everything else was
@@ -4118,7 +4118,7 @@ sent the reader at it.
 
 ## 8h. What a species becomes, and when
 
-<!-- covers: gen2/romdata.js gen2/engine.js @ 4aea79348f20 -->
+<!-- covers: gen2/romdata.js gen2/engine.js @ 83cb2f10983f -->
 
 Two questions a party entry cannot answer: *what will this turn into*, and
 *what is it about to learn*. Both are in one table, because in Gen 2 they are
@@ -4210,7 +4210,7 @@ file says they do.
 
 ## 8i. Reaching an hour
 
-<!-- covers: gen2/jobs.js gen2/engine.js gen2/romdata.js gen2/state.js gbcore/saves.js app/rows.js @ 4a2b2beab85f -->
+<!-- covers: gen2/jobs.js gen2/engine.js gen2/romdata.js gen2/state.js gbcore/saves.js app/rows.js @ de45ca7e3cbf -->
 
 A third of Johto's grass is behind the clock. HOOTHOOT is on Route 29 after
 dark and nowhere on it at noon, and for four versions the usage guide said the
@@ -4377,7 +4377,7 @@ cartridge will not say which hours are which.
 
 ## 8j. A cartridge that changed everything it could
 
-<!-- covers: titles/polished.js gen2/engine.js gen2/romdata.js gen2/state.js gen2/menus.js @ 47459bbbecdb -->
+<!-- covers: titles/polished.js gen2/engine.js gen2/romdata.js gen2/state.js gen2/menus.js @ 7523bd476ab4 -->
 
 Polished Crystal is the profile in `docs/DEVELOPING.md`'s hack table described
 as "the generic fallback, and the hardest thing to support properly". It is
@@ -4808,7 +4808,7 @@ This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ 8ac23c366065 -->
+<!-- covers: app/main.js index.html @ fc4304fda8c7 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -4947,6 +4947,15 @@ Three things in that path are worth writing down, because each of them decodes
   absolute position in the output so far. Getting that the wrong way round
   still produces a picture, just not the right one, which is why this was
   checked against a rendered sprite rather than a byte count.
+* **There are two command sets.** Polished Crystal rewrote `_Decompress`, and
+  three of the seven commands changed meaning while the framing — the `$ff`
+  terminator, the top-three-bits opcode — did not. `picLz` names which, and the
+  differences are commented at `_unlz`. A decoder built for one walks off the
+  start of its own output on the other, which is how it announced itself: the
+  stream boundaries came out exactly right and every byte between them was
+  wrong. It was recovered by disassembling `00:0862` and checked by executing
+  the cartridge's own routine against the same streams — byte for byte
+  identical on all four tested.
 * **Pic tiles are column-major**, the opposite of the menu icon's row-major
   order, and how many of them there are is in the **base-stats record** rather
   than beside the picture — `picSize`, one byte, two nibbles. Gen 2 pics are
@@ -5600,7 +5609,7 @@ seconds by a page whose loop was supposedly running.
 
 ### One thing at a time
 
-<!-- covers: app/main.js @ 92132c1154c0 -->
+<!-- covers: app/main.js @ cd8344de284c -->
 
 One Game Boy, one joypad, one canvas — so a great deal of this app is about
 making sure two things are never driving them at once. There are three claims,
@@ -5742,7 +5751,7 @@ before a step is taken, so a stopped walk does not move at all.
 
 ### What is behind the Gym door, before you open it
 
-<!-- covers: gen2/romdata.js gen2/engine.js app/rows.js @ e61f475814b1 -->
+<!-- covers: gen2/romdata.js gen2/engine.js app/rows.js @ ec08511a2316 -->
 
 The Gym row could say where the Gym is and who is in it. **Whether it is worth
 going** is two facts the cartridge has had all along, and neither of them
@@ -5855,7 +5864,7 @@ is the noise this list exists to replace.
 
 ### Leading with the one that can answer the room
 
-<!-- covers: gen2/romdata.js gen2/menus.js gen2/journey.js @ 8a1b65c9f83b -->
+<!-- covers: gen2/romdata.js gen2/menus.js gen2/journey.js @ 902f11ab1f58 -->
 
 **Gen 2 sends out slot one and asks nobody.** So the party's order decides the
 first battle of a Gym — and since the pass before, the pilot has known exactly
@@ -6154,7 +6163,7 @@ a conversation.
 
 ### The card behind a party row
 
-<!-- covers: app/rows.js app/main.js index.html @ 9f18ba4871ee -->
+<!-- covers: app/rows.js app/main.js index.html @ 308a78da68d1 -->
 
 Two questions the game itself will not answer about a Pokémon you are
 carrying — *what is this made of* and *what is it about to become* — and both
@@ -6243,7 +6252,7 @@ at body size.
 
 ### Running the list
 
-<!-- covers: app/rows.js app/main.js @ 2d40b228ed23 -->
+<!-- covers: app/rows.js app/main.js @ 2f1e365078cd -->
 
 The app has spent forty passes learning to answer one question — *what can the
 pilot do here, and which of those is worth most?* — and twenty showing the
@@ -6367,7 +6376,7 @@ to deposit your last Pokémon.
 
 ### The settings and the save card
 
-<!-- covers: index.html app/main.js @ 8ac23c366065 -->
+<!-- covers: index.html app/main.js @ fc4304fda8c7 -->
 
 The pilot's own list got a glyph column, shorter names and a slot to fill in
 v165. These two cards did not, and reading them found that they had a different
@@ -6814,7 +6823,7 @@ this needed upstream rather than in the vendored copy.
 The options went through this room first on purpose: the small half, standing up
 the whole path — config, rules, anonymous sign-in, merge, debounce — with a
 slider position at stake rather than a save. Three things travel this way, and
-all three merge: the remembered options, the 105 addresses out of the symbol
+all three merge: the remembered options, the 106 addresses out of the symbol
 file, and the notes two devices use to introduce their screens to each other.
 The save goes over the same room and does *not* merge, which is the next
 section.
@@ -7007,7 +7016,7 @@ they have been installed.
 
 ### Watching the other device's screen
 
-<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ 50307c4868b5 -->
+<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ b25cf1610a37 -->
 
 One device shows its screen; the other watches it, and plays it if the first
 one says so. The picture goes straight between them over WebRTC and never
@@ -7283,16 +7292,16 @@ and change what a past handover said.
 
 ### The symbol file stops travelling
 
-The `.sym` is 1.8MB and this app looks up **105 symbols in it**. So the room
-carries those 105 lines — about a kilobyte, `{name: [bank, addr]}` — and a
+The `.sym` is 1.8MB and this app looks up **106 symbols in it**. So the room
+carries those 106 lines — about a kilobyte, `{name: [bank, addr]}` — and a
 second device needs the ROM and nothing else. `Symbols.fromDigest` builds a
 table that behaves like the parsed file; `size` is the only honest difference,
-and it reports 105 because that is how many symbols it has.
+and it reports 106 because that is how many symbols it has.
 
 ```mermaid
 flowchart LR
     F["the .sym file<br/>1.8MB, 58,456 symbols"] --> S["Symbols<br/>the parsed table"]
-    S -->|"digest(SHARED_SYMBOLS)"| D["{name: [bank, addr]}<br/>105 entries, ~1KB"]
+    S -->|"digest(SHARED_SYMBOLS)"| D["{name: [bank, addr]}<br/>106 entries, ~1KB"]
     D --> R[["the room"]]
     R --> D2["the same 47 entries"]
     D2 -->|"Symbols.fromDigest"| T["a table that behaves<br/>like the parsed file"]

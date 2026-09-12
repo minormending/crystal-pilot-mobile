@@ -532,8 +532,11 @@ async function reallyStart() {
   // Said once, and only when it is worth saying: a cartridge the pilot has no
   // description of behaves correctly in a way that reads as broken.
   // Whether the *cartridge* names its maps, which a profile need not.
+  // Either kind of artwork answers it: the lens draws the menu icon where there
+  // is one and the portrait where there is not, so a cartridge with pics and no
+  // icons is not a cartridge with an empty lens.
   const known = describeTitle(title, { named: !!romdata.landmarks,
-                                      icons: !!romdata.icons });
+                                      icons: !!(romdata.icons || romdata.pics) });
   $('#titlerow').classList.toggle('hide', !known.show);
   $('#titlestate').textContent = known.text;
   shareSymbols();
@@ -1895,15 +1898,24 @@ function paintSprite(cv, sprite, side) {
   ctx.putImageData(img, 0, 0);
 }
 
-/** The lead's icon, out of the cartridge, into the 16x16 canvas. */
+/** The lead in the lens: its menu icon, or its portrait where there is none. */
 function drawLensMon(species) {
   const key = species === null ? null : `${species}:${lensFrame}`;
   if (key === lensDrawn) return;
-  // A cartridge whose symbol file does not name the icon tables answers null
-  // here, and the lens is then a lens with nothing in it -- which is what it
-  // was before this, and is the right amount of nothing.
-  const sprite = species === null || !romdata
+  let sprite = species === null || !romdata
     ? null : romdata.speciesIcon(species, lensFrame);
+  let side = 16;
+  lensAnimated = !!sprite;
+  if (!sprite && species !== null && romdata) {
+    // **A cartridge with no icon tables can still have the picture.** Polished
+    // Crystal is exactly that: it names none of the three icon symbols and does
+    // have `PokemonPicPointers`, so the lens was an empty circle on a cartridge
+    // that could answer the question perfectly well. A portrait is a better
+    // answer than nothing, and it is the *right* answer for a lens -- the icon
+    // is a family shape shared by up to thirty species, and this is the one.
+    const pic = romdata.speciesPic(species);
+    if (pic) { sprite = pic; side = pic.side; }
+  }
   // **Only a picture that was drawn counts as drawn.** The key used to be
   // recorded one line earlier, before there was any sprite to record it about
   // -- so a single call that found no reader wrote the *species* into the
@@ -1916,7 +1928,16 @@ function drawLensMon(species) {
   // tell "already done" from "tried once and failed".
   lensDrawn = species === null || sprite ? key : null;
   if (species !== null && !sprite) lensWhyEmpty(species);
-  paintSprite($('#lensmon'), sprite, 16);
+  const cv = $('#lensmon');
+  // The backing store is the picture's own size, and the drawn size is a whole
+  // divisor of it -- a Game Boy sprite at a fractional scale has visibly uneven
+  // pixels, which is the same rule the tablet layout spends a step on. A 40px
+  // portrait fills the glass at 1:1; a 56px one halves.
+  if (cv.width !== side) { cv.width = side; cv.height = side; }
+  const shown = side <= 40 ? side : Math.round(side / 2);
+  cv.style.width = `${side === 16 ? 32 : shown}px`;
+  cv.style.height = cv.style.width;
+  paintSprite(cv, sprite, side);
 }
 
 // Said once per session, because the caller runs four times a second.
@@ -1936,7 +1957,7 @@ function lensWhyEmpty(species) {
   lensComplained = true;
   if (!romdata) {
     console.warn('lens: no cartridge reader yet');
-  } else if (!romdata.icons) {
+  } else if (!romdata.icons && !romdata.pics) {
     // Either this .sym does not name them, or -- far more likely, and the
     // reason this message exists -- the page is running an older `romdata.js`
     // than the one it was served, in which case the field is `undefined`
@@ -1979,6 +2000,11 @@ function drawDexPic(host, species) {
   card.insertBefore(cv, card.firstChild);
 }
 
+// Whether what the lens is showing has a second frame. A portrait does not,
+// and re-decompressing one every 400ms to draw the identical picture is work
+// nobody asked for.
+let lensAnimated = false;
+
 /** Bob the lead while a job runs, the way the party menu does. */
 function lensBob(on) {
   clearInterval(lensTimer);
@@ -1988,6 +2014,7 @@ function lensBob(on) {
     return;
   }
   lensTimer = setInterval(() => {
+    if (!lensAnimated) return;
     lensFrame = lensFrame ? 0 : 1;
     lensDrawn = null;
     const species = lastSnapSpecies;

@@ -624,9 +624,12 @@ it is the picture this build draws rather than a picture of a Pokémon.
 The lens at the top left carries the smaller version of the same idea: your
 lead, with its HP as a ring round the rim, so the one thing worth knowing while
 a job runs is on screen while the panel is shut. That one is the *party menu*
-icon, and Gen 2 shares 37 of those across all 251 species — so the outline is a
-family and the colours are the species. The dex entry gets the real portrait
-because it is the pane you opened on purpose.
+icon where the cartridge has them — Gen 2 shares 37 of those across all 251
+species, so the outline is a family and the colours are the species — and the
+portrait where it does not. Polished Crystal is the second case: it names none
+of the icon tables and does have the pictures, so its lens shows the real thing.
+The dex entry always gets the portrait, because it is the pane you opened on
+purpose.
 
 ```
 CYNDAQUIL Lv13 ▴                                 35/37

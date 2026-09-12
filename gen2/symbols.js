@@ -172,7 +172,7 @@ export class Symbols {
  * Every symbol this app reads, by name.
  *
  * It exists so a device with a ROM and no .sym can be handed the addresses
- * instead of the file: 105 lines is about a kilobyte, against 1.8MB, and it
+ * instead of the file: 106 lines is about a kilobyte, against 1.8MB, and it
  * fits in a room with space for a save beside it.
  *
  * Written down rather than discovered, because nothing at run time can know
@@ -211,6 +211,9 @@ export const SHARED_SYMBOLS = [
   // how many tiles a pic is lives in the base-stats record rather than beside
   // the picture -- and that name is already on this list.
   'PokemonPicPointers',
+  // And, on a cartridge that keeps pic sizes in a table of their own rather
+  // than in the base-stats record, the table.
+  'PokemonPicSizes',
   'wBattleMonType1', 'wBattleMonType2',
   'wEnemyMonHP', 'wEnemyMonLevel', 'wEnemyMonMaxHP', 'wEnemyMonSpecies',
   'wEnemyMonType1', 'wEnemyMonType2',
