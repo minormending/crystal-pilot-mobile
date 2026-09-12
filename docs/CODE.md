@@ -4808,7 +4808,7 @@ This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ 173c460cb11f -->
+<!-- covers: app/main.js index.html @ c74b6eeffeaa -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -5077,6 +5077,15 @@ reset it explicitly rather than relying on nothing else claiming them.
 Neither was caught by anything in `check-app`, and that is the honest summary:
 `dead_css` knows when a rule *cannot* apply and `markers` knows when two rules
 draw the same thing, but nothing here knows what a rule is **for**.
+
+**It has now happened twice, so it is a pattern rather than an incident.**
+`button.jgo{min-height:42px;…}` sized every verb in the app except one: Import
+is a `<label>`, because a file input needs one to be clickable, so it matched
+nothing and fell back to the vendor's sizing a head taller than the three
+buttons above it in the same card. Same shape as the `canvas` rule — a
+declaration written for the element kind that happened to be there first, and
+correct until a second kind arrived. Both are element-qualified selectors doing
+a class's job.
 
 **The strip carries its own inks.** `--ink` and `--dim` are tuned against
 `--panel`; the strip is dark glass with light green on it, which is a different
@@ -5638,7 +5647,7 @@ seconds by a page whose loop was supposedly running.
 
 ### One thing at a time
 
-<!-- covers: app/main.js @ 5cf4543f6e7f -->
+<!-- covers: app/main.js @ 1dcb21834ca8 -->
 
 One Game Boy, one joypad, one canvas — so a great deal of this app is about
 making sure two things are never driving them at once. There are three claims,
@@ -6192,7 +6201,7 @@ a conversation.
 
 ### The card behind a party row
 
-<!-- covers: app/rows.js app/main.js index.html @ e1bb067dd0ed -->
+<!-- covers: app/rows.js app/main.js index.html @ 45babd0a6519 -->
 
 Two questions the game itself will not answer about a Pokémon you are
 carrying — *what is this made of* and *what is it about to become* — and both
@@ -6281,7 +6290,7 @@ at body size.
 
 ### Running the list
 
-<!-- covers: app/rows.js app/main.js @ 8190720c853e -->
+<!-- covers: app/rows.js app/main.js @ 8394cf69fd92 -->
 
 The app has spent forty passes learning to answer one question — *what can the
 pilot do here, and which of those is worth most?* — and twenty showing the
@@ -6405,7 +6414,7 @@ to deposit your last Pokémon.
 
 ### The settings and the save card
 
-<!-- covers: index.html app/main.js @ 173c460cb11f -->
+<!-- covers: index.html app/main.js @ c74b6eeffeaa -->
 
 The pilot's own list got a glyph column, shorter names and a slot to fill in
 v165. These two cards did not, and reading them found that they had a different
@@ -7045,7 +7054,7 @@ they have been installed.
 
 ### Watching the other device's screen
 
-<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ 445e78e57587 -->
+<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ 20ac5a15e8a0 -->
 
 One device shows its screen; the other watches it, and plays it if the first
 one says so. The picture goes straight between them over WebRTC and never

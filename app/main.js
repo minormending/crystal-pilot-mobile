@@ -2001,10 +2001,18 @@ function drawDexPic(host, species) {
   // Gen 2 pics are 5x5, 6x6 or 7x7 tiles and the game centres them in a 7x7
   // box, so the drawn size has to follow the picture rather than be fixed --
   // a 40px Pikachu stretched to a 56px square is a fat Pikachu.
-  cv.style.width = `${pic.side}px`;
-  cv.style.height = `${pic.side}px`;
+  cv.style.width = `${pic.side * 2}px`;
+  cv.style.height = `${pic.side * 2}px`;
   paintSprite(cv, pic, pic.side);
-  card.insertBefore(cv, card.firstChild);
+  // In a row with the type line rather than floated into the stats. The card is
+  // a table, and text wrapping round a picture leaves the rows that clear it
+  // starting at a different margin from the rows that do not.
+  const head = document.createElement('div');
+  head.className = 'dexhead';
+  head.appendChild(cv);
+  const types = card.querySelector('.dextypes');
+  if (types) head.appendChild(types);
+  card.insertBefore(head, card.firstChild);
 }
 
 /**

@@ -824,8 +824,18 @@
      Boy sprite scaled by anything but a whole number has visibly uneven pixels,
      and this one is small enough that 1x is the honest size. Floated so the
      entry's lines wrap round it rather than starting below it. */
-  .dexcard .pic{float:left;margin:0 10px 6px 0;image-rendering:pixelated;
-                border:0;background:none}
+  /* **Not floated.** A float is right for prose and wrong for a table, and
+     this card is mostly a table: the first two stat rows wrapped around the
+     picture and the rest did not, so the column of stat names had a ragged
+     left edge and the bars under them did not line up. It sits in a row of its
+     own with the type line instead, and everything below starts at the same
+     margin.
+
+     Drawn at 2x rather than 1:1, which the lens cannot afford and a card can:
+     this is the pane somebody opened to look at one species. A whole-number
+     scale either way. */
+  .dexcard .dexhead{display:flex;align-items:center;gap:12px;margin-bottom:8px}
+  .dexcard .pic{flex:0 0 auto;image-rendering:pixelated;border:0;background:none}
   .dexbox .chips{padding-bottom:8px}
   .dexbox .chips button{min-height:32px;padding:5px 10px;font-size:12px}
   /* Open, it needs an edge: the first offer below it wears no top rule, being
@@ -956,7 +966,15 @@
      shows the rail above rather than pretending to be pressable. */
   .job.lead button.jgo:not([disabled]){background:var(--action);
        border-color:var(--action);color:#fff;font-weight:600}
-  button.jgo{flex:0 0 auto;min-height:42px;padding:10px 20px;font-size:13px}
+  /* **`.jgo.file` as well, because Import is a `<label>`.** A file input needs
+     a label to be clickable, so that one control is the only verb in the app
+     that is not a `<button>` -- and an element-qualified rule matched every
+     sibling and not it. It fell back to the vendor's own sizing and stood a
+     head taller than the three buttons above it in the same card. The same
+     shape as the `canvas` rule that painted the lens black: a rule written for
+     the element kind that happened to be there first. */
+  button.jgo,.jgo.file{flex:0 0 auto;min-height:42px;padding:10px 20px;
+                       font-size:13px}
   .job.blocked .jname{color:var(--dim)}
 
   /* Both jobs above share this one choice, so it is labelled like a parameter
