@@ -846,7 +846,10 @@ export function describeOffers(s, ctx = {}) {
   const hint = [];
   // In a battle the list is empty by design, and an empty list with no
   // explanation reads as broken rather than as modal.
-  if (s.inBattle) hint.push('Fight and Throw are by the pad while a battle is on');
+  // "under the screen", not "by the pad": they were beside the pad before the
+  // chassis and are on the strip now, which is under the screen in all three
+  // layouts. A sentence that points at the wrong place is worse than none.
+  if (s.inBattle) hint.push('Fight and Throw are under the screen while a battle is on');
   if (afoot && !s.party.length) hint.push('most jobs need a Pokémon with you');
   // Only worth saying where it is the thing standing in the way: with a target
   // picked, no balls, and no errand to fetch any, Catch has quietly left the

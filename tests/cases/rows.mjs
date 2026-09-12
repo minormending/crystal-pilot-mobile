@@ -306,7 +306,11 @@ test('a battle empties the list, and says where its own actions went',
   }, { huntWanted: 'PIDGEY', ballId: POKE_BALL });
   t.eq(o.offered.length, 0, 'the pilot has nothing to propose mid-battle');
   t.false('battle' in o.rank, 'and does not rank the battle actions itself');
-  t.contains(o.hint, 'by the pad', 'an empty list explains itself');
+  // The wording is the assertion here, not decoration: the hint points at where
+  // the battle actions are, and they moved from beside the pad onto the strip
+  // when the chassis landed. A test that only checked the hint was non-empty
+  // would have let the app go on pointing at the wrong place.
+  t.contains(o.hint, 'under the screen', 'an empty list explains itself');
 });
 
 test('a fainted party lifts healing above the jobs it would block', async (t) => {
