@@ -1848,20 +1848,22 @@ const DEX_CHIPS = 24;
 let dexFolded = true;
 
 /** One party member: who it is, how close it is to fainting, and what it is. */
-// Which animation frame the lens is showing. Gen 2 keeps two per icon and the
-// party menu bobs between them; this only runs while a job does, because a
-// lens that bobs at rest is a moving thing on a page that is otherwise still.
-let lensFrame = 0;
+// What the lens is showing, and where it is up to.
+//
+// The cartridge's own idle animation, which is not stored as whole frames: the
+// decompressed picture is the base tiles followed by a pool of spare ones, and
+// a frame names which tile positions change and what to put there. `romdata`
+// assembles them; this holds the result and steps through the script.
+let lensArt = null;
+let lensSpecies = null;
+let lensStep = 0;
 let lensTimer = 0;
-// What is currently drawn, so a refresh four times a second is not four ROM
-// reads and four canvas writes a second for a picture that has not changed.
-let lensDrawn = null;
 
 /**
  * The party lead in the lens, with its HP round the rim.
  *
  * The rim is the point of it: a job runs for ninety seconds with the panel
- * shut, and until now "is my lead dying" was three taps away behind the party
+ * shut, and until this "is my lead dying" was three taps away behind the party
  * fold for the whole of that.
  */
 function paintLens(s) {
@@ -1871,8 +1873,10 @@ function paintLens(s) {
   lens.style.setProperty('--hp', String(Math.round(frac * 100)));
   lens.classList.toggle('out', !!lead && lead.hp === 0);
   lens.classList.toggle('low', !!lead && lead.hp > 0 && frac < 0.34);
-  lastSnapSpecies = lead ? lead.species : null;
-  drawLensMon(lastSnapSpecies);
+  lensLoad(lead ? lead.species : null);
+  lensDraw();
+  // A job already under way when the lead changes keeps animating the new one.
+  if (!lensTimer && document.body.classList.contains('piloting')) lensBob(true);
 }
 
 /**
@@ -1898,46 +1902,42 @@ function paintSprite(cv, sprite, side) {
   ctx.putImageData(img, 0, 0);
 }
 
-/** The lead in the lens: its menu icon, or its portrait where there is none. */
-function drawLensMon(species) {
-  const key = species === null ? null : `${species}:${lensFrame}`;
-  if (key === lensDrawn) return;
-  let sprite = species === null || !romdata
-    ? null : romdata.speciesIcon(species, lensFrame);
-  let side = 16;
-  lensAnimated = !!sprite;
-  if (!sprite && species !== null && romdata) {
-    // **A cartridge with no icon tables can still have the picture.** Polished
-    // Crystal is exactly that: it names none of the three icon symbols and does
-    // have `PokemonPicPointers`, so the lens was an empty circle on a cartridge
-    // that could answer the question perfectly well. A portrait is a better
-    // answer than nothing, and it is the *right* answer for a lens -- the icon
-    // is a family shape shared by up to thirty species, and this is the one.
-    const pic = romdata.speciesPic(species);
-    if (pic) { sprite = pic; side = pic.side; }
+/**
+ * Load whatever artwork this cartridge has for a species, best first.
+ *
+ * The animated portrait is the best answer and is per species. The menu icon
+ * is a *family* -- this cartridge maps up to thirty species onto one outline --
+ * so it is the fallback rather than the default, and a still portrait is what
+ * is left when there is no animation to play.
+ */
+function lensLoad(species) {
+  if (species === lensSpecies) return;
+  lensSpecies = species;
+  lensStep = 0;
+  lensArt = null;
+  if (species === null || !romdata) return;
+  const anim = romdata.speciesAnimation(species);
+  if (anim) {
+    lensArt = { side: anim.side, colours: anim.colours,
+                frames: anim.frames, play: anim.play };
+    return;
   }
-  // **Only a picture that was drawn counts as drawn.** The key used to be
-  // recorded one line earlier, before there was any sprite to record it about
-  // -- so a single call that found no reader wrote the *species* into the
-  // cache, and every refresh after it matched that key and returned early. One
-  // failed paint and the lens was empty for the rest of the session, with the
-  // ring still tracking HP beside it because that half never consulted a cache.
-  //
-  // This is the shape of the bug rather than a guard against a specific cause:
-  // a cache keyed on what was *asked for* rather than on what came back cannot
-  // tell "already done" from "tried once and failed".
-  lensDrawn = species === null || sprite ? key : null;
-  if (species !== null && !sprite) lensWhyEmpty(species);
-  const cv = $('#lensmon');
-  // The backing store is the picture's own size, and the drawn size is a whole
-  // divisor of it -- a Game Boy sprite at a fractional scale has visibly uneven
-  // pixels, which is the same rule the tablet layout spends a step on. A 40px
-  // portrait fills the glass at 1:1; a 56px one halves.
-  if (cv.width !== side) { cv.width = side; cv.height = side; }
-  const shown = side <= 40 ? side : Math.round(side / 2);
-  cv.style.width = `${side === 16 ? 32 : shown}px`;
-  cv.style.height = cv.style.width;
-  paintSprite(cv, sprite, side);
+  const icon = romdata.speciesIcon(species, 0);
+  if (icon) {
+    const two = romdata.speciesIcon(species, 1) || icon;
+    // The party menu's own two-frame bob, at its own speed.
+    lensArt = { side: 16, colours: icon.colours,
+                frames: [icon.pixels, two.pixels],
+                play: [{ frame: 0, hold: 24 }, { frame: 1, hold: 24 }] };
+    return;
+  }
+  const pic = romdata.speciesPic(species);
+  if (pic) {
+    lensArt = { side: pic.side, colours: pic.colours, frames: [pic.pixels],
+                play: [{ frame: 0, hold: 60 }] };
+    return;
+  }
+  lensWhyEmpty(species);
 }
 
 // Said once per session, because the caller runs four times a second.
@@ -1947,10 +1947,8 @@ let lensComplained = false;
  * Why the lens has a lead and no picture.
  *
  * An empty circle is the one failure here that looks like a *drawing* problem
- * from the outside and is almost never one -- twice now it has been the module
- * behind it rather than the canvas in front. There are only three answers and
- * the app knows all three, so it should say which rather than leave it to be
- * bisected from the console.
+ * from the outside and has never once been one. There are only three answers
+ * and the app knows all three, so it should say which.
  */
 function lensWhyEmpty(species) {
   if (lensComplained) return;
@@ -1958,20 +1956,29 @@ function lensWhyEmpty(species) {
   if (!romdata) {
     console.warn('lens: no cartridge reader yet');
   } else if (!romdata.icons && !romdata.pics) {
-    // Either this .sym does not name them, or -- far more likely, and the
-    // reason this message exists -- the page is running an older `romdata.js`
-    // than the one it was served, in which case the field is `undefined`
-    // rather than the `null` the constructor writes.
-    console.warn('lens: no icon tables on this cartridge. romdata.icons is '
-                 + `${romdata.icons === null ? 'null' : typeof romdata.icons}`
-                 + (romdata.icons === undefined
-                    ? ' — this build of romdata.js predates them, so the page is'
-                      + ' running a stale module. Hard-reload once.'
-                    : ' — this .sym does not name MonMenuIcons, IconPointers'
-                      + ' and Icons.'));
+    console.warn('lens: this .sym names neither the icon tables nor '
+                 + 'PokemonPicPointers, so there is no artwork to draw');
   } else {
-    console.warn(`lens: no icon for species ${species}`);
+    console.warn(`lens: no artwork for species ${species}`);
   }
+}
+
+/** The frame the lens is on, into the canvas. */
+function lensDraw() {
+  const cv = $('#lensmon');
+  if (!lensArt) { paintSprite(cv, null, cv.width); return; }
+  const side = lensArt.side;
+  if (cv.width !== side) { cv.width = side; cv.height = side; }
+  // A whole-number scale, because a Game Boy sprite at a fractional one has
+  // visibly uneven pixels -- the rule the tablet layout spends a step on. The
+  // icon doubles to 32; a 40px portrait fills the glass at 1:1; a 56px one
+  // halves.
+  const shown = side === 16 ? 32 : side <= 40 ? side : Math.round(side / 2);
+  cv.style.width = `${shown}px`;
+  cv.style.height = `${shown}px`;
+  const at = lensArt.play[lensStep % lensArt.play.length];
+  paintSprite(cv, { pixels: lensArt.frames[at.frame] || lensArt.frames[0],
+                    colours: lensArt.colours }, side);
 }
 
 /**
@@ -2000,29 +2007,32 @@ function drawDexPic(host, species) {
   card.insertBefore(cv, card.firstChild);
 }
 
-// Whether what the lens is showing has a second frame. A portrait does not,
-// and re-decompressing one every 400ms to draw the identical picture is work
-// nobody asked for.
-let lensAnimated = false;
-
-/** Bob the lead while a job runs, the way the party menu does. */
+/**
+ * Play the lead's animation while a job runs.
+ *
+ * Only while one does, which is the rule the two-frame bob already followed: a
+ * lens that moves at rest is a moving thing on a page that is otherwise still,
+ * and this app's whole layout argument is about not having one. A job is also
+ * when the lens is worth looking at -- it is the only thing on the panel still
+ * reporting while the menu is shut.
+ *
+ * A timeout rather than an interval, because each frame names its own hold --
+ * in the cartridge's frames, which are sixtieths of a second.
+ */
 function lensBob(on) {
-  clearInterval(lensTimer);
+  clearTimeout(lensTimer);
   lensTimer = 0;
-  if (!on) {
-    if (lensFrame !== 0) { lensFrame = 0; lensDrawn = null; }
-    return;
+  if (!on) { lensStep = 0; lensDraw(); return; }
+  const tick = () => {
+    if (!lensArt || lensArt.play.length < 2) { lensTimer = 0; return; }
+    lensStep = (lensStep + 1) % lensArt.play.length;
+    lensDraw();
+    lensTimer = setTimeout(tick, lensArt.play[lensStep].hold * 1000 / 60);
+  };
+  if (lensArt && lensArt.play.length > 1) {
+    lensTimer = setTimeout(tick, lensArt.play[lensStep].hold * 1000 / 60);
   }
-  lensTimer = setInterval(() => {
-    if (!lensAnimated) return;
-    lensFrame = lensFrame ? 0 : 1;
-    lensDrawn = null;
-    const species = lastSnapSpecies;
-    if (species !== null) drawLensMon(species);
-  }, 400);
 }
-// The lead the lens last drew, kept so the bob can redraw without a snapshot.
-let lastSnapSpecies = null;
 
 function monRow(m, snap) {
   const frac = m.maxHp ? m.hp / m.maxHp : 0;

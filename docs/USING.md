@@ -623,13 +623,16 @@ it is the picture this build draws rather than a picture of a Pokémon.
 
 The lens at the top left carries the smaller version of the same idea: your
 lead, with its HP as a ring round the rim, so the one thing worth knowing while
-a job runs is on screen while the panel is shut. That one is the *party menu*
-icon where the cartridge has them — Gen 2 shares 37 of those across all 251
-species, so the outline is a family and the colours are the species — and the
-portrait where it does not. Polished Crystal is the second case: it names none
-of the icon tables and does have the pictures, so its lens shows the real thing.
-The dex entry always gets the portrait, because it is the pane you opened on
-purpose.
+a job runs is on screen while the panel is shut.
+
+**It is the lead's own portrait, and while a job runs it plays the cartridge's
+idle animation** — the same frames the game uses on its own status screen, out
+of your own ROM. Only while a job runs: a lens that moves at rest is a moving
+thing on a page that is otherwise still, and the layout here is built around
+not having one. The fallback, on a cartridge with no animation for a species,
+is the party menu icon — Gen 2 shares 37 of those across all 251 species, so
+that outline is a family and the colours are the species. Measured: 250 of
+Crystal's 251 animate, and every one of Polished Crystal's 291.
 
 ```
 CYNDAQUIL Lv13 ▴                                 35/37

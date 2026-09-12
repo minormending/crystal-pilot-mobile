@@ -192,6 +192,17 @@ export class RomData {
       ? this.at('PokemonPicPointers') : null;
     this.picSizes = this.e.picSizes && symbols.has(this.e.picSizes)
       ? this.at(this.e.picSizes) : null;
+    // The idle animation: which frames exist, which tiles each one swaps, and
+    // the order to play them. Optional like everything else here -- without
+    // them a picture is a still.
+    this.anims = symbols.has('AnimationPointers')
+      ? this.at('AnimationPointers') : null;
+    this.bitmasks = symbols.has('BitmasksPointers')
+      ? this.at('BitmasksPointers') : null;
+    // Crystal reaches the frames through a table of their own; Polished keeps
+    // the address in the picture's row instead, so this is absent there.
+    this.frames = symbols.has('FramesPointers')
+      ? this.at('FramesPointers') : null;
   }
 
   /**
@@ -291,6 +302,131 @@ export class RomData {
   }
 
   /**
+   * One species' row of `PokemonPicPointers`: where its pictures live.
+   *
+   * The row is the cartridge's, not this app's. Crystal's is six bytes -- a
+   * bank and an address for the front pic, the same again for the back --
+   * with `BANK(pic) - $36` stored and the difference added back. Polished's is
+   * seven: one bank, then three addresses, the back pic sharing the front's
+   * bank and the third being its animation frames, and the bank is the real
+   * one. `picEntry` and `picsFix` are what the profiles say about that.
+   */
+  _picEntry(id) {
+    if (!this.pics || typeof this.e.picsFix !== 'number') return null;
+    const stride = this.e.picEntry || 6;
+    const e = this.pics.addr + (id - 1) * stride;
+    const byte = (o) => this.gb.romByte(this.pics.bank, e + o);
+    const bank = byte(0) + this.e.picsFix;
+    const addr = byte(1) | (byte(2) << 8);
+    if (!addr) return null;
+    // Only the seven-byte row carries it; on Crystal the frames are reached
+    // through a pointer table of their own instead.
+    const frames = stride >= 7 ? (byte(5) | (byte(6) << 8)) : null;
+    return { bank, addr, frames };
+  }
+
+  /** A `dw` entry in a pointer table, read in the table's own bank. */
+  _dw(table, id) {
+    if (!table) return null;
+    const a = table.addr + (id - 1) * 2;
+    const v = this.gb.romByte(table.bank, a) | (this.gb.romByte(table.bank, a + 1) << 8);
+    return v ? { bank: table.bank, addr: v } : null;
+  }
+
+  /**
+   * A species' idle animation: every frame drawn, and the order to play them.
+   *
+   * Gen 2 does not store whole frames. The decompressed picture is the base
+   * tiles followed by a pool of spare ones, and a frame is a *bitmask* saying
+   * which tile positions change plus one tile index per set bit -- so a frame
+   * costs a handful of bytes rather than another picture. Bulbasaur's first
+   * bitmask has thirteen bits set and its first frame is fourteen bytes: the
+   * mask index and thirteen tiles. That arithmetic is how the format was
+   * confirmed.
+   *
+   * `frames[0]` is the picture itself, because the scripts refer to it by
+   * index 0 like any other frame.
+   *
+   * **The script's loops are flattened rather than run.** `setrepeat` and
+   * `dorepeat` are read for their arguments and otherwise skipped, so what
+   * comes back is every frame the script names, once, in order. The lens
+   * cycles that. It is not the cartridge's exact timing and does not need to
+   * be -- what it needs is the animation, and a loop interpreter is a second
+   * thing to get wrong.
+   */
+  speciesAnimation(id) {
+    const pic = this.speciesPic(id);
+    if (!pic || !this.bitmasks || !this.anims) return null;
+    const entry = this._picEntry(id);
+    const frameAt = this.frames ? this._dw(this.frames, id)
+      : (entry && entry.frames ? { bank: entry.bank, addr: entry.frames } : null);
+    const bmAt = this._dw(this.bitmasks, id);
+    const animAt = this._dw(this.anims, id);
+    if (!frameAt || !bmAt || !animAt) return null;
+    const side = pic.side;
+    const w = side / 8;
+    const slots = w * w;
+    const maskBytes = Math.ceil(slots / 8);
+
+    // **The script says how many frames there are; the table does not.** The
+    // first draft took the frame count from where the first pointer lands, on
+    // the reasoning that a list of `dw` ends where its own data begins. That is
+    // true of most species and false of some -- Totodile's and Chikorita's
+    // first pointers go *backwards*, to frames defined ahead of the list -- and
+    // the subtraction then yields a negative count. Nothing needs the total:
+    // what is needed is the frames the script actually names.
+    const play = [];
+    let top = 0;
+    for (let i = 0, guard = 0; guard < 128; guard++) {
+      const b = this.gb.romByte(animAt.bank, animAt.addr + i);
+      if (b === 0xFF || b === undefined) break;
+      // `setrepeat` and `dorepeat`, read for their argument and skipped -- see
+      // the note above about flattening rather than running the loops.
+      if (b === 0xFE || b === 0xFD) { i += 2; continue; }
+      const hold = this.gb.romByte(animAt.bank, animAt.addr + i + 1);
+      play.push({ frame: b, hold: hold || 1 });
+      if (b > top) top = b;
+      i += 2;
+    }
+    if (!play.length || top > 32) return null;
+
+    const fb = frameAt.bank;
+    const word = (a) => this.gb.romByte(fb, a) | (this.gb.romByte(fb, a + 1) << 8);
+    const frames = [pic.pixels];
+    // Index 0 is the picture itself, so frame n is the (n-1)th pointer.
+    for (let f = 1; f <= top; f++) {
+      const at2 = word(frameAt.addr + (f - 1) * 2);
+      const mi = this.gb.romByte(fb, at2);
+      const map = [];
+      let k = 1;
+      for (let i = 0; i < slots; i++) {
+        const bit = this.gb.romByte(bmAt.bank, bmAt.addr + mi * maskBytes + (i >> 3));
+        const t = (bit >> (i & 7)) & 1 ? this.gb.romByte(fb, at2 + k++) : i;
+        map.push(t * 64 < pic.tiles.length ? t : i);
+      }
+      frames.push(this._paint(pic.tiles, map, w));
+    }
+    return { side, colours: pic.colours, frames, play };
+  }
+
+  /** Tile indices laid out column-major into a side x side pixel buffer. */
+  _paint(tiles, map, w) {
+    const side = w * 8;
+    const px = new Uint8Array(side * side);
+    for (let pos = 0; pos < map.length; pos++) {
+      const tx = Math.floor(pos / w);
+      const ty = pos % w;
+      const base = map[pos] * 64;
+      for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+          px[(ty * 8 + r) * side + tx * 8 + c] = tiles[base + r * 8 + c];
+        }
+      }
+    }
+    return px;
+  }
+
+  /**
    * A species' front pic: `{ pixels, side, colours }`, or null.
    *
    * `side` is in pixels and varies -- Gen 2 pics are 5x5, 6x6 or 7x7 tiles and
@@ -328,11 +464,9 @@ export class RomData {
       w = size >> 4;
       if ((size & 15) !== w) return null;
     }
-    if (typeof this.e.picsFix !== 'number') return null;
-    const e = this.pics.addr + (id - 1) * (this.e.picEntry || 6);
-    const bank = this.gb.romByte(this.pics.bank, e) + this.e.picsFix;
-    const addr = this.gb.romByte(this.pics.bank, e + 1)
-                 | (this.gb.romByte(this.pics.bank, e + 2) << 8);
+    const at = this._picEntry(id);
+    if (!at) return null;
+    const { bank, addr } = at;
     const h = w;
     if (!w || w > 8) return null;
     const data = this._unlz(bank, addr);
@@ -340,23 +474,25 @@ export class RomData {
     // animation frames -- so the first `w * h` tiles are what is wanted and the
     // rest is somebody else's feature.
     if (data.length < w * h * 16) return null;
-    const side = w * 8;
-    const pixels = new Uint8Array(side * side);
-    for (let t = 0; t < w * h; t++) {
-      const tx = Math.floor(t / h);
-      const ty = t % h;
+    // Every tile the stream holds, not just the picture's: the spare ones after
+    // it are what the animation frames are made of, and decompressing twice to
+    // get them would be the same work done again.
+    const count = Math.floor(data.length / 16);
+    const tiles = new Uint8Array(count * 64);
+    for (let t = 0; t < count; t++) {
       for (let row = 0; row < 8; row++) {
         const lo = data[t * 16 + row * 2];
         const hi = data[t * 16 + row * 2 + 1];
         for (let col = 0; col < 8; col++) {
           const bit = 7 - col;
-          pixels[(ty * 8 + row) * side + tx * 8 + col] =
-            ((hi >> bit) & 1) * 2 + ((lo >> bit) & 1);
+          tiles[t * 64 + row * 8 + col] = ((hi >> bit) & 1) * 2 + ((lo >> bit) & 1);
         }
       }
     }
     const pal = this.speciesColours(id) || ['#b9b9c4', '#4a4a55'];
-    return { pixels, side, colours: [null, pal[0], pal[1], '#000000'] };
+    const map = Array.from({ length: w * h }, (_, t) => t);
+    return { pixels: this._paint(tiles, map, w), side: w * 8, tiles,
+             colours: [null, pal[0], pal[1], '#000000'] };
   }
 
   /**
