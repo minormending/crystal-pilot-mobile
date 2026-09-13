@@ -4844,7 +4844,7 @@ This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ 3664786a462a -->
+<!-- covers: app/main.js index.html @ 061085115764 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -4922,6 +4922,29 @@ the tap marker is positioned in percentages of it — one tile is 10% across and
 Padding would break the first, and a wrapper element would change what `cqh` is
 measuring. A shadow takes no part in layout at all, so the bezel and the frame
 can be drawn around the picture without either sum moving.
+
+**The screen is on the page before there is a game to put in it**, and it used
+to be hidden until a ROM arrived. That was the obvious reading of "there is
+nothing to show yet" and it was wrong about the *shell*: the stage row is
+`minmax(0,1fr)`, so it claims whatever height is going whether or not anything
+is in it. A hidden screen therefore left a **500 × 580** hole of bare plastic on
+a laptop and **500 × 860** on a tablet — the largest thing on the page, in the
+place a person looks first, painted the same flat red as the case around it.
+
+Nobody had seen it because nobody had looked at this app without a cartridge in
+it since the redesign. Found by pointing the `ui-audit` harness at the repo,
+which is a thing that *can only* see this state: it has no ROM, so the
+screenshots it takes are the ones a first-time visitor gets and the ones no
+amount of playing the game will ever show you. Its four automated checks passed
+clean both before and after — a hole is not an overflow, a contrast failure or a
+missing landmark — which is the argument for the design-review half of that
+harness existing at all.
+
+A Pokédex that is switched off still has a screen in it, so the fix is to draw
+one: the canvas is black, the bezel and frame are already `box-shadow`, and the
+device reads as a device waiting for a cartridge. Nothing else changed —
+`#taphint` still waits for a game, because *tap the screen to walk there* is a
+lie until there is somewhere to walk.
 
 **The lens is the party lead, and the rim is its HP.** A job runs for ninety
 seconds with the panel shut, and until this *is my lead dying* was three taps
@@ -5729,7 +5752,7 @@ seconds by a page whose loop was supposedly running.
 
 ### One thing at a time
 
-<!-- covers: app/main.js @ 8ac520363f96 -->
+<!-- covers: app/main.js @ 4d1244d837a2 -->
 
 One Game Boy, one joypad, one canvas — so a great deal of this app is about
 making sure two things are never driving them at once. There are three claims,
@@ -6283,7 +6306,7 @@ a conversation.
 
 ### The card behind a party row
 
-<!-- covers: app/rows.js app/main.js index.html @ cb7a8a4a52de -->
+<!-- covers: app/rows.js app/main.js index.html @ 6580ae030df6 -->
 
 Two questions the game itself will not answer about a Pokémon you are
 carrying — *what is this made of* and *what is it about to become* — and both
@@ -6372,7 +6395,7 @@ at body size.
 
 ### Running the list
 
-<!-- covers: app/rows.js app/main.js @ 8f3fc8df30c3 -->
+<!-- covers: app/rows.js app/main.js @ e1dcbe66e9dc -->
 
 The app has spent forty passes learning to answer one question — *what can the
 pilot do here, and which of those is worth most?* — and twenty showing the
@@ -6496,7 +6519,7 @@ to deposit your last Pokémon.
 
 ### The settings and the save card
 
-<!-- covers: index.html app/main.js @ 3664786a462a -->
+<!-- covers: index.html app/main.js @ 061085115764 -->
 
 The pilot's own list got a glyph column, shorter names and a slot to fill in
 v165. These two cards did not, and reading them found that they had a different
@@ -7136,7 +7159,7 @@ they have been installed.
 
 ### Watching the other device's screen
 
-<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ 0ecb78781d32 -->
+<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ 93a33f60eb83 -->
 
 One device shows its screen; the other watches it, and plays it if the first
 one says so. The picture goes straight between them over WebRTC and never

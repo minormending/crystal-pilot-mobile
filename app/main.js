@@ -508,7 +508,8 @@ async function reallyStart() {
   $('#modes').classList.remove('hide');
   paintSlots();
   paintUndo();
-  $('#screenwrap').classList.remove('hide');
+  // The screen is on the page from the first frame now -- see the note in the
+  // markup -- so only the hint that depends on a game is revealed here.
   $('#taphint').classList.remove('hide');
   // There is something to look at now, so the menu gets out of the way.
   showPanel(null);
@@ -1076,8 +1077,10 @@ function watchScreen() {
       const v = $('#remote');
       v.srcObject = stream;
       v.classList.remove('hide');
+      // The wrap itself is never hidden; what swaps is which of the two
+      // pictures inside it is drawn -- this device's canvas, or the other
+      // device's video in the same box, so the pad below means the same thing.
       $('#screen').classList.add('hide');
-      $('#screenwrap').classList.remove('hide');
       $('#ctrls').classList.remove('hide');
       paintScreen();
     },

@@ -1371,7 +1371,13 @@
        screen sizes itself against this box's height in `cqh`, and the tap hint
        below is outside it and so out of the sum. -->
   <div class="shot">
-  <div class="screenwrap hide" id="screenwrap">
+  <!-- Not hidden until a ROM arrives, which is what it used to be. The stage
+       row is `minmax(0,1fr)` -- it takes whatever height is going whether or
+       not anything is in it -- so a hidden screen left a 500x580 hole of bare
+       shell on a laptop and 500x860 on a tablet, which reads as a page that
+       failed to render rather than as a device waiting for a cartridge. A
+       Pokedex that is switched off still has a screen in it. -->
+  <div class="screenwrap" id="screenwrap">
     <canvas id="screen" width="160" height="144"></canvas>
     <!-- The other device's picture, in the same place this one's would be, so
          the pad below it means the same thing either way. -->
