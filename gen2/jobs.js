@@ -4,6 +4,7 @@
 // battle primitives, decides when to stop, and returns { ok, message, stats }
 // -- the shape the interface renders without knowing what happened.
 import { SETTLE_FRAMES } from '../gbcore/taskbase.js';
+import { normalise } from './romdata.js';
 // Which party member is on the field. Both mixins need the answer and it is
 // battle.js's to give -- see the note on it for what reading party[0] cost.
 import { onField, otherBattleMenu } from './battle.js';
@@ -294,7 +295,16 @@ export function withJobs(Base) {
       stats.encounters++;
       const name = this.rom.speciesName(s.enemy.species);
       seen.set(name, (seen.get(name) || 0) + 1);
-      if (name === want) {
+      // **Folded, because a name is content and content is what a hack
+      // changes.** The app passes the string straight out of the same wild
+      // table this reads, so its own path matched on either cartridge -- but a
+      // raw `===` makes every other caller's casing load-bearing, and Polished
+      // Crystal renamed all 291 species from Crystal's PIDGEY to Pidgey. Asked
+      // for `pidgey` on that cartridge this ran past five of them and then
+      // reported *"saw 12 encounters without finding pidgey -- this grass gives
+      // Sentret x6, Pidgey x5"*, which names the thing it refused to see. The
+      // same fold the ball preference and the heal list already use.
+      if (normalise(name) === normalise(want)) {
         stats.found = name;
         stats.level = s.enemy.level;
         stats.seconds = ((Date.now() - started) / 1000).toFixed(1);

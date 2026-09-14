@@ -1661,7 +1661,7 @@ and a Pokémon Center restores PP, so the grind treats it as a trip it already
 knew how to make. See [the tiles that run a
 script](#8g-the-tiles-that-run-a-script-and-saying-hello) for the walk half.
 
-<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 3f55758f5135 -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 9a2406f218a4 -->
 
 ### Which move, and which question
 
@@ -2368,7 +2368,7 @@ fainted.
 
 ## 7. Catching something
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ c98ca9685998 -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ 9fa1ada1a404 -->
 
 Catching is the most involved loop, because a Poké Ball's odds turn on how much
 HP is left. Throwing at a full-health target is mostly throwing balls away.
@@ -2531,7 +2531,24 @@ flowchart TD
 
 ## 7a. Five that act on where you already are
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ e4a647931476 -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ 3e351141c895 -->
+
+**The first jobs ever run on Polished Crystal, now that its opening reaches the
+grass.** Grind took the starter Lv6 to Lv7 in two wild battles and 15 seconds,
+which exercises the battle loop, the encounter handling, the party read and the
+level check on a cartridge none of them had been asked about. Hunt reads its
+wild table correctly too — *this grass gives Sentret x6, Pidgey x5, Rattata x1*.
+
+One thing came out of it. `hunt` compared the species it saw against the one it
+was asked for with a raw `===`, and Polished renamed all 291 species from
+Crystal's `PIDGEY` to `Pidgey`. The app's own path was never affected — it
+passes the string straight out of the same wild table `hunt` reads — but any
+other caller's casing was load-bearing, and asked for `pidgey` it ran past five
+Pidgey and then reported *"saw 12 encounters without finding pidgey — this grass
+gives … Pidgey x5"*, naming the thing it had refused to see. It folds both sides
+through `normalise` now, which is what the ball preference and the heal list
+already do, and for the reason this file gives there: an id is layout and a name
+is content, and content is what a hack changes.
 
 Grind, hunt and catch all go *looking* for something. These five do the obvious
 thing with the situation you are already in, and take no parameters:
@@ -2911,7 +2928,7 @@ counter and came away with **five potions and ¥1800**, in 49 seconds.
 
 ## 7b. Saving, and getting the save out
 
-<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 3f55758f5135 -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 9a2406f218a4 -->
 
 ```mermaid
 flowchart TD
@@ -4327,7 +4344,7 @@ file says they do.
 
 ## 8i. Reaching an hour
 
-<!-- covers: gen2/jobs.js gen2/engine.js gen2/romdata.js gen2/state.js gbcore/saves.js app/rows.js @ 848b745dcdda -->
+<!-- covers: gen2/jobs.js gen2/engine.js gen2/romdata.js gen2/state.js gbcore/saves.js app/rows.js @ f57e329327fb -->
 
 A third of Johto's grass is behind the clock. HOOTHOOT is on Route 29 after
 dark and nowhere on it at noon, and for four versions the usage guide said the
