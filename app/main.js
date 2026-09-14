@@ -8,7 +8,7 @@ import { Symbols, sharedNames } from '../gen2/symbols.js';
 import { runSequence, sequenceSaid } from './runner.js';
 import {
   describeAge, describeAuto, describeDex, describeDexTotals, describeHandoff,
-  describeKept, describeOffers, describeParty, describeReplaced, describeRoom,
+  describeKept, describeOffers, describePartyTotals, describeReplaced, describeRoom,
   describeRows, describeSaying, describeScreen, describeSlot, describeTitle,
   describeUndo, findSpecies, hoursLine, joinFailure, otherHour,
 } from './rows.js';
@@ -2325,7 +2325,10 @@ async function refresh() {
   paintLens(s);
   dimPane('party', !s.party.length);
   $('#panel').classList.toggle('hide', !s.party.length);
-  $('#leadline').textContent = describeParty(s, { rom: romdata });
+  // A total, not the lead: the members are drawn directly underneath this
+  // line, and `describeParty`'s lead-and-health shape repeated the first of
+  // them word for word. See `describePartyTotals`.
+  $('#leadline').textContent = describePartyTotals(s);
   // The other half of the same staleness: a smaller party leaves `dexSlot`
   // pointing past the end, and the card silently re-opens on whoever arrives
   // in that slot next.

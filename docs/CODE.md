@@ -4287,7 +4287,7 @@ file says they do.
 
 ## 8i. Reaching an hour
 
-<!-- covers: gen2/jobs.js gen2/engine.js gen2/romdata.js gen2/state.js gbcore/saves.js app/rows.js @ bc64d017448a -->
+<!-- covers: gen2/jobs.js gen2/engine.js gen2/romdata.js gen2/state.js gbcore/saves.js app/rows.js @ 848b745dcdda -->
 
 A third of Johto's grass is behind the clock. HOOTHOOT is on Route 29 after
 dark and nowhere on it at noon, and for four versions the usage guide said the
@@ -4945,7 +4945,7 @@ This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ f59e67ec5346 -->
+<!-- covers: app/main.js index.html @ 89c9b3426fc3 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -5461,16 +5461,30 @@ empty list with no explanation reads as broken rather than as modal. The screen
 pays for the line: measured 259×233 out in the world and 203×182 with a battle
 on, at 375×667, which is the `cqh` sizing above doing exactly what it was for.
 
-**The party is one line, above the two jobs it decides.** It had a card of its
+**The party was one line, above the two jobs it decides.** It had a card of its
 own with a row and an HP bar per member — six rows for the two facts a pilot
 acts on. Which Pokémon leads decides what a grind levels, and whether anyone is
-hurt decides whether Heal is on the list, so `describeParty` puts both at the
-top of the list that uses them: *TOTODILE Lv5 · 14/20 · +2 more · 1 fainted*.
+hurt decides whether Heal is on the list, so `describeParty` put both at the top
+of the list that used them: *TOTODILE Lv5 · 14/20 · +2 more · 1 fainted*.
 Fainted is said **instead of** hurt, because a fainted party is the state that
 stops a job finishing and "3 hurt" said of a party with one out cold buries the
 half that matters.
 
-Nothing is deleted: the line is a `<summary>` and the bars are one tap below it.
+**That line outlived the layout it was written for, and said everything twice
+for a while.** Giving the party a key on the strip put the rows *directly
+underneath* the summary rather than a tap below it, so on a party of one the
+pane read `1 Pokémon`'s worth of nothing: *TOTODILE Lv5 · 20/20* over a row
+saying **TOTODILE** Lv5 · 20/20. One fact drawn twice reads as a fault rather
+than as a summary, and it was filed as one.
+
+So the line is a *total* now — `describePartyTotals`, *3 Pokémon · 1 hurt* —
+which is the shape the Pokédex beside it already uses: `describeDexTotals` says
+*1 caught of 251 · 1 seen* over a list of species and repeats none of them. The
+condition survives the change because whether anyone is hurt is the fact a total
+can carry and six HP bars make you count; the lead does not, because it is the
+first row. Nothing wanted the lead-shaped version once the rows were always on
+screen, so it went rather than sitting unrendered.
+
 With no party the whole box is hidden rather than summarising nothing — the hint
 under the offers already says that most jobs want a Pokémon along.
 
@@ -5909,7 +5923,7 @@ seconds by a page whose loop was supposedly running.
 
 ### One thing at a time
 
-<!-- covers: app/main.js @ 4d1244d837a2 -->
+<!-- covers: app/main.js @ 007729562d4f -->
 
 One Game Boy, one joypad, one canvas — so a great deal of this app is about
 making sure two things are never driving them at once. There are three claims,
@@ -6051,7 +6065,7 @@ before a step is taken, so a stopped walk does not move at all.
 
 ### What is behind the Gym door, before you open it
 
-<!-- covers: gen2/romdata.js gen2/engine.js app/rows.js @ 624129e18839 -->
+<!-- covers: gen2/romdata.js gen2/engine.js app/rows.js @ 413bba9e9cd9 -->
 
 The Gym row could say where the Gym is and who is in it. **Whether it is worth
 going** is two facts the cartridge has had all along, and neither of them
@@ -6463,7 +6477,7 @@ a conversation.
 
 ### The card behind a party row
 
-<!-- covers: app/rows.js app/main.js index.html @ 31cb53b46f49 -->
+<!-- covers: app/rows.js app/main.js index.html @ 644cf5a02320 -->
 
 Two questions the game itself will not answer about a Pokémon you are
 carrying — *what is this made of* and *what is it about to become* — and both
@@ -6552,7 +6566,7 @@ at body size.
 
 ### Running the list
 
-<!-- covers: app/rows.js app/main.js @ e1dcbe66e9dc -->
+<!-- covers: app/rows.js app/main.js @ a605ac4b702f -->
 
 The app has spent forty passes learning to answer one question — *what can the
 pilot do here, and which of those is worth most?* — and twenty showing the
@@ -6676,7 +6690,7 @@ to deposit your last Pokémon.
 
 ### The settings and the save card
 
-<!-- covers: index.html app/main.js @ f59e67ec5346 -->
+<!-- covers: index.html app/main.js @ 89c9b3426fc3 -->
 
 The pilot's own list got a glyph column, shorter names and a slot to fill in
 v165. These two cards did not, and reading them found that they had a different
@@ -7333,7 +7347,7 @@ they have been installed.
 
 ### Watching the other device's screen
 
-<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ 93a33f60eb83 -->
+<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ 386ac89c7bc9 -->
 
 One device shows its screen; the other watches it, and plays it if the first
 one says so. The picture goes straight between them over WebRTC and never

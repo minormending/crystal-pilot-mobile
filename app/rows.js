@@ -1065,27 +1065,30 @@ export function describeSaying(lines, { max = SAYING_MAX } = {}) {
 }
 
 /**
- * The party in one line: who leads, and whether anyone needs a Center.
+ * The party as a total: how many, and whether anyone needs a Center.
  *
- * The party had a card of its own with a row and an HP bar per member -- six
- * rows for two facts a pilot acts on. Which one leads decides what a grind
- * levels, and whether anyone is hurt decides whether Heal is on the list, so
- * both belong at the top of the list that uses them rather than in a panel
- * below it. The bars are still there, one tap down, for when the summary is not
- * the answer.
+ * **A total because the members are already on screen.** This line was
+ * `describeParty`, which named the lead and its health -- written for a line
+ * that sat *above the two jobs those facts decide*, where nothing else said
+ * them. The redesign that gave the party a key on the strip put the rows
+ * directly underneath this line and left it saying `TOTODILE Lv5 · 20/20`
+ * immediately above a row reading `TOTODILE Lv5  20/20`: one fact drawn
+ * twice, which reads as a fault rather than as a summary. Nothing was left
+ * that wanted the lead-shaped version, so it went with it.
  *
- * Fainted outranks hurt and is said instead of it: a fainted party is the state
- * that stops a job finishing, and "3 hurt" said of a party with one out cold
- * buries the part that matters.
+ * A total is the shape the Pokedex beside it already uses -- `describeDexTotals`
+ * says *1 caught of 251 · 1 seen* over a list of species and repeats none of
+ * them -- so the two panes now summarise the same way.
+ *
+ * The condition is kept and the lead is dropped, because *whether anyone is
+ * hurt* is the fact a total can carry and six HP bars make you count. Fainted
+ * is said instead of hurt: a fainted party is what stops a job finishing, and
+ * "3 hurt" said of a party with one out cold buries the half that matters.
  */
-export function describeParty(s, ctx = {}) {
-  const { rom = null } = ctx;
-  const lead = s.party[0];
-  if (!lead) return 'no party yet';
-  const name = rom ? rom.speciesName(lead.species) : `#${lead.species}`;
-  const bits = [`${name} Lv${lead.level}`, `${lead.hp}/${lead.maxHp}`];
-  const rest = s.party.length - 1;
-  if (rest > 0) bits.push(`+${rest} more`);
+export function describePartyTotals(s) {
+  const n = s.party.length;
+  if (!n) return 'no party yet';
+  const bits = [`${n} Pokémon`];
   const out = s.party.filter((m) => m.hp === 0).length;
   const hurt = s.party.filter((m) => m.hp > 0 && m.hp < m.maxHp).length;
   if (out) bits.push(`${out} fainted`);

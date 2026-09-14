@@ -8,7 +8,7 @@ import { fakeRom, symbols, test, worldRam } from '../harness.mjs';
 import { GameState } from '../../gen2/state.js';
 import { readCode } from '../../gbcore/room.js';
 import { describeAge, describeHandoff, describeKept, describeOffers,
-         describeParty, describeReplaced,
+         describePartyTotals, describeReplaced,
          describeRoom, describeScreen, joinFailure, describeRows, describeSlot,
          betterGrind, betterHour, hoursLine, otherHour,
          describeUndo, describeSaying, describeAuto, describeDex,
@@ -386,23 +386,25 @@ test('the hint only names things there is something to do about', async (t) => {
   t.contains(battling.hint, 'Fight and Throw', 'only where the actions are');
 });
 
-test('the party reads as one line, and says fainted rather than hurt',
+test('the party reads as a total, and says fainted rather than hurt',
      async (t) => {
-  const party = (world) => describeParty(state.read(worldRam(sym, world)), { rom });
+  const party = (world) => describePartyTotals(state.read(worldRam(sym, world)));
 
   t.eq(party({}), 'no party yet', 'with nobody, it says so and stops');
 
+  // The rows are directly under this line, so it counts them rather than
+  // naming the first of them a second time.
   const alone = party({ party: [{ species: CYNDAQUIL, level: 5, hp: 20, maxHp: 20 }] });
-  t.contains(alone, 'Lv5', 'the lead carries its level');
-  t.contains(alone, '20/20', 'and its health');
-  t.false(alone.includes('more'), 'and says nothing about a party of one');
+  t.eq(alone, '1 Pokémon', 'a healthy party of one is a count and nothing else');
+  t.false(alone.includes('Lv'), 'the lead is the row below, not this line');
+  t.false(alone.includes('20/20'), 'and so is its health');
 
   const three = party({ party: [
     { species: CYNDAQUIL, level: 5, hp: 20, maxHp: 20 },
     { species: PIDGEY, level: 4, hp: 9, maxHp: 15 },
     { species: PIDGEY, level: 3, hp: 12, maxHp: 12 },
   ] });
-  t.contains(three, '+2 more', 'the rest are counted, not listed');
+  t.contains(three, '3 Pokémon', 'the whole party is counted');
   t.contains(three, '1 hurt', 'and the one that is hurt is the reason to care');
 
   const down = party({ party: [
