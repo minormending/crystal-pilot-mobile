@@ -574,8 +574,26 @@
               min-height:40px;padding:6px 2px;background:none;border:0;
               box-shadow:none;text-align:left;color:var(--lcd-ink)}
   .door .lines{flex:1 1 auto;min-width:0}
-  .door #status,.door #steps,.door #saying{display:block;overflow:hidden;
+  .door #steps,.door #saying{display:block;overflow:hidden;
                              text-overflow:ellipsis;white-space:nowrap}
+  /* **The one line here that is allowed two.** `#status` carries the
+     instructions and the failures -- "Press Start, then play until you are out
+     in the world", "the kept files could not be read — pick them again" -- and
+     at one line it cut seven of the app's twenty-one of them mid-word, with
+     `Menu ▴` holding the right edge. Measured at 375px and 390px: seven and
+     eight clipped, and **every one of them fits in exactly two**. None wants a
+     third, so the clamp is 2 and not a bigger number: a status that needs
+     three lines is a status that wants rewriting, and the ellipsis says so.
+
+     The two lines beneath it stay at one on purpose. They are a live tail and
+     a live quote -- `#steps` is the newest log line and `#saying` is whatever
+     the game is saying -- so both change every few frames, and a bar that grew
+     and shrank with them would jitter the screen and the pad above and below
+     it. `#status` changes slowly enough that the bar taking a second line is a
+     thing that happens to it, not a thing it does. */
+  .door #status{display:-webkit-box;-webkit-box-orient:vertical;
+                -webkit-line-clamp:2;line-clamp:2;overflow:hidden;
+                white-space:normal;overflow-wrap:anywhere}
   /* The last thing the pilot said, on the outside of the door. A job takes
      ninety seconds and the log is behind the door it just closed; without this
      the only sign of life would be a busy dot. */

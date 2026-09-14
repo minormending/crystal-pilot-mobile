@@ -650,6 +650,25 @@ and the door:
 It is a row of two buttons rather than one tappable strip, so Stop cannot open
 the door under the thumb that meant to press it.
 
+**The top line of it is allowed two lines, and the two under it are not.** This
+repository had already written the rule down, for a job's state line four words
+too long: one nowrap line with an ellipsis is *the right shape for a row and the
+wrong shape for a sentence*. The top line here is the one carrying sentences —
+the instructions and the failures. Measured across the
+twenty-one this app can put there, at 375px and 390px, **seven and eight were
+cut mid-word** — *Press Start, then play until you are out i…*, *the kept files
+could not be read — pick t…* — with `Menu ▴` holding the right edge. Every one
+of them fits in two lines and none wants a third, so two is the clamp: a status
+needing three is one that wants rewriting, and the ellipsis still says so. A
+four-hundred-character string leaves the bar exactly as tall as a two-line one.
+
+The two lines beneath stay at one on purpose. They are a live tail and a live
+quote — the newest thing the pilot said, and whatever the game is saying — and
+both change every few frames, so a bar that grew and shrank with them would
+jitter the screen above it and the pad below. The top line changes slowly
+enough that taking a second line is something that happens to it a few times a
+session rather than something it does continuously.
+
 The pilot's account of itself was once a single label that overwrote itself,
 with a second line left over from whatever ran before — "ready" sitting above a
 stale "finding grass". The errand walks four maps, heals twice and fights a
@@ -1336,4 +1355,4 @@ So this page carries a marker naming the files it describes and the hash they
 had when it was last read against them. `tools/docs-check` reports it when they
 move, and the pre-commit hook blocks on that report.
 
-<!-- covers: index.html app/main.js app/rows.js @ cdf2513cd8fb -->
+<!-- covers: index.html app/main.js app/rows.js @ 31cb53b46f49 -->

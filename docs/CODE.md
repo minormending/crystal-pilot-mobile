@@ -4945,7 +4945,7 @@ This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ 34173a5f187f -->
+<!-- covers: app/main.js index.html @ f59e67ec5346 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -6463,7 +6463,7 @@ a conversation.
 
 ### The card behind a party row
 
-<!-- covers: app/rows.js app/main.js index.html @ cdf2513cd8fb -->
+<!-- covers: app/rows.js app/main.js index.html @ 31cb53b46f49 -->
 
 Two questions the game itself will not answer about a Pokémon you are
 carrying — *what is this made of* and *what is it about to become* — and both
@@ -6676,7 +6676,7 @@ to deposit your last Pokémon.
 
 ### The settings and the save card
 
-<!-- covers: index.html app/main.js @ 34173a5f187f -->
+<!-- covers: index.html app/main.js @ f59e67ec5346 -->
 
 The pilot's own list got a glyph column, shorter names and a slot to fill in
 v165. These two cards did not, and reading them found that they had a different
@@ -6751,6 +6751,23 @@ its whole life beside the **middle** row of three, reading as that row's name.
 phone as *nothing from this sessi…*, because a `jstate` is one nowrap line with
 an ellipsis: the right shape for a row and the wrong shape for a sentence. The
 half that mattered was the half that was cut.
+
+**And the bar's own top line was the same fault, on the line that carries the
+instructions.** `#status` holds the sentence telling you what to do or what
+went wrong, and it was one nowrap line with `Menu ▴` on the right of it:
+measured across the twenty-one strings this app can put there, seven were cut
+mid-word at 390px and eight at 375px. *Press Start, then play until you are out
+i…* is the first thing a new cartridge says, and the half that mattered was
+again the half that was cut.
+
+Every one of the twenty-one fits in **two** lines and none needs three, so
+`#status` is a two-line clamp rather than a nowrap — which also bounds it: four
+hundred characters leave the bar exactly as tall as fifty-three do, and
+anything that really would need a third line still ends in an ellipsis, which
+is the signal that a status wants rewriting rather than more room. `#steps` and
+`#saying` keep the single line. They are a live tail and a live quote, changing
+every few frames, and a bar that grew and shrank with them would move the
+screen above it and the pad below; `#status` changes a few times a session.
 
 Two of these are now checked and one is now instrumented:
 
