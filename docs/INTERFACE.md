@@ -60,40 +60,65 @@ dying* was three taps away behind the party fold for all of it.
  ┌───────────────────────┐   ┌───────────────────────┐
  │ ◉ ∶ crystal-pilot   ⚙ │   │ ◉ ∶ crystal-pilot   ⚙ │  ← the brow, always
  ├───────────────────────┤   ├───────────────────────┤
- │                       │   │ ┌───────────────────┐ │
- │                       │   │ │ Send the pilot    │ │
- │        screen         │   │ │  Catch  ▸ Start   │ │  the sheet, over
- │                       │   │ │  Hunt   ▸ Start   │ │  the same area
- │                       │   │ └───────────────────┘ │
- │  Tap to walk there.   │   │ │  Party            │ │
- ├───────────────────────┤   │ │  Your save        │ │
- │ Route 30      ¥1200   │   │ └───────────────────┘ │
- │ ● ready       Menu ▴  │   │  Jobs Party Dex Save  │  ← the strip of keys
- │   ▲                   │   ├───────────────────────┤
- │ ◀ ● ▶       B     A   │   │ ● ready      Close ▾  │  ← the strip, always
- │   ▼                   │   └───────────────────────┘
- │   Select    Start     │
- └───────────────────────┘
-        menu closed                 menu open
+ │                       │   │                       │
+ │                       │   │                       │
+ │        screen         │   │        screen         │  ← never covered
+ │                       │   │                       │
+ │                       │   │                       │
+ │  Tap to walk there.   │   │  Tap to walk there.   │
+ ├───────────────────────┤   ├───────────────────────┤
+ │ Route 30      ¥1200   │   │ Route 30      ¥1200   │
+ │ ● ready               │   │ ● ready               │  ← the strip, always
+ ├───────────────────────┤   ├───────────────────────┤
+ │   ▲                   │   │ ┌───────────────────┐ │
+ │ ◀ ● ▶       B     A   │   │ │  Send the pilot   │ │  ← the deck: the pad,
+ │   ▼   Select   Start  │   │ │   Catch  ▸ Start  │ │    or one pane
+ ├───────────────────────┤   ├───────────────────────┤
+ │ PLAY Jobs Party Dex … │   │ Play JOBS Party Dex … │  ← the tabs, always
+ └───────────────────────┘   └───────────────────────┘
+        Play                        Jobs
 ```
 
-The sheet shares the stage's grid area — two grid items in one area overlap,
-which is the whole trick — so opening the menu costs the screen nothing and
-moves neither the bar nor the brow. It is open until a game is running, because
-until then it holds the only two things there are to do; after that it is closed
-by default, and closed again by every job that starts, because asking the pilot
-to do something is asking to watch it. Closing is one-way: a job that ends
-leaves the screen alone rather than throwing a menu over whatever it just did.
+**There is no door on a phone any more.** The five panes used to live in a
+sheet that shared the stage's grid area and opened over the game; the strip that
+switched them sat at that sheet's foot, which put it halfway up the screen
+behind a chevron reading *Menu ▴*. It is a row of tabs along the bottom edge
+now, and the row above them — the *deck* — holds one thing at a time: the pad,
+or one pane. **Play** is the tab that puts the pad there, and it is what *shut*
+used to mean.
 
-**On a portrait phone the pad stands down while the menu is open**, and it is
-the one piece of furniture that moves. Sharing the stage's area meant the panes
-were handed the *game screen's* height however much they had to show — 332px
-against the Jobs pane's 1144px, so seven tenths of the app's main control
-surface sat behind a scroll nobody is told about. The pad is what that height
-was spent on, and it is unpressable while the menu covers the game it drives,
-so it yields and the stage row absorbs it: 332px to **564px**, and the save
-pane stops overflowing at all. The two wide layouts keep both, because there
-the sheet has a grid area of its own and nothing has to give anything up.
+What that buys is that the screen is never covered. The brow, the picture and
+the strip are the same on every tab, and so is the deck's height, so nothing on
+the page moves when you switch and the canvas is never re-laid-out. The pad and
+the panes were never both useful at once — the pad drives a game the pane was
+covering — so sharing one row costs nothing and returns the game to the screen.
+
+A job that starts switches to Play, because asking the pilot to do something is
+asking to watch it. That is one-way: a job that ends leaves the tab alone rather
+than throwing a pane over whatever it just did.
+
+**The deck is capped, and the cap is what keeps the picture on screen.** Left
+to size itself it takes what its content asks for, and the Jobs pane asks for
+579px on a phone — which ate the whole flexible row above it and left the stage
+at exactly zero. A tab bar whose first tab is the game, over a game that is not
+drawn, is worse than the door it replaced. The cap is `max(15rem, 30dvh)`: 15rem
+clears the 232px pad whatever the viewport does, and 30dvh hands a tall phone a
+little more for the panes that want it. Anything longer scrolls.
+
+Thirty rather than thirty-four because the deck is the same height on every tab
+*deliberately*, so whatever the panes are given, Play spends on slack around the
+pad. Measured on a 390×844 phone: 30dvh leaves the pad 21px of slack and the
+picture 326px, where 34 left it 55px and the picture 292.
+
+**Before a cartridge the gateway takes the screen's room instead**, which is
+where the sheet always put it: the three questions are the whole page at that
+point, and the deck's cap is right for a pane under a running game and wrong for
+them. It cut the third question off and drew an empty black screen above the
+other two — a picture of nothing at the one moment there is nothing to picture.
+
+The two wide layouts keep the side panel and never grew tabs: there the sheet is
+a column beside the game with room for both, the pad has a place of its own, and
+the Play tab has nothing to do, so it is not drawn.
 
 Measured the same way at v95, with a game running and the menu closed:
 
@@ -833,7 +858,7 @@ shell and a shell does not rearrange.
 
 | | screen | the rest |
 | --- | --- | --- |
-| **Portrait phone** | full width, letterboxed on short phones | bar and pad below, the menu opens over the screen and the pad stands down |
+| **Portrait phone** | full width, letterboxed on short phones | strip below, then the deck — pad or pane — and tabs along the bottom |
 | **Landscape phone** | between your thumbs | D-pad left, A/B right, the menu a column beside |
 | **Tablet** | an integer 3× — 480 × 432 — while the height allows it | the menu alongside, permanently |
 
@@ -1355,4 +1380,4 @@ So this page carries a marker naming the files it describes and the hash they
 had when it was last read against them. `tools/docs-check` reports it when they
 move, and the pre-commit hook blocks on that report.
 
-<!-- covers: index.html app/main.js app/rows.js @ 207ab2b251c6 -->
+<!-- covers: index.html app/main.js app/rows.js @ 36d48c6aa299 -->

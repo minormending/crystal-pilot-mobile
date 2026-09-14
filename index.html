@@ -376,10 +376,26 @@
      flat fill reads as a coloured rectangle; what makes moulded plastic is the
      light catching the top edge and the underside falling away, which is
      exactly what the two `inset` shadows are. */
-  main{margin:0 auto;width:100%;
+  /* **The deck is capped so the screen cannot be squeezed out of existence.**
+     Left to size itself the row takes what its content asks for, and the Jobs
+     pane asks for 579px on a phone -- which ate the whole `1fr` above it and
+     left the stage at exactly zero. A tab bar whose first tab is the game, over
+     a game that is not drawn, is worse than the door it replaced.
+     `max(15rem,30dvh)` is two floors in one: 15rem clears the pad, which is
+     232px and has to fit whatever the viewport does, and 30dvh hands a tall
+     phone a little more for the panes that want it. Anything longer scrolls,
+     which is what the fade at the foot of `#panes` is for.
+
+     Thirty rather than thirty-four because the deck is the same height on every
+     tab, deliberately -- nothing moves when you switch and the canvas is never
+     re-laid-out -- so whatever the panes are given, Play spends on slack around
+     a 232px pad. Measured on a 390x844 phone: 30dvh leaves the pad 21px of
+     slack and the screen 326px, where 34 left it 55px and the screen 292. */
+  main{margin:0 auto;width:100%;--deck:max(15rem,30dvh);
        flex:1 1 auto;min-height:0;display:grid;gap:9px;
        grid-template:"brow" auto "stage" minmax(0,1fr)
-                     "bar" auto "pad" auto/minmax(0,1fr);
+                     "bar" auto "deck" minmax(0,var(--deck)) "tabs" auto
+                     /minmax(0,1fr);
        border-radius:20px;
        background:linear-gradient(180deg,var(--shell-hi) 0,var(--shell) 9%,
                   var(--shell) 74%,var(--shell-lo) 100%);
@@ -448,11 +464,51 @@
      opening it costs the screen nothing and moves neither the bar nor the pad.
      A phone has no room for both the game and the menu; that is why there is a
      door at all, and why the tablet and landscape rules below take it away. */
+  /* **On a phone the sheet is not a box, it is two rows.** It used to be one
+     element over the stage holding the panes and the strip, which is why the
+     strip sat halfway up the screen behind a door. `display:contents`
+     dissolves it so `#panes` and `#modes` become grid items of `main` in their
+     own right -- the same trick the landscape layout has always used on
+     `.padwrap` -- and the strip can then sit at the bottom edge where a tab bar
+     belongs. The panel look moves to `#panes` with it, because a dissolved
+     element paints nothing.
+
+     The two wide layouts put it back together below: there it really is a
+     column beside the game, and its foot is the right place for the strip. */
   .sheet{grid-area:stage;z-index:3;background:var(--bg);
-         min-height:0;display:flex;flex-direction:column;gap:8px;
+         min-height:0;flex-direction:column;gap:8px;
          border-radius:12px;padding:8px 8px 8px;
-         box-shadow:inset 0 0 0 1px var(--line)}
-  .sheet:not(.open){display:none}
+         box-shadow:inset 0 0 0 1px var(--line);
+         display:contents}
+  /* The panel look is declared on `.sheet` above and *repeated* here rather
+     than moved, because on a phone `.sheet` paints nothing -- a `contents`
+     element has no box -- and on the two wide layouts it is the box. Moving it
+     down here instead left the wide sheet with no background at all, which the
+     visual check caught as a column of bare shell. */
+  .sheet .panes{grid-area:deck;z-index:3;background:var(--bg);
+                border-radius:12px;padding:8px;
+                box-shadow:inset 0 0 0 1px var(--line)}
+  /* **Before a cartridge the gateway goes back over the screen**, which is
+     where the sheet always put it. The deck is capped so the picture cannot be
+     squeezed out of the layout, and that cap is right for a pane sitting under
+     a running game and wrong for the three cards that are the entire page when
+     there is no game: it cut the third question off and left a black rectangle
+     above them, drawing a screen with nothing in it at the one moment there is
+     nothing to draw. Taking the stage's area covers it, exactly as before.
+     Inert on the two wide layouts, where `.panes` is a flex child and a grid
+     area means nothing to it. */
+  body.nogame .sheet .panes{grid-area:stage}
+  /* And the deck goes to nothing with it. **A `minmax(0,240px)` row does not
+     collapse when it is empty** -- measured, it took all 240 with the gateway
+     moved out of it, leaving a slab of shell under the bar. Zeroing the cap is
+     what actually collapses the row, and it is a custom property rather than a
+     second `grid-template` so that the two wide layouts, which declare their
+     own templates and never read `--deck`, cannot be reached by this at all.
+
+     It has to be set *on `main`*: `main` declares its own `--deck`, and a
+     property declared on the element beats one inherited from `body`, so
+     `body.nogame{--deck:0}` was shadowed and the row stayed at 240. */
+  body.nogame main{--deck:0px}
   /* The sheet itself no longer scrolls: the strip at its foot has to stay put,
      and a strip inside a scroller scrolls away from the panes it switches. So
      the scrolling moved in one level, onto the panes, and the fade went with
@@ -506,8 +562,8 @@
      each key 34px and every label broke in half -- "JOB S", "SET UP". A key
      whose name is cut is worse than a key on a second row, and `auto-fit`
      picks the count instead of being told it. */
-  .modes{flex:0 0 auto;display:grid;gap:5px;
-         grid-template-columns:repeat(auto-fit,minmax(58px,1fr))}
+  .modes{grid-area:tabs;flex:0 0 auto;display:grid;gap:5px;
+         grid-template-columns:repeat(auto-fit,minmax(52px,1fr))}
   .modes button{min-width:0;min-height:42px;padding:0 4px;border-radius:8px;
                 font-size:10.5px;font-weight:700;letter-spacing:.05em;
                 white-space:nowrap;text-transform:uppercase;
@@ -528,24 +584,12 @@
                                    color:var(--action-ink);
                                    border-color:var(--line);
                                    box-shadow:inset 0 -2px 0 rgba(0,0,0,.22)}
-  /* The fade at the sheet's bottom edge is a mask, which makes the sheet
-     transparent there -- over the page background that reads as "more below",
-     and over the running game it read as the game bleeding through the menu.
-     Hiding the stage costs nothing: a sheet over the screen is covering it
-     either way. `visibility` rather than `display`, so the canvas keeps its
-     size and the emulator is not re-laid-out twice per menu. */
-  body.menuopen .stage{visibility:hidden}
-  /* And the pad goes with it, on the phone layout only. The sheet shares the
-     stage's grid area, so the panes were given the *game screen's* height --
-     332px on a 390x844 phone -- however much they had to show. The Jobs pane
-     is 1144px with a game running: travel, the level advice, what is worth
-     looking for here, where to walk, what to grind to. Seven tenths of the one
-     screen this app exists to drive, behind a scroll nobody is told about.
-     The pad is what that height was spent on, and it is unpressable while the
-     menu is over the game it belongs to -- so it yields, and `stage` being
-     `minmax(0,1fr)` absorbs the row. The two layouts below keep both, because
-     there the sheet has a grid area of its own and the game stays visible. */
-  body.menuopen .padwrap{display:none}
+  /* The stage used to be hidden while the menu was open, and the pad with it:
+     the sheet shared the stage's grid area, so opening a pane meant covering
+     the game and standing the pad down to give the pane room. Neither is true
+     now. The panes have a row of their own beneath the screen, so the game is
+     on display whichever tab is showing -- which is the whole point of putting
+     the tabs at the bottom. */
 
   /* One line that owns "what is happening", and the handle you pull to ask for
      anything. It is a row of two buttons rather than one tappable card: Stop
@@ -633,11 +677,24 @@
   .door #saying:empty{display:none}
   /* The word matters as much as the arrow. A chevron alone at 11px was a mark
      nobody would read as a door, and this line is the only way into the menu. */
-  .chev{flex:0 0 auto;color:var(--lcd-dim);font-size:12px;font-weight:600;
+  /* **Gone, along with the door it named.** The strip of tabs below says which
+     of six things is showing and switches between them in one press, so a
+     chevron offering to open "the menu" is naming a thing that no longer
+     exists. Both wide layouts have hidden it for as long as they have had a
+     column that never shuts; the phone joins them now for the same reason.
+     The line itself stays pressable as an undocumented shortcut, which is what
+     it already was on those two. */
+  .chev{display:none}
+  .chev.show{flex:0 0 auto;color:var(--lcd-dim);font-size:12px;font-weight:600;
         letter-spacing:.04em;padding-left:8px;white-space:nowrap}
 
 
-  .padwrap{grid-area:pad}
+  /* The pad and the panes are the same row now, and the strip below chooses
+     which one is in it -- see `body.padmode`. They were never both useful at
+     once on a phone: the pad drives a game the pane was covering. */
+  .padwrap{grid-area:deck}
+  body.padmode .panes{display:none}
+  body:not(.padmode) .padwrap{display:none}
   /* The pad sits in a recess moulded into the shell rather than on a card.
      Same keys, same geometry -- what changes is that the surface behind them
      is below the plastic instead of on top of it, which is the difference
@@ -1272,14 +1329,21 @@
        to do: the sheet is a column and stays open. The chevron goes with it --
        an affordance for a door that is not there is worse than no affordance. */
     .sheet,.sheet:not(.open){display:flex;grid-area:sheet}
-    /* Both at once here, so the stage is never the thing being covered -- and
-       the pad stays for the same reason: it is the sheet that has its own grid
-       area in this layout, so nothing has to yield its height to it. */
-    body.menuopen .stage{visibility:visible}
+    /* **Putting the sheet back together.** The phone dissolves it so the strip
+       can be a tab bar at the bottom edge; here it is a real column beside the
+       game, its foot is the right place for the strip, and the pad has a place
+       of its own -- so nothing is swapped away to reach a pane and the Play tab
+       has nothing to do. Each line undoes one of the phone layout's. */
+    .sheet{display:flex}
+    .sheet .panes{grid-area:auto;background:none;border-radius:0;padding:0;
+                  box-shadow:none;flex:1 1 auto}
+    .modes{grid-area:auto}
+    .modes [data-pane="play"]{display:none}
+    body.padmode .panes{display:flex}
     /* `contents` and not `block`: this layout dissolves the wrapper so the
        d-pad and face buttons can take grid areas of their own (above), and
        giving it a box back would collapse both into one cell. */
-    body.menuopen .padwrap{display:contents}
+    body:not(.padmode) .padwrap{display:contents}
     .chev{display:none}
     #taphint{display:none}
   }
@@ -1326,11 +1390,19 @@
        without gets a smaller picture instead of a pad drawn over the hint. */
     #screenwrap{width:min(100%,480px,calc(100cqh * 160 / 144))}
     .sheet,.sheet:not(.open){display:flex;grid-area:sheet}
-    /* Both at once here, so the stage is never the thing being covered -- and
-       the pad stays for the same reason: it is the sheet that has its own grid
-       area in this layout, so nothing has to yield its height to it. */
-    body.menuopen .stage{visibility:visible}
-    body.menuopen .padwrap{display:block}
+    /* **Putting the sheet back together.** The phone dissolves it so the strip
+       can be a tab bar at the bottom edge; here it is a real column beside the
+       game, its foot is the right place for the strip, and the pad has a place
+       of its own -- so nothing is swapped away to reach a pane and the Play tab
+       has nothing to do. Each line undoes one of the phone layout's. */
+    .sheet{display:flex}
+    .sheet .panes{grid-area:auto;background:none;border-radius:0;padding:0;
+                  box-shadow:none;flex:1 1 auto}
+    .modes{grid-area:auto}
+    .modes [data-pane="play"]{display:none}
+    body.padmode .panes{display:flex}
+    .padwrap{grid-area:pad}
+    body:not(.padmode) .padwrap{display:block}
     .chev{display:none}
     /* Nothing to say here any more: the column is the cap, and the pad filling
        it is what puts its edges on the same two lines as the strip above it and
@@ -1339,7 +1411,7 @@
   }
 </style>
 </head>
-<body>
+<body class="nogame">
 <!-- One sprite sheet, drawn once and referenced by `<use>`.
      
      No icon font and no CDN: this app has no build step and has to work with
@@ -2045,6 +2117,12 @@
        before that the three gateway cards above are the only thing to look at
        and a strip of empty rooms is worse than no strip. -->
   <div class="modes hide" id="modes" role="group" aria-label="What to show">
+    <!-- **The first tab is the game itself, and it only exists on a phone.**
+         The deck below the strip holds one thing at a time: the pad, or a
+         pane. On the two wide layouts the pad has a place of its own and
+         nothing has to be swapped away to reach a pane, so this key is
+         `display:none` there and the strip is the five it always was. -->
+    <button type="button" data-pane="play" aria-pressed="false">Play</button>
     <button type="button" data-pane="jobs" aria-pressed="true">Jobs</button>
     <button type="button" data-pane="party" aria-pressed="false">Party</button>
     <button type="button" data-pane="dex" aria-pressed="false">Dex</button>

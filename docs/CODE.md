@@ -4945,7 +4945,7 @@ This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ 65f9550ed993 -->
+<!-- covers: app/main.js index.html @ f250c0b0c2f0 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -5009,22 +5009,40 @@ landscape the two could not both be on screen at any scroll position.
 | `.bar` | what is happening, where you are, Stop, and the door | never |
 | `.sheet` | the jobs, the save, the party, settings | yes, and only this |
 | `.padwrap` | the eight buttons | never |
+| `.modes` | the six tabs | never |
 
-**The one thing that does move is the pad, and only on a phone with the menu
-open.** The sheet shares the stage's grid area — two items in one area overlap,
-which is what lets the menu cost the screen nothing — so the panes were handed
-the *game screen's* height however much they had to show: 332px on a 390×844
-phone against the Jobs pane's 1144px, seven tenths of the app's main control
-surface behind a scroll nobody is told about. The travel advice, the
-what-is-worth-catching-here chips, the walk-to list and the whole grind row were
-all below the fold on the screen this app exists to drive.
+On a phone the rows are `brow / stage / bar / deck / tabs`, and `.sheet` is not
+a box there at all: `display:contents` dissolves it so `#panes` and `#modes`
+become grid items of `main` in their own right — the same trick the landscape
+layout has always used on `.padwrap` — which lets the strip sit on the bottom
+edge as a tab bar while the panes take the row above it. The panel look is
+declared on both, because a `contents` element paints nothing and on the two
+wide layouts `.sheet` is still the box.
 
-The pad is what that height was spent on, and it is unpressable while the menu
-is over the game it belongs to, so `body.menuopen` takes it away and `stage`
-being `minmax(0,1fr)` absorbs the row — 332px to **564px**, and the Save pane
-stops overflowing at all. The two wide layouts keep both, because there the
-sheet has a grid area of its own and nothing has to yield; landscape restores it
-as `display:contents` rather than `block`, because that layout dissolves the
+**The pad and the panes are the same row, and the tabs choose which is in it.**
+`body.padmode` is that choice: `play` is a sixth value of `pane` rather than a
+second piece of state, because *which tab is lit* is one question and the strip
+has to answer it the same way for all six. It is what the door meant by shut.
+
+The deck is capped at `max(15rem, 30dvh)` and the cap is load-bearing: left to
+size itself the row takes what its content asks for, and the Jobs pane asks for
+579px — which ate the whole `minmax(0,1fr)` above it and left the stage at
+exactly zero. A tab bar whose first tab is the game, over a game that is not
+drawn, is worse than the door it replaced. 15rem clears the 232px pad whatever
+the viewport does; 30dvh gives a tall phone a little more. Anything longer
+scrolls, which is what the fade at the foot of `#panes` is for.
+
+The cap is a **custom property on `main`**, not a second `grid-template`, so the
+two wide layouts — which declare their own templates and never read `--deck` —
+cannot be reached by it. `body.nogame main{--deck:0}` collapses the row before a
+cartridge, when the gateway moves back over the stage: a `minmax(0,240px)` row
+does *not* collapse on its own when it is empty, measured, and it has to be set
+on `main` because `main` declares its own `--deck` and an element's own property
+beats one inherited from `body`.
+
+The two wide layouts keep the side panel and the pad's own place, so nothing is
+swapped and the Play tab is not drawn. Landscape restores `.padwrap` as
+`display:contents` rather than `block`, because that layout dissolves the
 wrapper so the d-pad and the face buttons can take grid areas of their own, and
 handing it a box back collapses both into one cell.
 
@@ -5948,7 +5966,7 @@ seconds by a page whose loop was supposedly running.
 
 ### One thing at a time
 
-<!-- covers: app/main.js @ 007729562d4f -->
+<!-- covers: app/main.js @ 2b8ab51a603e -->
 
 One Game Boy, one joypad, one canvas — so a great deal of this app is about
 making sure two things are never driving them at once. There are three claims,
@@ -6502,7 +6520,7 @@ a conversation.
 
 ### The card behind a party row
 
-<!-- covers: app/rows.js app/main.js index.html @ 207ab2b251c6 -->
+<!-- covers: app/rows.js app/main.js index.html @ 36d48c6aa299 -->
 
 Two questions the game itself will not answer about a Pokémon you are
 carrying — *what is this made of* and *what is it about to become* — and both
@@ -6591,7 +6609,7 @@ at body size.
 
 ### Running the list
 
-<!-- covers: app/rows.js app/main.js @ a605ac4b702f -->
+<!-- covers: app/rows.js app/main.js @ b35c89d70fd5 -->
 
 The app has spent forty passes learning to answer one question — *what can the
 pilot do here, and which of those is worth most?* — and twenty showing the
@@ -6715,7 +6733,7 @@ to deposit your last Pokémon.
 
 ### The settings and the save card
 
-<!-- covers: index.html app/main.js @ 65f9550ed993 -->
+<!-- covers: index.html app/main.js @ f250c0b0c2f0 -->
 
 The pilot's own list got a glyph column, shorter names and a slot to fill in
 v165. These two cards did not, and reading them found that they had a different
@@ -7372,7 +7390,7 @@ they have been installed.
 
 ### Watching the other device's screen
 
-<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ 386ac89c7bc9 -->
+<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ 87bbac8e9a0a -->
 
 One device shows its screen; the other watches it, and plays it if the first
 one says so. The picture goes straight between them over WebRTC and never

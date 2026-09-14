@@ -286,6 +286,15 @@ let panel = 'menu';
  */
 let pane = 'jobs';
 const PANES = ['jobs', 'party', 'dex', 'save', 'set'];
+// **A sixth tab that is not a pane.** On a phone the strip is a tab bar at the
+// bottom edge and the row above it holds one thing at a time: the pad, or a
+// pane. `play` is that row showing the pad, which is what the door used to mean
+// by *shut*. It is a value of `pane` rather than a second piece of state
+// because "which tab is lit" is one question, and the strip has to answer it
+// the same way for all six. The two wide layouts hide the key: there the pad
+// has a place of its own and nothing has to be swapped away to reach a pane.
+const PLAY = 'play';
+const TABS = [PLAY, ...PANES];
 
 function showPanel(which) {
   panel = which;
@@ -315,15 +324,21 @@ function dimPane(pane, empty) {
 }
 
 function showPane(want) {
-  if (!PANES.includes(want)) return;
+  if (!TABS.includes(want)) return;
   pane = want;
+  // `play` leaves every pane hidden; the body class swaps the pad in for them.
   for (const key of PANES) {
     $(`#pane-${key}`).classList.toggle('hide', key !== want);
   }
+  document.body.classList.toggle('padmode', want === PLAY);
   for (const b of $('#modes').querySelectorAll('button')) {
     b.setAttribute('aria-pressed', String(b.dataset.pane === pane));
   }
-  paintGear();
+  // The panel and the tab are one question now, so this answers it once rather
+  // than leaving each caller to remember. On the phone `play` is what the door
+  // used to call shut; on the wide layouts the sheet is a column that never
+  // shuts and this only keeps the door's aria in step with the strip.
+  showPanel(want === PLAY ? null : 'menu');
 }
 /**
  * Which door of the fork is open, or the fork itself when nothing is passed.
@@ -351,6 +366,9 @@ function openGate(which = null) {
   // card above, that no ROM was needed. Answering a question and then
   // contradicting the answer is worse than never asking.
   setStatus(GATE_STATUS[which] || 'waiting for a ROM and a .sym');
+  // The three cards are the page while they are up, so they take the screen's
+  // room rather than the deck's -- see `body.nogame`.
+  document.body.classList.add('nogame');
   $('#gateway').classList.toggle('hide', !!which);
   $('#intro').classList.toggle('hide', which !== 'about');
   $('#loader').classList.toggle('hide', which !== 'files');
@@ -359,6 +377,7 @@ function openGate(which = null) {
 
 /** A game is running: none of the three questions applies any more. */
 function closeGateway() {
+  document.body.classList.remove('nogame');
   for (const id of ['#gateway', '#intro', '#loader', '#watchcard']) {
     $(id).classList.add('hide');
   }
@@ -511,8 +530,9 @@ async function reallyStart() {
   // The screen is on the page from the first frame now -- see the note in the
   // markup -- so only the hint that depends on a game is revealed here.
   $('#taphint').classList.remove('hide');
-  // There is something to look at now, so the menu gets out of the way.
-  showPanel(null);
+  // There is something to look at now, so the deck shows the pad and the game
+  // above it rather than the gateway that just did its job.
+  showPane(PLAY);
   startLoop();
   // And there is now something to *show*, which the screen row has to be told.
   // It is painted from paintRoom, which runs at startup and when the room
@@ -1475,7 +1495,7 @@ function setMode(piloting) {
   $('#stopRun').classList.toggle('hide', !on);
   // Asking for a job is asking to watch it. Only one way: a job that ends does
   // not re-open the menu, because the person may well be reading the screen.
-  if (piloting) showPanel(null);
+  if (piloting) showPane(PLAY);
   // A watching device's pad stops working for as long as this runs, and it has
   // no way to know that unless it is told.
   tellInput();
@@ -3556,15 +3576,16 @@ $('#travel').onclick = async () => {
   });
 };
 
-$('#door').onclick = () => showPanel(panel ? null : 'menu');
+$('#door').onclick = () => showPane(pane === PLAY ? 'jobs' : PLAY);
 // The gear is a shortcut to one key on the strip rather than a second door.
 // Pressing it when settings is already showing closes the panel, which is what
 // it did when settings *was* a panel -- the affordance is unchanged, and what
 // it opens onto is now one of five things rather than one of two.
 $('#gear').onclick = () => {
-  if (panel && pane === 'set') { showPanel(null); return; }
+  // Pressing it while settings is already showing goes back to the game, which
+  // is what closing the panel used to mean and is still the shortest way out.
+  if (pane === 'set') { showPane(PLAY); return; }
   showPane('set');
-  showPanel('menu');
 };
 // Delegated, so five keys are one listener and an unknown one is ignored
 // rather than switching to a pane that does not exist.
@@ -3578,7 +3599,7 @@ $('#modes').onclick = (ev) => {
 // The lens is the party, which is what it is drawing. A round window showing
 // your lead that does nothing when pressed is a worse affordance than a plain
 // one, because it looks like it should.
-$('#lens').onclick = () => { showPane('party'); showPanel('menu'); };
+$('#lens').onclick = () => showPane('party');
 $('#jobs').onclick = (ev) => {
   const key = ev.target.closest('.key');
   if (!key) return;
