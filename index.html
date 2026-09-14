@@ -638,9 +638,15 @@
      above it either way. */
   .battlebar .why{color:var(--lcd-bad)}
   .battlebar .jstate:empty{display:none}
-  button.door{flex:1 1 auto;min-width:0;display:flex;align-items:center;gap:2px;
-              min-height:40px;padding:6px 2px;background:none;border:0;
-              box-shadow:none;text-align:left;color:var(--lcd-ink)}
+  /* `font-size` and `font-weight` are carried here because this stopped being a
+     `<button>`: the app's own `button{...}` rule was handing it 0.94rem/500 and
+     nothing else was, so turning it into a `<div>` silently grew the status
+     line and wrapped it to two, which pushed the bar taller and the picture up.
+     Caught by the visual check on the one registered screen whose status line
+     is long enough to wrap. */
+  .door{flex:1 1 auto;min-width:0;display:flex;align-items:center;gap:2px;
+        min-height:40px;padding:6px 2px;text-align:left;
+        font-size:0.94rem;font-weight:500;color:var(--lcd-ink)}
   .door .lines{flex:1 1 auto;min-width:0}
   .door #steps,.door #saying{display:block;overflow:hidden;
                              text-overflow:ellipsis;white-space:nowrap}
@@ -675,19 +681,6 @@
   .door #saying{font-family:ui-monospace,Menlo,monospace;font-size:12px;
                 color:var(--lcd-dim);margin-top:2px;font-style:italic}
   .door #saying:empty{display:none}
-  /* The word matters as much as the arrow. A chevron alone at 11px was a mark
-     nobody would read as a door, and this line is the only way into the menu. */
-  /* **Gone, along with the door it named.** The strip of tabs below says which
-     of six things is showing and switches between them in one press, so a
-     chevron offering to open "the menu" is naming a thing that no longer
-     exists. Both wide layouts have hidden it for as long as they have had a
-     column that never shuts; the phone joins them now for the same reason.
-     The line itself stays pressable as an undocumented shortcut, which is what
-     it already was on those two. */
-  .chev{display:none}
-  .chev.show{flex:0 0 auto;color:var(--lcd-dim);font-size:12px;font-weight:600;
-        letter-spacing:.04em;padding-left:8px;white-space:nowrap}
-
 
   /* The pad and the panes are the same row now, and the strip below chooses
      which one is in it -- see `body.padmode`. They were never both useful at
@@ -1326,8 +1319,7 @@
     .face{grid-area:face;align-self:center;flex-direction:column}
     .menus{grid-area:menus;margin:0}
     /* Two columns means there is room for both, so there is nothing for a door
-       to do: the sheet is a column and stays open. The chevron goes with it --
-       an affordance for a door that is not there is worse than no affordance. */
+       to do: the sheet is a column and stays open. */
     .sheet,.sheet:not(.open){display:flex;grid-area:sheet}
     /* **Putting the sheet back together.** The phone dissolves it so the strip
        can be a tab bar at the bottom edge; here it is a real column beside the
@@ -1344,7 +1336,6 @@
        d-pad and face buttons can take grid areas of their own (above), and
        giving it a box back would collapse both into one cell. */
     body:not(.padmode) .padwrap{display:contents}
-    .chev{display:none}
     #taphint{display:none}
   }
 
@@ -1403,7 +1394,6 @@
     body.padmode .panes{display:flex}
     .padwrap{grid-area:pad}
     body:not(.padmode) .padwrap{display:block}
-    .chev{display:none}
     /* Nothing to say here any more: the column is the cap, and the pad filling
        it is what puts its edges on the same two lines as the strip above it and
        the screen's moulding above that. It also no longer needs
@@ -1570,15 +1560,19 @@
       <span class="purse hide" id="purse"></span>
     </div>
     <div class="barline">
-      <button class="door" id="door" aria-expanded="true" aria-controls="sheet">
+      <!-- **A display, not a door.** It was a button for as long as there was a
+           panel behind it to open; the tabs along the bottom edge are that now,
+           so pressing this opened nothing a key did not already open, with no
+           chevron left to say it could. A control that looks like a readout and
+           acts like a door is worse than either. -->
+      <div class="door" id="door">
         <span class="dot" id="dot"></span>
         <span class="lines">
           <span id="status">waiting for a ROM and a .sym</span>
           <span id="steps"></span>
           <span id="saying"></span>
         </span>
-        <span class="chev" id="chev" aria-hidden="true">Menu ▴</span>
-      </button>
+      </div>
       <button id="stopRun" class="stopnow hide">Stop</button>
     </div>
     <!-- A battle is modal, and its two actions are the only ones there are

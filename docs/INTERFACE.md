@@ -38,7 +38,7 @@ places, one opens over them, and the page itself never scrolls at all:
 | --- | --- | --- |
 | the brow | the lens — your lead, with its HP round the rim | never |
 | the stage | the screen and the tap hint | never |
-| the bar | what is happening, Stop, and the door | never |
+| the bar | what is happening, and Stop | never |
 | the sheet | the offers, the save, the party, settings | yes, and only this |
 | the pad | the eight buttons | never |
 
@@ -663,17 +663,26 @@ one stops which thing.* Then there was one, in a card that still scrolled. This
 repository had already written the rule down: **a page you scroll to read is
 fine, a page you must scroll to stop the pilot is not.**
 
-So the status line is furniture. It sits between the screen and the pad, it
-never moves, and it holds the dot, what is happening, Stop while something runs,
-and the door:
+So the status line is furniture. It sits between the screen and the deck, it
+never moves, and it holds the dot, what is happening, and Stop while something
+runs:
 
 ```
-● off to Mr. Pokémon's                       Menu ▴
+● off to Mr. Pokémon's                            Stop
   through to Elm's lab
 ```
 
-It is a row of two buttons rather than one tappable strip, so Stop cannot open
-the door under the thumb that meant to press it.
+**It is a readout and not a control any more.** It was a button for as long as
+there was a panel behind it to open; the tabs along the bottom edge are that
+now, so pressing it opened nothing a key did not already open — and with the
+chevron gone there was nothing left to say it could. A control that looks like a
+readout and acts like a door is worse than either, so it is a `<div>`.
+
+Which cost one thing worth writing down: the app's own `button{...}` rule was
+handing it `0.94rem/500` and nothing else was, so the moment it stopped being a
+`<button>` the status line grew and wrapped to two, pushing the bar taller and
+the picture up. The size is declared on `.door` now. The visual check caught it
+on the one registered screen whose status line is long enough to wrap.
 
 **The top line of it is allowed two lines, and the two under it are not.** This
 repository had already written the rule down, for a job's state line four words
@@ -704,9 +713,9 @@ Three lines now, newest last, cleared when a run *starts* rather than when it
 finishes: the last thing the pilot said is the most useful thing on screen once
 it has stopped. Consecutive repeats collapse, because several legs say "heading
 left" and a stack of identical lines reads as being stuck rather than as making
-progress. The log lives in the sheet — behind a door the job just closed — so
-the newest line is mirrored onto the outside of the door, which is the second
-line above. Without it a ninety-second job would show one busy dot and no sign
+progress. The log lives in the Jobs pane — behind a tab the job just switched
+away from — so the newest line is mirrored onto the status line, which is the
+second line above. Without it a ninety-second job would show one busy dot and no sign
 of life.
 
 While a job runs the pad stops taking input and dims to say so; pressing it
@@ -1380,4 +1389,4 @@ So this page carries a marker naming the files it describes and the hash they
 had when it was last read against them. `tools/docs-check` reports it when they
 move, and the pre-commit hook blocks on that report.
 
-<!-- covers: index.html app/main.js app/rows.js @ 36d48c6aa299 -->
+<!-- covers: index.html app/main.js app/rows.js @ 1ea3371bb5ac -->

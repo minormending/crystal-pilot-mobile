@@ -4945,7 +4945,7 @@ This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ f250c0b0c2f0 -->
+<!-- covers: app/main.js index.html @ 7f2a15fd4c6f -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -5023,6 +5023,16 @@ wide layouts `.sheet` is still the box.
 `body.padmode` is that choice: `play` is a sixth value of `pane` rather than a
 second piece of state, because *which tab is lit* is one question and the strip
 has to answer it the same way for all six. It is what the door meant by shut.
+
+**And `pane` is now the only state there is.** `panel` said whether a sheet was
+open over the screen; with `play` as the closed state it became a function of
+`pane`, and `paintGear`'s `!!panel && pane === 'set'` a long way of writing
+`pane === 'set'`. Two values that can only ever agree are two values that can be
+made to disagree, so `showPanel` and `panel` are gone, and `body.menuopen` and
+`.sheet.open` with them -- both were still written on every switch and neither
+was read by a single rule once the phone stopped putting a sheet over the game.
+The status line stopped being a `<button>` at the same time, for the same
+reason: there is nothing behind it to open.
 
 The deck is capped at `max(15rem, 30dvh)` and the cap is load-bearing: left to
 size itself the row takes what its content asks for, and the Jobs pane asks for
@@ -5966,7 +5976,7 @@ seconds by a page whose loop was supposedly running.
 
 ### One thing at a time
 
-<!-- covers: app/main.js @ 2b8ab51a603e -->
+<!-- covers: app/main.js @ f9b1f6f73d71 -->
 
 One Game Boy, one joypad, one canvas — so a great deal of this app is about
 making sure two things are never driving them at once. There are three claims,
@@ -6520,7 +6530,7 @@ a conversation.
 
 ### The card behind a party row
 
-<!-- covers: app/rows.js app/main.js index.html @ 36d48c6aa299 -->
+<!-- covers: app/rows.js app/main.js index.html @ 1ea3371bb5ac -->
 
 Two questions the game itself will not answer about a Pokémon you are
 carrying — *what is this made of* and *what is it about to become* — and both
@@ -6609,7 +6619,7 @@ at body size.
 
 ### Running the list
 
-<!-- covers: app/rows.js app/main.js @ b35c89d70fd5 -->
+<!-- covers: app/rows.js app/main.js @ 8774f96d161b -->
 
 The app has spent forty passes learning to answer one question — *what can the
 pilot do here, and which of those is worth most?* — and twenty showing the
@@ -6733,7 +6743,7 @@ to deposit your last Pokémon.
 
 ### The settings and the save card
 
-<!-- covers: index.html app/main.js @ f250c0b0c2f0 -->
+<!-- covers: index.html app/main.js @ 7f2a15fd4c6f -->
 
 The pilot's own list got a glyph column, shorter names and a slot to fill in
 v165. These two cards did not, and reading them found that they had a different
@@ -7390,7 +7400,7 @@ they have been installed.
 
 ### Watching the other device's screen
 
-<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ 87bbac8e9a0a -->
+<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ fb143b8edb58 -->
 
 One device shows its screen; the other watches it, and plays it if the first
 one says so. The picture goes straight between them over WebRTC and never

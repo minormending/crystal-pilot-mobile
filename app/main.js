@@ -258,31 +258,20 @@ const setStatus = (text, kind = '') => {
 };
 
 /**
- * Show one of the two panels over the screen, or neither.
+ * Which tab is showing, and the only piece of state the strip needs.
  *
- * There are two doors and never two panels: the status line opens the menu, the
- * gear opens settings, and opening either closes the other. One `panel` value
- * rather than two open flags, because "both open" is a state with no meaning
- * that two booleans would let happen.
+ * **It used to be two**, and the second has gone with the door it belonged to.
+ * `panel` said whether a sheet was open over the screen and `pane` said which
+ * of five was in it. That shape was already awkward -- it could not say that
+ * "open, on the jobs" and "open, on settings" are the same kind of thing -- and
+ * the tabs made it redundant outright: `play` *is* the closed state, so `panel`
+ * was a function of `pane`, and `paintGear`'s `!!panel && pane === 'set'` was a
+ * long way of writing `pane === 'set'`. Two values that can only ever agree are
+ * two values that can be made to disagree.
  *
- * The menu is open until a game is running, because until then it holds the
- * only two things there are to do -- read what this is, and pick the files --
- * and a door closed over an empty screen would be an app with nothing in it.
- * After that it is closed by default and by every job that starts: you asked
- * the pilot to do something, so the thing to look at is the game.
- *
- * The tablet and landscape layouts pin the menu open in CSS and hide its
- * chevron, so this still runs there and simply has nothing to move for 'menu'.
- */
-let panel = 'menu';
-/**
- * Which pane the strip is showing.
- *
- * Separate from whether the panel is open at all, which it was not: one value
- * used to carry three states -- null, 'menu', 'settings' -- and that shape
- * cannot say "open, on the jobs" and "open, on settings" are the same kind of
- * thing. It could also not say what the strip needs to know, which is where you
- * are *while the panel is shut*.
+ * `body.menuopen` and `.sheet.open` went the same way: both were still written
+ * on every switch and neither was read by a single rule once the phone stopped
+ * putting a sheet over the game.
  */
 let pane = 'jobs';
 const PANES = ['jobs', 'party', 'dex', 'save', 'set'];
@@ -296,19 +285,9 @@ const PANES = ['jobs', 'party', 'dex', 'save', 'set'];
 const PLAY = 'play';
 const TABS = [PLAY, ...PANES];
 
-function showPanel(which) {
-  panel = which;
-  $('#sheet').classList.toggle('open', !!which);
-  document.body.classList.toggle('menuopen', !!which);
-  $('#door').setAttribute('aria-expanded', which ? 'true' : 'false');
-  $('#chev').textContent = which ? 'Close ▾' : 'Menu ▴';
-  paintGear();
-}
-
-/** The gear is pressed when settings is the pane *and* the panel is open. */
+/** The gear is pressed when settings is the tab showing. */
 function paintGear() {
-  $('#gear').setAttribute('aria-expanded',
-                          String(!!panel && pane === 'set'));
+  $('#gear').setAttribute('aria-expanded', String(pane === 'set'));
 }
 
 /**
@@ -334,11 +313,7 @@ function showPane(want) {
   for (const b of $('#modes').querySelectorAll('button')) {
     b.setAttribute('aria-pressed', String(b.dataset.pane === pane));
   }
-  // The panel and the tab are one question now, so this answers it once rather
-  // than leaving each caller to remember. On the phone `play` is what the door
-  // used to call shut; on the wide layouts the sheet is a column that never
-  // shuts and this only keeps the door's aria in step with the strip.
-  showPanel(want === PLAY ? null : 'menu');
+  paintGear();
 }
 /**
  * Which door of the fork is open, or the fork itself when nothing is passed.
@@ -3576,7 +3551,6 @@ $('#travel').onclick = async () => {
   });
 };
 
-$('#door').onclick = () => showPane(pane === PLAY ? 'jobs' : PLAY);
 // The gear is a shortcut to one key on the strip rather than a second door.
 // Pressing it when settings is already showing closes the panel, which is what
 // it did when settings *was* a panel -- the affordance is unchanged, and what
