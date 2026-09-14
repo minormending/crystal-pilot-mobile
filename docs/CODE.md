@@ -1192,7 +1192,7 @@ Two more things the map alone will not tell you:
 
 ### `world.js` — which map adjoins which
 
-<!-- covers: gen2/world.js @ 8f466c3a4d60 -->
+<!-- covers: gen2/world.js @ e01f91b4da89 -->
 
 The map graph, read out of the cartridge: edge connections *and* warps, so it can
 route out of a building rather than only across a route.
@@ -1266,6 +1266,14 @@ from being worse than the bug — none of which can refuse a map that exists:
   table: it is the difference between "somebody stands at (5,2)" and
   `VioletGymFalknerScript`, and it is what lets `tools/rom-events` name a
   leader without walking the event block a second time.
+- **And where an object's two bytes are *not* a script, it says so.** A
+  cartridge with an `OBJECTTYPE_COMMAND` writes a command's operands in that
+  place, so a command object comes back with a null `script` and a `command`
+  instead — the id and both operands. The null is the useful half: a caller
+  holding a symbol table will name anything it is handed, and an operand pair
+  resolves as readily as an address does, to something that is confidently
+  wrong. See [a cartridge that changed everything it
+  could](#8j-a-cartridge-that-changed-everything-it-could).
 - **A tile off the map is not a tile**, which needed `sizeOf(group, number)` —
   the ROM's own copy of what `collision.mapSize()` reads from work RAM, so it
   can be asked about a room nobody has walked into. Measured against two maps
@@ -1392,7 +1400,7 @@ point those coordinates mean somewhere else entirely.
 
 ## 5. Crossing to the next map
 
-<!-- covers: gen2/journey.js gen2/world.js @ ae2279c32e5b -->
+<!-- covers: gen2/journey.js gen2/world.js @ da1887ad07f6 -->
 
 A connection spans only part of a shared edge, so "walk west until something
 happens" does not work. `crossEdge()` closes the distance in stages, then tries
@@ -1465,6 +1473,25 @@ forty — and only a walk that came back for some other reason spends a try. The
 allowance is what keeps *not counted* from meaning *forever*. It has not been
 seen to rescue a walk on the cartridge yet; it is a budget that was measured
 against the wrong thing, fixed on the way past.
+
+**And a leg that starts the instant the last one returned starts mid-warp.**
+`crossEdge` has always settled before it plans; `through()` did not, and the
+difference cost three failed walks into Elm's lab on Polished Crystal before
+anybody looked. Measured at the moment the lab leg began: `mapKey` already read
+24.2 correctly, and `collision.calibrate` returned **no offset and no position
+at all**. So `walkTo` planned on whatever the collision reader last held — the
+room just left — and the pilot walked back out through its own front door,
+reporting *"could not get into the lab"* from inside its own house.
+
+It settles first now, at the top of **each try** rather than once per leg,
+because the map changes under that loop — that is what the loop is for. Unlike
+`crossEdge` a failure to settle is not fatal here: a doorway leg can begin
+inside a script that is holding the controls, and the loop below already knows
+how to answer one. The symptom read as flakiness — it passed whenever anything
+slow happened to run between the legs — which is the shape a missing settle
+always has, and the reason to go looking for the read rather than add a wait.
+`nav.awaitMapChange` had been written for this exact hazard, comment and all,
+and never called by anything.
 
 **A gate at an edge is not a phone call.** `crossEdge` answers a refusal by
 running the scripts and asking again, because out there a refusal usually *is*
@@ -1807,7 +1834,7 @@ mechanism's evidence spans two runs rather than one.
 
 ### The bigger number is not the harder hit
 
-<!-- covers: gen2/romdata.js gen2/engine.js gen2/battle.js @ ec7daaca5a07 -->
+<!-- covers: gen2/romdata.js gen2/engine.js gen2/battle.js @ 7bb680ac117d -->
 
 For twenty-three passes the pilot ranked its moves by one number: the `power`
 byte out of the cartridge's move table. `romdata.move()` had been returning the
@@ -1961,7 +1988,7 @@ pilot uses, not a second one beside it. See section 10.
 
 ### Sending out somebody who can touch it
 
-<!-- covers: gen2/battle.js gen2/engine.js @ f422ba6eaf41 -->
+<!-- covers: gen2/battle.js gen2/engine.js @ 27559f1d1c8e -->
 
 The pass before could tell that the Pokémon on the field takes nothing off a
 Ghost, and said so. The remedy it named — *a different Pokémon* — was one the
@@ -2479,7 +2506,7 @@ flowchart TD
 
 ## 7a. Five that act on where you already are
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ ae627991c925 -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ 53ace4e48f4e -->
 
 Grind, hunt and catch all go *looking* for something. These five do the obvious
 thing with the situation you are already in, and take no parameters:
@@ -2750,7 +2777,7 @@ said *trainer battle: lost* **seven times**. One loss, reported seven ways.
 
 ## 7d. The counter, and the money it takes
 
-<!-- covers: gen2/menus.js gen2/state.js titles/crystal.js @ d9e478c0f343 -->
+<!-- covers: gen2/menus.js gen2/state.js titles/crystal.js @ 888a7bfb8e7a -->
 
 Everything the pilot could do until now used what it found. **Shop** walks to a
 mart and buys, which is the first thing it does that spends rather than
@@ -3151,7 +3178,7 @@ because that failure is only otherwise discovered by reaching for the undo.
 
 ## 8. The errands
 
-<!-- covers: titles/crystal.js gen2/journey.js @ 53957559fbad -->
+<!-- covers: titles/crystal.js gen2/journey.js @ ea04c9986eee -->
 
 Everything in this section is `crystal.js` — the only file in the app that names
 a Crystal map, a Crystal door or a Crystal NPC. What it stands on is
@@ -3523,7 +3550,7 @@ the bag" rather than "did we gain any".
 
 ## 8a. Finding the Centers and the Marts in the cartridge
 
-<!-- covers: gen2/world.js gen2/journey.js @ ae2279c32e5b -->
+<!-- covers: gen2/world.js gen2/journey.js @ da1887ad07f6 -->
 
 The last thing in this app that had to be written out by hand. A title said
 where the Centers and the Marts were, so the pilot healed in the two towns
@@ -3551,6 +3578,20 @@ Every size in that block is measured against work RAM rather than read off a
 macro: the object list parsed out of the ROM matches `wMapObjects` entry for
 entry on Elm's lab, Cherrygrove's Center and Route 30 — sprites, tiles and types
 alike, which is a stronger check than reading the macro would be.
+
+**An object's two bytes are its script only when the object is a script.** A
+cartridge with an `OBJECTTYPE_COMMAND` puts a command's operands in the same
+place, so reading them as an address gives a number that is not one — and,
+resolved against a symbol table, a *name* that is not one either. `objectsOn`
+tells the two apart where it reads them: a command object comes back with a
+null `script` and a `command` carrying the id and both operands. Nothing
+downstream has to guess, and a null cannot be resolved into a confident wrong
+answer, which is the failure this reader keeps meeting in other forms.
+
+The signatures below do not use either field — a Center is a nurse on a tile,
+not a script — so discovery was never affected by this. What was affected is
+everything that *names* what it found; see [a cartridge that changed everything
+it could](#8j-a-cartridge-that-changed-everything-it-could).
 
 The signatures are the engine profile's, measured across the whole ROM rather
 than on the two maps the app already knew:
@@ -3614,7 +3655,7 @@ after](#8d-a-route-the-game-itself-refuses).
 
 ## 8b. Asking the cartridge what its places are called
 
-<!-- covers: gen2/romdata.js gen2/world.js @ 4b9aef765f35 -->
+<!-- covers: gen2/romdata.js gen2/world.js @ c4df96ec4c8e -->
 
 The one table that **retires** hand-written data rather than adding to it. A map
 used to be called whatever the title profile said, and everything else was
@@ -3689,7 +3730,7 @@ go](#8c-naming-a-city-is-a-feature).
 
 ## 8c. Naming a city is a feature
 
-<!-- covers: titles/crystal.js gen2/world.js @ 255165b8e71c -->
+<!-- covers: titles/crystal.js gen2/world.js @ 6a127882be50 -->
 
 The map graph has always reached most of Johto. A flood over its exits from
 Route 31 finds sixty-odd maps in five legs — and every feature in this app was
@@ -3773,7 +3814,7 @@ by, which is the only leg it can measure.
 
 ## 8d. A route the game itself refuses
 
-<!-- covers: gen2/journey.js gen2/state.js @ fb8b304722a1 -->
+<!-- covers: gen2/journey.js gen2/state.js @ a4d936de5587 -->
 
 The pass before this one taught the walk to *quote* the man who turns it back.
 This is the pilot doing something about it.
@@ -3880,7 +3921,7 @@ counting bytes reads a full case as one.
 
 ## 8e. Fighting everybody here
 
-<!-- covers: gen2/journey.js @ 8d51609079fa -->
+<!-- covers: gen2/journey.js @ d28d19b3aae6 -->
 
 The primitive a Gym needs. The pilot has been stopped on Route 32 for three
 passes by a man who wants Falkner beaten first, and beating Falkner means
@@ -3981,7 +4022,7 @@ costs however long it takes somebody to notice their money is gone.
 
 ## 8f. Going and winning a badge
 
-<!-- covers: gen2/journey.js gen2/state.js titles/crystal.js @ 3a4847df5612 -->
+<!-- covers: gen2/journey.js gen2/state.js titles/crystal.js @ e9e29ac9fbf5 -->
 
 The pilot has been turned back from Route 32 since the pass it learned to find
 Pokémon Centers. `reopen` throws away every written-off road the moment a badge
@@ -4064,7 +4105,7 @@ everybody is a heal whatever it says about itself.
 
 ## 8g. The tiles that run a script, and saying hello
 
-<!-- covers: gen2/world.js gen2/journey.js @ ae2279c32e5b -->
+<!-- covers: gen2/world.js gen2/journey.js @ da1887ad07f6 -->
 
 Four passes of machinery pointed at one sentence a man says, and the reader that
 made it diagnosable is twelve lines.
@@ -4154,7 +4195,7 @@ sent the reader at it.
 
 ## 8h. What a species becomes, and when
 
-<!-- covers: gen2/romdata.js gen2/engine.js @ 03d32b3d67f9 -->
+<!-- covers: gen2/romdata.js gen2/engine.js @ 31777a6e1c07 -->
 
 Two questions a party entry cannot answer: *what will this turn into*, and
 *what is it about to learn*. Both are in one table, because in Gen 2 they are
@@ -4246,7 +4287,7 @@ file says they do.
 
 ## 8i. Reaching an hour
 
-<!-- covers: gen2/jobs.js gen2/engine.js gen2/romdata.js gen2/state.js gbcore/saves.js app/rows.js @ f95f036fd3b8 -->
+<!-- covers: gen2/jobs.js gen2/engine.js gen2/romdata.js gen2/state.js gbcore/saves.js app/rows.js @ bc64d017448a -->
 
 A third of Johto's grass is behind the clock. HOOTHOOT is on Route 29 after
 dark and nowhere on it at noon, and for four versions the usage guide said the
@@ -4413,7 +4454,7 @@ cartridge will not say which hours are which.
 
 ## 8j. A cartridge that changed everything it could
 
-<!-- covers: titles/polished.js gen2/engine.js gen2/romdata.js gen2/state.js gen2/menus.js @ b00ed854948e -->
+<!-- covers: titles/polished.js gen2/engine.js gen2/romdata.js gen2/state.js gen2/menus.js @ dce833e4cb17 -->
 
 Polished Crystal is the profile in `docs/DEVELOPING.md`'s hack table described
 as "the generic fallback, and the hardest thing to support properly". It is
@@ -4482,6 +4523,35 @@ alphabet, a type numbering, an evolution format, and two lists of item names —
 rather than a description of a game.
 
 ### What is declared, and what is still not verified
+
+**Its opening could not be started at all, and nothing here knew** — the driver
+in `titles/polished.js` carried a comment saying it had never been run on a live
+game, because the only Browser pane available loads a ROM and will not step it.
+Run at last, on a headless page that does step it, `run()` failed on its first
+leg with *"never reached the overworld — is this a Polished Crystal ROM?"*.
+
+A new game here opens on a **ruleset menu** — Natures, Abilities, Phys/Spcl
+split, EV gain, Experience gain — and `continueGame` pressed only A.
+`engine/menus/options_menu_shared.asm` leaves that loop on `PAD_B` or
+`PAD_START` only; `PAD_A` falls through to *advance the description* and loops.
+The pilot mashed A at a menu A cannot leave, for the whole budget, and then
+blamed the cartridge.
+
+So one press in `INTRO_ESCAPE_EVERY` is a B. It is checked **after**
+`takeNameMenu`, which is not tidiness: B on the name menu is *back out*, and
+backing out of the name menu is how you land in the letter grid that the same
+function's other branch exists to avoid. Twelve is measured — often enough to
+leave such a box in well under a second of game time, rare enough that the B's
+landing in ordinary dialogue cost nothing, because B advances text there just
+as A does. Crystal's opening plays exactly as before, nine legs and a Lv5
+starter in the grass.
+
+**And the budget was too small even once unblocked.** Two runs of the same
+build reached the overworld at 5,373 and 41,773 frames — Polished's opening is
+both longer than Crystal's and far more variable — so `INTRO_FRAMES` is 60,000
+where it was 20,000. The stall was not the bound, and that was checked rather
+than assumed: held at A-only for 120,000 frames, `mapStatus` and `mapGroup`
+never moved off zero.
 
 **Its trainers read now**, and getting there took three separate things.
 `TrainerGroups` is `dba` into banks `$7d` and `$79`, so the first pointer is
@@ -4821,12 +4891,43 @@ counter is a wall, so the pilot stands two tiles off and looks at it — (3,3)
 facing LEFT at a clerk on (1,3), measured once in Cherrygrove. Twelve entries
 inherited it untested, which is what the new `marts` check group is for: it
 walks from `stand` in the direction `face` and asks whether anybody is there.
-All twelve are, and eleven of them are unnameable — Polished writes its clerks
-as `mart_clerk_event`, an `OBJECTTYPE_COMMAND` whose two bytes are a command
-and its operand rather than an address, so resolving them gave
+All twelve are, and eleven of them are named by their *command* — Polished
+writes its clerks as `mart_clerk_event`, an `OBJECTTYPE_COMMAND` whose two
+bytes are a command's operands rather than an address, so resolving them gave
 `ToughClaws+5` and `HitmontopBackpic+58`. An object is named only when its
-pointer lands on a symbol *start* now, which is the same exactness test
-`--layout` scores a stride with.
+pointer lands on a symbol *start*, which is the same exactness test `--layout`
+scores a stride with.
+
+**That exactness test stopped the wrong names and left a worse problem behind
+it**: the eleven came back as *"a type-5 object, whose two bytes are not a
+pointer"* — true, and it reads like a fault. It is not one; every one of those
+marts sells you things. But a line that shrugs is a line the next reader takes
+for a finding, and one did, filing seven working marts as broken.
+
+So `world.objectsOn` tells the two apart at the source rather than leaving
+every caller to guess. A command object gets **no `script` at all** — a null
+cannot be resolved into a confident wrong name — and a `command` instead,
+carrying the id and its two operands. `--marts` then reads *"a mart clerk —
+pokemart(dialog 0, mart 2)"*, which confirms not that somebody is standing
+there but that it is a shopkeeper, and which shop.
+
+**0x92 is measured, not counted out of the macro file.** `pokemart` is one
+`const` among well over a hundred in `macros/scripts/events.asm`, and counting
+those by hand is the arithmetic this repository has got wrong four times.
+Instead the byte was read off all eleven clerks: 0x92 every time, operands
+`dialog 0` and a mart id that differs per town — 2 Violet, 3 Azalea, 0x0c
+Ecruteak — while the command objects that are *not* clerks, the fruit trees and
+signposts, carry 0x51. One value across every mart and a different one
+everywhere else is what makes it the mart command rather than a coincidence. It
+lives in the profile as `engine.commands`, and `gen2/engine.js` carries an empty
+`commands` beside it because a title may only override a field the engine
+already reads — Crystal has no command objects at all.
+
+The same null fixed `--verify` without being aimed at it. Nine of the twenty-two
+type-versus-name disagreements it reported here were command operands landing
+inside a trainer's bytes — `FuchsiaMart: TrainerCooltrainermFinch is type 5`
+being the clearest — and an object with no script is now skipped rather than
+named after whatever it collided with. Thirteen remain, and they are real.
 
 **And its dialogue is compressed.** `macros/scripts/text.asm` compresses a
 string whenever compression saves space, so "was" is nowhere in that ROM while
@@ -4844,7 +4945,7 @@ This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ 894f9d23cb55 -->
+<!-- covers: app/main.js index.html @ 34173a5f187f -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -4908,6 +5009,30 @@ landscape the two could not both be on screen at any scroll position.
 | `.bar` | what is happening, where you are, Stop, and the door | never |
 | `.sheet` | the jobs, the save, the party, settings | yes, and only this |
 | `.padwrap` | the eight buttons | never |
+
+**The one thing that does move is the pad, and only on a phone with the menu
+open.** The sheet shares the stage's grid area — two items in one area overlap,
+which is what lets the menu cost the screen nothing — so the panes were handed
+the *game screen's* height however much they had to show: 332px on a 390×844
+phone against the Jobs pane's 1144px, seven tenths of the app's main control
+surface behind a scroll nobody is told about. The travel advice, the
+what-is-worth-catching-here chips, the walk-to list and the whole grind row were
+all below the fold on the screen this app exists to drive.
+
+The pad is what that height was spent on, and it is unpressable while the menu
+is over the game it belongs to, so `body.menuopen` takes it away and `stage`
+being `minmax(0,1fr)` absorbs the row — 332px to **564px**, and the Save pane
+stops overflowing at all. The two wide layouts keep both, because there the
+sheet has a grid area of its own and nothing has to yield; landscape restores it
+as `display:contents` rather than `block`, because that layout dissolves the
+wrapper so the d-pad and the face buttons can take grid areas of their own, and
+handing it a box back collapses both into one cell.
+
+**And the fade at the foot of `.panes` is sized to its own padding.** It exists
+so a card cut off mid-button reads as *there is more below* rather than as a
+rendering fault, and at `padding-bottom: 2px` against a 14px mask it went on
+saying so after there was no more below: a pane scrolled to the bottom looked
+exactly like one that had not been. Sixteen clears the fourteen.
 
 **`main` *is* the shell** rather than a container holding one. With the
 `<header>` gone there is nothing else at that level, so a wrapper element would
@@ -5926,7 +6051,7 @@ before a step is taken, so a stopped walk does not move at all.
 
 ### What is behind the Gym door, before you open it
 
-<!-- covers: gen2/romdata.js gen2/engine.js app/rows.js @ 3bae6af9165c -->
+<!-- covers: gen2/romdata.js gen2/engine.js app/rows.js @ 624129e18839 -->
 
 The Gym row could say where the Gym is and who is in it. **Whether it is worth
 going** is two facts the cartridge has had all along, and neither of them
@@ -6039,7 +6164,7 @@ is the noise this list exists to replace.
 
 ### Leading with the one that can answer the room
 
-<!-- covers: gen2/romdata.js gen2/menus.js gen2/journey.js @ 44ac79abc559 -->
+<!-- covers: gen2/romdata.js gen2/menus.js gen2/journey.js @ 323a952c0666 -->
 
 **Gen 2 sends out slot one and asks nobody.** So the party's order decides the
 first battle of a Gym — and since the pass before, the pilot has known exactly
@@ -6229,7 +6354,7 @@ disagreements.
 
 ### Gates: asking the cartridge what it wants
 
-<!-- covers: gen2/state.js gen2/journey.js titles/crystal.js @ 3a4847df5612 -->
+<!-- covers: gen2/state.js gen2/journey.js titles/crystal.js @ e9e29ac9fbf5 -->
 
 Two kinds of closed road, and the difference is everything:
 
@@ -6338,7 +6463,7 @@ a conversation.
 
 ### The card behind a party row
 
-<!-- covers: app/rows.js app/main.js index.html @ 48205c43cf94 -->
+<!-- covers: app/rows.js app/main.js index.html @ cdf2513cd8fb -->
 
 Two questions the game itself will not answer about a Pokémon you are
 carrying — *what is this made of* and *what is it about to become* — and both
@@ -6551,7 +6676,7 @@ to deposit your last Pokémon.
 
 ### The settings and the save card
 
-<!-- covers: index.html app/main.js @ 894f9d23cb55 -->
+<!-- covers: index.html app/main.js @ 34173a5f187f -->
 
 The pilot's own list got a glyph column, shorter names and a slot to fill in
 v165. These two cards did not, and reading them found that they had a different

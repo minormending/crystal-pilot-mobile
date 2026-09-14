@@ -571,7 +571,14 @@ export const gen2 = {
     coord: { scene: 0, y: 1, x: 2 },
     // Inside an object. `origin` is the +4 the cartridge stores tiles at, the
     // same one work RAM uses.
-    object: { sprite: 0, y: 1, x: 2, type: 7, script: 9, origin: 4 },
+    //
+    // `command` is the byte between the type and the pointer. On Crystal it is
+    // a trainer's sight range and nothing reads it; on a cartridge with an
+    // `OBJECTTYPE_COMMAND` it is *which* command, and the two bytes after it
+    // are that command's operands rather than an address -- see `objectsOn`.
+    // Named here rather than only in the profile that needs it, because the
+    // byte is at the same offset on both and only its meaning differs.
+    object: { sprite: 0, y: 1, x: 2, type: 7, command: 8, script: 9, origin: 4 },
     // **The type is the low nibble of byte seven on Crystal, and the whole
     // byte on Polished Crystal.** Crystal packs the palette into the high
     // nibble -- `dn \9, \<10>` -- and Polished gives the palette its own
@@ -678,6 +685,14 @@ export const gen2 = {
   // `script` is here to be named rather than to be used: nothing branches on
   // it, and leaving it out would make 0 look like an absence.
   objectTypes: { script: 0, itemball: 1, trainer: 2 },
+  // Which command an `OBJECTTYPE_COMMAND` object is running, by the name of
+  // the one thing that wants to recognise it. **Empty here, and not an
+  // oversight**: Crystal has no command objects at all -- its object types
+  // stop at `trainer` above -- so there is no command for this cartridge to
+  // name. A hack that adds the type fills this in, and `titles/polished.js`
+  // does. The field exists here rather than only there because a title may
+  // only override a field the engine already reads; see `titles/contract.js`.
+  commands: {},
 
   // --- how to recognise a place through a door -----------------------------
   // The two rooms the pilot has business in, and the one object each that says

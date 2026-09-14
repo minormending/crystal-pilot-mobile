@@ -47,6 +47,21 @@ const PRESS_SETTLES = 3;
 // not interactive the instant a cursor reads non-zero -- and by the second the
 // box has always been up.
 const MENU_STEP_TRIES = 3;
+// How long to press through an opening before giving up on it. Crystal reaches
+// the overworld in about six thousand frames; Polished Crystal was measured at
+// 5,373 and 41,773 on two runs of the same build, because its opening is both
+// longer and far more variable. Twenty thousand -- what this was -- fails the
+// slower of those two on time alone, with a message blaming the ROM.
+const INTRO_FRAMES = 60000;
+// One press in this many is a B rather than an A, because an opening can
+// contain a box that A does not leave. Polished Crystal's is its ruleset
+// screen: `OptionsShared_RunLoop` leaves on PAD_B or PAD_START and treats
+// PAD_A as "advance the description", so a pilot that only knows A sits there
+// until the budget runs out. Twelve is measured -- often enough to leave such
+// a box in well under a second of game time, rare enough that the B's landing
+// in ordinary dialogue costs nothing, since B advances text there just as A
+// does.
+const INTRO_ESCAPE_EVERY = 12;
 // The words this walk drives to live in the engine profile, as `menuWords`
 // -- one list per row, because a hack that renamed the START menu has
 // renamed it and there is nothing to do about that but know its word.
@@ -62,7 +77,7 @@ export function withMenus(Base) {
    * Only ever run for an automated test. A person starting a new game should
    * see their own intro and pick their own name; see main.js.
    */
-  async continueGame(maxFrames = 20000) {
+  async continueGame(maxFrames = INTRO_FRAMES) {
     await this.step(2500);
     let spent = 2500;
     // Two different checks at two different rates. "Has the world loaded?"
@@ -72,7 +87,12 @@ export function withMenus(Base) {
     // choice, and one stray A takes NEW NAME and drops us in the letter grid.
     for (let i = 0; spent < maxFrames; i++) {
       if (await this.takeNameMenu()) continue;
-      await this.push('A', 5, 8);
+      // The B is checked for *after* takeNameMenu, so it can never be the
+      // press that answers the name menu -- B there is "back out", and backing
+      // out of the name menu is how you end up in the letter grid this code
+      // spends its other branch avoiding.
+      await this.push(i % INTRO_ESCAPE_EVERY === INTRO_ESCAPE_EVERY - 1
+                        ? 'B' : 'A', 5, 8);
       await this.pump();
       spent += 13;
       if (i % 10 !== 0) continue;

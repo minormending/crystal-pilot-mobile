@@ -735,6 +735,22 @@ export class Journey {
     this.battleStuck = false;
     for (let i = 0; i < tries && fought < THROUGH_BATTLES;) {
       if (this.stopped) return false;
+      // **Settle before planning, the way `crossEdge` already does.** A leg
+      // that starts the instant the one before it returned starts mid-warp,
+      // and `collision.calibrate` fails outright there -- measured on Polished
+      // Crystal's walk to Elm's lab, where the first read after *out of the
+      // house* returned map 24.2 correctly but no collision offset and no
+      // position at all. `walkTo` then plans on whatever the reader last had,
+      // which is the room just left, and the pilot walks back through its own
+      // front door: three runs ended in PlayersHouse1F reporting "could not
+      // get into the lab".
+      //
+      // Not fatal if it never settles, unlike `crossEdge`: a doorway leg can
+      // begin inside a script that is holding the controls, and the loop below
+      // already knows how to answer one. Settling is worth a try each time
+      // round rather than once, because the map changes under this loop --
+      // that is what it is for.
+      await this.settled();
       const from = await this.mapKey();
       if (from === expect) return true;
       // A window in the way is not a door that will not open, and until this

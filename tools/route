@@ -203,7 +203,13 @@ if (argv.includes('--objects')) {
     out[name] = world.objectsOn(key >> 8, key & 0xff).map((o) => ({
       map: `${key >> 8}.${key & 0xff}`,
       sprite: o.sprite, x: o.x, y: o.y, type: o.type,
-      script: `${o.script.bank.toString(16)}:${o.script.addr.toString(16)}`,
+      // Null for a command object, whose two bytes are operands rather than an
+      // address -- `world.objectsOn` tells the two apart so that nothing here
+      // has to. `command` carries what it is instead.
+      script: o.script
+        ? `${o.script.bank.toString(16)}:${o.script.addr.toString(16)}` : null,
+      command: o.command
+        ? { id: o.command.id, args: o.command.args } : null,
     }));
   }
   if (json) say(JSON.stringify(out));
@@ -211,8 +217,11 @@ if (argv.includes('--objects')) {
     if (!objects.length) continue;
     say(`${name}:`);
     for (const o of objects) {
-      say(`  (${o.x},${o.y})  type ${o.type}  sprite ${o.sprite}  `
-                  + `${o.script}`);
+      const what = o.script
+        ? o.script
+        : `command $${o.command.id.toString(16)}`
+          + `(${o.command.args.map((a) => `$${a.toString(16)}`).join(', ')})`;
+      say(`  (${o.x},${o.y})  type ${o.type}  sprite ${o.sprite}  ${what}`);
     }
   }
   process.exit(0);

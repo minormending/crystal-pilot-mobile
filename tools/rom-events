@@ -453,6 +453,14 @@ def gym_objects(cart, name):
     """
     found = {}
     for o in route_objects().get(name, []):
+        # **A command object has no script to name**, and naming it anyway is
+        # what made `--verify` report 22 disagreements on Polished Crystal that
+        # were not disagreements: `FuchsiaMart: TrainerCooltrainermFinch is
+        # type 5` is a mart clerk whose operands happened to land inside a
+        # trainer's bytes. The reader now hands these over as `command` rather
+        # than as a pointer, so there is something to skip on.
+        if not o['script']:
+            continue
         bank, _, addr = o['script'].partition(':')
         found[cart.near(int(bank, 16), int(addr, 16))] = (o['x'], o['y'],
                                                           o['type'])
@@ -1148,6 +1156,31 @@ FACING = {'LEFT': (-1, 0), 'RIGHT': (1, 0), 'UP': (0, -1), 'DOWN': (0, 1)}
 MART_REACH = 2
 
 
+POKEMART_CMD = re.compile(r'commands:\s*\{[^}]*?pokemart:\s*(0x[0-9a-fA-F]+|\d+)',
+                          re.S)
+
+
+def pokemart_command(cart):
+    """The command id a mart clerk runs on this cartridge, or None.
+
+    Off the title profile rather than counted out of the hack's macro file:
+    `pokemart` is one `const` in a list of well over a hundred, and counting
+    those by hand is the arithmetic this repository has got wrong before.
+    """
+    if not hasattr(pokemart_command, 'cache'):
+        pokemart_command.cache = {}
+    key = id(cart)
+    if key not in pokemart_command.cache:
+        found = None
+        for path in picked_titles(cart):
+            m = POKEMART_CMD.search(path.read_text())
+            if m:
+                found = int(m.group(1), 0)
+                break
+        pokemart_command.cache[key] = found
+    return pokemart_command.cache[key]
+
+
 def object_name(cart, o):
     """What to call an object, or what kind it is if it has no name.
 
@@ -1159,10 +1192,30 @@ def object_name(cart, o):
     `ToughClaws+5` and `HitmontopBackpic+58`. Standing exactly where the
     check said, under a name that means nothing.
 
-    The test is exactness: a pointer that lands on a symbol *start* is a
-    script and a number that lands in the middle of one is a number. Which is
-    the same test `--layout` scores a stride with, for the same reason.
+    That much was already known, and the answer was to stop naming them: they
+    came back as *"a type-5 object, whose two bytes are not a pointer"*, which
+    is true and reads like a fault. It is not one -- eleven of Polished's
+    twelve marts are command objects and every one of them sells you things --
+    but a line that shrugs is a line the next reader mistakes for a finding,
+    and this one was, in the pass that added this paragraph.
+
+    So a command object is now *named by its command*, which for a clerk is
+    the strongest confirmation there is: not "something is standing there" but
+    "this is a shopkeeper, and this is the shop".
+
+    For script objects the test is unchanged and is exactness: a pointer that
+    lands on a symbol *start* is a script and a number that lands in the
+    middle of one is a number. Which is the same test `--layout` scores a
+    stride with, for the same reason.
     """
+    if o.get('command'):
+        cid, args = o['command']['id'], o['command']['args']
+        if cid == pokemart_command(cart):
+            return f'a mart clerk — pokemart(dialog {args[0]}, mart {args[1]})'
+        return (f'a command object running ${cid:02x}'
+                f'({", ".join(f"${a:02x}" for a in args)})')
+    if not o['script']:
+        return f'a type-{o["type"]} object with neither a script nor a command'
     bank, _, addr = o['script'].partition(':')
     found = cart.near(int(bank, 16), int(addr, 16))
     return found if '+' not in found and not found.startswith('$') \

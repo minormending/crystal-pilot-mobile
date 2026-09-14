@@ -458,8 +458,13 @@
      the scrolling moved in one level, onto the panes, and the fade went with
      it -- a card cut off mid-button should read as "there is more below"
      rather than as a rendering fault. */
+  /* The padding is the fade's height, not a gap. At 2px the last row was still
+     under the mask at full scroll, so a pane you had scrolled to the bottom of
+     looked exactly like one you had not -- the fade that exists to say "there
+     is more below" said it after there was no more below. Sixteen clears the
+     fourteen the mask takes. */
   .panes{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;
-         display:flex;flex-direction:column;gap:10px;padding-bottom:2px;
+         display:flex;flex-direction:column;gap:10px;padding-bottom:16px;
          mask-image:linear-gradient(to bottom,#000 calc(100% - 14px),transparent);
          -webkit-mask-image:linear-gradient(to bottom,#000 calc(100% - 14px),transparent)}
   .pane{display:flex;flex-direction:column;gap:10px}
@@ -506,6 +511,17 @@
      either way. `visibility` rather than `display`, so the canvas keeps its
      size and the emulator is not re-laid-out twice per menu. */
   body.menuopen .stage{visibility:hidden}
+  /* And the pad goes with it, on the phone layout only. The sheet shares the
+     stage's grid area, so the panes were given the *game screen's* height --
+     332px on a 390x844 phone -- however much they had to show. The Jobs pane
+     is 1144px with a game running: travel, the level advice, what is worth
+     looking for here, where to walk, what to grind to. Seven tenths of the one
+     screen this app exists to drive, behind a scroll nobody is told about.
+     The pad is what that height was spent on, and it is unpressable while the
+     menu is over the game it belongs to -- so it yields, and `stage` being
+     `minmax(0,1fr)` absorbs the row. The two layouts below keep both, because
+     there the sheet has a grid area of its own and the game stays visible. */
+  body.menuopen .padwrap{display:none}
 
   /* One line that owns "what is happening", and the handle you pull to ask for
      anything. It is a row of two buttons rather than one tappable card: Stop
@@ -1214,8 +1230,14 @@
        to do: the sheet is a column and stays open. The chevron goes with it --
        an affordance for a door that is not there is worse than no affordance. */
     .sheet,.sheet:not(.open){display:flex;grid-area:sheet}
-    /* Both at once here, so the stage is never the thing being covered. */
+    /* Both at once here, so the stage is never the thing being covered -- and
+       the pad stays for the same reason: it is the sheet that has its own grid
+       area in this layout, so nothing has to yield its height to it. */
     body.menuopen .stage{visibility:visible}
+    /* `contents` and not `block`: this layout dissolves the wrapper so the
+       d-pad and face buttons can take grid areas of their own (above), and
+       giving it a box back would collapse both into one cell. */
+    body.menuopen .padwrap{display:contents}
     .chev{display:none}
     #taphint{display:none}
   }
@@ -1262,8 +1284,11 @@
        without gets a smaller picture instead of a pad drawn over the hint. */
     #screenwrap{width:min(100%,480px,calc(100cqh * 160 / 144))}
     .sheet,.sheet:not(.open){display:flex;grid-area:sheet}
-    /* Both at once here, so the stage is never the thing being covered. */
+    /* Both at once here, so the stage is never the thing being covered -- and
+       the pad stays for the same reason: it is the sheet that has its own grid
+       area in this layout, so nothing has to yield its height to it. */
     body.menuopen .stage{visibility:visible}
+    body.menuopen .padwrap{display:block}
     .chev{display:none}
     /* Nothing to say here any more: the column is the cap, and the pad filling
        it is what puts its edges on the same two lines as the strip above it and

@@ -65,25 +65,35 @@ dying* was three taps away behind the party fold for all of it.
  │        screen         │   │ │  Catch  ▸ Start   │ │  the sheet, over
  │                       │   │ │  Hunt   ▸ Start   │ │  the same area
  │                       │   │ └───────────────────┘ │
- │  Tap to walk there.   │   │ ┌───────────────────┐ │
- ├───────────────────────┤   │ │ Your save         │ │
- │ Route 30      ¥1200   │   ├───────────────────────┤
- │ ● ready       Menu ▴  │   │ ● ready      Close ▾  │  ← the strip, always
+ │  Tap to walk there.   │   │ │  Party            │ │
+ ├───────────────────────┤   │ │  Your save        │ │
+ │ Route 30      ¥1200   │   │ └───────────────────┘ │
+ │ ● ready       Menu ▴  │   │  Jobs Party Dex Save  │  ← the strip of keys
  │   ▲                   │   ├───────────────────────┤
- │ ◀ ● ▶       B     A   │   │   ▲                   │
- │   ▼                   │   │ ◀ ● ▶       B     A   │  ← the pad, always
- │   Select    Start     │   │   ▼   Select   Start  │
- └───────────────────────┘   └───────────────────────┘
+ │ ◀ ● ▶       B     A   │   │ ● ready      Close ▾  │  ← the strip, always
+ │   ▼                   │   └───────────────────────┘
+ │   Select    Start     │
+ └───────────────────────┘
         menu closed                 menu open
 ```
 
 The sheet shares the stage's grid area — two grid items in one area overlap,
 which is the whole trick — so opening the menu costs the screen nothing and
-moves neither the bar nor the pad. It is open until a game is running, because
+moves neither the bar nor the brow. It is open until a game is running, because
 until then it holds the only two things there are to do; after that it is closed
 by default, and closed again by every job that starts, because asking the pilot
 to do something is asking to watch it. Closing is one-way: a job that ends
 leaves the screen alone rather than throwing a menu over whatever it just did.
+
+**On a portrait phone the pad stands down while the menu is open**, and it is
+the one piece of furniture that moves. Sharing the stage's area meant the panes
+were handed the *game screen's* height however much they had to show — 332px
+against the Jobs pane's 1144px, so seven tenths of the app's main control
+surface sat behind a scroll nobody is told about. The pad is what that height
+was spent on, and it is unpressable while the menu covers the game it drives,
+so it yields and the stage row absorbs it: 332px to **564px**, and the save
+pane stops overflowing at all. The two wide layouts keep both, because there
+the sheet has a grid area of its own and nothing has to give anything up.
 
 Measured the same way at v95, with a game running and the menu closed:
 
@@ -804,7 +814,7 @@ shell and a shell does not rearrange.
 
 | | screen | the rest |
 | --- | --- | --- |
-| **Portrait phone** | full width, letterboxed on short phones | bar and pad below, the menu opens over the screen |
+| **Portrait phone** | full width, letterboxed on short phones | bar and pad below, the menu opens over the screen and the pad stands down |
 | **Landscape phone** | between your thumbs | D-pad left, A/B right, the menu a column beside |
 | **Tablet** | an integer 3× — 480 × 432 — while the height allows it | the menu alongside, permanently |
 
@@ -1326,4 +1336,4 @@ So this page carries a marker naming the files it describes and the hash they
 had when it was last read against them. `tools/docs-check` reports it when they
 move, and the pre-commit hook blocks on that report.
 
-<!-- covers: index.html app/main.js app/rows.js @ 48205c43cf94 -->
+<!-- covers: index.html app/main.js app/rows.js @ cdf2513cd8fb -->

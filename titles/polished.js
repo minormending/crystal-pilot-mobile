@@ -247,6 +247,21 @@ export const polished = {
     // Gym nobody fought.
     objectTypes: { script: 0, itemball: 1, trainer: [2, 3], pokemon: 4,
                    command: 5, scriptSilent: 6, doNothing: 7 },
+    // Which command an `OBJECTTYPE_COMMAND` object is running, for the one
+    // command a check here needs to recognise.
+    //
+    // **0x92 is measured off the cartridge, not counted out of the macro
+    // file.** `pokemart` is one `const` in a list of well over a hundred in
+    // `macros/scripts/events.asm`, and counting them by hand is exactly the
+    // kind of arithmetic this repository has got wrong four times. Instead the
+    // byte was read: all eleven of this cartridge's command-type mart clerks
+    // carry 0x92 at that offset, with operands `dialog 0` and a mart id that
+    // differs per town -- 2 Violet, 3 Azalea, 0x0c Ecruteak -- while command
+    // objects that are *not* clerks (the fruit trees and signposts in New Bark
+    // Town) carry 0x51. One value across every mart and a different one
+    // everywhere else is what makes it the mart command rather than a
+    // coincidence.
+    commands: { pokemart: 0x92 },
     // Which object says *this room is a Pokemon Center* and which says
     // *this is a Mart*. Different sprites and, for the nurse, a different
     // tile.

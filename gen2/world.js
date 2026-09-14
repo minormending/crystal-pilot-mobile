@@ -417,15 +417,39 @@ export class World {
         // makes it do something wrong. This is what caught the sweep looking
         // for the Gyms -- an object at (141,72) on a map twenty tiles wide.
         if (size && (x < 0 || y < 0 || x >= size[0] || y >= size[1])) continue;
-        out.push({ sprite: rd(o + field.sprite), x, y,
-                   type: rd(o + field.type) & ev.typeMask,
+        const type = rd(o + field.type) & ev.typeMask;
+        // **A command object's two bytes are operands, not an address.** Where
+        // a cartridge has an `OBJECTTYPE_COMMAND`, the record carries a command
+        // id and its arguments in the same place a script object carries its
+        // pointer -- so reading them as one gives an address that is not an
+        // address. Measured on Polished Crystal: eleven of its twelve mart
+        // clerks came back named after whatever symbol the number happened to
+        // land inside, `ToughClaws+5` and `HitmontopBackpic+58` among them, and
+        // the twelfth -- Cherrygrove's, the one written as a script -- was the
+        // only one that read true.
+        //
+        // So the two are told apart here rather than guessed at by every
+        // caller. A command object gets no `script` at all, which is the point:
+        // a null cannot be resolved into a confident wrong name.
+        const command = this.e.objectTypes?.command;
+        const isCommand = command !== undefined && type === command;
+        out.push({ sprite: rd(o + field.sprite), x, y, type,
                    // Where the object's script lives, so a caller with the
                    // symbol table can *name* it. Two more reads out of a
                    // record already in hand, and the difference between "an
                    // object stands here" and "this is
                    // `VioletGymFalknerScript`".
-                   script: { bank, addr: rd(o + field.script)
-                                         | rd(o + field.script + 1) << 8 } });
+                   script: isCommand ? null
+                     : { bank, addr: rd(o + field.script)
+                                     | rd(o + field.script + 1) << 8 },
+                   // And for a command object, what it actually says: the
+                   // command and its two operands, which is how a mart clerk
+                   // can be recognised as a mart clerk rather than as an
+                   // object that failed to be a script.
+                   command: isCommand
+                     ? { id: rd(o + field.command),
+                         args: [rd(o + field.script), rd(o + field.script + 1)] }
+                     : null });
       }
     } catch (e) {
       // Same as the other readers here: nonsense reads mean nothing placed,
