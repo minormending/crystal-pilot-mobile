@@ -1009,7 +1009,21 @@ export function withMenus(Base) {
   async continueFromTitle(rounds = 24) {
     for (let i = 0; i < rounds && !this.cancelled; i++) {
       const s = await this.snap();
-      if (s.worldLoaded) return true;
+      // **The map being up is not the game being ready.** `worldLoaded` turns
+      // true the moment the map is handled, and a game that has just come back
+      // from a reload is still running its own scripts then -- this repository
+      // has the note twice over, that a restored game refuses every button
+      // until the scripts are let out. Returning on the first signal made every
+      // caller inherit that window: measured, a second Skip pressed straight
+      // after the first was refused by `canSave` with *the screen is busy*,
+      // intermittently, which reads as the button doing nothing.
+      //
+      // `awaitQuiet` is what `canSave` itself waits on, so this returns a game
+      // in the state the next question is about to ask for.
+      if (s.worldLoaded) {
+        await this.awaitQuiet();
+        return true;
+      }
       await this.push(i % 2 === 0 ? 'START' : 'A', 6, 12);
       await this.step(90);
     }

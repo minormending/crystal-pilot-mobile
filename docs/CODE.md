@@ -2531,7 +2531,7 @@ flowchart TD
 
 ## 7a. Five that act on where you already are
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ 3e351141c895 -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ 443d2daa643a -->
 
 **The first jobs ever run on Polished Crystal, now that its opening reaches the
 grass.** Grind took the starter Lv6 to Lv7 in two wild battles and 15 seconds,
@@ -2819,7 +2819,7 @@ said *trainer battle: lost* **seven times**. One loss, reported seven ways.
 
 ## 7d. The counter, and the money it takes
 
-<!-- covers: gen2/menus.js gen2/state.js titles/crystal.js @ 53fb64214287 -->
+<!-- covers: gen2/menus.js gen2/state.js titles/crystal.js @ 1826b6dba134 -->
 
 Everything the pilot could do until now used what it found. **Shop** walks to a
 mart and buys, which is the first thing it does that spends rather than
@@ -4401,8 +4401,25 @@ the edit nor the frames on the strength of an earlier probe that skipped `+1h`
 twelve times and saw no change; that result is unexplained and the single
 eight-hour skip is the one to trust, being one edit with one reading.
 
-What is still open is the narrower half this section actually asks: whether the
-*frames* move it. `playtime` advances with them normally -- 233 to 4224 over
+**Repeated Skips do not accumulate, and that is open.** Five back to back leave
+the saved start hour at 11 every time -- read out of the battery at
+`sPlayerData + (wStartHour - wPlayerData)` after each one. The only reading that
+fits is that the running game never adopts the edited hour, so the next
+`saveGame` writes its own value back over it: skip one lands because the battery
+was written fresh, and every skip after it is undone by the save that precedes
+it. That contradicts the single `shiftClock(8)` above, which did move the game
+from day to night, and **which of those two is the true picture is not settled**.
+Until it is, treat Skip as reliable once and unproven twice.
+
+A second, smaller thing was found on the way and is fixed: `continueFromTitle`
+returned the moment `worldLoaded` went true, which is before the game takes
+input again -- so a Skip pressed straight after another was intermittently
+refused by `canSave` with *the screen is busy*, three times in four. It waits on
+`awaitQuiet` now, the same wait `canSave` itself makes, and five consecutive
+attempts were refused none.
+
+What is also still open is the narrower half this section actually asks: whether
+the *frames* move it. `playtime` advances with them normally -- 233 to 4224 over
 222,000 frames -- while a run that pressed on for some fourteen game-hours of
 frames never saw the block change. That is evidence and not proof, and the way
 to settle it is to Skip to the last hour of a block and then step one hour,
@@ -4532,7 +4549,7 @@ cartridge will not say which hours are which.
 
 ## 8j. A cartridge that changed everything it could
 
-<!-- covers: titles/polished.js gen2/engine.js gen2/romdata.js gen2/state.js gen2/menus.js @ 3d4e3a975c23 -->
+<!-- covers: titles/polished.js gen2/engine.js gen2/romdata.js gen2/state.js gen2/menus.js @ 703fd504abe1 -->
 
 Polished Crystal is the profile in `docs/DEVELOPING.md`'s hack table described
 as "the generic fallback, and the hardest thing to support properly". It is
@@ -6329,7 +6346,7 @@ is the noise this list exists to replace.
 
 ### Leading with the one that can answer the room
 
-<!-- covers: gen2/romdata.js gen2/menus.js gen2/journey.js @ ef21833cdf8c -->
+<!-- covers: gen2/romdata.js gen2/menus.js gen2/journey.js @ 8a3a3f6de51b -->
 
 **Gen 2 sends out slot one and asks nobody.** So the party's order decides the
 first battle of a Gym — and since the pass before, the pilot has known exactly
