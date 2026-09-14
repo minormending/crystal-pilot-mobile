@@ -1329,6 +1329,112 @@ export class Journey {
     return out;
   }
 
+  /* --- the opening, which is not one cartridge's -----------------------
+     These four were methods on `class Crystal` until Polished Crystal's pilot
+     was measured taking a starter with *Crystal's tiles*: its Elm's Lab is the
+     same lab, object for object -- Elm at (5,2), the three balls at (6,3),
+     (7,3), (8,3) in the same order, the aide at (2,9) -- and every tile they
+     use comes from `title.places` rather than from here. So a second copy in
+     the second profile would have been the same walk written twice, which is
+     the mistake this repository keeps paying for.
+
+     They stay refusable rather than assumed: a title that declares none of
+     `elmTalkFrom`, `starterBallX`, `labExit` or `route29` simply never calls
+     them, and its `run` stops wherever it stopped before. */
+
+  /**
+   * Hear Elm out, so the three balls become active.
+   *
+   * Split from picking one because choosing a starter is not the pilot's
+   * business. It is the one decision in the opening that is actually a
+   * decision, and a tool that plays the intro for you should hand it back
+   * rather than answer it on your behalf.
+   */
+  async askElm() {
+    const p = this.title.places;
+    await this.runScripts();                      // Elm greets you on the way in
+    await this.nav.walkTo(this.collision, p.elmTalkFrom, this.walkOpts);
+    await this.nav.step('UP');
+    await this.gb.press('A', 6, 12);
+    await this.runScripts();
+  }
+
+  /** Stand in front of the balls, so the choice is one step away. */
+  async waitAtTheTable() {
+    const p = this.title.places;
+    await this.nav.walkTo(this.collision, [p.starterBallX.totodile, 4],
+                          this.walkOpts);
+    await this.nav.step('UP');
+  }
+
+  async takeStarter(which) {
+    const p = this.title.places;
+    const ballX = p.starterBallX[which];
+    if (ballX === undefined) {
+      return `unknown starter ${which}`;
+    }
+    await this.askElm();
+
+    for (let attempt = 0; attempt < 3; attempt++) {
+      await this.nav.walkTo(this.collision, [ballX, 4], this.walkOpts);
+      await this.nav.step('UP');
+      await this.gb.press('A', 6, 12);
+      // Two questions on the way out, and A is right for only one of them.
+      // "Do you want CYNDAQUIL, the fire POKeMON?" wants yes, which is what
+      // pressing through gives -- so the pressing runs until the Pokemon is
+      // ours and stops there. "Give a nickname to the CYNDAQUIL you received?"
+      // wants no, and B on it is the game's own name for the thing.
+      //
+      // For twenty-eight passes this was one `runScripts` that answered both,
+      // walked into the naming screen and typed the letter under the cursor:
+      // every starter this app took was called AAAAAAAAAA.
+      await this.runUntilParty();
+      await this.takeDefaultName();
+      await this.runScripts();
+      await this.runScripts();
+      const s = await this.snap();
+      if (s.party.length > 0) return null;
+      this.say(`starter: attempt ${attempt + 1} did not take`);
+    }
+    return 'could not pick up a starter in the lab';
+  }
+
+  /**
+   * Title screen to standing in the grass with a Pokemon.
+   *
+   * Returns { ok, message, party }.
+   */
+  /**
+   * The legs from Elm's lab out to the grass.
+   *
+   * Separate because the pilot stops in between: with no starter named it hands
+   * over at the table, and this is what finishes the job afterwards.
+   */
+  async toGrass() {
+    const p = this.title.places;
+    const s = await this.snap();
+    if (!s.party.length) {
+      return { ok: false, party: [], message: 'pick a starter first' };
+    }
+    const legs = [
+      ['back outside', async () =>
+        await this.through(p.labExit, p.newBarkTown)
+          ? null : 'could not get out of the lab'],
+      ['out to Route 29', async () =>
+        await this.crossEdge('LEFT', p.route29) ? null : 'could not reach Route 29'],
+      ['finding grass', async () =>
+        await this.findGrass() ? null : 'could not find a patch of grass'],
+    ];
+    return this.walkLegs(legs, async () => {
+      const now = await this.snap();
+      const lead = now.party[0];
+      return { ok: true, party: now.party,
+               message: lead
+                 ? `ready on Route 29 with a Lv${lead.level} ${this.nameOf(lead)}`
+                 : 'reached the grass, but with no Pokémon' };
+    });
+  }
+
   /** Stand on a tile that rolls for wild encounters. */
   async findGrass() {
     const grass = this.state.e.grassTiles;

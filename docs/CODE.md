@@ -1400,7 +1400,7 @@ point those coordinates mean somewhere else entirely.
 
 ## 5. Crossing to the next map
 
-<!-- covers: gen2/journey.js gen2/world.js @ da1887ad07f6 -->
+<!-- covers: gen2/journey.js gen2/world.js @ f6061147ab72 -->
 
 A connection spans only part of a shared edge, so "walk west until something
 happens" does not work. `crossEdge()` closes the distance in stages, then tries
@@ -2513,7 +2513,7 @@ flowchart TD
 
 ## 7a. Five that act on where you already are
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ 53ace4e48f4e -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ 3eb016ac24fa -->
 
 Grind, hunt and catch all go *looking* for something. These five do the obvious
 thing with the situation you are already in, and take no parameters:
@@ -2784,7 +2784,7 @@ said *trainer battle: lost* **seven times**. One loss, reported seven ways.
 
 ## 7d. The counter, and the money it takes
 
-<!-- covers: gen2/menus.js gen2/state.js titles/crystal.js @ 888a7bfb8e7a -->
+<!-- covers: gen2/menus.js gen2/state.js titles/crystal.js @ 53fb64214287 -->
 
 Everything the pilot could do until now used what it found. **Shop** walks to a
 mart and buys, which is the first thing it does that spends rather than
@@ -3185,13 +3185,31 @@ because that failure is only otherwise discovered by reaching for the undo.
 
 ## 8. The errands
 
-<!-- covers: titles/crystal.js gen2/journey.js @ ea04c9986eee -->
+<!-- covers: titles/crystal.js gen2/journey.js @ e4cac510c33d -->
 
 Everything in this section is `crystal.js` — the only file in the app that names
 a Crystal map, a Crystal door or a Crystal NPC. What it stands on is
 `journey.js`, section 5's routing and crossing, which knows none of them. That
 division is what a ROM hack of the same base game would exploit: an errand is
 a title's, and getting there is the engine's.
+
+**The opening moved down to the engine, because it turned out not to be one
+cartridge's.** `askElm`, `waitAtTheTable`, `takeStarter` and `toGrass` were
+methods on `class Crystal` until Polished Crystal's pilot was measured taking a
+Totodile with *Crystal's tiles*: `rom-events --objects ElmsLab` returns the same
+room on both cartridges — Elm at (5,2), the aide at (2,9), the three balls at
+(6,3) (7,3) (8,3) in that order — and every tile those four methods use comes
+out of `title.places`. A second copy in the second profile would have been the
+same walk written twice, which is the mistake this repository keeps paying for.
+
+They stay refusable rather than assumed: a title declaring none of
+`elmTalkFrom`, `starterBallX`, `labExit` or `route29` never calls them and its
+`run` stops where it stopped before. Polished declares all four now and gets as
+far as the lab door with a starter in hand, where a scene Crystal does not have
+turns it back — *"Aaaaaaa, I want / you to have this"*. Running the scripts
+first was tried and changes nothing, because the scene fires on the exit tile
+rather than before it. It reports who stopped it, which is the answer this
+section's refusal path exists to give.
 
 **The file has two halves, and they differ in kind.** `crystal` is *data* — the
 shape the engine reads, and the whole of what a second title would have to
@@ -3557,7 +3575,7 @@ the bag" rather than "did we gain any".
 
 ## 8a. Finding the Centers and the Marts in the cartridge
 
-<!-- covers: gen2/world.js gen2/journey.js @ da1887ad07f6 -->
+<!-- covers: gen2/world.js gen2/journey.js @ f6061147ab72 -->
 
 The last thing in this app that had to be written out by hand. A title said
 where the Centers and the Marts were, so the pilot healed in the two towns
@@ -3737,7 +3755,7 @@ go](#8c-naming-a-city-is-a-feature).
 
 ## 8c. Naming a city is a feature
 
-<!-- covers: titles/crystal.js gen2/world.js @ 6a127882be50 -->
+<!-- covers: titles/crystal.js gen2/world.js @ fe8892aadde1 -->
 
 The map graph has always reached most of Johto. A flood over its exits from
 Route 31 finds sixty-odd maps in five legs — and every feature in this app was
@@ -3821,7 +3839,7 @@ by, which is the only leg it can measure.
 
 ## 8d. A route the game itself refuses
 
-<!-- covers: gen2/journey.js gen2/state.js @ a4d936de5587 -->
+<!-- covers: gen2/journey.js gen2/state.js @ 74b545982c16 -->
 
 The pass before this one taught the walk to *quote* the man who turns it back.
 This is the pilot doing something about it.
@@ -3928,7 +3946,7 @@ counting bytes reads a full case as one.
 
 ## 8e. Fighting everybody here
 
-<!-- covers: gen2/journey.js @ d28d19b3aae6 -->
+<!-- covers: gen2/journey.js @ 7f1992e6f8c7 -->
 
 The primitive a Gym needs. The pilot has been stopped on Route 32 for three
 passes by a man who wants Falkner beaten first, and beating Falkner means
@@ -4029,7 +4047,7 @@ costs however long it takes somebody to notice their money is gone.
 
 ## 8f. Going and winning a badge
 
-<!-- covers: gen2/journey.js gen2/state.js titles/crystal.js @ e9e29ac9fbf5 -->
+<!-- covers: gen2/journey.js gen2/state.js titles/crystal.js @ 2e3e55a41657 -->
 
 The pilot has been turned back from Route 32 since the pass it learned to find
 Pokémon Centers. `reopen` throws away every written-off road the moment a badge
@@ -4112,7 +4130,7 @@ everybody is a heal whatever it says about itself.
 
 ## 8g. The tiles that run a script, and saying hello
 
-<!-- covers: gen2/world.js gen2/journey.js @ da1887ad07f6 -->
+<!-- covers: gen2/world.js gen2/journey.js @ f6061147ab72 -->
 
 Four passes of machinery pointed at one sentence a man says, and the reader that
 made it diagnosable is twelve lines.
@@ -4337,6 +4355,20 @@ table. On this cartridge:
 
 Which is what everybody believed and nothing here had read.
 
+**Measured at last, and the answer is not yet the one the question wanted.**
+On a headless page (2026-09-14) the *write* half proved out: twelve consecutive
+`shiftClock(+1h)` calls each saved in-game, checked the battery's checksum,
+applied `advanceClock`, installed, and got back into the world. The save editor
+works.
+
+The *read* half did not move. `wTimeOfDay` stayed on `day` across all twelve
+skips and across a further hour of stepped frames, while `playtime` advanced
+normally -- 233 to 4224 over 222,000 frames. So the block is following neither
+the clock edit nor the frames, which is a narrower question than the one this
+section poses and the one worth asking next: whether `wTimeOfDay` is recomputed
+only on some event -- a map load, a midnight check -- rather than continuously.
+Nothing here should be read as the editor failing; the install half is proven.
+
 ### Two ways to get to an hour, and they are different trades
 
 ```mermaid
@@ -4461,7 +4493,7 @@ cartridge will not say which hours are which.
 
 ## 8j. A cartridge that changed everything it could
 
-<!-- covers: titles/polished.js gen2/engine.js gen2/romdata.js gen2/state.js gen2/menus.js @ dce833e4cb17 -->
+<!-- covers: titles/polished.js gen2/engine.js gen2/romdata.js gen2/state.js gen2/menus.js @ eeecdd310e63 -->
 
 Polished Crystal is the profile in `docs/DEVELOPING.md`'s hack table described
 as "the generic fallback, and the hardest thing to support properly". It is
@@ -6238,7 +6270,7 @@ is the noise this list exists to replace.
 
 ### Leading with the one that can answer the room
 
-<!-- covers: gen2/romdata.js gen2/menus.js gen2/journey.js @ 323a952c0666 -->
+<!-- covers: gen2/romdata.js gen2/menus.js gen2/journey.js @ 3a6bdcfdd7e4 -->
 
 **Gen 2 sends out slot one and asks nobody.** So the party's order decides the
 first battle of a Gym — and since the pass before, the pilot has known exactly
@@ -6337,7 +6369,7 @@ all reasons to walk in as we are rather than reasons not to go.
 
 ### Reading a gym out of the cartridge
 
-<!-- covers: titles/crystal.js @ d794ca9dfcd8 -->
+<!-- covers: titles/crystal.js @ 50955a524eb8 -->
 
 A gym declaration is five hand-written facts:
 
@@ -6428,7 +6460,7 @@ disagreements.
 
 ### Gates: asking the cartridge what it wants
 
-<!-- covers: gen2/state.js gen2/journey.js titles/crystal.js @ e9e29ac9fbf5 -->
+<!-- covers: gen2/state.js gen2/journey.js titles/crystal.js @ 2e3e55a41657 -->
 
 Two kinds of closed road, and the difference is everything:
 

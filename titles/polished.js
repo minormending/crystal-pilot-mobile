@@ -569,6 +569,15 @@ export const polished = {
     labDoor: [6, 3],
     elmsLab: key(24, 3),
     labExit: [4, 11],
+    // **Crystal's numbers, and not copied on faith.** `rom-events --objects
+    // ElmsLab` on both cartridges returns the same room: Elm at (5,2), the
+    // aide at (2,9), the three balls at (6,3) (7,3) (8,3) in that order, the
+    // cop at (5,3). Only the sprites differ, and this one adds Lyra at (5,11)
+    // beside the door. So the tiles transfer, and a live run took a Totodile
+    // with them before any of this was written down.
+    elmTalkFrom: [5, 3],
+    starterBallX: { cyndaquil: 6, totodile: 7, chikorita: 8 },
+    route29: key(24, 1),
     route29: key(24, 1),
   },
   // **The same road, the same man, and the same Egg — found by asking rather
@@ -755,9 +764,9 @@ export class Polished extends Journey {
    * "refused". That is the handover point, and it is the game's choice
    * rather than this profile's.
    */
-  async run() {
+  async run(starter = null) {
     const p = this.title.places;
-    return this.walkLegs([
+    const legs = [
       ['starting a new game', async () => {
         if (await this.tasks.continueGame()) return null;
         return 'never reached the overworld — is this a Polished Crystal ROM?';
@@ -771,12 +780,32 @@ export class Polished extends Journey {
       ["into Elm's lab", async () =>
         await this.through(p.labDoor, p.elmsLab)
           ? null : 'could not get into the lab'],
-    ], async () => {
-      const now = await this.snap();
-      return { ok: true, handover: true, party: now.party,
-               message: now.party.length
-                 ? 'in the lab — your turn'
-                 : 'in the lab — your turn, Lyra is waiting' };
-    });
+    ];
+
+    // The same hand-over Crystal makes, and for the same reason: which of the
+    // three you want is the one real decision in the opening.
+    if (!starter) {
+      legs.push(['hearing Elm out', async () => {
+        await this.askElm();
+        await this.waitAtTheTable();
+        return null;
+      }]);
+      return this.walkLegs(legs, async () => ({
+        ok: true, handover: true, party: [],
+        message: 'your turn — pick a starter',
+      }));
+    }
+
+    legs.push([`taking ${starter}`, async () => await this.takeStarter(starter)]);
+    // **It gets the starter and stops at the door, and that is measured rather
+    // than assumed.** With one in hand the walk out is turned back by somebody
+    // saying *"Aaaaaaa, I want / you to have this"* -- this cartridge hands you
+    // something on the way out that Crystal does not, and `through`'s refusal
+    // path reports the words rather than pressing through them. Running the
+    // scripts first was tried and changes nothing: the scene fires on the exit
+    // tile, not before it, so answering it needs the walk to know about it and
+    // not this profile. Left as it stands, saying who stopped it, which is a
+    // better answer than a leg that pretends to have handled it.
+    return this.walkLegs(legs, async () => await this.toGrass());
   }
 }
