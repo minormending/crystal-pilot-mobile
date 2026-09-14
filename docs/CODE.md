@@ -4393,13 +4393,20 @@ On a headless page (2026-09-14) the *write* half proved out: twelve consecutive
 applied `advanceClock`, installed, and got back into the world. The save editor
 works.
 
-The *read* half did not move. `wTimeOfDay` stayed on `day` across all twelve
-skips and across a further hour of stepped frames, while `playtime` advanced
-normally -- 233 to 4224 over 222,000 frames. So the block is following neither
-the clock edit nor the frames, which is a narrower question than the one this
-section poses and the one worth asking next: whether `wTimeOfDay` is recomputed
-only on some event -- a map load, a midnight check -- rather than continuously.
-Nothing here should be read as the editor failing; the install half is proven.
+**The read half works too, and the first write-up of this got that wrong.** One
+`shiftClock(8)` takes the game from `day` to `night`, read back after the reload
+with the pilot standing still -- so the edit lands, the game believes it, and
+Skip does what the button promises. It was recorded here as following *neither*
+the edit nor the frames on the strength of an earlier probe that skipped `+1h`
+twelve times and saw no change; that result is unexplained and the single
+eight-hour skip is the one to trust, being one edit with one reading.
+
+What is still open is the narrower half this section actually asks: whether the
+*frames* move it. `playtime` advances with them normally -- 233 to 4224 over
+222,000 frames -- while a run that pressed on for some fourteen game-hours of
+frames never saw the block change. That is evidence and not proof, and the way
+to settle it is to Skip to the last hour of a block and then step one hour,
+which the working editor now makes cheap.
 
 ### Two ways to get to an hour, and they are different trades
 
