@@ -610,6 +610,17 @@ def verify(cart):
             # `startswith('Trainer')` disagreed with the type field 479 times
             # in a game with 2108 objects on its maps -- which is not a
             # finding about the hack, it is this rule not knowing the word.
+            # **A name rule cannot know every cartridge's naming.** Polished
+            # Crystal's remaining thirteen are all of this shape and all
+            # explicable: it names a map's own trainers after the map --
+            # `OlivineGymGentlemanPreston`, `RocketHideoutB1FScientistSanders`
+            # -- so the prefix never matches, while the *type* field is
+            # `OBJECTTYPE_TRAINER` and `OBJECTTYPE_GENERICTRAINER` exactly as
+            # it should be. Checked against the disassembly, both of them.
+            # The other direction is the one Crystal also has: a trainer you
+            # *talk to* is legitimately a script object, so `Trainer...` at
+            # type 0 is right too. Neither is a fault to chase; the count is
+            # here because a *change* in it would be.
             named = script.startswith(('Trainer', 'GenericTrainer'))
             if named != (kind in fights):
                 disagree += 1

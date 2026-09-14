@@ -1490,8 +1490,15 @@ inside a script that is holding the controls, and the loop below already knows
 how to answer one. The symptom read as flakiness — it passed whenever anything
 slow happened to run between the legs — which is the shape a missing settle
 always has, and the reason to go looking for the read rather than add a wait.
-`nav.awaitMapChange` had been written for this exact hazard, comment and all,
-and never called by anything.
+
+**A correction, because the first write-up of this got it wrong.**
+`nav.awaitMapChange` was described here as written for this hazard and never
+called by anything. It *is* called — `walkTo` uses it the moment a walk lands on
+a warp tile, to wait the transition out and report the map it arrives on, and
+`tests/cases/nav.mjs` stubs it. The claim came from a grep for three names that
+were not its name. It was never the missing piece: it answers *what map did that
+warp land on*, where the settle above answers *is the collision map readable
+yet*, and only the second was absent.
 
 **A gate at an edge is not a phone call.** `crossEdge` answers a refusal by
 running the scripts and asking again, because out there a refusal usually *is*
