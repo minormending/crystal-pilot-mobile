@@ -705,10 +705,42 @@ MENU_DATA_ITEMS = 1
 # the failure is silent in both directions: a box mistaken for another is
 # pressed with the wrong answer, and a box nothing matches is pressed on
 # through.
+# Each entry names the symbol Crystal uses *and* whatever a hack calls the same
+# box, because "the name I know is not here" is a fact about vocabulary and was
+# being reported as a fact about capability. Polished Crystal has both of these
+# under its own names -- `BattleMenuDataHeader` and `BattleMenuPKMN_Loop` -- and
+# was told for two passes that its shapes could not be checked. The first
+# candidate that the symbol file has is the one used, so Crystal is unchanged.
 APP_BOXES = [
-    ('BattleMenuHeader', 'battleMenu', None),
-    ('BattleMonMenu.MenuHeader', 'switchBox', 'SWITCH'),
+    (('BattleMenuHeader', 'BattleMenuDataHeader'), 'battleMenu', None),
+    (('BattleMonMenu.MenuHeader', 'BattleMenuPKMN_Loop.MenuHeader'),
+     'switchBox', 'switch'),
 ]
+
+
+MENU_WORDS = re.compile(r'menuWords:\s*\{(.*?)\n\s*\}', re.S)
+
+
+def menu_words(cart, key, fallback):
+    """What the *profile* calls a menu's first option, or `fallback`.
+
+    **Read rather than repeated.** This check used to hold the cartridge to the
+    literal `'SWITCH'`, which is Crystal's word; Polished Crystal's box begins
+    `Switch`, its profile has said `switch: ['SWITCH', 'Switch']` all along, and
+    the check called the disagreement a fault. A tool keeping its own copy of
+    something a profile declares is the bug this file exists to catch, so it
+    stopped keeping one.
+    """
+    for path in picked_titles(cart):
+        block = MENU_WORDS.search(path.read_text())
+        if not block:
+            continue
+        row = re.search(rf'\b{key}:\s*\[(.*?)\]', block.group(1), re.S)
+        if row:
+            found = re.findall(r"'([^']*)'", row.group(1))
+            if found:
+                return found
+    return list(fallback)
 
 
 def find_text(cart, phrase, limit=12):
@@ -1040,8 +1072,16 @@ def menus(cart):
     """
     want = app_numbers()
     bad = 0
-    for name, field, first in APP_BOXES:
-        got = menu_header(cart, name)
+    for names, field, first in APP_BOXES:
+        tried = (names,) if isinstance(names, str) else names
+        name, got = None, None
+        for candidate in tried:
+            got = menu_header(cart, candidate)
+            if got:
+                name = candidate
+                break
+        if not got:
+            name = ' / '.join(tried)
         if not got:
             # **A cartridge that does not name this menu cannot be asked.**
             # The app drives a box by its *shape* -- how many rows, where the
@@ -1050,8 +1090,8 @@ def menus(cart):
             # `BattleMenuHeader`; its battle menu is built somewhere else
             # under another name. The shape is then unverified, which is
             # worth saying and is not the same as wrong.
-            print(f'  note  {name} is not in this symbol file, so the shape '
-                  f'the app declares for it is unchecked here')
+            print(f'  note  none of {name} is in this symbol file, so the '
+                  f'shape the app declares for it is unchecked here')
             continue
         mine = want.get(field, {})
         # The first option's name is only printed where it is also checked.
@@ -1066,10 +1106,15 @@ def menus(cart):
                 print(f'  !!  {field}.{key} says {mine[key]}, '
                       f'{name} has {got[key]}')
                 bad += 1
-        if first and got['first'] != first:
-            print(f'  !!  {field} expects "{first}" first, '
-                  f'{name} begins "{got["first"]}"')
-            bad += 1
+        if first:
+            # Any of the words the profile declares for this menu will do: a
+            # cartridge that writes `Switch` where Crystal writes `SWITCH` has
+            # renamed a word, not changed a shape.
+            words = menu_words(cart, first, ('SWITCH',))
+            if not any(got['first'].startswith(w) for w in words):
+                print(f'  !!  {field} expects one of {words} first, '
+                      f'{name} begins "{got["first"]}"')
+                bad += 1
         print(line + ('' if bad else '  — and the app agrees'))
     return bad
 

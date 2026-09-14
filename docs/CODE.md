@@ -1027,7 +1027,7 @@ noticing at all.
 
 ### `collision.js` — what you can walk on
 
-<!-- covers: gen2/collision.js @ 9797d99f76a9 -->
+<!-- covers: gen2/collision.js @ 44fcadd39988 -->
 
 Decodes the loaded map into "can I stand on this tile", and does breadth-first
 pathfinding over the result. This is what turns walking from trial and error
@@ -1295,7 +1295,7 @@ Route 30's door to it at `(17,5)`.
 
 ## 4. Taking one step, and planning a walk
 
-<!-- covers: gen2/nav.js gen2/collision.js @ 3017fcbddabf -->
+<!-- covers: gen2/nav.js gen2/collision.js @ 756b87105ebe -->
 
 ### One step
 
@@ -4999,6 +4999,26 @@ type-versus-name disagreements it reported here were command operands landing
 inside a trainer's bytes — `FuchsiaMart: TrainerCooltrainermFinch is type 5`
 being the clearest — and an object with no script is now skipped rather than
 named after whatever it collided with. Thirteen remain, and they are real.
+
+**Two of its three unchecked notes were about vocabulary, not capability.**
+`--menus` reported that `BattleMenuHeader` and `BattleMonMenu.MenuHeader` were
+not in this symbol file, so the shapes the app declares for them went
+unverified. They are in it, under this cartridge's own names —
+`BattleMenuDataHeader` and `BattleMenuPKMN_Loop.MenuHeader` — which is the same
+lesson its icon tables taught: *a missing name is a question about vocabulary,
+not an answer about capability.* Each entry names Crystal's symbol and the
+hack's now, first match wins, and **both of Polished's boxes check out**: 34
+items at row 12, and 3 at row 11.
+
+Finding them immediately found something else. The check held the first option
+to the literal `'SWITCH'`, and this cartridge's box begins `Switch` — so it
+reported a fault against a profile that has said `switch: ['SWITCH', 'Switch']`
+all along. A tool keeping its own copy of what a profile declares is precisely
+the bug this file exists to catch, so it reads `menuWords` instead.
+
+The third note stands and is a real fact about the cartridge: no header here
+claims left column 2, so the Bug-Catching Contest cannot be told from an
+ordinary battle menu on it.
 
 **And its dialogue is compressed.** `macros/scripts/text.asm` compresses a
 string whenever compression saves space, so "was" is nowhere in that ROM while

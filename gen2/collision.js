@@ -208,8 +208,8 @@ export class CollisionMap {
       const x = b(wram, at + mo.x) - mo.origin;
       const y = b(wram, at + mo.y) - mo.origin;
       if (x < 0 || y < 0 || x >= w || y >= h) continue;
-      out.push({ index: i, sprite, type: b(wram, at + mo.type) & 0x0f,
-                 x, y });
+      out.push({ index: i, sprite,
+                 type: b(wram, at + mo.type) & this._typeMask(), x, y });
     }
     return out;
   }
@@ -238,6 +238,26 @@ export class CollisionMap {
    * one of them falls back to the placements and the other must not claim a map
    * has no trainers when it has not looked.
    */
+  /**
+   * How much of the object's type byte is the type.
+   *
+   * **Off the profile, because one reader here already does it.**
+   * `world.objectsOn` masks with `mapEvents.typeMask` and these two masked with
+   * a hard `0x0f` -- Crystal's rule, where the palette lives in the high nibble
+   * -- so on a cartridge that declares otherwise the ROM reader and the work-RAM
+   * readers disagreed about the same field. Polished Crystal declares `0xff`
+   * for exactly that reason.
+   *
+   * No type either cartridge actually uses is above 7, so nothing observed
+   * changed when this stopped being a constant; that is what makes it worth
+   * doing now rather than after something reads `$1x` and is quietly told it is
+   * a script. Two copies of a rule is the shape of the last four bugs here.
+   */
+  _typeMask() {
+    const ev = this.e && this.e.mapEvents;
+    return ev && ev.typeMask !== undefined ? ev.typeMask : 0x0f;
+  }
+
   liveObjects(wram = this.wram) {
     if (this.a.structs === null || this.a.objects === null) return null;
     const out = [];
@@ -257,7 +277,7 @@ export class CollisionMap {
       // there whatever it turns out to be.
       const type = index < mo.count
         ? b(wram, this.a.objects + index * mo.bytes + mo.type)
-          & 0x0f
+          & this._typeMask()
         : null;
       out.push({ index, sprite, type, x, y });
     }
