@@ -1400,7 +1400,7 @@ point those coordinates mean somewhere else entirely.
 
 ## 5. Crossing to the next map
 
-<!-- covers: gen2/journey.js gen2/world.js @ f6061147ab72 -->
+<!-- covers: gen2/journey.js gen2/world.js @ d43f591619ba -->
 
 A connection spans only part of a shared edge, so "walk west until something
 happens" does not work. `crossEdge()` closes the distance in stages, then tries
@@ -1499,6 +1499,24 @@ a warp tile, to wait the transition out and report the map it arrives on, and
 were not its name. It was never the missing piece: it answers *what map did that
 warp land on*, where the settle above answers *is the collision map readable
 yet*, and only the second was absent.
+
+**A gate repeats itself; a scene says its piece and lets you past.** Both look
+identical from inside `through` — a refusal with words on the screen — and for
+two passes both spent a turn, which is how Polished Crystal's pilot came away
+from its own lab door carrying a starter it could not walk out with. Measured:
+it is stopped by *"Aaaaaaa, I want / you to have this"*, somebody handing it
+something on the way out, and the attempt straight after the walk gave up
+succeeded on the first try. Two turns had gone before the scene finished
+talking.
+
+So the words are the test. Route 32's gateman says the same sentence however
+many times he is asked; a conversation that has moved on has not refused twice,
+it has refused once and then said something else — so a refusal whose words
+differ from the last one's costs no turn. The *first* refusal always costs one,
+because there is nothing for it to have changed from, and letting it off gave
+the gateman three attempts where the whole point of him is that two is one too
+many. `tries` bounds the loop either way, so a scene that never stops talking
+cannot run forever.
 
 **A gate at an edge is not a phone call.** `crossEdge` answers a refusal by
 running the scripts and asking again, because out there a refusal usually *is*
@@ -2513,7 +2531,7 @@ flowchart TD
 
 ## 7a. Five that act on where you already are
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ 3eb016ac24fa -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ e4a647931476 -->
 
 Grind, hunt and catch all go *looking* for something. These five do the obvious
 thing with the situation you are already in, and take no parameters:
@@ -3185,7 +3203,7 @@ because that failure is only otherwise discovered by reaching for the undo.
 
 ## 8. The errands
 
-<!-- covers: titles/crystal.js gen2/journey.js @ e4cac510c33d -->
+<!-- covers: titles/crystal.js gen2/journey.js @ 531a91728c42 -->
 
 Everything in this section is `crystal.js` — the only file in the app that names
 a Crystal map, a Crystal door or a Crystal NPC. What it stands on is
@@ -3204,12 +3222,9 @@ same walk written twice, which is the mistake this repository keeps paying for.
 
 They stay refusable rather than assumed: a title declaring none of
 `elmTalkFrom`, `starterBallX`, `labExit` or `route29` never calls them and its
-`run` stops where it stopped before. Polished declares all four now and gets as
-far as the lab door with a starter in hand, where a scene Crystal does not have
-turns it back — *"Aaaaaaa, I want / you to have this"*. Running the scripts
-first was tried and changes nothing, because the scene fires on the exit tile
-rather than before it. It reports who stopped it, which is the answer this
-section's refusal path exists to give.
+`run` stops where it stopped before. Polished declares all four now and plays
+the whole opening, ending *"ready on Route 29 with a Lv6 Totodile"* — the same
+nine legs Crystal walks.
 
 **The file has two halves, and they differ in kind.** `crystal` is *data* — the
 shape the engine reads, and the whole of what a second title would have to
@@ -3575,7 +3590,7 @@ the bag" rather than "did we gain any".
 
 ## 8a. Finding the Centers and the Marts in the cartridge
 
-<!-- covers: gen2/world.js gen2/journey.js @ f6061147ab72 -->
+<!-- covers: gen2/world.js gen2/journey.js @ d43f591619ba -->
 
 The last thing in this app that had to be written out by hand. A title said
 where the Centers and the Marts were, so the pilot healed in the two towns
@@ -3839,7 +3854,7 @@ by, which is the only leg it can measure.
 
 ## 8d. A route the game itself refuses
 
-<!-- covers: gen2/journey.js gen2/state.js @ 74b545982c16 -->
+<!-- covers: gen2/journey.js gen2/state.js @ 898280d166d9 -->
 
 The pass before this one taught the walk to *quote* the man who turns it back.
 This is the pilot doing something about it.
@@ -3946,7 +3961,7 @@ counting bytes reads a full case as one.
 
 ## 8e. Fighting everybody here
 
-<!-- covers: gen2/journey.js @ 7f1992e6f8c7 -->
+<!-- covers: gen2/journey.js @ 666d9e1b8068 -->
 
 The primitive a Gym needs. The pilot has been stopped on Route 32 for three
 passes by a man who wants Falkner beaten first, and beating Falkner means
@@ -4047,7 +4062,7 @@ costs however long it takes somebody to notice their money is gone.
 
 ## 8f. Going and winning a badge
 
-<!-- covers: gen2/journey.js gen2/state.js titles/crystal.js @ 2e3e55a41657 -->
+<!-- covers: gen2/journey.js gen2/state.js titles/crystal.js @ 72f7158a65ca -->
 
 The pilot has been turned back from Route 32 since the pass it learned to find
 Pokémon Centers. `reopen` throws away every written-off road the moment a badge
@@ -4130,7 +4145,7 @@ everybody is a heal whatever it says about itself.
 
 ## 8g. The tiles that run a script, and saying hello
 
-<!-- covers: gen2/world.js gen2/journey.js @ f6061147ab72 -->
+<!-- covers: gen2/world.js gen2/journey.js @ d43f591619ba -->
 
 Four passes of machinery pointed at one sentence a man says, and the reader that
 made it diagnosable is twelve lines.
@@ -4493,7 +4508,7 @@ cartridge will not say which hours are which.
 
 ## 8j. A cartridge that changed everything it could
 
-<!-- covers: titles/polished.js gen2/engine.js gen2/romdata.js gen2/state.js gen2/menus.js @ eeecdd310e63 -->
+<!-- covers: titles/polished.js gen2/engine.js gen2/romdata.js gen2/state.js gen2/menus.js @ 3d4e3a975c23 -->
 
 Polished Crystal is the profile in `docs/DEVELOPING.md`'s hack table described
 as "the generic fallback, and the hardest thing to support properly". It is
@@ -6270,7 +6285,7 @@ is the noise this list exists to replace.
 
 ### Leading with the one that can answer the room
 
-<!-- covers: gen2/romdata.js gen2/menus.js gen2/journey.js @ 3a6bdcfdd7e4 -->
+<!-- covers: gen2/romdata.js gen2/menus.js gen2/journey.js @ ef21833cdf8c -->
 
 **Gen 2 sends out slot one and asks nobody.** So the party's order decides the
 first battle of a Gym — and since the pass before, the pilot has known exactly
@@ -6460,7 +6475,7 @@ disagreements.
 
 ### Gates: asking the cartridge what it wants
 
-<!-- covers: gen2/state.js gen2/journey.js titles/crystal.js @ 2e3e55a41657 -->
+<!-- covers: gen2/state.js gen2/journey.js titles/crystal.js @ 72f7158a65ca -->
 
 Two kinds of closed road, and the difference is everything:
 

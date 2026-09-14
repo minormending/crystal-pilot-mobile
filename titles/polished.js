@@ -797,15 +797,12 @@ export class Polished extends Journey {
     }
 
     legs.push([`taking ${starter}`, async () => await this.takeStarter(starter)]);
-    // **It gets the starter and stops at the door, and that is measured rather
-    // than assumed.** With one in hand the walk out is turned back by somebody
-    // saying *"Aaaaaaa, I want / you to have this"* -- this cartridge hands you
-    // something on the way out that Crystal does not, and `through`'s refusal
-    // path reports the words rather than pressing through them. Running the
-    // scripts first was tried and changes nothing: the scene fires on the exit
-    // tile, not before it, so answering it needs the walk to know about it and
-    // not this profile. Left as it stands, saying who stopped it, which is a
-    // better answer than a leg that pretends to have handled it.
+    // The same last leg as Crystal's, and it reaches the same grass. Getting
+    // there needed one fix that is not this profile's: on the way out of the
+    // lab this cartridge hands you something -- *"Aaaaaaa, I want / you to have
+    // this"* -- and `through` used to spend both its turns on that scene and
+    // call it a gate. A gate repeats itself; a scene says its piece. See
+    // `Journey.through`.
     return this.walkLegs(legs, async () => await this.toGrass());
   }
 }

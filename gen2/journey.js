@@ -730,7 +730,7 @@ export class Journey {
     // away, the Pokemon Center on Route 32 is ninety-six steps down a
     // ninety-tile route, and eight tries never got near it. `travelTo` learned
     // the same thing about a refused leg one pass earlier.
-    let fought = 0, turned = 0, greeted = false;
+    let fought = 0, turned = 0, greeted = false, lastSaid = null;
     this.turnedBack = null;
     this.battleStuck = false;
     for (let i = 0; i < tries && fought < THROUGH_BATTLES;) {
@@ -801,6 +801,29 @@ export class Journey {
         await this.runScripts();
         if (said) {
           this.turnedBack = said;
+          // **A gate repeats itself; a scene says its piece and lets you past.**
+          // Both look identical from here -- a refusal with words on it -- and
+          // spending a turn on the second kind is how Polished Crystal's pilot
+          // came away from its own lab door with a starter it could not carry
+          // out. Measured: it is stopped by *"Aaaaaaa, I want / you to have
+          // this"*, somebody handing it something on the way out, and the very
+          // next attempt walks straight through. Two turns were gone before the
+          // scene had finished talking.
+          //
+          // So the words are the test. Route 32's gateman says the same
+          // sentence however many times he is asked, and that still spends a
+          // turn and still gives up; a conversation that has moved on has not
+          // refused twice, it has refused once and then said something else.
+          // `tries` still bounds the loop either way, so a scene that never
+          // stops talking cannot run forever. The *first* refusal always costs
+          // a turn -- there is nothing to have changed from yet, and letting it
+          // off gave the Route 32 gateman three attempts where the whole point
+          // of him is that two is already one too many.
+          if (lastSaid !== null && said !== lastSaid) {
+            lastSaid = said;
+            continue;
+          }
+          lastSaid = said;
           // **Say hello before giving up.** Whoever pushed us back is standing
           // beside the tile that did it, and the rest of their script -- the
           // half that checks a badge and hands something over -- runs when they
