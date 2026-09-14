@@ -458,15 +458,39 @@
      the scrolling moved in one level, onto the panes, and the fade went with
      it -- a card cut off mid-button should read as "there is more below"
      rather than as a rendering fault. */
-  /* The padding is the fade's height, not a gap. At 2px the last row was still
-     under the mask at full scroll, so a pane you had scrolled to the bottom of
+  /* **The fade has to be taller than a line, and the padding has to clear the
+     fade.** Two numbers, one each for the two ends of the same scroll.
+
+     At the *bottom* of the scroll the padding is what matters: at 2px the last
+     row was still under the mask, so a pane you had scrolled to the end of
      looked exactly like one you had not -- the fade that exists to say "there
-     is more below" said it after there was no more below. Sixteen clears the
-     fourteen the mask takes. */
+     is more below" went on saying it after there was no more below.
+
+     At *rest* the mask's own height is what matters, and fourteen was under it.
+     The line boxes in here measure 13 to 18px, so a fourteen-pixel ramp cannot
+     cover the tallest of them: the edge landed mid-glyph -- measured on the
+     about card, 7px into a 15px line -- and what showed was a half-height row
+     of letter-tops at about half opacity. That reads as clipped text rather
+     than as a fade, which is the one thing the fade is there to prevent.
+
+     **A plain ramp of twenty-two fixed the sliver and cost the line above it.**
+     Held side by side in one page against the old fourteen, it faded the
+     half-line to a ghost as intended -- and dimmed the last *fully visible*
+     line with it, because a linear mask cannot tell which of the pixels it is
+     covering are a whole line and which are the top of a cut one.
+
+     So the ramp is weighted rather than linear: still twenty-two tall, over
+     the tallest line box, but holding at nine tenths for its first six pixels
+     and doing the work in the last sixteen. The line above the fold stays as
+     crisp as it was at fourteen, and the cut line below it goes as faint as it
+     did at twenty-two. The padding matches the mask's full height, so the
+     bottom of the scroll still clears. */
   .panes{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;
-         display:flex;flex-direction:column;gap:10px;padding-bottom:16px;
-         mask-image:linear-gradient(to bottom,#000 calc(100% - 14px),transparent);
-         -webkit-mask-image:linear-gradient(to bottom,#000 calc(100% - 14px),transparent)}
+         display:flex;flex-direction:column;gap:10px;padding-bottom:22px;
+         mask-image:linear-gradient(to bottom,#000 calc(100% - 22px),
+                    rgba(0,0,0,.9) calc(100% - 16px),transparent);
+         -webkit-mask-image:linear-gradient(to bottom,#000 calc(100% - 22px),
+                    rgba(0,0,0,.9) calc(100% - 16px),transparent)}
   .pane{display:flex;flex-direction:column;gap:10px}
   /* --- the strip of keys at the foot of the panel -------------------------
      What used to be a stack you scrolled through. Five cards sat on top of one

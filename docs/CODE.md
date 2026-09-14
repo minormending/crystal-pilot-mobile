@@ -4945,7 +4945,7 @@ This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ 89c9b3426fc3 -->
+<!-- covers: app/main.js index.html @ 65f9550ed993 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -5028,11 +5028,36 @@ as `display:contents` rather than `block`, because that layout dissolves the
 wrapper so the d-pad and the face buttons can take grid areas of their own, and
 handing it a box back collapses both into one cell.
 
-**And the fade at the foot of `.panes` is sized to its own padding.** It exists
-so a card cut off mid-button reads as *there is more below* rather than as a
-rendering fault, and at `padding-bottom: 2px` against a 14px mask it went on
-saying so after there was no more below: a pane scrolled to the bottom looked
-exactly like one that had not been. Sixteen clears the fourteen.
+**And the fade at the foot of `.panes` has two numbers, one for each end of the
+same scroll.** It exists so a card cut off mid-button reads as *there is more
+below* rather than as a rendering fault, and it was failing at both ends.
+
+At the *bottom* of the scroll the padding is what matters. At
+`padding-bottom: 2px` against a 14px mask the fade went on saying *more below*
+after there was no more below: a pane scrolled to the end looked exactly like
+one that had not been.
+
+At *rest* the mask's own height is what matters, and this is the half that took
+a second pass to see. **A ramp shorter than a line cannot hide one.** The line
+boxes inside this scroller measure 13 to 18px; the mask was 14, so the edge
+landed mid-glyph — measured on the about card, 7px into a 15px line — and what
+showed was a half-height row of letter-tops at about half opacity. Which reads
+as clipped text, the exact thing the fade is there to prevent, and it was filed
+as a defect on a re-audit by the person who had just written the padding fix and
+assumed it covered both ends.
+
+**A plain ramp of 22 fixed the sliver and cost the line above it**, which is
+only visible if the two are held side by side in one page — the same crop, the
+same text, nothing changing but the mask. It faded the half-line to a ghost as
+intended, and dimmed the last *fully visible* line with it, because a linear
+mask cannot tell which of the pixels under it are a whole line and which are
+the top of a cut one.
+
+So the ramp is weighted rather than linear: 22 tall, over the tallest line box,
+holding at nine tenths for its first six pixels and doing the work in the last
+sixteen. The line above the fold stays as crisp as it was at 14 and the cut
+line below goes as faint as it did at 22. The padding matches the mask's full
+height so the bottom of the scroll still clears.
 
 **`main` *is* the shell** rather than a container holding one. With the
 `<header>` gone there is nothing else at that level, so a wrapper element would
@@ -6477,7 +6502,7 @@ a conversation.
 
 ### The card behind a party row
 
-<!-- covers: app/rows.js app/main.js index.html @ 644cf5a02320 -->
+<!-- covers: app/rows.js app/main.js index.html @ 207ab2b251c6 -->
 
 Two questions the game itself will not answer about a Pokémon you are
 carrying — *what is this made of* and *what is it about to become* — and both
@@ -6690,7 +6715,7 @@ to deposit your last Pokémon.
 
 ### The settings and the save card
 
-<!-- covers: index.html app/main.js @ 89c9b3426fc3 -->
+<!-- covers: index.html app/main.js @ 65f9550ed993 -->
 
 The pilot's own list got a glyph column, shorter names and a slot to fill in
 v165. These two cards did not, and reading them found that they had a different
