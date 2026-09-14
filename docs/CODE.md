@@ -4844,7 +4844,7 @@ This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ 061085115764 -->
+<!-- covers: app/main.js index.html @ 894f9d23cb55 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -5090,6 +5090,38 @@ falls back to the menu icon — and all 291 of Polished's do, though there the
 lens reaches the per-species icon first and the animation is what the Dex card
 would use. All 291 of Polished's icons decompress too, to exactly 128 bytes
 each, and all 291 masks to exactly 64.
+
+**Pico owned the palette too, and that one was losing in silence.** The block
+mapping Pico's variables onto this app's colours — `--pico-color: var(--ink)`
+and forty-one more — sat on a bare `:root`. Pico defines those same names under
+`:host(:not([data-theme=dark])),:root:not([data-theme=dark]),[data-theme=light]`,
+and `:root:not(...)` is two selectors' worth of specificity against `:root`'s
+one. So the mapping lost. Measured against a rendered page rather than reasoned
+about: **35 of the 42 names were resolving to Pico's value**, including
+`--pico-color` at `#373c44` and `--pico-background-color` at `#fff`. The block
+that says *Pico takes its colours from here* had been almost entirely inert
+since the redesign.
+
+Almost nothing looked wrong, which is why it lasted. This sheet colours nearly
+everything itself, so the vendor's values had nowhere to land — except the
+handful of places it does not. Pico assigns `color` to
+`address,blockquote,dl,ol,p,pre,table,ul` **directly**, not by inheritance, so
+every `<p>` in a card was dark slate on a dark panel: **1.47:1**, against the
+4.5 that is legible. Three paragraphs across two cards, unreadable, on the
+route a first-time visitor takes.
+
+`:root:root` ties Pico's specificity and this sheet comes after the vendor's
+link, so a tie is a win. Two things came back with it that had been asked for
+and never granted: the `.gbc`/`.sym` chips are `--pico-code-background-color:
+var(--raise)` as declared, instead of Pico's white light-scheme pill; and form
+elements take `--pico-form-element-*`.
+
+**Neither `tools/check-app contrast` nor anything else here could have caught
+it.** That group reads this stylesheet's own token pairs, and this is a pair the
+stylesheet never names — a vendor default meeting one of ours in the cascade,
+visible only in a computed style on a rendered page. It took axe-core through
+the `ui-audit` harness, on a card reachable only by pressing something, which is
+also why it survived: the four checks had only ever seen the screen you land on.
 
 **Pico owns `main`'s box, and every rule here that touched it was losing
 silently.** Pico's classless build styles `body>main` with width, both margins,
@@ -6306,7 +6338,7 @@ a conversation.
 
 ### The card behind a party row
 
-<!-- covers: app/rows.js app/main.js index.html @ 6580ae030df6 -->
+<!-- covers: app/rows.js app/main.js index.html @ 48205c43cf94 -->
 
 Two questions the game itself will not answer about a Pokémon you are
 carrying — *what is this made of* and *what is it about to become* — and both
@@ -6519,7 +6551,7 @@ to deposit your last Pokémon.
 
 ### The settings and the save card
 
-<!-- covers: index.html app/main.js @ 061085115764 -->
+<!-- covers: index.html app/main.js @ 894f9d23cb55 -->
 
 The pilot's own list got a glyph column, shorter names and a slot to fill in
 v165. These two cards did not, and reading them found that they had a different

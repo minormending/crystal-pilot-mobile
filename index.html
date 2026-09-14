@@ -104,8 +104,31 @@
      So Pico supplies what was actually missing -- a type scale, control
      styling, focus rings, a spacing rhythm -- and takes its colours from here.
      Pico ships a light/dark switch of its own, and that half is simply unused
-     now: there is one palette, and it is mapped once. */
-  :root {
+     now: there is one palette, and it is mapped once.
+
+     **`:root:root`, and the doubling is the whole reason this block works.**
+     Pico defines these same names under
+     `:host(:not([data-theme=dark])),:root:not([data-theme=dark]),[data-theme=light]`
+     -- and `:root:not(...)` is two selectors' worth of specificity against a
+     bare `:root`'s one. So every mapping here lost, silently, to the vendor's
+     *light* scheme. Measured against a rendered page rather than reasoned
+     about: **35 of the 42 names below** were resolving to Pico's value and not
+     to ours, including `--pico-color` at `#373c44` and
+     `--pico-background-color` at `#fff`.
+     Almost nothing looked wrong, because this sheet colours nearly everything
+     itself. What showed was the handful of places it does not: Pico assigns
+     `color` to `address,blockquote,dl,ol,p,pre,table,ul` *directly*, so every
+     `<p>` in a card was dark slate on a dark panel at **1.47:1**, against the
+     4.5 that is legible.
+     Doubling ties Pico's specificity, and this sheet comes after the vendor's
+     link, so a tie is a win. The same trap as `body>main` out-specifying
+     `main` two sections down -- and the third time this vendor has quietly
+     beaten a rule written here.
+     `tools/check-app contrast` cannot see this class of fault: it reads this
+     stylesheet's own token pairs, and a vendor default meeting one of ours in
+     the cascade is a pair the stylesheet never names. It took axe-core against
+     a rendered page, on a card reachable only by pressing something. */
+  :root:root {
     --pico-background-color: var(--bg);
     --pico-color: var(--ink);
     --pico-muted-color: var(--dim);
@@ -629,7 +652,11 @@
   .gate:hover .gname,.gate:focus-visible .gname{color:var(--accent)}
   /* Back to the fork. A link rather than a button, because it undoes a choice:
      a full-width control here would compete with the thing the card is for. */
-  button.backlink{flex:0 0 auto;min-height:0;padding:2px 0;border:0;
+  /* 24px of height, which is the floor a pointer needs (WCAG 2.5.8) and not a
+     look: at `padding:2px 0` these measured 21px and the audit was right to
+     refuse them. The four extra pixels are padding, so the text has not
+     moved. */
+  button.backlink{flex:0 0 auto;min-height:24px;padding:4px 0;border:0;
                   background:none;color:var(--dim);font-size:12px;
                   text-align:left}
   button.backlink:hover{color:var(--ink)}
@@ -638,7 +665,10 @@
      it wants two files, and all of that used to live only in the README. */
   .intro h2{margin-bottom:10px}
   .intro p{margin:0 0 10px;line-height:1.5}
-  .intro .lede{color:var(--ink);font-size:15px}
+  /* Not `.intro .lede` -- the watch card has one too, and scoping this to the
+     card it was written for is how that one ended up with no size and no
+     colour of its own. */
+  .lede{color:var(--ink);font-size:15px}
   .intro .files{list-style:none;padding:0;margin:0 0 10px}
   .intro .files li{display:flex;gap:8px;align-items:baseline;padding:3px 0;
                    color:var(--dim);font-size:13px}
