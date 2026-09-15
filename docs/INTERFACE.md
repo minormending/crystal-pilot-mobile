@@ -107,6 +107,12 @@ change, with a cartridge in: the screen was **2px tall on a 320×568 phone and
 18px on a 360×640**, while a 390×844 phone had a healthy 256. A control that
 resizes the thing you are watching is the complaint people actually made.
 
+The strip itself never wraps on a phone now -- `grid-auto-flow:column` makes one
+column per *visible* key, so six here without the number being written down. The
+two wide layouts put the wrapping back deliberately: there the strip is a narrow
+column beside the game rather than a footer across the width, and five keys
+forced onto one row put PARTY and DEX through each other.
+
 So `--stage` is a size, and the deck is the `1fr`. Three caps, each a different
 thing running out: the **width** of the card, because a picture wider than that
 cannot be drawn; **42svh**, so a tall phone does not spend everything on it; and
@@ -1405,4 +1411,4 @@ So this page carries a marker naming the files it describes and the hash they
 had when it was last read against them. `tools/docs-check` reports it when they
 move, and the pre-commit hook blocks on that report.
 
-<!-- covers: index.html app/main.js app/rows.js @ a4e6173ecccb -->
+<!-- covers: index.html app/main.js app/rows.js @ be1e93d31910 -->

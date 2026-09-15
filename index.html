@@ -585,8 +585,18 @@
      each key 34px and every label broke in half -- "JOB S", "SET UP". A key
      whose name is cut is worse than a key on a second row, and `auto-fit`
      picks the count instead of being told it. */
+  /* **One row, always, and exactly as many columns as there are keys.**
+     `repeat(auto-fit,minmax(52px,1fr))` wrapped to a second row below about
+     380px wide -- six keys want 337px and a 320px phone has about 300 -- and
+     the row it stole came out of the picture above it. A fixed `repeat(6,…)`
+     stops the wrapping but is wrong on the two wide layouts, which hide the
+     Play key and would leave an empty sixth column. `grid-auto-flow:column`
+     makes a track per *visible* child, so it is six without that number being
+     written down -- and the two wide layouts put the wrapping back, because
+     there the strip is a narrow column beside the game rather than a full-width
+     footer, and five keys on one row there collide. */
   .modes{grid-area:tabs;flex:0 0 auto;display:grid;gap:5px;
-         grid-template-columns:repeat(6,minmax(0,1fr))}
+         grid-auto-flow:column;grid-auto-columns:minmax(0,1fr)}
   .modes button{min-width:0;min-height:42px;padding:0 4px;border-radius:8px;
                 font-size:10.5px;font-weight:700;letter-spacing:.05em;
                 white-space:nowrap;text-transform:uppercase;
@@ -1386,7 +1396,11 @@
     .sheet{display:flex}
     .sheet .panes{grid-area:auto;background:none;border-radius:0;padding:0;
                   box-shadow:none;flex:1 1 auto}
-    .modes{grid-area:auto}
+    /* Back to wrapping here: this strip is a narrow column beside the game,
+       not a footer across the phone, and five keys forced onto one row put
+       PARTY and DEX through each other -- measured on iPad portrait. */
+    .modes{grid-area:auto;grid-auto-flow:row;
+           grid-template-columns:repeat(auto-fit,minmax(52px,1fr))}
     .modes [data-pane="play"]{display:none}
     body.padmode .panes{display:flex}
     /* `contents` and not `block`: this layout dissolves the wrapper so the
@@ -1446,7 +1460,11 @@
     .sheet{display:flex}
     .sheet .panes{grid-area:auto;background:none;border-radius:0;padding:0;
                   box-shadow:none;flex:1 1 auto}
-    .modes{grid-area:auto}
+    /* Back to wrapping here: this strip is a narrow column beside the game,
+       not a footer across the phone, and five keys forced onto one row put
+       PARTY and DEX through each other -- measured on iPad portrait. */
+    .modes{grid-area:auto;grid-auto-flow:row;
+           grid-template-columns:repeat(auto-fit,minmax(52px,1fr))}
     .modes [data-pane="play"]{display:none}
     body.padmode .panes{display:flex}
     /* **The size container is the phone's, and it has to be given back here.**
