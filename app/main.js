@@ -2440,7 +2440,10 @@ async function refresh() {
     try {
       const here = s.map[0] * 256 + s.map[1];
       const list = await boot.gymList(here);
-      const pick = await boot.nearestPlace(list, here, (g) => g.map);
+      // Drawing, not walking: no frames are stepped to settle the camera --
+      // see nearestPlace. This runs on the idle timer.
+      const pick = await boot.nearestPlace(list, here, (g) => g.map,
+                                           { settle: false });
       gymNext = pick && pick.place
         ? { ...pick.place, at: boot.where(pick.place.map),
             legs: here === pick.place.map ? 0 : Math.max(1, Math.round((pick.cost || 0) / 25)) }
@@ -2492,7 +2495,8 @@ async function refresh() {
   // before it is asked to make it.
   if (boot && !s.inBattle && s.worldLoaded) {
     try {
-      const pick = await boot.nearestHeal(s.map[0] * 256 + s.map[1]);
+      const pick = await boot.nearestHeal(s.map[0] * 256 + s.map[1],
+                                          { settle: false });
       healPlace = pick ? boot.where(pick.map) : null;
       // Not just where, but whether the pilot has already been told no there.
       healShut = pick ? pick.shut || null : null;

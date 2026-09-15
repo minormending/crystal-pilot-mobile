@@ -392,6 +392,21 @@ each buries the two that matter. Skipped starts are counted and shown as
 dropped — measured, the same opening went from 144 lines to 12. The *history* is
 never throttled; `recent()` has them all.
 
+**Nothing steps frames while the pilot is idle**, and that was not true when
+this was written. `refresh` runs on a 1.2s timer whenever no job does, and it
+asked `nearestPlace` for the cost to draw on the Gym and Heal rows —
+which settled the camera first, one `gb.run(16)` a call. Measured on the
+deployed v244: **26.7 frames a second with nobody playing**, every one of them
+from `Crystal.settled`, which is about half real time spent advancing somebody's
+game to draw a row. Those two callers now pass `settle: false`; the jobs still
+settle, because a walk planned on a mid-slide position goes a tile wrong. Same
+answers either way on the live cartridge — Heal 6149 at cost 31, Gym 2565 at
+cost 87 — and 0 frames instead of 160 over six seconds.
+
+It mattered to this module as well as to the battery: those frames landed on
+whatever activity was current, so a loop that had genuinely stopped still looked
+like it was stepping, and no stall outside a job could ever be reported.
+
 **A job closes its activity when it ends**, in `runTask`. Without that the last
 `settle` would stay open and the idle loop — which steps frames through the same
 `gb.run` — would go on counting into it, so a six-frame settle would still be
@@ -1581,7 +1596,7 @@ point those coordinates mean somewhere else entirely.
 
 ## 5. Crossing to the next map
 
-<!-- covers: gen2/journey.js gen2/world.js @ d43f591619ba -->
+<!-- covers: gen2/journey.js gen2/world.js @ d052cd663236 -->
 
 A connection spans only part of a shared edge, so "walk west until something
 happens" does not work. `crossEdge()` closes the distance in stages, then tries
@@ -2712,7 +2727,7 @@ flowchart TD
 
 ## 7a. Five that act on where you already are
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ 1f857557b1b0 -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ f490304b7524 -->
 
 **The first jobs ever run on Polished Crystal, now that its opening reaches the
 grass.** Grind took the starter Lv6 to Lv7 in two wild battles and 15 seconds,
@@ -3412,7 +3427,7 @@ because that failure is only otherwise discovered by reaching for the undo.
 
 ## 8. The errands
 
-<!-- covers: titles/crystal.js gen2/journey.js @ 531a91728c42 -->
+<!-- covers: titles/crystal.js gen2/journey.js @ f566340556cf -->
 
 Everything in this section is `crystal.js` — the only file in the app that names
 a Crystal map, a Crystal door or a Crystal NPC. What it stands on is
@@ -3799,7 +3814,7 @@ the bag" rather than "did we gain any".
 
 ## 8a. Finding the Centers and the Marts in the cartridge
 
-<!-- covers: gen2/world.js gen2/journey.js @ d43f591619ba -->
+<!-- covers: gen2/world.js gen2/journey.js @ d052cd663236 -->
 
 The last thing in this app that had to be written out by hand. A title said
 where the Centers and the Marts were, so the pilot healed in the two towns
@@ -4063,7 +4078,7 @@ by, which is the only leg it can measure.
 
 ## 8d. A route the game itself refuses
 
-<!-- covers: gen2/journey.js gen2/state.js @ 898280d166d9 -->
+<!-- covers: gen2/journey.js gen2/state.js @ ff7523d243f7 -->
 
 The pass before this one taught the walk to *quote* the man who turns it back.
 This is the pilot doing something about it.
@@ -4170,7 +4185,7 @@ counting bytes reads a full case as one.
 
 ## 8e. Fighting everybody here
 
-<!-- covers: gen2/journey.js @ 666d9e1b8068 -->
+<!-- covers: gen2/journey.js @ c25ab20cb5ec -->
 
 The primitive a Gym needs. The pilot has been stopped on Route 32 for three
 passes by a man who wants Falkner beaten first, and beating Falkner means
@@ -4271,7 +4286,7 @@ costs however long it takes somebody to notice their money is gone.
 
 ## 8f. Going and winning a badge
 
-<!-- covers: gen2/journey.js gen2/state.js titles/crystal.js @ 72f7158a65ca -->
+<!-- covers: gen2/journey.js gen2/state.js titles/crystal.js @ d24e53aaa621 -->
 
 The pilot has been turned back from Route 32 since the pass it learned to find
 Pokémon Centers. `reopen` throws away every written-off road the moment a badge
@@ -4354,7 +4369,7 @@ everybody is a heal whatever it says about itself.
 
 ## 8g. The tiles that run a script, and saying hello
 
-<!-- covers: gen2/world.js gen2/journey.js @ d43f591619ba -->
+<!-- covers: gen2/world.js gen2/journey.js @ d052cd663236 -->
 
 Four passes of machinery pointed at one sentence a man says, and the reader that
 made it diagnosable is twelve lines.
@@ -5313,7 +5328,7 @@ This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ e86cb48a7499 -->
+<!-- covers: app/main.js index.html @ cd36faac2ebb -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -6388,7 +6403,7 @@ seconds by a page whose loop was supposedly running.
 
 ### One thing at a time
 
-<!-- covers: app/main.js @ 4ab378db3ac6 -->
+<!-- covers: app/main.js @ ed67caceda58 -->
 
 One Game Boy, one joypad, one canvas — so a great deal of this app is about
 making sure two things are never driving them at once. There are three claims,
@@ -6643,7 +6658,7 @@ is the noise this list exists to replace.
 
 ### Leading with the one that can answer the room
 
-<!-- covers: gen2/romdata.js gen2/menus.js gen2/journey.js @ 7000842fe665 -->
+<!-- covers: gen2/romdata.js gen2/menus.js gen2/journey.js @ 3f6c59066349 -->
 
 **Gen 2 sends out slot one and asks nobody.** So the party's order decides the
 first battle of a Gym — and since the pass before, the pilot has known exactly
@@ -6833,7 +6848,7 @@ disagreements.
 
 ### Gates: asking the cartridge what it wants
 
-<!-- covers: gen2/state.js gen2/journey.js titles/crystal.js @ 72f7158a65ca -->
+<!-- covers: gen2/state.js gen2/journey.js titles/crystal.js @ d24e53aaa621 -->
 
 Two kinds of closed road, and the difference is everything:
 
@@ -6942,7 +6957,7 @@ a conversation.
 
 ### The card behind a party row
 
-<!-- covers: app/rows.js app/main.js index.html @ c15f7e4d5165 -->
+<!-- covers: app/rows.js app/main.js index.html @ e58cf00a14a2 -->
 
 Two questions the game itself will not answer about a Pokémon you are
 carrying — *what is this made of* and *what is it about to become* — and both
@@ -7031,7 +7046,7 @@ at body size.
 
 ### Running the list
 
-<!-- covers: app/rows.js app/main.js @ f6a186bf6fd2 -->
+<!-- covers: app/rows.js app/main.js @ 52ed512c3802 -->
 
 The app has spent forty passes learning to answer one question — *what can the
 pilot do here, and which of those is worth most?* — and twenty showing the
@@ -7155,7 +7170,7 @@ to deposit your last Pokémon.
 
 ### The settings and the save card
 
-<!-- covers: index.html app/main.js @ e86cb48a7499 -->
+<!-- covers: index.html app/main.js @ cd36faac2ebb -->
 
 The pilot's own list got a glyph column, shorter names and a slot to fill in
 v165. These two cards did not, and reading them found that they had a different
@@ -7880,7 +7895,7 @@ they have been installed.
 
 ### Watching the other device's screen
 
-<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ 0eddafe1e6a4 -->
+<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ 3f84ad955870 -->
 
 One device shows its screen; the other watches it, and plays it if the first
 one says so. The picture goes straight between them over WebRTC and never

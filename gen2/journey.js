@@ -2756,14 +2756,22 @@ export class Journey {
    * names the Center it would walk to *before* the button is pressed, so the
    * choice is visible rather than discovered in the log afterwards.
    */
-  async nearestPlace(list, from, mapOf = (p) => p.map) {
+  async nearestPlace(list, from, mapOf = (p) => p.map, { settle = true } = {}) {
     const places = list || [];
     if (!places.length) return null;
     const last = places[places.length - 1];
     if (!this.world) return { place: last, cost: undefined };
 
     const legCost = this.title.legCost || 25;
-    const wram = await this.settled();
+    // **`settle: false` is for a caller that is only going to draw the answer.**
+    // Settling means stepping frames until the camera stops, which is right
+    // before a walk -- a position read mid-slide is a tile out and the walk goes
+    // to the wrong place. It is wrong for the interface: `refresh` runs on a
+    // 1.2s timer whenever no job is, and one `gb.run(16)` per call had the game
+    // advancing about 27 frames a second with nobody playing it. Measured, that
+    // is roughly *half real time*, spent on a row that says "Center, 12 tiles" —
+    // and the worst a stale read can do to that number is make it 13.
+    const wram = settle ? await this.settled() : await this.gb.readWram();
     // **The cheapest place is not the nearest one if the game will not let you
     // in.** Standing on Route 32, the Center on Route 32 costs nothing and is
     // shut; Violet City is one leg north and open. Asked before the distance,
@@ -2797,10 +2805,10 @@ export class Journey {
                 : { place: open[open.length - 1], cost: undefined };
   }
 
-  async nearestHeal(from) {
+  async nearestHeal(from, { settle = true } = {}) {
     const healers = await this.healerList(from);
     if (!healers.length) return null;
-    const picked = await this.nearestPlace(healers, from);
+    const picked = await this.nearestPlace(healers, from, (p) => p.map, { settle });
     if (!picked || !picked.place) return null;
     const h = picked.place;
     // The entry is handed to the procedure, which is what lets one procedure
