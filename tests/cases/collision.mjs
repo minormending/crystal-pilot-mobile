@@ -419,6 +419,51 @@ test('what can be stood on: not a wall, not water, and warps only when asked',
   t.true(cm.walkable(4, 1, { allowWarp: true }), 'only when it is the goal');
 });
 
+test('a tap that misses reaches for the tile the thumb was leaning towards',
+     async (t) => {
+  // One wall with floor all round it, so every answer below is about which
+  // neighbour the fraction picks rather than about which tiles are open.
+  const sym = symbols();
+  const cm = new CollisionMap(sym, collisionRom(PERMS));
+  cm.use(worldRam(sym, { mapBlocks: [5, 6] }));
+  const at = {};
+  cm.collisionAt = (x, y) => at[`${x},${y}`] ?? FLOOR;
+  at['4,4'] = WALL_TILE;
+
+  t.eq(cm.nearestWalkable([3.5, 4.5]), [3, 4], 'a tap on open ground is that tile');
+  // The tapped tile wins from anywhere inside it, corners included: the point
+  // is in it, so no neighbour's centre can be nearer.
+  t.eq(cm.nearestWalkable([3.98, 4.98]), [3, 4], 'even from its far corner');
+  t.eq(cm.nearestWalkable([4.1, 4.5]), [3, 4], 'the wall sends a left-edge tap left');
+  t.eq(cm.nearestWalkable([4.9, 4.5]), [5, 4], 'and a right-edge tap right');
+  t.eq(cm.nearestWalkable([4.5, 4.1]), [4, 3], 'a tap high on it goes above');
+  t.eq(cm.nearestWalkable([4.5, 4.9]), [4, 5], 'and low on it, below');
+});
+
+test('a tap with nothing walkable near it is not moved somewhere else',
+     async (t) => {
+  // Water in every direction, which is the case that must *not* snap: there is
+  // no tile the tap could have meant, and saying so names the one aimed at.
+  const sym = symbols();
+  const cm = new CollisionMap(sym, collisionRom(PERMS));
+  cm.use(worldRam(sym, { mapBlocks: [5, 6] }));
+  cm.collisionAt = () => WATER_TILE;
+  t.eq(cm.nearestWalkable([4.5, 4.5]), null, 'nothing within reach');
+});
+
+test('a doorway is a tile people tap on purpose', async (t) => {
+  const sym = symbols();
+  const cm = new CollisionMap(sym, collisionRom(PERMS));
+  cm.use(worldRam(sym, { mapBlocks: [5, 6] }));
+  const at = {};
+  cm.collisionAt = (x, y) => at[`${x},${y}`] ?? FLOOR;
+  at['4,4'] = 0x71;                        // a warp
+  t.eq(cm.nearestWalkable([4.5, 4.5]), [4, 4], 'the warp itself, not the floor by it');
+  const aside = cm.nearestWalkable([4.5, 4.5], { allowWarp: false });
+  t.true(aside[0] !== 4 || aside[1] !== 4,
+         'unless the caller says a warp is not a destination');
+});
+
 test('nothing outside the map can be stood on', async (t) => {
   // Ten by twelve tiles, so 0..9 and 0..11. The bounds are the only check
   // available -- there is no sentinel in the block data -- and getting them

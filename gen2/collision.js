@@ -445,6 +445,44 @@ export class CollisionMap {
   }
 
   /**
+   * The walkable tile nearest a point, for a finger that missed.
+   *
+   * **A tile is about twelve pixels across on a phone** -- the screen renders
+   * at 122 CSS pixels for ten tiles -- so a tap that plainly means *over
+   * there* lands on the tree beside *there* often enough to be the normal
+   * case. Refusing it is technically correct and useless: the tap was not
+   * ambiguous to the person who made it.
+   *
+   * `point` is in tile units *with fractions*, so (12.3, 7.8) is three tenths
+   * across tile 12. That is what decides which neighbour wins, and it is the
+   * whole reason the caller does not round first: the half of the tile the
+   * thumb was on is the only evidence of which way it was reaching.
+   *
+   * The tapped tile always wins when it is walkable -- the point is inside it,
+   * so its centre is nearer than any neighbour's can be -- which makes this
+   * safe to put in front of every tap rather than only the failing ones.
+   *
+   * Warps count as walkable here, because a doorway is a thing people tap on
+   * purpose. Null when nothing within `radius` can be stood on, so the caller
+   * can say *no way to reach* about the tile that was actually aimed at.
+   */
+  nearestWalkable([px, py], { radius = 1, allowWarp = true } = {}) {
+    const tx = Math.floor(px), ty = Math.floor(py);
+    let best = null, near = Infinity;
+    for (let dy = -radius; dy <= radius; dy++) {
+      for (let dx = -radius; dx <= radius; dx++) {
+        const x = tx + dx, y = ty + dy;
+        if (!this.walkable(x, y, { allowWarp })) continue;
+        // Centre to centre, so a tap on the left edge of a blocked tile
+        // reaches for the tile on its left and not the one above it.
+        const d = Math.hypot(px - (x + 0.5), py - (y + 0.5));
+        if (d < near) { near = d; best = [x, y]; }
+      }
+    }
+    return best;
+  }
+
+  /**
    * The reachable tile that lies furthest in a direction.
    *
    * Walking straight at the edge of a route does not work: Route 30 is

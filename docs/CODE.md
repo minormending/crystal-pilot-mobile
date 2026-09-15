@@ -1053,11 +1053,33 @@ noticing at all.
 
 ### `collision.js` — what you can walk on
 
-<!-- covers: gen2/collision.js @ 44fcadd39988 -->
+<!-- covers: gen2/collision.js @ 2233000df338 -->
 
 Decodes the loaded map into "can I stand on this tile", and does breadth-first
 pathfinding over the result. This is what turns walking from trial and error
 into a plan.
+
+**`nearestWalkable` is the one call here that exists for a thumb.** On a phone
+the game screen renders about 122 CSS pixels wide, so a tile is twelve of them
+— half the width of the smallest thing a design guideline will let you ask
+somebody to hit. A tap that plainly means *over there* lands on the tree beside
+*there* often enough to be the normal case, and refusing it is technically
+correct and useless: the tap was not ambiguous to the person who made it.
+
+So it takes a point in tile units **with its fraction kept** — (12.3, 7.8) is
+three tenths across tile 12 — and answers with the walkable tile nearest to it
+within one tile. The fraction is the whole argument for the signature: which
+half of a tile the thumb covered is the only evidence of which way it was
+reaching, and it is thrown away the moment anybody rounds. Measured on Route 29
+standing at (53,12): 50 of the 90 tiles on screen cannot be stood on, and 14 of
+those now resolve to the tile beside them. The other 36 are deep inside blocks
+of trees, where no neighbour is walkable either, and those still refuse.
+
+Two properties make it safe in front of *every* tap rather than only the failing
+ones. The tapped tile always wins when it is walkable, because the point is
+inside it and no neighbour's centre can be nearer. And warps count as walkable,
+because a doorway is a thing people tap on purpose — `pathTo` makes the same
+exemption for the same reason, but only for its goal.
 
 **And for a long time almost none of it was checked.** Line coverage said 51%,
 which sounds like a gap and reads as a plateau. [`tools/mutate`](DEVELOPING.md#whether-the-tests-would-notice)
@@ -1321,7 +1343,7 @@ Route 30's door to it at `(17,5)`.
 
 ## 4. Taking one step, and planning a walk
 
-<!-- covers: gen2/nav.js gen2/collision.js @ 756b87105ebe -->
+<!-- covers: gen2/nav.js gen2/collision.js @ c85b8ba2f60f -->
 
 ### One step
 
@@ -5142,7 +5164,7 @@ This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ 7f2a15fd4c6f -->
+<!-- covers: app/main.js index.html @ 3e42d95e6a60 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -5164,9 +5186,36 @@ stateDiagram-v2
     note right of Piloting
         hold() refuses; the pad dims to say so
         Stop on the bar; the newest log line beside it
-        showPanel(null) closes the menu
+        the tabs stay live: a job is watched from any pane
     end note
 ```
+
+**A press has to be felt, because it cannot be seen.** The thumb making it is
+on top of the key it pressed, so a fill and an inset shadow are both under the
+finger: the only pixels anybody can actually look at are the ones *around* the
+contact patch. The pressed state therefore spreads a ring past the key's own
+edge into them, in the same colour as the fill, and `position:relative` puts a
+pressed arm over its neighbours — the cross is five cells sharing edges, and a
+ring drawn in source order would be half-covered by the arm after it.
+
+The buzz is the other half, and the one that reaches the hand rather than the
+eye: eight milliseconds on a press that *landed*. It is on the pointer path
+only, in `bindHold` rather than in `hold`, which is two decisions. A pad that
+buzzed while a job was running would be telling you it took an input it threw
+away. And a held key repeats `keydown` at the system rate, so a buzz per repeat
+is a rumble — a keyboard is a desktop's input anyway, where there is nothing to
+buzz. See [the settings card](#the-settings-and-the-save-card) for the switch
+and why it is hidden on an iPhone.
+
+**And a tap on the screen is aimed at a twelve-pixel tile**, which is half the
+width of the smallest target a guideline will let you ask for. The click handler
+hands `walkToTap` the tap's position *with its fraction*, and
+[`nearestWalkable`](#collisionjs--what-you-can-walk-on) rounds it once, where it
+can also see the map: the tile under the thumb when that tile can be stood on,
+and otherwise the walkable tile the thumb was leaning towards. The status line
+says when it moved — `walking to (54,10) — nothing stands on (55,10)` — because
+a walk that quietly goes somewhere other than where the finger landed is the
+same defect as one that refuses, and only one of them says why.
 
 The furniture is a grid, and every layout is the same four areas rearranged.
 `main` names them, and each one is a single child of `main` except the sheet,
@@ -6173,7 +6222,7 @@ seconds by a page whose loop was supposedly running.
 
 ### One thing at a time
 
-<!-- covers: app/main.js @ f9b1f6f73d71 -->
+<!-- covers: app/main.js @ f82c59bd27eb -->
 
 One Game Boy, one joypad, one canvas — so a great deal of this app is about
 making sure two things are never driving them at once. There are three claims,
@@ -6727,7 +6776,7 @@ a conversation.
 
 ### The card behind a party row
 
-<!-- covers: app/rows.js app/main.js index.html @ 1ea3371bb5ac -->
+<!-- covers: app/rows.js app/main.js index.html @ 826ee950c09c -->
 
 Two questions the game itself will not answer about a Pokémon you are
 carrying — *what is this made of* and *what is it about to become* — and both
@@ -6816,7 +6865,7 @@ at body size.
 
 ### Running the list
 
-<!-- covers: app/rows.js app/main.js @ 8774f96d161b -->
+<!-- covers: app/rows.js app/main.js @ c6ab8a6ad36a -->
 
 The app has spent forty passes learning to answer one question — *what can the
 pilot do here, and which of those is worth most?* — and twenty showing the
@@ -6940,7 +6989,7 @@ to deposit your last Pokémon.
 
 ### The settings and the save card
 
-<!-- covers: index.html app/main.js @ 7f2a15fd4c6f -->
+<!-- covers: index.html app/main.js @ 3e42d95e6a60 -->
 
 The pilot's own list got a glyph column, shorter names and a slot to fill in
 v165. These two cards did not, and reading them found that they had a different
@@ -6971,6 +7020,21 @@ was drawn beside a hidden Forget button, in the one place a person opens *in
 order to change something*. The row appears now only when something is kept —
 which is when it has both a fact and a button — and the behaviour it was
 explaining is a sentence in *How this works* with the other explanations.
+
+**`Buzz` is on this card and not on the pad, and it is hidden where it would be
+a lie.** A press on a touchscreen has no travel and no click, and on a pad the
+thumb is on top of the key it just pressed — so the buzz is the only feedback
+that reaches the hand rather than the eye. It is eight milliseconds, which is a
+tick and not a rumble, and that number is about walking: forty presses to cross
+a route, not four, and anything you can feel *end* becomes the thing you notice
+instead of the game.
+
+The row is absent on a device with no motor, which is every iPhone — Safari has
+never shipped the Vibration API — because a switch that cannot change anything
+is a question nobody should be asked. And the preference is **not** one of the
+shared options: see [What it remembers](#what-it-remembers) for why a fact about
+the hand holding this device must not travel to the tablet it is sharing a room
+with.
 
 The save card took the v165 treatment as written. Every row there carried the
 verb twice: *Save the game* beside a button saying Save, *Undo the last job*
@@ -7121,7 +7185,7 @@ stands 3.40:1 clear of the recess it is moulded around.
 
 ### What it remembers
 
-<!-- covers: gbcore/remember.js @ 9ac487273fa8 -->
+<!-- covers: gbcore/remember.js @ d5d9e3629905 -->
 
 The app forgets everything on a reload, and a reload is not rare: the Update
 button causes one deliberately, and a phone discards a background tab whenever
@@ -7147,6 +7211,15 @@ and it survives a reload because a stamp invented at load time would make every
 reload look like a fresh decision. An absent or nonsense stamp reads as `0`,
 which loses to every real one: the record with nothing in it is the one that
 must not win.
+
+**One preference is deliberately outside all of that.** Whether a press buzzes
+has its own key and no stamp, because the rules above exist to *share* a choice
+between devices and this is the one choice that must not travel: it is a fact
+about the hand holding this device, and the tablet it is in a room with may have
+no motor at all. Sent through `adoptable` it would be one device answering a
+question only the other was asked. The colour theme made the same call before
+this file existed, and is left alone for the same reason — a key of its own
+costs nothing, and moving it would mean a migration in exchange for nothing.
 
 **What is stored is the choice, never what the choice worked out to.** `+2`
 means two above the lead, so storing the `Lv12` it resolved to today would come
@@ -7597,7 +7670,7 @@ they have been installed.
 
 ### Watching the other device's screen
 
-<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ fb143b8edb58 -->
+<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ 7dd83021d045 -->
 
 One device shows its screen; the other watches it, and plays it if the first
 one says so. The picture goes straight between them over WebRTC and never

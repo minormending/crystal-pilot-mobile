@@ -1219,10 +1219,23 @@
   .dpad button:active,.face button:active,.menus button:active{
         background:var(--action);color:#fff}
   .menus button.held b,.menus button:active b{color:#fff}
-  .face button.held,.face button:active{transform:scale(.95);
-        box-shadow:inset 0 3px 6px rgba(0,0,0,.35)}
-  .dpad button.held,.dpad button:active{
-        box-shadow:inset 0 3px 6px rgba(0,0,0,.35)}
+  /* **The press has to read from outside the key, because the thumb making it
+     is on top of the key.** A fill and an inset shadow are both under the
+     finger: on a phone the only pixels anyone can actually see are the ones
+     around the contact patch, so the ring spreads past the key's own edge into
+     them. It is the same colour as the fill, so nothing new is introduced --
+     what changes is where the signal is.
+
+     `position:relative` is what puts a pressed arm over its neighbours: the
+     cross is five cells sharing edges, and a ring drawn in source order would
+     be half-covered by the arm after it. */
+  .dpad button.held,.dpad button:active,
+  .face button.held,.face button:active,
+  .menus button.held,.menus button:active{
+        position:relative;z-index:1;
+        box-shadow:inset 0 3px 6px rgba(0,0,0,.35),
+                   0 0 0 4px color-mix(in srgb,var(--action) 55%,transparent)}
+  .face button.held,.face button:active{transform:scale(.95)}
   @media (prefers-reduced-motion:reduce){
     .face button.held,.face button:active{transform:none}
   }
@@ -1472,6 +1485,12 @@
   <g id="i-devices" fill="none" stroke="currentColor" stroke-width="1.8"
      stroke-linecap="round" stroke-linejoin="round">
     <path d="M2.6 4.4h6.6v9.6H2.6Z"/><path d="M11.2 7.2h4.2v7.4h-4.2Z"/></g>
+  <!-- A handset with a wave off each side: the phone in a hand, shaking. It
+       borrows i-devices' own body so the two read as the same family. -->
+  <g id="i-buzz" fill="none" stroke="currentColor" stroke-width="1.8"
+     stroke-linecap="round" stroke-linejoin="round">
+    <path d="M6.4 3.6h5.2v10.8H6.4Z"/>
+    <path d="M3.4 6.6a4 4 0 0 0 0 4.8"/><path d="M14.6 6.6a4 4 0 0 1 0 4.8"/></g>
   <g id="i-files" fill="none" stroke="currentColor" stroke-width="1.8"
      stroke-linecap="round" stroke-linejoin="round">
     <path d="M2.6 5.4h4.1l1.5 1.9h7.2v7.3H2.6Z"/></g>
@@ -2030,6 +2049,17 @@
         <span class="x" id="speedx">1&times;</span>
       </span>
     </div>
+    <!-- Hidden on a device with no motor, which is every iPhone: Safari has
+         never shipped the Vibration API, and a switch that does nothing is
+         worse than no switch. Unlike the rows above this one is *not* shared
+         into a room -- see remember.js -- because it is a fact about the hand
+         holding this device and not about the game. -->
+    <div class="themerow hide" id="buzzrow">
+      <svg class="jicon" viewBox="0 0 18 18" aria-hidden="true"><use href="#i-buzz"/></svg>
+      <span class="lvlabel">Buzz</span>
+      <span class="val" id="buzzstate">a tick when a key goes down</span>
+      <button class="themebtn" id="buzztoggle" aria-pressed="true">On</button>
+    </div>
     <div class="themerow">
       <svg class="jicon" viewBox="0 0 18 18" aria-hidden="true"><use href="#i-devices"/></svg>
       <span class="lvlabel">Devices</span>
@@ -2086,10 +2116,11 @@
       <p>The speed slider above only changes how fast the game runs
         while <em>you</em> are watching it. A pilot task always runs as fast as
         the phone manages, which is the whole point of it.</p>
-      <p><b>Playing.</b> Press and hold the pad to walk — a tap in a new
-        direction only turns you. Tap the screen and the pilot walks you there.
-        On a keyboard: arrows, Z and X for A and B, Enter for Start, Shift for
-        Select.</p>
+      <p><b>Playing.</b> Press and hold the pad to walk — a tap shorter than
+        about an eighth of a second in a new direction only turns you. Tap the screen and
+        the pilot walks you there; if that tile cannot be stood on, it walks to
+        the one beside it you were reaching for and says so. On a keyboard:
+        arrows, Z and X for A and B, Enter for Start, Shift for Select.</p>
       <p><b>Sending the pilot.</b> Hunt and catch both walk the grass and run
         from everything else; hunt hands you the battle, catch weakens it and
         throws. Only what this route has at this hour is offered. While a job

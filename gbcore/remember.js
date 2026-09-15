@@ -167,6 +167,41 @@ export function writeOpts(patch, given = null) {
   }
 }
 
+// --- one preference that is this device's alone ------------------------------
+//
+// Its own key, and deliberately not one of `OPT_KEYS` above. Those are shared:
+// `adoptable` hands a phone the speed and the hunt chosen on the tablet, which
+// is right for choices about the *game* and wrong for this one. Whether a press
+// buzzes is a fact about the hand holding this device -- the tablet it is
+// sharing a room with may not have a motor at all -- so a setting that
+// travelled would be one device answering a question only the other was asked.
+//
+// The colour theme made the same call before this file existed, and for the
+// same reason it is left alone: a key of its own costs nothing.
+const BUZZ_KEY = 'crystal-pilot-buzz';
+
+/** Does a press buzz? On unless somebody has said otherwise. */
+export function readBuzz(given = null) {
+  const st = store(given);
+  if (!st) return true;
+  try {
+    return st.getItem(BUZZ_KEY) !== 'off';
+  } catch (e) {
+    return true;                 // unreadable storage is not a preference
+  }
+}
+
+/** Remember that answer. */
+export function writeBuzz(on, given = null) {
+  const st = store(given);
+  if (!st) return;
+  try {
+    st.setItem(BUZZ_KEY, on ? 'on' : 'off');
+  } catch (e) {
+    // Full, or refused. A forgotten preference is not worth a message.
+  }
+}
+
 // --- the files, and the game that goes with them -----------------------------
 //
 // The ROM and the .sym used to be re-picked every session, which is two file

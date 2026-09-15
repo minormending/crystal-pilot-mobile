@@ -14,7 +14,8 @@ import {
 } from './rows.js';
 import { VERSION } from '../gbcore/version.js';
 import { adoptable, forgetKept, keepBattery, keepRom, keepSym, keptMeta,
-         readOpts, recall, sanitise, writeOpts } from '../gbcore/remember.js';
+         readBuzz, readOpts, recall, sanitise, writeBuzz,
+         writeOpts } from '../gbcore/remember.js';
 import { chosenName, needsOffer, openRoom, wasSharing } from '../gbcore/room.js';
 import { createHost, createWatcher } from '../gbcore/stream.js';
 import { Cancelled } from '../gbcore/taskbase.js';
@@ -2610,8 +2611,33 @@ function syncHeld() {
   }
 }
 
+// Whether this device can buzz at all, and whether it has been told not to.
+// Asked once: a device does not grow a motor mid-session, and the setting row
+// is hidden where there is none rather than offering a switch that does
+// nothing. iOS is that case -- Safari has never shipped the Vibration API --
+// so on an iPhone this is silently false and the pressed state below is the
+// whole of the feedback.
+const CAN_BUZZ = typeof navigator !== 'undefined'
+  && typeof navigator.vibrate === 'function';
+let buzzing = CAN_BUZZ && readBuzz();
+
+/**
+ * The shortest buzz the platform will honour, on a key going down.
+ *
+ * Eight milliseconds is a tick rather than a rumble, and it matters that it is
+ * this short: walking is forty presses, not four, and anything you can feel
+ * *end* becomes the thing you notice instead of the game. Thrown away if the
+ * platform refuses -- vibrate wants a user gesture, and a `pointerdown` is one,
+ * but a keyboard repeat on a desktop is not always.
+ */
+function buzz() {
+  if (!buzzing) return;
+  try { navigator.vibrate(8); } catch (e) { /* refused: not worth a word */ }
+}
+
+/** Press a button, and say whether the press landed. */
 function hold(button) {
-  if (running) return;
+  if (running) return false;
   // Watching means this device has no game: the joypad belongs to the one that
   // does. The same two functions every pad and key already go through, so
   // nothing else in the app has to know which machine it is talking to.
@@ -2619,14 +2645,37 @@ function hold(button) {
     // The host refuses these anyway; not sending them is what keeps the pad
     // from lighting up as though they had landed. The guarantee is still the
     // host's -- this is only the same answer, given a frame earlier.
-    if (!remoteInput.ok) return;
+    if (!remoteInput.ok) return false;
     watcher.press({ t: 'hold', b: button });
     remoteHeld.add(button);
     syncHeld();
-    return;
+    return true;
   }
   gb.hold(button);
   syncHeld();
+  return true;
+}
+
+// Only on a device that has a motor. The row is hidden rather than disabled
+// where there is none: a switch that cannot change anything is a question
+// nobody should be asked.
+if (CAN_BUZZ) {
+  const paintBuzz = () => {
+    $('#buzztoggle').textContent = buzzing ? 'On' : 'Off';
+    $('#buzztoggle').setAttribute('aria-pressed', String(buzzing));
+    $('#buzzstate').textContent = buzzing
+      ? 'a tick when a key goes down' : 'no buzz on a press';
+  };
+  $('#buzzrow').classList.remove('hide');
+  $('#buzztoggle').onclick = () => {
+    buzzing = !buzzing;
+    writeBuzz(buzzing);
+    paintBuzz();
+    // Turning it on answers the only question worth asking -- what does it feel
+    // like -- without making somebody go and press the pad to find out.
+    buzz();
+  };
+  paintBuzz();
 }
 
 function release(button) {
@@ -2641,7 +2690,13 @@ function release(button) {
 }
 
 function bindHold(el, button) {
-  const down = (e) => { e.preventDefault(); hold(button); };
+  // The buzz is here and not in `hold`, which is two decisions. It fires only
+  // on a press that landed -- a pad that buzzes while a job is running would be
+  // telling you it took an input it threw away. And it is on the *pointer*
+  // path only: a held key repeats `keydown` at the system rate, and a buzz per
+  // repeat is a rumble rather than a tick. A keyboard is a desktop's input
+  // anyway, where there is nothing to buzz.
+  const down = (e) => { e.preventDefault(); if (hold(button)) buzz(); };
   const up = (e) => { e.preventDefault(); release(button); };
   el.addEventListener('pointerdown', down);
   el.addEventListener('pointerup', up);
@@ -3245,8 +3300,10 @@ async function walkToTap(tx, ty) {
     if (!s.worldLoaded) { setStatus('no map on screen to walk on', 'bad'); return; }
     if (await windowOpen()) { setStatus('close the menu first', 'bad'); return; }
 
-    const goal = [s.pos[0] + tx - PLAYER_TILE_X, s.pos[1] + ty - PLAYER_TILE_Y];
-    if (goal[0] === s.pos[0] && goal[1] === s.pos[1]) {
+    // Where the tap landed on the map, fraction and all, and the tile under it.
+    const point = [s.pos[0] + tx - PLAYER_TILE_X, s.pos[1] + ty - PLAYER_TILE_Y];
+    const tapped = [Math.floor(point[0]), Math.floor(point[1])];
+    if (tapped[0] === s.pos[0] && tapped[1] === s.pos[1]) {
       setStatus('you are already standing there', '');
       return;
     }
@@ -3262,8 +3319,20 @@ async function walkToTap(tx, ty) {
     // small indoor room is off the map, and saying "no way to reach" there
     // blames the route for a tile that does not exist.
     const [mw, mh] = collision.mapSize();
-    if (goal[0] < 0 || goal[1] < 0 || goal[0] >= mw || goal[1] >= mh) {
+    if (tapped[0] < 0 || tapped[1] < 0 || tapped[0] >= mw || tapped[1] >= mh) {
       setStatus('that is off the edge of the map', 'bad');
+      return;
+    }
+    // A tile is twelve pixels on a phone, so a tap meaning *over there* lands
+    // on the tree beside *there* often enough to be the normal case. The tile
+    // under the thumb wins whenever it can be stood on; only when it cannot
+    // does the fraction decide which neighbour was being reached for. Falls
+    // back to the tile aimed at when nothing around it is walkable either, so
+    // the refusal below still names the tile somebody actually tapped.
+    const goal = collision.nearestWalkable(point) || tapped;
+    const moved = goal[0] !== tapped[0] || goal[1] !== tapped[1];
+    if (moved && goal[0] === s.pos[0] && goal[1] === s.pos[1]) {
+      setStatus('you are already standing there', '');
       return;
     }
     if (!collision.pathTo(s.pos, goal)) {
@@ -3274,7 +3343,13 @@ async function walkToTap(tx, ty) {
     // Pressed while the route was being worked out. Answered before a step is
     // taken rather than at the first one, so a stopped walk does not move.
     if (walkCancelled) { setStatus('stopped', 'ok'); return; }
-    setStatus(`walking to (${goal[0]},${goal[1]})`, 'busy');
+    // Said in the status line and not the progress line, because the progress
+    // line is overwritten by the first step a third of a second later. A walk
+    // that quietly goes somewhere other than where the finger landed is the
+    // same defect as one that refuses: either way the tile in the message is
+    // not the tile under the thumb, and only one of them says why.
+    setStatus(`walking to (${goal[0]},${goal[1]})`
+              + (moved ? ` — nothing stands on (${tapped[0]},${tapped[1]})` : ''), 'busy');
     markGoal(goal);
     const res = await nav.walkTo(collision, goal, {
       onStep: (n, at) => progress(`step ${n} — at (${at[0]},${at[1]})`),
@@ -3344,15 +3419,18 @@ async function walkToTap(tx, ty) {
   }
 }
 
+// Handed on with its fraction intact, and that is the point rather than an
+// oversight: on a phone the screen is about 122 CSS pixels across, so a tile is
+// twelve of them, and which half of a tile a thumb covered is the only evidence
+// of which way it was reaching. `walkToTap` rounds, once, where it can also
+// see the map.
 $('#screen').addEventListener('click', (e) => {
   if (running || !gb.ready) return;
   const r = e.currentTarget.getBoundingClientRect();
   if (!r.width || !r.height) return;
-  const tx = Math.min(SCREEN_TILES_X - 1,
-                      Math.floor((e.clientX - r.left) / r.width * SCREEN_TILES_X));
-  const ty = Math.min(SCREEN_TILES_Y - 1,
-                      Math.floor((e.clientY - r.top) / r.height * SCREEN_TILES_Y));
-  walkToTap(tx, ty);
+  const within = (v, tiles) => Math.min(tiles - 1e-6, Math.max(0, v * tiles));
+  walkToTap(within((e.clientX - r.left) / r.width, SCREEN_TILES_X),
+            within((e.clientY - r.top) / r.height, SCREEN_TILES_Y));
 });
 
 $('#go').onclick = async () => {
