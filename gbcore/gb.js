@@ -29,11 +29,26 @@ const GB_WRAM_BYTES = 0x2000;
 // game parked in a bank nobody has mapped readable at all.
 const GB_WRAM_BANK_BYTES = 0x1000;
 
-// The smallest call worth timing. Below this the per-call overhead on a
-// visible page is most of what is measured; at this size it is a few per cent.
+// The smallest call worth timing. Below this the per-call cost of crossing
+// into the worker is most of what is measured; at this size it is a few per
+// cent. See `rate`, which is the only thing that reads it.
 const RATE_SAMPLE = 240;
 // And how many frames have to have gone by before the average means anything.
 const RATE_MIN = 1200;
+
+// How often the canvas is repainted while frames are being stepped.
+//
+// Stepping no longer draws -- see `run` -- so something has to, and the only
+// question is how often. A Game Boy is 60fps and a display is 60 or 120Hz, so
+// anything under about 16ms is paint nobody can see; 33ms is thirty a second,
+// which reads as smooth for something being watched rather than played, and
+// halves the number of times a long job stops to draw.
+//
+// It is a floor rather than a schedule: a paint is *considered* after every
+// step and skipped unless this long has passed, so a job that steps a hundred
+// times in a frame paints once and a job that steps twice a second paints
+// twice. Nothing is queued and nothing accumulates.
+const PAINT_MS = 33;
 
 export class GameBoy {
   constructor() {
@@ -46,6 +61,12 @@ export class GameBoy {
     // machine's throughput goes stale.
     this.stepped = 0;
     this.steppingMs = 0;
+    // The paint throttle -- see PAINT_MS and `paint`. `paintedAt` is when the
+    // last one was asked for and `painting` whether one is still in flight,
+    // and both are needed: a paint takes longer than the interval, so time
+    // alone would start a second one on top of the first.
+    this.paintedAt = 0;
+    this.painting = false;
   }
 
   async start(canvas) {
@@ -79,28 +100,69 @@ export class GameBoy {
   /**
    * Advance `n` frames as fast as the device manages.
    *
-   * Two paths, because the core's own _runNumberOfFrames begins by awaiting
-   * pause() -- and pause() waits for an animation frame, which a hidden page
-   * never gets. Left alone, backgrounding the tab (switching apps, screen off)
-   * hangs every call here forever: the grind stops dead while the page still
-   * claims to be running. So when the page is hidden the frames are stepped
-   * directly, which is what _runNumberOfFrames does anyway minus the drawing
-   * -- and there is nothing to draw for a screen nobody is looking at.
+   * **One path, and it is the one that used to be the exception.** The core's
+   * own `_runNumberOfFrames` opens with `await pause()`, and `pause()` waits
+   * for an animation frame -- so every call cost one whether it asked for two
+   * frames or two hundred. A hidden page never gets that frame at all, which
+   * is why stepping directly was already here as the hidden-page path; what
+   * took so long to see is that the *visible* page was paying for it sixty
+   * times a second and getting nothing back.
+   *
+   * Measured on the real cartridge, 120Hz display: `_runNumberOfFrames(2)`
+   * took 16.36ms to do 0.9ms of work -- 94% waiting. `nav.settle` calls
+   * exactly that up to 45 times, so settling after a step spent three quarters
+   * of a second to emulate a second and a half of game. On a 60Hz phone the
+   * wait is twice as long again, which is why the speed slider never helped:
+   * it scales the idle loop's batch and no job reads it.
+   *
+   * Stepping directly is what `_runNumberOfFrames` does anyway once the
+   * waiting is taken out, minus the drawing -- so `paint` below does the
+   * drawing, on a throttle, and nothing here waits for it.
    */
   async run(n = 1) {
     const began = performance.now();
-    if (!document.hidden) {
-      await this.core._runNumberOfFrames(n);
-    } else {
-      for (let i = 0; i < n; i++) {
-        await this.core._runWasmExport('executeFrame', []);
-      }
+    for (let i = 0; i < n; i++) {
+      await this.core._runWasmExport('executeFrame', []);
     }
+    // Stepping draws nothing, so ask for a paint -- throttled, and never
+    // awaited. On a hidden page there is nothing to paint and `paint` says so.
+    this.paint();
     // Only big calls are sampled -- see `rate` for why.
     if (n >= RATE_SAMPLE) {
       this.stepped += n;
       this.steppingMs += performance.now() - began;
     }
+  }
+
+  /**
+   * Put what has been stepped on the screen, at most every PAINT_MS.
+   *
+   * **Never awaited, and that is the whole point.** `_runNumberOfFrames(0)`
+   * steps nothing and paints, which is exactly the half of it worth keeping --
+   * but it still opens with `await pause()`, and `pause()` waits for an
+   * animation frame. Measured at 16.6ms a call on a 120Hz display, so awaiting
+   * it here would put the tax this method exists to remove straight back.
+   * Left to run on its own it costs the caller nothing: the waiting is on the
+   * main thread and the worker is free to step frames right through it.
+   *
+   * Failures are swallowed rather than raised. A paint that does not land
+   * leaves a stale picture for a thirtieth of a second and the next one fixes
+   * it; letting it reject would take down the job that happened to be stepping
+   * at the time, which is a working game lost to a cosmetic miss.
+   */
+  paint() {
+    // Nothing to paint for a screen nobody is looking at, and `pause()` never
+    // returns on a hidden page -- the animation frame it waits for does not
+    // come. That was already true of the old visible-page path and is why the
+    // hidden one existed; it is now the only reason this check is here.
+    if (document.hidden || !this.core || this.painting) return;
+    const now = performance.now();
+    if (now - this.paintedAt < PAINT_MS) return;
+    this.paintedAt = now;
+    this.painting = true;
+    Promise.resolve(this.core._runNumberOfFrames(0))
+      .catch(() => {})
+      .finally(() => { this.painting = false; });
   }
 
   /**
@@ -111,17 +173,19 @@ export class GameBoy {
    * M-series Mac and perhaps a third of that on a phone, which is the
    * difference between a quarter of an hour and most of one.
    *
-   * **Only calls of `RATE_SAMPLE` frames or more are counted**, and that is
-   * not tidiness. On a visible page the library's `_runNumberOfFrames` begins
-   * by awaiting an animation frame, so a call of sixteen frames is sixteen
-   * milliseconds of waiting around a quarter-millisecond of work -- averaging
-   * those in would answer *how often does the idle loop tick* when the
-   * question is *how fast does this core step frames*.
+   * **Only calls of `RATE_SAMPLE` frames or more are counted**, and the reason
+   * has changed with `run`. It used to be that a small call was almost all
+   * animation-frame wait, so averaging those in answered *how often does the
+   * idle loop tick* rather than *how fast does this core step frames*. That
+   * wait is gone. What is left is the per-call `await` into the worker, which
+   * a two-frame call still pays in full and a two-hundred-frame call amortises
+   * -- smaller than it was, and the same shape, so the same floor holds.
    *
-   * That overhead is still in the samples that do count, which makes the rate
-   * a slight underestimate and therefore any time computed from it a slight
-   * overestimate. That is the right direction for the only thing anyone does
-   * with it: deciding whether to press a button and go and do something else.
+   * The remaining overhead is still inside the samples that count, which makes
+   * the rate a slight underestimate and therefore any time computed from it a
+   * slight overestimate. That is the right direction for the only thing anyone
+   * does with it: deciding whether to press a button and go and do something
+   * else.
    *
    * Null until there is enough to say. A guess here would be a number on a
    * screen, and a number on a screen is believed.
