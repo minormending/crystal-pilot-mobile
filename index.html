@@ -404,10 +404,20 @@
      re-laid-out -- so whatever the panes are given, Play spends on slack around
      a 232px pad. Measured on a 390x844 phone: 30dvh leaves the pad 21px of
      slack and the screen 326px, where 34 left it 55px and the screen 292. */
-  main{margin:0 auto;width:100%;--deck:max(15rem,30dvh);
+  main{margin:0 auto;width:100%;
+       /* Three caps, and each one is a different thing running out.
+          The first is the **width**: a screen wider than the card cannot be
+          drawn, and 0.9 is 144/160 with the frame's 10px of padding added back.
+          The second keeps a tall phone from spending everything on the picture.
+          The third reserves the deck: 383px is the brow, the bar, the strip and
+          the gaps (253) plus 170 for whatever is in the deck, so a short phone
+          shrinks the screen rather than the pad. */
+       --stage:min(calc((min(100vw,560px) - 20px) * 0.9 + 20px),
+                   42svh,calc(100svh - 423px));
+       --deck:minmax(0,1fr);
        flex:1 1 auto;min-height:0;display:grid;gap:9px;
-       grid-template:"brow" auto "stage" minmax(0,1fr)
-                     "bar" auto "deck" minmax(0,var(--deck)) "tabs" auto
+       grid-template:"brow" auto "stage" var(--stage)
+                     "bar" auto "deck" var(--deck) "tabs" auto
                      /minmax(0,1fr);
        border-radius:20px;
        background:linear-gradient(180deg,var(--shell-hi) 0,var(--shell) 9%,
@@ -521,7 +531,7 @@
      It has to be set *on `main`*: `main` declares its own `--deck`, and a
      property declared on the element beats one inherited from `body`, so
      `body.nogame{--deck:0}` was shadowed and the row stayed at 240. */
-  body.nogame main{--deck:0px}
+  body.nogame main{--deck:0px;--stage:minmax(0,1fr)}
   /* The sheet itself no longer scrolls: the strip at its foot has to stay put,
      and a strip inside a scroller scrolls away from the panes it switches. So
      the scrolling moved in one level, onto the panes, and the fade went with
@@ -576,7 +586,7 @@
      whose name is cut is worse than a key on a second row, and `auto-fit`
      picks the count instead of being told it. */
   .modes{grid-area:tabs;flex:0 0 auto;display:grid;gap:5px;
-         grid-template-columns:repeat(auto-fit,minmax(52px,1fr))}
+         grid-template-columns:repeat(6,minmax(0,1fr))}
   .modes button{min-width:0;min-height:42px;padding:0 4px;border-radius:8px;
                 font-size:10.5px;font-weight:700;letter-spacing:.05em;
                 white-space:nowrap;text-transform:uppercase;
@@ -1163,10 +1173,26 @@
      to opposite edges with a hand's width of nothing between them. */
   .gamepad{display:flex;align-items:center;justify-content:space-between;
            gap:10px;padding:4px 0 0;max-width:330px;margin:0 auto}
+  /* **The pad now fits the deck rather than the deck fitting the pad.** The
+     stage takes a size from the window and the deck takes what is left (see
+     `main`), so on a short phone that is less than the 232px this pad used to
+     insist on -- and a pad that overflows its row is a pad with its face
+     buttons under the tab strip. `cqh` against the deck lets the cells shrink
+     only when there is not room, so every phone that had a full-size pad
+     still has one. */
+  /* **The shares have to add up to less than the container.** Three rows of
+     cross at 27cqh plus an 16cqh button and its margin is 103% of the deck
+     before the card's own padding, so the card overflowed at *every* size and
+     put Select and Start under the tab strip -- measured, 217px of card in a
+     206px deck on a 390x844 phone. 3 x 20 + 5 + 18 = 83 leaves the padding its
+     room (3 x 19 + 5 + 17 = 79 after a 320x568 phone was still 2px over), and
+     the `min()` against a fixed px means a phone with space to spare
+     still gets the pad at the size it always had. */
+  .padwrap{container-type:size;display:grid;align-content:center}
 
   /* A connected cross, not four loose boxes. The cells touch and only the
      outer tips are rounded, which is what makes it read as a D-pad. */
-  .dpad{--cell:48px;display:grid;grid-template-columns:repeat(3,var(--cell));
+  .dpad{--cell:min(48px,19cqh);display:grid;grid-template-columns:repeat(3,var(--cell));
         grid-template-rows:repeat(3,var(--cell));flex:0 0 auto}
   /* A key needs an edge. These were flat fills of `--key` on a card of
      `--panel`, which in the light theme is #dee5f0 on #ffffff -- a 1.1:1 step,
@@ -1195,7 +1221,7 @@
         background:rgba(0,0,0,.22)}
 
   /* Round, and on the diagonal A-over-B. */
-  .face{--btn:60px;display:grid;grid-template-columns:repeat(2,var(--btn));
+  .face{--btn:min(60px,25cqh);display:grid;grid-template-columns:repeat(2,var(--btn));
         grid-template-rows:repeat(2,calc(var(--btn) * 0.78));flex:0 0 auto}
   .face button{width:var(--btn);height:var(--btn);border-radius:50%;
         min-height:0;padding:0;flex:0 0 auto;background:var(--key);
@@ -1210,14 +1236,17 @@
 
   /* Slim slanted keys, the way the hardware marks Select and Start. The label
      is un-skewed inside so only the key is angled. */
-  .menus{display:flex;gap:16px;justify-content:center;margin-top:16px}
+  /* Scaled with the cross above it -- see `.padwrap`. This row is 60px of the
+     pad card once its margin is counted, so leaving it fixed while the cross
+     shrank put Select and Start under the tab strip on a 568-tall phone. */
+  .menus{display:flex;gap:16px;justify-content:center;margin-top:min(16px,5cqh)}
   .menus button{display:flex;align-items:center;justify-content:center;
         border:1px solid var(--key-edge);
         box-shadow:inset 0 1px 0 rgba(255,255,255,.08),
                    0 1px 3px rgba(16,18,24,.14)}
   .menus button b{letter-spacing:.12em;font-weight:600;font-size:10.5px;
         color:var(--key-ink)}
-  .menus button{flex:0 0 auto;min-height:44px;padding:0 22px;border:0;
+  .menus button{flex:0 0 auto;min-height:min(44px,17cqh);padding:0 22px;border:0;
         border-radius:7px;background:var(--key);transform:skewX(-16deg);
         box-shadow:inset 0 1px 0 rgba(255,255,255,.05)}
   .menus button b{display:block;transform:skewX(16deg);font-weight:600;
@@ -1338,7 +1367,9 @@
     .brow{gap:8px}
     /* :not(.hide) matters: this selector outweighs `.hide{display:none}`, and
        without the guard the pad would be on screen before a ROM is picked. */
-    .padwrap,#ctrls:not(.hide),.gamepad{display:contents}
+    /* `display:contents` already discards the containment -- measured, the
+       cells stayed 48px -- but saying so is cheaper than relying on it. */
+    .padwrap,#ctrls:not(.hide),.gamepad{display:contents;container-type:normal}
     .stage{grid-area:screen;justify-content:center;overflow:hidden}
     #screenwrap{align-self:center}
     .dpad{grid-area:dpad;align-self:center}
@@ -1418,7 +1449,17 @@
     .modes{grid-area:auto}
     .modes [data-pane="play"]{display:none}
     body.padmode .panes{display:flex}
-    .padwrap{grid-area:pad}
+    /* **The size container is the phone's, and it has to be given back here.**
+       `container-type:size` makes an element unable to be sized by its own
+       content -- which is right in the deck, a row with a height of its own,
+       and fatal in this layout, where the `pad` area is content-sized: the
+       containment resolved the pad's height to 0, `19cqh` to 0, and the cross
+       and the face buttons to **0x0**. Measured on tablet and desktop, both.
+       Back to `normal` and `cqh` falls through to the viewport, where the
+       `min()` against the fixed px picks the fixed px, which is the size this
+       pad has always been here. */
+    .padwrap{grid-area:pad;container-type:normal;display:block;
+             align-content:normal}
     body:not(.padmode) .padwrap{display:block}
     /* Nothing to say here any more: the column is the cap, and the pad filling
        it is what puts its edges on the same two lines as the strip above it and

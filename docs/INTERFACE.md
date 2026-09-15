@@ -97,18 +97,34 @@ A job that starts switches to Play, because asking the pilot to do something is
 asking to watch it. That is one-way: a job that ends leaves the tab alone rather
 than throwing a pane over whatever it just did.
 
-**The deck is capped, and the cap is what keeps the picture on screen.** Left
-to size itself it takes what its content asks for, and the Jobs pane asks for
-579px on a phone — which ate the whole flexible row above it and left the stage
-at exactly zero. A tab bar whose first tab is the game, over a game that is not
-drawn, is worse than the door it replaced. The cap is `max(15rem, 30dvh)`: 15rem
-clears the 232px pad whatever the viewport does, and 30dvh hands a tall phone a
-little more for the panes that want it. Anything longer scrolls.
+**The picture takes its size from the window, and the deck takes what is left.**
+That is the second attempt. The first capped the deck and let the stage flex,
+which was right about the danger — a pane left to size itself asks for 579px and
+ate the whole flexible row — and wrong about which row should absorb a change.
+Anything that moved, moved the picture: the six tab keys wrap to a second row
+below about 380px wide, and that alone cost 47px of stage. Measured before the
+change, with a cartridge in: the screen was **2px tall on a 320×568 phone and
+18px on a 360×640**, while a 390×844 phone had a healthy 256. A control that
+resizes the thing you are watching is the complaint people actually made.
 
-Thirty rather than thirty-four because the deck is the same height on every tab
-*deliberately*, so whatever the panes are given, Play spends on slack around the
-pad. Measured on a 390×844 phone: 30dvh leaves the pad 21px of slack and the
-picture 326px, where 34 left it 55px and the picture 292.
+So `--stage` is a size, and the deck is the `1fr`. Three caps, each a different
+thing running out: the **width** of the card, because a picture wider than that
+cannot be drawn; **42svh**, so a tall phone does not spend everything on it; and
+**`100svh - 423px`**, which reserves the brow, the bar, the strip, the gaps and
+170px of deck, so a short phone shrinks the picture rather than the pad. `svh`
+rather than `dvh` on purpose — `dvh` changes as the address bar hides, which is
+the same complaint by another route.
+
+Measured after, screen height by phone: 320×568 → 96, 360×640 → 168, 375×667 →
+195, 390×844 → 304, 430×932 → 340. Identical on every tab, at every size.
+
+**The pad fits the deck now, rather than the deck fitting the pad.** Its cross,
+face and Select/Start row are `min(fixed, Ncqh)` against the deck, so a phone
+with room keeps the size it always had and a short one scales down instead of
+sliding under the tab strip. The shares have to add up to *less* than the
+container — three rows of cross at 27cqh plus a button and its margin came to
+103% before the card's own padding, and overflowed at every size; 3 × 19 + 5 +
+17 = 79 leaves the padding its room.
 
 **Before a cartridge the gateway takes the screen's room instead**, which is
 where the sheet always put it: the three questions are the whole page at that
@@ -1389,4 +1405,4 @@ So this page carries a marker naming the files it describes and the hash they
 had when it was last read against them. `tools/docs-check` reports it when they
 move, and the pre-commit hook blocks on that report.
 
-<!-- covers: index.html app/main.js app/rows.js @ e58cf00a14a2 -->
+<!-- covers: index.html app/main.js app/rows.js @ a4e6173ecccb -->

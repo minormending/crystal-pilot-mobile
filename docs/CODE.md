@@ -5328,7 +5328,7 @@ This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ cd36faac2ebb -->
+<!-- covers: app/main.js index.html @ 062edbe3f468 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -5444,13 +5444,30 @@ was read by a single rule once the phone stopped putting a sheet over the game.
 The status line stopped being a `<button>` at the same time, for the same
 reason: there is nothing behind it to open.
 
-The deck is capped at `max(15rem, 30dvh)` and the cap is load-bearing: left to
-size itself the row takes what its content asks for, and the Jobs pane asks for
-579px — which ate the whole `minmax(0,1fr)` above it and left the stage at
-exactly zero. A tab bar whose first tab is the game, over a game that is not
-drawn, is worse than the door it replaced. 15rem clears the 232px pad whatever
-the viewport does; 30dvh gives a tall phone a little more. Anything longer
+**The stage is sized and the deck is the `1fr`** — the other way round from
+how this started. Capping the deck was right about the danger (a pane left to
+size itself asks for 579px and ate the flexible row) and wrong about which row
+should absorb a change: everything that moved moved the *picture*. The six tab
+keys wrap below about 380px wide, and that alone cost 47px of stage. Measured
+with a cartridge in: the screen was **2px tall on a 320×568 phone, 18px on
+360×640**, against 256 on a 390×844 one.
+
+`--stage` now takes three caps — the card's width, `42svh`, and
+`100svh - 423px`, which reserves the brow, bar, strip, gaps and 170px of deck so
+a short phone shrinks the picture rather than the pad. `svh` not `dvh`: `dvh`
+moves when the address bar hides, which is the same complaint by another route.
+After: 96 / 168 / 195 / 304 / 340 px of screen at 320×568 / 360×640 / 375×667 /
+390×844 / 430×932, identical on every tab. Anything longer than the deck
 scrolls, which is what the fade at the foot of `#panes` is for.
+
+**The pad is sized against the deck with `cqh`**, so it scales only where there
+is no room. Two things that cost a measurement each: the shares must total less
+than 100% of the container (27cqh × 3 + 16 + margin is 103%, and the card
+overflowed at *every* size, putting Select and Start under the tab strip), and
+`container-type:size` must not reach the two wide layouts — there the pad area
+is content-sized, containment resolved it to zero, and the cross and face came
+out **0×0** on both tablet and desktop. Both blocks set `container-type:normal`,
+where `cqh` falls through to the viewport and the `min()` picks the fixed px.
 
 The cap is a **custom property on `main`**, not a second `grid-template`, so the
 two wide layouts — which declare their own templates and never read `--deck` —
@@ -6957,7 +6974,7 @@ a conversation.
 
 ### The card behind a party row
 
-<!-- covers: app/rows.js app/main.js index.html @ e58cf00a14a2 -->
+<!-- covers: app/rows.js app/main.js index.html @ a4e6173ecccb -->
 
 Two questions the game itself will not answer about a Pokémon you are
 carrying — *what is this made of* and *what is it about to become* — and both
@@ -7170,7 +7187,7 @@ to deposit your last Pokémon.
 
 ### The settings and the save card
 
-<!-- covers: index.html app/main.js @ cd36faac2ebb -->
+<!-- covers: index.html app/main.js @ 062edbe3f468 -->
 
 The pilot's own list got a glyph column, shorter names and a slot to fill in
 v165. These two cards did not, and reading them found that they had a different
