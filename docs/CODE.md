@@ -386,12 +386,35 @@ everything populated — cartridge RAM 32768, Game Boy memory 65536, internal
 state 1024, palette 128 — and persists it, so the library's own
 `getSaveStates()` lists them back.
 
-`loadState()` is the half that genuinely does not work. It rejects with
-`undefined` on states the library created itself, fetched from its own
-IndexedDB, handed to its own API with every buffer the right length. That is
-what makes a state useless here, not the copy semantics above: a snapshot you
-can never return to is not a save state. Slots hold battery saves instead — see
-[section 7c](#7c-slots-undo-and-bringing-a-save-in).
+`loadState()` is the half that genuinely does not work, and **it fails in three
+different ways depending on where the state came from and what the core is
+doing** — which is worth setting out, because two of them look like success.
+
+Handed a state the library created itself, fetched from its own IndexedDB and
+passed back to its own API with every buffer the right length, it rejects with
+`undefined`. Handed an in-memory state while the core is paused, it throws on a
+buffer that is not there. Handed one while the core is *playing*, it **resolves
+without error and does not restore the game** — which is the worst of the three,
+because nothing announces it. Measured on Route 29: a state saved at `53,13`
+and reloaded after walking to `51,13` put the player at `53,12`, which is
+neither, and left the game refusing every button; `runScripts()` did not bring
+input back, and the next `saveState`/`loadState` cycle threw on a detached
+ArrayBuffer. That last part is reliable; the wrong-position reading is one
+trial, because a game that has stopped accepting input cannot be walked
+anywhere to set up a second.
+
+**Do not settle this with a byte comparison, because a byte comparison says it
+works.** Diffing work RAM across a restore is quietly convincing — 592 bytes
+moved by running 1,200 frames, only 40 still different afterwards, and all 40
+transient (the stack, the sprite OAM shadow, the text timer). The catch is that
+those frames were stepped with no buttons pressed, so the game was idling on one
+tile and there was nothing much to restore; the 97% agreement was mostly two
+snapshots of a game that had not gone anywhere. Ask the game *where it is*, after
+walking it somewhere, or the measurement will agree with whatever you hoped.
+
+That is what makes a state useless here, not the copy semantics above: a
+snapshot you can never return to is not a save state. Slots hold battery saves
+instead — see [section 7c](#7c-slots-undo-and-bringing-a-save-in).
 
 **The battery save is the one that *can* work**, because it only needs reading.
 `batterySave()` used to return `this.core.getSavedMemory()`, which is
