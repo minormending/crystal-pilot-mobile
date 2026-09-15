@@ -14,6 +14,8 @@
 // do offer -- reading the emulated address space -- and the state variables the
 // hooks used to stand in for.
 
+import { OFF } from './trace.js';
+
 const SRAM_BYTES = 32768;
 const GB_WRAM_START = 0xc000;   // where work RAM begins in the Game Boy's map
 // And how much of it there is. Stated once because two different things depend
@@ -89,6 +91,10 @@ export class GameBoy {
     // Whether the master audio channel is currently unmuted. Tracked here so a
     // caller can ask without crossing into the core -- see `setAudible`.
     this.audible = false;
+    // What the pilot is doing, for a console that wants to know why the
+    // picture is not moving -- see trace.js. A no-op until `main.js` puts a
+    // real one here, because every `run` below ticks it.
+    this.trace = OFF;
     // The paint throttle -- see PAINT_MS and `paint`. `paintedAt` is when the
     // last one was asked for and `painting` whether one is still in flight,
     // and both are needed: a paint takes longer than the interval, so time
@@ -159,6 +165,10 @@ export class GameBoy {
     for (let i = 0; i < n; i++) {
       await this.core._runWasmExport('executeFrame', []);
     }
+    // Every driving loop in the app reaches the machine through here -- the
+    // ones on TaskBase and the ones in nav.js that never touch it -- which is
+    // what makes this the one honest place to count from. See trace.js.
+    this.trace.tick(n);
     // Stepping draws nothing, so ask for a paint -- throttled, and never
     // awaited. On a hidden page there is nothing to paint and `paint` says so.
     this.paint();

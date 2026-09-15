@@ -71,6 +71,7 @@ export class Nav {
    * names a tile on the map you have just left.
    */
   async awaitMapChange(from, timeout = 240) {
+    this.gb.trace.doing('awaitMapChange', `leaving map ${from}, up to ${timeout} frames`);
     for (let i = 0; i < timeout; i += 2) {
       await this.gb.run(2);
       const key = await this.mapKey();
@@ -92,6 +93,7 @@ export class Nav {
    * which tile a tap meant, is reading a world that is still moving.
    */
   async settle(stillFor = 6, timeout = 90) {
+    this.gb.trace.doing('settle', `still for ${stillFor}, up to ${timeout} frames`);
     let last = await this.restState();
     let still = 0;
     for (let i = 0; i < timeout; i += 2) {
@@ -123,6 +125,7 @@ export class Nav {
    * collision map cannot see -- an NPC -- is standing in the way.
    */
   async step(dir, timeout = 60) {
+    this.gb.trace.doing('step', `${dir}, up to ${timeout} frames`);
     const before = await this.pos();
     let moved = false;
     this.gb.hold(dir);

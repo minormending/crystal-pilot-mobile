@@ -44,6 +44,8 @@ export class TaskBase {
     this.cancelled = false;
     this.ticks = 0;
     this.named = false;
+    // The most recent `snap`, for the debug view -- see `snap`.
+    this.lastSnap = null;
   }
 
   cancel() { this.cancelled = true; }
@@ -73,7 +75,12 @@ export class TaskBase {
   }
 
   async snap() {
-    return this.state.read(await this.gb.readWram());
+    // Kept as well as returned, for one reader: the debug view's `describe`,
+    // which runs synchronously from inside `gb.run` and so cannot do a read of
+    // its own. The loops here snap constantly, so this is never far behind --
+    // and it costs one assignment on a path that already built the object.
+    this.lastSnap = this.state.read(await this.gb.readWram());
+    return this.lastSnap;
   }
 
   say(msg) { this.onProgress(msg); }
@@ -99,6 +106,7 @@ export class TaskBase {
    * any number. Press, look, stop when it is shut.
    */
   async closeMenus(times = 8) {
+    this.gb.trace.doing('closeMenus', `up to ${times} B`);
     for (let i = 0; i < times; i++) {
       if (!(await this.snap()).windowOpen) return true;
       await this.push('B', 5, 10);
@@ -130,6 +138,7 @@ export class TaskBase {
    * its first caller is how the second one ends up with a copy.
    */
   async keepDefaultName(tries = NAME_TRIES) {
+    this.gb.trace.doing('keepDefaultName', `up to ${tries} tries`);
     for (let i = 0; i < tries; i++) {
       if (this.cancelled) return false;
       const wram = await this.gb.readWram();
@@ -166,6 +175,7 @@ export class TaskBase {
    * different thing to go and look at than "the box would not close".
    */
   async closeConversation(times = 12) {
+    this.gb.trace.doing('closeConversation', `up to ${times} B`);
     for (let i = 0; i < times; i++) {
       const s = await this.snap();
       if (!s.windowOpen && !s.scriptRunning) return true;
@@ -180,6 +190,7 @@ export class TaskBase {
 
   /** Tap through whatever text is left until the game stops asking. */
   async settleText(taps = 40) {
+    this.gb.trace.doing('settleText', `up to ${taps} A`);
     for (let i = 0; i < taps; i++) {
       const s = await this.snap();
       if (!s.inBattle && !s.windowOpen && !s.scriptRunning) return;
@@ -202,6 +213,7 @@ export class TaskBase {
    * asks whether the game can be saved has to let it settle first.
    */
   async awaitQuiet(tries = QUIET_TRIES) {
+    this.gb.trace.doing('awaitQuiet', 'world loaded, no script, no battle');
     let s = await this.snap();
     for (let i = 0; i < tries; i++) {
       if (s.worldLoaded && !s.scriptRunning && !s.inBattle) return s;

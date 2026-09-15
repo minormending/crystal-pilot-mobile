@@ -16,6 +16,7 @@ import { RomData } from '../gen2/romdata.js';
 import { Symbols } from '../gen2/symbols.js';
 import { gen2 } from '../gen2/engine.js';
 import { charOf } from '../gen2/screen.js';
+import { OFF } from '../gbcore/trace.js';
 
 const GB_WRAM_START = 0xc000;
 const WRAM_BYTES = 0x2000;
@@ -371,7 +372,8 @@ export class FakeGameBoy {
    * when a button is pushed. Without it the machine is inert, which is right
    * for testing a refusal and useless for testing a sequence.
    */
-  constructor({ wram = null, sram = null, onPress = null, onRun = null } = {}) {
+  constructor({ wram = null, sram = null, onPress = null, onRun = null,
+               trace = null } = {}) {
     this.wram = wram || new Uint8Array(WRAM_BYTES);
     this.sram = sram || new Uint8Array(SRAM_BYTES);
     this.rom = new Uint8Array(16);
@@ -380,6 +382,10 @@ export class FakeGameBoy {
     this.held = new Set();
     this.onPress = onPress;
     this.onRun = onRun;
+    // The real GameBoy carries one and every driving loop calls `doing` on it.
+    // A test that wants to *see* the labels passes its own; the default is the
+    // same no-op the app runs with tracing off.
+    this.trace = trace || OFF;
   }
 
   async readWram() { return this.wram; }

@@ -4,6 +4,7 @@
 
 import { readHeader } from '../gbcore/cartridge.js';
 import { GameBoy, audibleNow } from '../gbcore/gb.js';
+import { Trace } from '../gbcore/trace.js';
 import { Symbols, sharedNames } from '../gen2/symbols.js';
 import { runSequence, sequenceSaid } from './runner.js';
 import {
@@ -1654,6 +1655,12 @@ async function runTask(id, busy, work,
     // three go through. The pilot's own last line stays.
     watchSaying(false);
     running = false;
+    // Close whatever the job was last doing. Without this the activity stays
+    // open, and the idle loop -- which steps frames through the same `gb.run`
+    // -- goes on counting into it: a `settle` that ran for six frames would
+    // still be "running" minutes later with fifty thousand against its name,
+    // and a genuinely stuck loop could never be told from a finished one.
+    gb.trace.finish('job ended');
     syncAudio();
     setMode(false);
     $(id).disabled = false;
@@ -4560,8 +4567,51 @@ if ('serviceWorker' in navigator) {
 }
 
 // Exposed so the spike can be driven from a console or a test harness.
+// --- the debug view ------------------------------------------------------------
+//
+// A still picture means one of two things and they want opposite responses: a
+// loop patiently doing its job, or a loop that has stopped. `PILOT.trace.on()`
+// tells them apart -- see gbcore/trace.js for why counting from `gb.run` is
+// the only honest place, and why it keeps a timer of its own.
+//
+// `?debug=1` turns it on before the first frame, which is the only way to
+// catch something that goes wrong during the opening.
+const trace = new Trace({
+  // What the game says about itself, for the end of every line. Guarded
+  // completely: this runs while a job is mid-flight, and a tracer that threw
+  // would take down the job it was reporting on -- which is the one failure
+  // mode a debug tool must not have.
+  describe: () => {
+    try {
+      if (!tasks || !gb || !gb.ready) return null;
+      const s = tasks.lastSnap;
+      if (!s || !s.map) return null;
+      const bits = [`map ${s.map.join('.')}`];
+      if (s.inBattle) bits.push('in battle');
+      if (s.scriptRunning) bits.push('script has the controls');
+      if (!s.worldLoaded) bits.push('no world');
+      return bits.join(', ');
+    } catch (e) {
+      return null;
+    }
+  },
+});
+gb.trace = trace;
+if (PARAMS.get('debug') === '1') trace.start();
+
 window.PILOT = {
   gb,
+  // The debug view. `PILOT.trace.on()` starts it, `.off()` stops it,
+  // `.recent()` is the last few things the pilot did, `.now()` is what it is
+  // doing this instant. Named `on`/`off` here rather than start/stop because
+  // these are typed at a prompt by somebody in a hurry.
+  trace: {
+    on: (o) => { trace.start(o); return 'tracing'; },
+    off: () => { trace.stop(); return 'stopped'; },
+    now: () => trace.snapshot(),
+    recent: (n) => trace.recent(n),
+    raw: trace,
+  },
   get tasks() { return tasks; },
   get state() { return state; },
   get collision() { return collision; },

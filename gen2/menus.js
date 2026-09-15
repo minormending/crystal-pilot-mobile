@@ -78,6 +78,7 @@ export function withMenus(Base) {
    * see their own intro and pick their own name; see main.js.
    */
   async continueGame(maxFrames = INTRO_FRAMES) {
+    this.gb.trace.doing('continueGame', `mashing A/B, budget ${maxFrames} frames`);
     await this.step(2500);
     let spent = 2500;
     // Two different checks at two different rates. "Has the world loaded?"

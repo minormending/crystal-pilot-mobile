@@ -713,7 +713,7 @@ def check_docs_shape():
              21: "Twenty-one", 22: "Twenty-two", 23: "Twenty-three",
              24: "Twenty-four", 25: "Twenty-five", 26: "Twenty-six",
              27: "Twenty-seven", 28: "Twenty-eight", 29: "Twenty-nine",
-             30: "Thirty"}
+             30: "Thirty", 31: "Thirty-one", 32: "Thirty-two"}
     want = WORDS.get(len(modules))
     # Anchored on the count, not on the sentence that used to follow it. The
     # pattern wanted "... modules. Arrows point from" and the prose grew a

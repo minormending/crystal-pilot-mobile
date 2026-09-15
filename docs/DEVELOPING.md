@@ -15,9 +15,9 @@ what CI checks and what the pre-commit hook blocks on.
 ```mermaid
 flowchart LR
     E[an edit] --> H{{".githooks/pre-commit"}}
-    H --> T["./run-tests<br/>979 behaviour tests"]
+    H --> T["./run-tests<br/>992 behaviour tests"]
     H --> C["tools/check-app<br/>36 groups"]
-    H --> D["tools/docs-check<br/>46 tracked sections"]
+    H --> D["tools/docs-check<br/>47 tracked sections"]
     T --> OK[commit]
     C --> OK
     D --> OK
@@ -39,7 +39,7 @@ git config core.hooksPath .githooks
 ./run-tests -v         # notes and stack lines
 ```
 
-979 tests in 28 files, and what each file is about says more than the count:
+992 tests in 29 files, and what each file is about says more than the count:
 
 | file | tests | what it pins down |
 | --- | --- | --- |
@@ -71,8 +71,31 @@ git config core.hooksPath .githooks
 | `input.mjs` | 3 | held buttons, and releasing them |
 | `gb.mjs` | 7 | — |
 | `audio.mjs` | 6 | when the game may make a noise, and a core that has no audio behind it |
+| `trace.mjs` | 13 | — |
 
 No ROM, no browser, no emulator — which is the point rather than a compromise.
+
+## When the screen stops moving
+
+`PILOT.trace.on()` in the console, or `?debug=1` in the URL to have it running
+before the first frame. It says what the pilot is doing, one line per activity,
+with the map and whether a script has the controls:
+
+```
+[pilot] ▶ awaitMapChange · leaving map 6148, up to 240 frames · map 24.5
+[pilot] ⏳ settle — no frames for 2.4s (18 so far, 2.6s in) — the screen is not
+        frozen, this loop is waiting
+```
+
+The `⏳` line is the one worth waiting for: it comes from a timer rather than
+from the loop, so it appears even when whatever the pilot is stuck on will never
+call anything again. `PILOT.trace.now()` is the activity in flight and
+`.recent(20)` the last few that finished, which is the pair of questions — *what
+is it doing* and *what did it just do* — that a still picture raises.
+
+Quiet between jobs by design, so leaving it on costs nothing. See
+[`trace.js`](CODE.md#tracejs--what-the-pilot-is-doing) for why it counts from
+`gb.run` and why the start lines are throttled.
 The ROM is not in this repository and never will be, so a test that needs one
 cannot run on a clean checkout or in CI, and a test that cannot run there does
 not get run.
@@ -128,9 +151,9 @@ section gives. Everything by hand runs against a local build.
 
 ```mermaid
 flowchart BT
-    C["the app"] --> T["./run-tests<br/>979 behaviour tests"]
+    C["the app"] --> T["./run-tests<br/>992 behaviour tests"]
     C --> A["tools/check-app<br/>36 groups"]
-    C --> D["tools/docs-check<br/>46 tracked sections"]
+    C --> D["tools/docs-check<br/>47 tracked sections"]
     C --> V["tools/coverage<br/>what the suite never runs"]
     T --> M["tools/mutate<br/>break a line, see who notices"]
     A --> K["tools/check-checks<br/>break each group's own subject"]

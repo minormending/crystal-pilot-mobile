@@ -114,9 +114,9 @@ of the subtleties in sections 6 and 7.
 
 ## 2. The shape of it
 
-<!-- covers-api: app/main.js gen2/journey.js titles/crystal.js gen2/tasks.js gen2/nav.js gen2/world.js gen2/collision.js gen2/state.js gen2/romdata.js gen2/symbols.js gbcore/gb.js @ 5698bcb23ab1 -->
+<!-- covers-api: app/main.js gen2/journey.js titles/crystal.js gen2/tasks.js gen2/nav.js gen2/world.js gen2/collision.js gen2/state.js gen2/romdata.js gen2/symbols.js gbcore/gb.js @ ec2d2dec490c -->
 
-Thirty modules, in four directories, and the directories are the design:
+Thirty-one modules, in four directories, and the directories are the design:
 **an import may point down this list and never up.**
 
 | | holds | may import from |
@@ -209,8 +209,10 @@ flowchart LR
         ver["version.js<br/>which build this is"]
         cart["cartridge.js<br/>what a ROM says it is"]
         gb["gb.js<br/>emulator wrapper"]
+        trace["trace.js<br/>what the pilot is doing"]
     end
 
+    gb --> trace
     main --> pick
     pick --> contract
     pick --> title
@@ -258,6 +260,7 @@ flowchart LR
 | --- | --- |
 | `cartridge.js` | "is this a Game Boy ROM, and which game?" |
 | `gb.js` | "run some frames", "read memory", "hold this button" |
+| `trace.js` | "what is the pilot doing, and why has the picture stopped?" |
 | `engine.js` | "how wide is a party entry, and which byte is a move's power?" |
 | `symbols.js` | "where does `wPartyCount` live?" |
 | `state.js` | "what is happening right now?" |
@@ -346,9 +349,68 @@ count comes back in `stats.knockouts`, since each one costs half your money.
 
 ## 3. The layers, bottom up
 
+### `trace.js` — what the pilot is doing
+
+<!-- covers: gbcore/trace.js @ 9d29cd31b47b -->
+
+**A screen that is not changing means one of two things, and they want opposite
+responses.** A job can spend four seconds settling, forty presses closing a
+conversation, or two thousand frames waiting for a map to load — and a loop that
+has genuinely stopped looks exactly the same from outside: a still picture and a
+status line that said something once. The question at that moment is not *what
+happened*, which the status line answers, but **is it working, and on what**.
+
+`PILOT.trace.on()` answers it. `.off()` stops, `.now()` is the activity in
+flight, `.recent(n)` the last few that finished. `?debug=1` starts it before the
+first frame, which is the only way to watch something that goes wrong during the
+opening.
+
+```
+[pilot] ▶ continueGame · mashing A/B, budget 60000 frames · map 0.0, no world
+[pilot]   · continueGame · mashing A/B, budget 60000 frames · 3072 frames · 1.5s
+[pilot] ▶ step · LEFT, up to 60 frames · map 24.4 (+18 since)
+[pilot]   · awaitMapChange · leaving map 6148, up to 240 frames · 2656 frames · 1.5s
+[pilot] ⏳ settle — no frames for 2.4s (18 so far, 2.6s in) — the screen is not
+        frozen, this loop is waiting
+```
+
+**It counts from `gb.run`**, which is the one call every driving loop reaches
+the machine through — including the three in `nav.js` that never touch
+`TaskBase`. Anywhere else would have been a list of places to keep in step with.
+
+**And it keeps a timer of its own**, which is the only part that can report the
+second case. A loop that has stopped stepping will never call anything again, so
+nothing it does can raise the alarm; a heartbeat asking *has the thing that was
+running stopped* is the whole mechanism. It fires once per stall rather than
+once per beat.
+
+**Start lines are throttled to one every 333ms**, and that is what makes it
+usable rather than merely correct. Walking is a `step` and a `settle` per tile,
+a few milliseconds each, so the opening starts about 140 activities: one line
+each buries the two that matter. Skipped starts are counted and shown as
+`(+18 since)` on the next, so the rhythm is visible and nothing is silently
+dropped — measured, the same opening went from 144 lines to 12. The *history* is
+never throttled; `recent()` has them all.
+
+**A job closes its activity when it ends**, in `runTask`. Without that the last
+`settle` would stay open and the idle loop — which steps frames through the same
+`gb.run` — would go on counting into it, so a six-frame settle would still be
+"running" minutes later with fifty thousand frames against its name, and a stuck
+loop could never be told from a finished one. Between jobs `now()` is null and
+the console is silent, which was checked rather than assumed.
+
+The state on the end of each line comes from `TaskBase.lastSnap`, cached by
+`snap()` because `describe` runs synchronously inside `gb.run` and cannot do a
+read of its own. The loops snap constantly, so it is never far behind.
+
+**`OFF` is a real object rather than a null check.** `gb.run` ticks on every
+call and seventeen loops call `doing`, so the cost of tracing being off has to
+be one branch inside one method — not a `?.` the reader has to see past at each
+of those sites.
+
 ### `gb.js` — the emulator
 
-<!-- covers: gbcore/gb.js @ 45d4ed5801cf -->
+<!-- covers: gbcore/gb.js @ 4001f946d332 -->
 
 Wraps WasmBoy. Runs frames, reads work RAM, holds and releases buttons.
 
@@ -1277,7 +1339,7 @@ Two more things the map alone will not tell you:
 
 ### `nav.js` — walking
 
-<!-- covers: gen2/nav.js @ 95172f0962ea -->
+<!-- covers: gen2/nav.js @ 36b695fd208a -->
 
 `step()` takes one tile. `walkTo()` gets to a tile, re-planning every step.
 
@@ -1386,7 +1448,7 @@ Route 30's door to it at `(17,5)`.
 
 ## 4. Taking one step, and planning a walk
 
-<!-- covers: gen2/nav.js gen2/collision.js @ c85b8ba2f60f -->
+<!-- covers: gen2/nav.js gen2/collision.js @ 853e8dbac369 -->
 
 ### One step
 
@@ -1752,7 +1814,7 @@ and a Pokémon Center restores PP, so the grind treats it as a trip it already
 knew how to make. See [the tiles that run a
 script](#8g-the-tiles-that-run-a-script-and-saying-hello) for the walk half.
 
-<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 9a2406f218a4 -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ bb84d752e96c -->
 
 ### Which move, and which question
 
@@ -2622,7 +2684,7 @@ flowchart TD
 
 ## 7a. Five that act on where you already are
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ 443d2daa643a -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ 1f857557b1b0 -->
 
 **The first jobs ever run on Polished Crystal, now that its opening reaches the
 grass.** Grind took the starter Lv6 to Lv7 in two wild battles and 15 seconds,
@@ -2910,7 +2972,7 @@ said *trainer battle: lost* **seven times**. One loss, reported seven ways.
 
 ## 7d. The counter, and the money it takes
 
-<!-- covers: gen2/menus.js gen2/state.js titles/crystal.js @ 1826b6dba134 -->
+<!-- covers: gen2/menus.js gen2/state.js titles/crystal.js @ 053a92d573ba -->
 
 Everything the pilot could do until now used what it found. **Shop** walks to a
 mart and buys, which is the first thing it does that spends rather than
@@ -3019,7 +3081,7 @@ counter and came away with **five potions and ¥1800**, in 49 seconds.
 
 ## 7b. Saving, and getting the save out
 
-<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ 9a2406f218a4 -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ bb84d752e96c -->
 
 ```mermaid
 flowchart TD
@@ -4700,7 +4762,7 @@ cartridge will not say which hours are which.
 
 ## 8j. A cartridge that changed everything it could
 
-<!-- covers: titles/polished.js gen2/engine.js gen2/romdata.js gen2/state.js gen2/menus.js @ c35ffc9e0b26 -->
+<!-- covers: titles/polished.js gen2/engine.js gen2/romdata.js gen2/state.js gen2/menus.js @ c027e1ac3c46 -->
 
 Polished Crystal is the profile in `docs/DEVELOPING.md`'s hack table described
 as "the generic fallback, and the hardest thing to support properly". It is
@@ -5223,7 +5285,7 @@ This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ c8152a9697d7 -->
+<!-- covers: app/main.js index.html @ cc55ce39d573 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -6298,7 +6360,7 @@ seconds by a page whose loop was supposedly running.
 
 ### One thing at a time
 
-<!-- covers: app/main.js @ 6fce7e0aa45f -->
+<!-- covers: app/main.js @ 43c5b5591096 -->
 
 One Game Boy, one joypad, one canvas — so a great deal of this app is about
 making sure two things are never driving them at once. There are three claims,
@@ -6553,7 +6615,7 @@ is the noise this list exists to replace.
 
 ### Leading with the one that can answer the room
 
-<!-- covers: gen2/romdata.js gen2/menus.js gen2/journey.js @ 8a3a3f6de51b -->
+<!-- covers: gen2/romdata.js gen2/menus.js gen2/journey.js @ 7000842fe665 -->
 
 **Gen 2 sends out slot one and asks nobody.** So the party's order decides the
 first battle of a Gym — and since the pass before, the pilot has known exactly
@@ -6852,7 +6914,7 @@ a conversation.
 
 ### The card behind a party row
 
-<!-- covers: app/rows.js app/main.js index.html @ b6b55f937c4e -->
+<!-- covers: app/rows.js app/main.js index.html @ 949581f4caa6 -->
 
 Two questions the game itself will not answer about a Pokémon you are
 carrying — *what is this made of* and *what is it about to become* — and both
@@ -6941,7 +7003,7 @@ at body size.
 
 ### Running the list
 
-<!-- covers: app/rows.js app/main.js @ b7cc21051589 -->
+<!-- covers: app/rows.js app/main.js @ 3b14f228ea8a -->
 
 The app has spent forty passes learning to answer one question — *what can the
 pilot do here, and which of those is worth most?* — and twenty showing the
@@ -7065,7 +7127,7 @@ to deposit your last Pokémon.
 
 ### The settings and the save card
 
-<!-- covers: index.html app/main.js @ c8152a9697d7 -->
+<!-- covers: index.html app/main.js @ cc55ce39d573 -->
 
 The pilot's own list got a glyph column, shorter names and a slot to fill in
 v165. These two cards did not, and reading them found that they had a different
@@ -7790,7 +7852,7 @@ they have been installed.
 
 ### Watching the other device's screen
 
-<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ 97802de759e2 -->
+<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ e2ab04a2bd69 -->
 
 One device shows its screen; the other watches it, and plays it if the first
 one says so. The picture goes straight between them over WebRTC and never
@@ -8403,7 +8465,7 @@ about that code did not.
 
 ### The other checks
 
-<!-- covers: tools/check-app @ 1219773ad838 -->
+<!-- covers: tools/check-app @ e2cf2323d763 -->
 
 `tools/check-app` runs everything that can be verified without a ROM:
 
