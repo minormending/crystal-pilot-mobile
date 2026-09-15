@@ -351,7 +351,7 @@ count comes back in `stats.knockouts`, since each one costs half your money.
 
 ### `trace.js` — what the pilot is doing
 
-<!-- covers: gbcore/trace.js @ 9d29cd31b47b -->
+<!-- covers: gbcore/trace.js @ 9416e89a3ae6 -->
 
 **A screen that is not changing means one of two things, and they want opposite
 responses.** A job can spend four seconds settling, forty presses closing a
@@ -402,6 +402,34 @@ the console is silent, which was checked rather than assumed.
 The state on the end of each line comes from `TaskBase.lastSnap`, cached by
 `snap()` because `describe` runs synchronously inside `gb.run` and cannot do a
 read of its own. The loops snap constantly, so it is never far behind.
+
+**There is a panel as well as a console, and the panel is the point.** A phone
+has no console, and a phone is where this app runs — so `Settings → Debug` draws
+the same tracer into the settings card. The switch turns the tracer itself on
+and off with the panel, because a panel over a stopped tracer is an empty box
+and a tracer with no reader is work for nothing; `PILOT.trace.on()` stays for
+anyone who wants the lines without the box. `?debug=1` opens the panel, not just
+the console.
+
+Three things about it that are not obvious from looking at it.
+
+**It is painted on a timer, not by the tracer.** The tracer emits from inside
+`gb.run`, the hottest path in the app — touching the DOM there would put a
+layout on every frame the pilot steps. Four times a second is faster than
+anybody reads.
+
+**The log is built from `recent()` rather than from the console's own lines**,
+and the reason is width. A console line carries the label, the budget, the frame
+count and the map: one line on a laptop, three wrapped ones in a box 390 pixels
+wide, so the panel showed three entries. Two aligned columns of the same facts
+show fourteen. It is `white-space: pre` for that reason — the columns only line
+up if nothing reflows.
+
+**Newest first, and it does not chase a tail.** The live activity is above the
+log and the log runs backwards under it, so what just happened is already in
+view. Scroll position is only reset when the reader was already at the top:
+somebody who has scrolled down is reading something, and yanking them back four
+times a second is the one thing a log panel must not do.
 
 **`OFF` is a real object rather than a null check.** `gb.run` ticks on every
 call and seventeen loops call `doing`, so the cost of tracing being off has to
@@ -5285,7 +5313,7 @@ This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ cc55ce39d573 -->
+<!-- covers: app/main.js index.html @ e86cb48a7499 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -6360,7 +6388,7 @@ seconds by a page whose loop was supposedly running.
 
 ### One thing at a time
 
-<!-- covers: app/main.js @ 43c5b5591096 -->
+<!-- covers: app/main.js @ 4ab378db3ac6 -->
 
 One Game Boy, one joypad, one canvas — so a great deal of this app is about
 making sure two things are never driving them at once. There are three claims,
@@ -6914,7 +6942,7 @@ a conversation.
 
 ### The card behind a party row
 
-<!-- covers: app/rows.js app/main.js index.html @ 949581f4caa6 -->
+<!-- covers: app/rows.js app/main.js index.html @ c15f7e4d5165 -->
 
 Two questions the game itself will not answer about a Pokémon you are
 carrying — *what is this made of* and *what is it about to become* — and both
@@ -7003,7 +7031,7 @@ at body size.
 
 ### Running the list
 
-<!-- covers: app/rows.js app/main.js @ 3b14f228ea8a -->
+<!-- covers: app/rows.js app/main.js @ f6a186bf6fd2 -->
 
 The app has spent forty passes learning to answer one question — *what can the
 pilot do here, and which of those is worth most?* — and twenty showing the
@@ -7127,7 +7155,7 @@ to deposit your last Pokémon.
 
 ### The settings and the save card
 
-<!-- covers: index.html app/main.js @ cc55ce39d573 -->
+<!-- covers: index.html app/main.js @ e86cb48a7499 -->
 
 The pilot's own list got a glyph column, shorter names and a slot to fill in
 v165. These two cards did not, and reading them found that they had a different
@@ -7355,7 +7383,7 @@ stands 3.40:1 clear of the recess it is moulded around.
 
 ### What it remembers
 
-<!-- covers: gbcore/remember.js @ b0d4b91f6a0c -->
+<!-- covers: gbcore/remember.js @ 39927ca17b05 -->
 
 The app forgets everything on a reload, and a reload is not rare: the Update
 button causes one deliberately, and a phone discards a background tab whenever
@@ -7852,7 +7880,7 @@ they have been installed.
 
 ### Watching the other device's screen
 
-<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ e2ab04a2bd69 -->
+<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ 0eddafe1e6a4 -->
 
 One device shows its screen; the other watches it, and plays it if the first
 one says so. The picture goes straight between them over WebRTC and never

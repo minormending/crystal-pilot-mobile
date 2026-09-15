@@ -77,8 +77,12 @@ No ROM, no browser, no emulator — which is the point rather than a compromise.
 
 ## When the screen stops moving
 
-`PILOT.trace.on()` in the console, or `?debug=1` in the URL to have it running
-before the first frame. It says what the pilot is doing, one line per activity,
+**`Settings → Debug`**, which is the one that works on a phone — there is no
+console there. It shows the activity in flight and the last fourteen under it,
+and the line turns red when the pilot has stopped stepping frames.
+
+`PILOT.trace.on()` does the same from a console, and `?debug=1` in the URL
+opens the panel before the first frame. It says what the pilot is doing, one line per activity,
 with the map and whether a script has the controls:
 
 ```
@@ -160,7 +164,7 @@ flowchart BT
     T -.-> V
     M -.->|"survivors, by file"| R(["the suite is load-bearing"])
     K -.->|"36 of 36 bite"| R2(["the groups are awake"])
-    V -.->|"61%, and where"| R3(["the gaps are known"])
+    V -.->|"60%, and where"| R3(["the gaps are known"])
 ```
 
 The two on the right are the same idea pointed at different subjects, and the

@@ -307,6 +307,19 @@
      unrelated-looking rows was how an unlabelled code box came to sit under
      "not sharing" looking like a field somebody had already filled in. */
   .themerow.sub{padding-left:29px}
+  /* The debug panel. A fixed height rather than one that grows: it sits inside
+     a card that already scrolls, and a box that gets taller as the pilot works
+     would push everything under it around while somebody is reading. */
+  .tracebox{flex:1 1 100%;border:1px solid var(--line);border-radius:8px;
+    background:rgba(0,0,0,.28);padding:7px 8px;min-width:0}
+  .tracenow{font:600 12px ui-monospace,SFMono-Regular,Menlo,monospace;
+    color:var(--ink);margin-bottom:5px;overflow-wrap:anywhere}
+  .tracenow.stalled{color:var(--warn,#ffb4a2)}
+  /* `pre` rather than wrapped text: the two columns only line up if nothing
+     reflows, and a row too long for the box is better clipped than folded. */
+  .tracelog{margin:0;max-height:9.5em;overflow:auto;font:11px/1.5 ui-monospace,
+    SFMono-Regular,Menlo,monospace;color:var(--dim);white-space:pre;
+    overflow-x:auto}
   /* **Three states, all three visible.** This was one button that said the
      state it was in (`auto`) and cycled on press: nothing about it said there
      were three, which they were, or which way round. A segment group is the
@@ -1487,6 +1500,11 @@
     <path d="M2.6 4.4h6.6v9.6H2.6Z"/><path d="M11.2 7.2h4.2v7.4h-4.2Z"/></g>
   <!-- A handset with a wave off each side: the phone in a hand, shaking. It
        borrows i-devices' own body so the two read as the same family. -->
+  <g id="i-debug" fill="none" stroke="currentColor" stroke-width="1.8"
+     stroke-linecap="round" stroke-linejoin="round">
+    <rect x="6" y="6" width="6" height="8" rx="3"/>
+    <path d="M6.5 9h-3M14.5 9h-3M7 5.5 8.5 4M11 5.5 9.5 4M7 14l-1.5 2M11 14l1.5 2"/>
+  </g>
   <g id="i-sound" fill="none" stroke="currentColor" stroke-width="1.8"
      stroke-linecap="round" stroke-linejoin="round">
     <path d="M4 7h2.5L10 4v10L6.5 11H4z"/>
@@ -2074,6 +2092,23 @@
       <span class="lvlabel">Buzz</span>
       <span class="val" id="buzzstate">a tick when a key goes down</span>
       <button class="themebtn" id="buzztoggle" aria-pressed="true">On</button>
+    </div>
+    <!-- Last in the card on purpose: it is the row somebody looks for only
+         when something has already gone wrong, and it is the only one whose
+         panel is worth several lines of the screen. Remembered per device like
+         Sound and Buzz -- which device you are debugging on is not a fact about
+         the game. -->
+    <div class="themerow" id="debugrow">
+      <svg class="jicon" viewBox="0 0 18 18" aria-hidden="true"><use href="#i-debug"/></svg>
+      <span class="lvlabel">Debug</span>
+      <span class="val" id="debugstate">off</span>
+      <button class="themebtn" id="debugtoggle" aria-pressed="false">Off</button>
+    </div>
+    <div class="themerow sub hide" id="debugpanel">
+      <div class="tracebox" aria-live="polite">
+        <div class="tracenow" id="tracenow">nothing running</div>
+        <pre class="tracelog" id="tracelog"></pre>
+      </div>
     </div>
     <div class="themerow">
       <svg class="jicon" viewBox="0 0 18 18" aria-hidden="true"><use href="#i-devices"/></svg>

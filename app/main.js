@@ -15,8 +15,8 @@ import {
 } from './rows.js';
 import { VERSION } from '../gbcore/version.js';
 import { adoptable, forgetKept, keepBattery, keepRom, keepSym, keptMeta,
-         readBuzz, readOpts, readSound, recall, sanitise, writeBuzz,
-         writeOpts, writeSound } from '../gbcore/remember.js';
+         readBuzz, readDebug, readOpts, readSound, recall, sanitise, writeBuzz,
+         writeDebug, writeOpts, writeSound } from '../gbcore/remember.js';
 import { chosenName, needsOffer, openRoom, wasSharing } from '../gbcore/room.js';
 import { createHost, createWatcher } from '../gbcore/stream.js';
 import { Cancelled } from '../gbcore/taskbase.js';
@@ -41,6 +41,40 @@ const DEV = PARAMS.has('dev');
 // Automated runs, which have nobody to press A, opt in.
 const AUTOSTART = PARAMS.has('autostart');
 const gb = new GameBoy();
+
+// --- the debug view ------------------------------------------------------------
+//
+// A still picture means one of two things and they want opposite responses: a
+// loop patiently doing its job, or a loop that has stopped. `PILOT.trace.on()`
+// tells them apart -- see gbcore/trace.js for why counting from `gb.run` is
+// the only honest place, and why it keeps a timer of its own.
+//
+// Created here, beside `gb`, rather than beside its own console wiring lower
+// down: the settings panel reads it during module init, and a `const` used
+// before its declaration is a ReferenceError that stops the whole app from
+// booting -- which is exactly what it did.
+const trace = new Trace({
+  // What the game says about itself, for the end of every line. Guarded
+  // completely: this runs while a job is mid-flight, and a tracer that threw
+  // would take down the job it was reporting on -- which is the one failure
+  // mode a debug tool must not have.
+  describe: () => {
+    try {
+      if (!tasks || !gb || !gb.ready) return null;
+      const s = tasks.lastSnap;
+      if (!s || !s.map) return null;
+      const bits = [`map ${s.map.join('.')}`];
+      if (s.inBattle) bits.push('in battle');
+      if (s.scriptRunning) bits.push('script has the controls');
+      if (!s.worldLoaded) bits.push('no world');
+      return bits.join(', ');
+    } catch (e) {
+      return null;
+    }
+  },
+});
+gb.trace = trace;
+
 let symbols = null, state = null, tasks = null, romBytes = null;
 let collision = null, nav = null, romdata = null, boot = null, title = null;
 let world;
@@ -3149,6 +3183,111 @@ $('#catch').onclick = async () => {
 };
 
 
+// --- the debug panel -----------------------------------------------------------
+//
+// The console view has one problem the panel exists for: **there is no console
+// on a phone**, and a phone is where this app runs. Same tracer, same lines,
+// drawn into the settings card instead.
+//
+// Painted on a timer rather than from the tracer, and that is deliberate. The
+// tracer emits from inside `gb.run`, which is the hottest path in the app --
+// touching the DOM there would put a layout on every frame the pilot steps.
+// Four times a second is faster than anybody reads and costs nothing.
+// `?debug=1` opens it before the first frame, which is the only way to watch
+// something that goes wrong during the opening -- and it opens the *panel*
+// rather than only the console, because the device with no console is the one
+// this matters on.
+let debugging = readDebug() || PARAMS.get('debug') === '1';
+let debugTimer = null;
+
+/**
+ * Draw the current activity and the last few lines.
+ *
+ * Reads `trace.lines()` rather than collecting its own, so turning the panel on
+ * *after* something has gone odd still shows what led up to it -- which is when
+ * somebody actually turns it on.
+ */
+/** `text`, cut to `n` with an ellipsis, for a column that must not wrap. */
+function clip(text, n) {
+  return text.length <= n ? text : `${text.slice(0, n - 1)}…`;
+}
+
+function paintDebug() {
+  const now = trace.snapshot();
+  const el = $('#tracenow');
+  if (!el) return;
+  if (!now) {
+    el.textContent = 'nothing running';
+    el.classList.remove('stalled');
+  } else {
+    const bits = [now.label];
+    if (now.detail) bits.push(now.detail);
+    bits.push(`${now.frames} frames`);
+    bits.push(`${(now.ms / 1000).toFixed(1)}s`);
+    // The stall is appended rather than joined: it is a clause about the line
+    // rather than another field on it, and ` · — no frames` reads as a typo.
+    const stuck = now.stalled
+      ? ` — no frames for ${(now.quietMs / 1000).toFixed(1)}s` : '';
+    el.textContent = bits.join(' · ') + stuck;
+    el.classList.toggle('stalled', !!now.stalled);
+  }
+  const log = $('#tracelog');
+  if (log) {
+    // **Built from `recent()` rather than from the console's own lines**, and
+    // the reason is the width. A console line carries the label, the budget,
+    // the frame count and the map, which is one line on a laptop and three
+    // wrapped ones in a box 390 pixels wide -- so the panel showed about three
+    // entries. Two columns of the same facts show a dozen.
+    const rows = trace.recent(14).reverse().map((r) => {
+      const what = r.detail ? `${r.label} ${r.detail.split(',')[0]}` : r.label;
+      const took = r.ms < 1000 ? `${r.ms}ms` : `${(r.ms / 1000).toFixed(1)}s`;
+      return `${clip(what, 22).padEnd(22)}${String(r.frames).padStart(5)}f ${took.padStart(6)}`;
+    });
+    const wasAtTop = log.scrollTop <= 4;
+    log.textContent = rows.join('\n') || 'nothing yet';
+    // Newest first, so the thing that just happened is the thing in view and
+    // there is no tail to chase. Somebody who has scrolled down is reading
+    // something older, and yanking them back four times a second is the one
+    // thing a log panel must not do.
+    if (wasAtTop) log.scrollTop = 0;
+  }
+}
+
+/**
+ * Turn the panel on or off, and with it the tracer itself.
+ *
+ * One switch for both: a panel showing a tracer that is off would draw an empty
+ * box for ever, and a tracer left running for a panel nobody has open is work
+ * with no reader. The console keeps its own way in -- `PILOT.trace.on()` -- for
+ * anyone who wants the lines without the box.
+ */
+function paintDebugRow() {
+  const btn = $('#debugtoggle');
+  if (!btn) return;
+  btn.textContent = debugging ? 'On' : 'Off';
+  btn.setAttribute('aria-pressed', String(debugging));
+  $('#debugstate').textContent = debugging
+    ? 'what the pilot is doing' : 'off';
+  $('#debugpanel').classList.toggle('hide', !debugging);
+  if (debugging) {
+    trace.start();
+    if (!debugTimer) debugTimer = setInterval(paintDebug, 250);
+    paintDebug();
+  } else {
+    trace.stop();
+    if (debugTimer) clearInterval(debugTimer);
+    debugTimer = null;
+  }
+}
+if ($('#debugtoggle')) {
+  $('#debugtoggle').onclick = () => {
+    debugging = !debugging;
+    writeDebug(debugging);
+    paintDebugRow();
+  };
+  paintDebugRow();
+}
+
 // --- sound -------------------------------------------------------------------
 // Off unless asked, and audible only while the game is being played rather
 // than driven -- `audibleNow` in gb.js holds the whole rule and says why.
@@ -4567,38 +4706,6 @@ if ('serviceWorker' in navigator) {
 }
 
 // Exposed so the spike can be driven from a console or a test harness.
-// --- the debug view ------------------------------------------------------------
-//
-// A still picture means one of two things and they want opposite responses: a
-// loop patiently doing its job, or a loop that has stopped. `PILOT.trace.on()`
-// tells them apart -- see gbcore/trace.js for why counting from `gb.run` is
-// the only honest place, and why it keeps a timer of its own.
-//
-// `?debug=1` turns it on before the first frame, which is the only way to
-// catch something that goes wrong during the opening.
-const trace = new Trace({
-  // What the game says about itself, for the end of every line. Guarded
-  // completely: this runs while a job is mid-flight, and a tracer that threw
-  // would take down the job it was reporting on -- which is the one failure
-  // mode a debug tool must not have.
-  describe: () => {
-    try {
-      if (!tasks || !gb || !gb.ready) return null;
-      const s = tasks.lastSnap;
-      if (!s || !s.map) return null;
-      const bits = [`map ${s.map.join('.')}`];
-      if (s.inBattle) bits.push('in battle');
-      if (s.scriptRunning) bits.push('script has the controls');
-      if (!s.worldLoaded) bits.push('no world');
-      return bits.join(', ');
-    } catch (e) {
-      return null;
-    }
-  },
-});
-gb.trace = trace;
-if (PARAMS.get('debug') === '1') trace.start();
-
 window.PILOT = {
   gb,
   // The debug view. `PILOT.trace.on()` starts it, `.off()` stops it,

@@ -234,6 +234,37 @@ export function writeSound(on, given = null) {
   }
 }
 
+const DEBUG_KEY = 'crystal-pilot-debug';
+
+/**
+ * Is the debug panel on? **Off unless asked**, like the sound.
+ *
+ * Its own key rather than one of the shared options, for the same reason as
+ * those two: which device somebody is debugging on is a fact about the device
+ * in their hand, and turning the panel on here should not open it on the
+ * tablet in the next room.
+ */
+export function readDebug(given = null) {
+  const st = store(given);
+  if (!st) return false;
+  try {
+    return st.getItem(DEBUG_KEY) === 'on';
+  } catch (e) {
+    return false;
+  }
+}
+
+/** Remember that answer. */
+export function writeDebug(on, given = null) {
+  const st = store(given);
+  if (!st) return;
+  try {
+    st.setItem(DEBUG_KEY, on ? 'on' : 'off');
+  } catch (e) {
+    // Full, or refused. A forgotten preference is not worth a message.
+  }
+}
+
 // --- the files, and the game that goes with them -----------------------------
 //
 // The ROM and the .sym used to be re-picked every session, which is two file

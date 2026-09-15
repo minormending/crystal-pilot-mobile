@@ -36,6 +36,10 @@ const REPORT_MS = 1500;
 // a minute of grinding is thousands of lines and the two that matter are lost
 // in them. A third of a second still shows the rhythm.
 const START_MS = 333;
+// How many emitted lines to keep for the on-screen panel. Small on purpose:
+// this is what a phone shows in a box a few centimetres tall, and anybody who
+// wants the whole run has the console. See `lines`.
+const KEEP_LINES = 40;
 // How many finished activities to keep for `recent`. A single job is a few
 // dozen; this holds the last several jobs without growing without bound.
 const KEEP = 200;
@@ -51,7 +55,7 @@ const KEEP = 200;
 export class Trace {
   constructor({ now = () => Date.now(), sink = null, describe = null,
                 stallMs = STALL_MS, reportMs = REPORT_MS, startMs = START_MS,
-                keep = KEEP } = {}) {
+                keep = KEEP, keepLines = KEEP_LINES } = {}) {
     this.nowFn = now;
     this.sink = sink || ((line) => console.log(line));
     // Answers a short string about the live game -- map, position, whether a
@@ -66,6 +70,12 @@ export class Trace {
     // the next one since -- see `doing`.
     this.announcedAt = -Infinity;
     this.skipped = 0;
+    // The last few lines, for the settings panel. Kept here rather than in the
+    // panel because a developer turns the panel on *after* something has
+    // already gone odd, and a buffer that only starts filling when somebody is
+    // looking would have nothing to show them.
+    this.log = [];
+    this.keepLines = keepLines;
     this.tracing = false;
     this.current = null;
     this.past = [];
@@ -213,7 +223,17 @@ export class Trace {
     return ms < 1000 ? `${Math.round(ms)}ms` : `${(ms / 1000).toFixed(1)}s`;
   }
 
-  emit(line) { this.sink(`[pilot] ${line}`); }
+  /** The last `n` lines, newest last -- what the settings panel draws. */
+  lines(n = 40) { return this.log.slice(-n); }
+
+  emit(line) {
+    const said = `[pilot] ${line}`;
+    this.log.push(said);
+    if (this.log.length > this.keepLines) {
+      this.log.splice(0, this.log.length - this.keepLines);
+    }
+    this.sink(said);
+  }
 }
 
 /**
@@ -228,6 +248,6 @@ export class Trace {
 export const OFF = {
   tracing: false,
   doing() {}, tick() {}, finish() {}, heartbeat() {},
-  snapshot() { return null; }, recent() { return []; },
+  snapshot() { return null; }, recent() { return []; }, lines() { return []; },
   start() { return this; }, stop() { return this; },
 };
