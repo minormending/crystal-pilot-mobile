@@ -365,7 +365,12 @@
      it is a thing you set, once, and the header it was justified by no longer
      exists. */
   .themerow .speed{display:flex;align-items:center;gap:6px;flex:1 1 auto}
-  .themerow .speed input[type=range]{width:auto;flex:1 1 auto;
+  /* 24px because that is the floor, not because the track needs it. A range
+     input is about 20 tall by default and WCAG 2.2 SC 2.5.8 puts the smallest
+     tap target at 24x24 -- and this one is dragged with a thumb on a phone.
+     Found by the in-game audit target: the speed row only exists once a
+     cartridge is loaded, so nothing had ever looked at it. */
+  .themerow .speed input[type=range]{width:auto;flex:1 1 auto;min-height:24px;
                                      accent-color:var(--accent);
                                      background:transparent;margin:0}
   .themerow .speed .x{font-variant-numeric:tabular-nums;font-weight:700;
@@ -875,8 +880,15 @@
   button:active:not([disabled]){transform:translateY(1px)}
   button:focus-visible,label.file:focus-visible{outline:0;
     box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 40%,transparent)}
+  /* `--action-ink`, not `#fff`. The palette names an ink for this background
+     and everything else uses it -- the selected tab key, the lens, the chosen
+     job -- but this one was hardcoded white, which is **2.4:1** on `#7fa9e8`
+     against the 4.5 it needs. `#0a1830` on the same fill is 8.6:1.
+     It survived because the only `.primary` on screen without a cartridge is
+     on a different ground; `#boot` appears once a ROM is loaded and nothing
+     had ever audited that half. */
   button.primary{background:var(--action);border-color:var(--action);
-                 color:#fff;font-weight:600}
+                 color:var(--action-ink);font-weight:600}
   button.primary:hover:not([disabled]){background:var(--accent);
                  border-color:var(--accent)}
   /* Greyed rather than faded. `opacity:.45` dims the *border* as well, so a
@@ -1196,13 +1208,18 @@
      put Select and Start under the tab strip -- measured, 217px of card in a
      206px deck on a 390x844 phone. 3 x 20 + 5 + 18 = 83 leaves the padding its
      room (3 x 19 + 5 + 17 = 79 after a 320x568 phone was still 2px over), and
-     the `min()` against a fixed px means a phone with space to spare
+     **And the floor is 24px, not zero.** WCAG 2.2 SC 2.5.8 puts the smallest
+     tap target at 24x24, and a share of a short deck goes under it: the audit's
+     own in-game target caught Select and Start at **101x23** the first time it
+     ran. `clamp` rather than `min` on all three, so the scaling stops there and
+     the card is allowed to be the thing that runs out of room instead.
+     The `min()` against a fixed px means a phone with space to spare
      still gets the pad at the size it always had. */
   .padwrap{container-type:size;display:grid;align-content:center}
 
   /* A connected cross, not four loose boxes. The cells touch and only the
      outer tips are rounded, which is what makes it read as a D-pad. */
-  .dpad{--cell:min(48px,19cqh);display:grid;grid-template-columns:repeat(3,var(--cell));
+  .dpad{--cell:clamp(24px,19cqh,48px);display:grid;grid-template-columns:repeat(3,var(--cell));
         grid-template-rows:repeat(3,var(--cell));flex:0 0 auto}
   /* A key needs an edge. These were flat fills of `--key` on a card of
      `--panel`, which in the light theme is #dee5f0 on #ffffff -- a 1.1:1 step,
@@ -1231,7 +1248,7 @@
         background:rgba(0,0,0,.22)}
 
   /* Round, and on the diagonal A-over-B. */
-  .face{--btn:min(60px,25cqh);display:grid;grid-template-columns:repeat(2,var(--btn));
+  .face{--btn:clamp(24px,25cqh,60px);display:grid;grid-template-columns:repeat(2,var(--btn));
         grid-template-rows:repeat(2,calc(var(--btn) * 0.78));flex:0 0 auto}
   .face button{width:var(--btn);height:var(--btn);border-radius:50%;
         min-height:0;padding:0;flex:0 0 auto;background:var(--key);
@@ -1256,7 +1273,7 @@
                    0 1px 3px rgba(16,18,24,.14)}
   .menus button b{letter-spacing:.12em;font-weight:600;font-size:10.5px;
         color:var(--key-ink)}
-  .menus button{flex:0 0 auto;min-height:min(44px,17cqh);padding:0 22px;border:0;
+  .menus button{flex:0 0 auto;min-height:clamp(24px,17cqh,44px);padding:0 22px;border:0;
         border-radius:7px;background:var(--key);transform:skewX(-16deg);
         box-shadow:inset 0 1px 0 rgba(255,255,255,.05)}
   .menus button b{display:block;transform:skewX(16deg);font-weight:600;

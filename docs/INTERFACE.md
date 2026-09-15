@@ -124,6 +124,15 @@ the same complaint by another route.
 Measured after, screen height by phone: 320×568 → 96, 360×640 → 168, 375×667 →
 195, 390×844 → 304, 430×932 → 340. Identical on every tab, at every size.
 
+**Nothing scales below 24×24**, which is WCAG 2.2 SC 2.5.8's floor for a tap
+target, so all three of the pad's sizes are `clamp(24px, …, fixed)` rather than
+`min(fixed, …)`. Two more of these were found in the same pass, both on screens
+that only exist once a cartridge is loaded and so had never been audited: the
+speed slider was a 20px-tall range input, and `Start a new game for me` was
+white on `#7fa9e8` — **2.4:1** against the 4.5 it needs. The palette had always
+named an ink for that background (`--action-ink`, 7.4:1) and everything else
+used it; `button.primary` alone hardcoded white.
+
 **The pad fits the deck now, rather than the deck fitting the pad.** Its cross,
 face and Select/Start row are `min(fixed, Ncqh)` against the deck, so a phone
 with room keeps the size it always had and a short one scales down instead of
@@ -1411,4 +1420,4 @@ So this page carries a marker naming the files it describes and the hash they
 had when it was last read against them. `tools/docs-check` reports it when they
 move, and the pre-commit hook blocks on that report.
 
-<!-- covers: index.html app/main.js app/rows.js @ be1e93d31910 -->
+<!-- covers: index.html app/main.js app/rows.js @ bd113f99c21f -->
