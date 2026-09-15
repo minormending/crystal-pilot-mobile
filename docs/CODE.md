@@ -348,7 +348,7 @@ count comes back in `stats.knockouts`, since each one costs half your money.
 
 ### `gb.js` — the emulator
 
-<!-- covers: gbcore/gb.js @ 475b1b909095 -->
+<!-- covers: gbcore/gb.js @ cac0869fbe29 -->
 
 Wraps WasmBoy. Runs frames, reads work RAM, holds and releases buttons.
 
@@ -433,6 +433,32 @@ Reads are deliberately small. `readBytes(addr, len)` exists alongside
 `readWram()` because a step polls coordinates every couple of frames, and
 pulling a whole 8 KB snapshot that often costs more than the emulation it is
 watching.
+
+**One line of the library is patched, and `reloadRom` is why.** WasmBoy opens
+every non-headless `loadROM` by writing the core's live cartridge RAM into its
+stored record, and only then reads that record back into the core — so a load
+whose whole purpose is to install a record overwrites it first, and the game
+comes back exactly as it was. `vendor/wasmboy.umd.js` guards that write-back on
+`globalThis.WASMBOY_KEEP_STORED_BATTERY`, and `reloadRom` sets it around the
+call:
+
+```js
+globalThis.WASMBOY_KEEP_STORED_BATTERY = true;
+try { await this.loadRom(this.rom); }
+finally { globalThis.WASMBOY_KEEP_STORED_BATTERY = false; }
+```
+
+The flag lives on this call rather than on `saves.install`, because it is a fact
+about the call: re-loading the cartridge already in hand means the stored record
+is the one wanted. `loadRom` — a *different* cartridge — keeps the library's
+behaviour, which is the behaviour that protects the battery of the game being
+put away.
+
+Guarding rather than deleting, and checked rather than commented: `tools/check-app
+patch` fails if the library's own line comes back or if `gb.js` stops setting the
+flag. A refresh of the vendored file would drop the patch in silence, and what
+that costs is in [section 8i](#8i-reaching-an-hour) — every
+install of a save after the first in a session, quietly doing nothing.
 
 </details>
 
@@ -3049,7 +3075,7 @@ Tackle and Leer. Two emulators, two implementations, one save file.
 
 ## 7c. Slots, undo, and bringing a save in
 
-<!-- covers: gbcore/saves.js @ 797955295a1d -->
+<!-- covers: gbcore/saves.js @ 5820fe1b9fae -->
 
 **There is one way to load a slot, and that is the point.** `loadSlot` in
 `main.js` reads the record, refuses it if its ROM fingerprint is not this
@@ -3132,6 +3158,16 @@ which pushes that record's `cartridgeRam` into the core. So installing a save
 means writing that record and re-loading the ROM — which is also why loading a
 slot leaves you at the title screen, and why `continueFromTitle` drives CONTINUE
 for you.
+
+**And the same re-load used to destroy the record on its way in.** WasmBoy opens
+every non-headless `loadROM` by writing the core's *live* cartridge RAM into that
+record first — a cartridge's battery being saved before a cartridge is swapped,
+which is right for every load except the one that is not a swap. It is skipped
+until the library has pushed RAM into the core once, which is true exactly once
+per session, so the first install of a session worked and **every later one was
+a silent no-op**: a slot that reported *back at Route 29* and left the game where
+it was. `gb.reloadRom` now guards it, and [section 8i](#8i-reaching-an-hour) has
+the measurement that found it, by way of a clock that would not add up.
 
 **The record is addressed by the key the library already used *for this
 cartridge***, and derived from `_getCartridgeInfo().header` when there is none.
@@ -4344,7 +4380,7 @@ file says they do.
 
 ## 8i. Reaching an hour
 
-<!-- covers: gen2/jobs.js gen2/engine.js gen2/romdata.js gen2/state.js gbcore/saves.js app/rows.js @ f57e329327fb -->
+<!-- covers: gen2/jobs.js gen2/engine.js gen2/romdata.js gen2/state.js gbcore/saves.js app/rows.js @ e2866458a5a4 -->
 
 A third of Johto's grass is behind the clock. HOOTHOOT is on Route 29 after
 dark and nowhere on it at noon, and for four versions the usage guide said the
@@ -4398,18 +4434,64 @@ works.
 with the pilot standing still -- so the edit lands, the game believes it, and
 Skip does what the button promises. It was recorded here as following *neither*
 the edit nor the frames on the strength of an earlier probe that skipped `+1h`
-twelve times and saw no change; that result is unexplained and the single
-eight-hour skip is the one to trust, being one edit with one reading.
+twelve times and saw no change. That probe was reading a real defect, but not
+the one it was pointed at: only the first of its twelve skips was ever
+installed, for the reason below.
 
-**Repeated Skips do not accumulate, and that is open.** Five back to back leave
-the saved start hour at 11 every time -- read out of the battery at
-`sPlayerData + (wStartHour - wPlayerData)` after each one. The only reading that
-fits is that the running game never adopts the edited hour, so the next
-`saveGame` writes its own value back over it: skip one lands because the battery
-was written fresh, and every skip after it is undone by the save that precedes
-it. That contradicts the single `shiftClock(8)` above, which did move the game
-from day to night, and **which of those two is the true picture is not settled**.
-Until it is, treat Skip as reliable once and unproven twice.
+**Repeated Skips did not accumulate, and the cause was not the clock.** Five
+back to back left the saved start hour at 11 every time -- read out of the
+battery at `sPlayerData + (wStartHour - wPlayerData)` after each one. It was
+written up here as the running game never adopting the edit, so that the next
+`saveGame` wrote its own hour back over it. That was wrong, and the measurement
+that disproved it was cheap: after a skip and a reload, saving in-game again
+writes back **11**, the edited hour, not the 10 the game would have had if it
+had never adopted anything. The game believes the edit. Nothing overwrites it
+from the cartridge side at all.
+
+Taking one failing skip apart, byte by byte, leaves only one place for it to go:
+
+| stage | the saved start hour |
+| --- | --- |
+| after skip 1 | 11 |
+| live battery after the in-game save | 11 |
+| what `advanceClock` handed `persist` | 12, checksum good |
+| the library's stored record, after `persist` | 12 |
+| the same record, after `reloadRom` | **11** |
+| the cartridge, after `reloadRom` | **11** |
+
+**WasmBoy begins every non-headless `loadROM` by writing the core's live
+cartridge RAM into its stored record, and only then reads that record back into
+the core.** Installing a save *is* writing that record, so the one load whose
+whole purpose is to install a record destroys it first — and the game comes
+back exactly as it was, with nothing raised anywhere. It is the library doing
+its job, which is saving a cartridge's battery before a cartridge is swapped.
+It is simply wrong for the one load that is not a swap.
+
+It hid for so long because the write-back is skipped until the library has
+pushed RAM into the core at least once, and that is true exactly once per
+session. **So the first install of a session worked and every later one was a
+silent no-op**, which is why this looked like arithmetic that did not carry.
+
+**It was never only Skip.** Four things install a battery, and three of them are
+somebody's save:
+
+| caller | what a second one did |
+| --- | --- |
+| the session restore at load (`main.js`) | first in the session, so it worked |
+| a slot (`loadSlot`) | nothing, and said *back at Route 29* |
+| a `.sav` file | nothing, and said it had put the file in |
+| a handoff from another device | nothing |
+
+Measured on the same build with the guard pinned off, which is the library as
+shipped: keep slot 1 at ten o'clock, Skip three hours, load slot 1 back. The
+game stays at thirteen. With the guard live, it comes back at ten.
+
+The fix is one line of somebody else's library, guarded on
+`WASMBOY_KEEP_STORED_BATTERY`, which [`gb.reloadRom`](../gbcore/gb.js) sets
+around the call — see [`gb.js`](#gbjs--the-emulator). `tools/check-app
+patch` fails if either half goes missing, because a library refresh would drop
+the patch silently and the symptom is a save that does not load: no error, no
+wrong bytes, just the game carrying on.
 
 A second, smaller thing was found on the way and is fixed: `continueFromTitle`
 returned the moment `worldLoaded` went true, which is before the game takes
@@ -7039,7 +7121,7 @@ stands 3.40:1 clear of the recess it is moulded around.
 
 ### What it remembers
 
-<!-- covers: gbcore/remember.js @ 3715fb205bcc -->
+<!-- covers: gbcore/remember.js @ 9ac487273fa8 -->
 
 The app forgets everything on a reload, and a reload is not rare: the Update
 button causes one deliberately, and a phone discards a background tab whenever
@@ -8128,7 +8210,7 @@ about that code did not.
 
 ### The other checks
 
-<!-- covers: tools/check-app @ 9fd3e16b755e -->
+<!-- covers: tools/check-app @ 1219773ad838 -->
 
 `tools/check-app` runs everything that can be verified without a ROM:
 
@@ -8149,6 +8231,7 @@ tools/check-app contrast     # or one group
 | `buttons` | every button name handed to `press`/`hold`/`release` is one the core knows |
 | `layers` | every import points down `gbcore → gen2 → titles → app`, never up |
 | `seam` | only `gb.js` touches the emulator core |
+| `patch` | the one line patched into the vendored emulator is still patched, and `gb.js` still sets the flag it guards on |
 | `titles` | a title adds to the engine and never overrides it |
 | `wiring` | every `$('#id')` is in the markup, and every named import resolves to a module that exports it |
 | `version` | `version.js` and the worker's cache name agree, and the display is in the header |
@@ -8263,6 +8346,15 @@ so a re-load that skipped it kept the previous cartridge's offset. `reloadRom`
 and `cartridgeHeader` are the two methods that were missing, and the check is
 what keeps them being used. Prose cannot hold a seam shut: nothing else in
 `check-app` would have noticed, because the reach resolves, parses and works.
+
+**`patch` guards a line in somebody else's library.** One line of
+`vendor/wasmboy.umd.js` is edited — the battery write-back at the top of every
+ROM load, which destroyed the record each install had just written and so made
+every install after a session's first a silent no-op. A refresh of the vendored
+file is how that line comes back, and the fault it restores shows up as a save
+that does not load: no error, no wrong bytes, the game simply carries on. So the
+group asserts both halves by their exact text, the library's line and `gb.js`
+setting the flag, and `check-checks` breaks it the way a refresh would.
 
 **`shell` checks both directions.** A file listed in the service worker but
 absent on disk makes the install reject, which takes the whole offline story

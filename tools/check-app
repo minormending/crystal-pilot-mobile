@@ -1123,6 +1123,48 @@ def check_emulator_seam():
         else ok(f"only gb.js touches the emulator core")
 
 
+# The one line of somebody else's library this repo edits, and the app's half of
+# the bargain. Both halves are spelled out so that either one going missing is
+# a failure here: the library's own line back, or nothing setting the flag.
+WASMBOY = ROOT / "vendor" / "wasmboy.umd.js"
+WRITEBACK_GUARDED = ("!this.options.headless&&!globalThis.WASMBOY_KEEP_STORED_BATTERY"
+                     "&&v.getLoadedCartridgeMemoryState().RAM&&await v.saveCartridgeRam()")
+WRITEBACK_BARE = ("!this.options.headless&&v.getLoadedCartridgeMemoryState().RAM"
+                  "&&await v.saveCartridgeRam()")
+
+
+def check_vendor_patch():
+    """The library's battery write-back is still guarded, and gb.js still guards it.
+
+    WasmBoy begins every non-headless `loadROM` by writing the core's live
+    cartridge RAM into its stored record, and only then reads that record back
+    into the core. Installing a save works by writing that record, so the load
+    that exists to install one destroys it first -- and the game comes back
+    exactly as it was, with nothing raised.
+
+    One line in `vendor/wasmboy.umd.js` guards that write-back on
+    `WASMBOY_KEEP_STORED_BATTERY`, which `gb.reloadRom` sets. A library refresh
+    would quietly drop it, and the symptom is a save that does not load: no
+    error, no wrong bytes, just the game carrying on. So both halves are checked
+    by their exact text, here rather than in a person's save file.
+    """
+    problems = []
+    js = WASMBOY.read_text() if WASMBOY.exists() else ""
+    if not js:
+        problems.append(f"{rel(WASMBOY)} is not there to be patched")
+    elif WRITEBACK_BARE in js:
+        problems.append(f"{rel(WASMBOY)} has the library's own write-back back")
+    elif js.count(WRITEBACK_GUARDED) != 1:
+        problems.append(f"{rel(WASMBOY)} does not hold the guarded write-back")
+    gb = ROOT / "gbcore" / "gb.js"
+    if "WASMBOY_KEEP_STORED_BATTERY" not in gb.read_text():
+        problems.append(f"{rel(gb)} never sets WASMBOY_KEEP_STORED_BATTERY")
+    for p in problems:
+        print(f"        {p}")
+    return fail(f"{len(problems)} problem(s) with the emulator patch") if problems \
+        else ok("the emulator's battery write-back is guarded, and gb.js guards it")
+
+
 # `document.addEventListener('x', handler)` and its window/bare equivalents.
 # Element listeners are deliberately not matched: an element listener's life is
 # the element's, and elements get replaced. `document` and `window` do not.
@@ -2285,6 +2327,7 @@ CHECKS = {
     "cartridge": check_cartridge,
     "layers": check_layers,
     "seam": check_emulator_seam,
+    "patch": check_vendor_patch,
     "awaited": check_awaited,
     "listeners": check_listeners,
     "exports": check_exports,

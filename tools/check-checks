@@ -114,6 +114,12 @@ def mutations(root):
         "layers": lambda: edit("gen2/state.js", sub(
             "import", "import { describeRows } from '../app/rows.js';\nimport")),
         "seam": lambda: edit("gen2/state.js", append("\n// probe: gb.core.thing()\n")),
+        # The library's own write-back line, back -- which is exactly what a
+        # refresh of the vendored file would do, and it is the shape of break
+        # this group exists for: it changes nothing anybody can see until the
+        # second save of a session quietly fails to load.
+        "patch": lambda: edit("vendor/wasmboy.umd.js", sub(
+            "!globalThis.WASMBOY_KEEP_STORED_BATTERY&&", "")),
         # An async decision used as a condition without `await`. A Promise is
         # truthy, so this reads "yes, calibrated" every single time and then
         # paths through walls with a stale decode.

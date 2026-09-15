@@ -141,10 +141,38 @@ export class GameBoy {
    * every later read empty; a re-load that skipped it kept whatever offset the
    * previous cartridge had. Reloading the ROM already in hand is the same job
    * with the same postcondition, so it is the same code.
+   *
+   * **The flag is what makes installing a battery work more than once.** Every
+   * non-headless `loadROM` begins by writing the core's *live* cartridge RAM
+   * into the library's stored record, and only then reads that record back
+   * into the core. So a re-load that exists to install a record first destroys
+   * it: the record is overwritten with the game that is already running, and
+   * the game comes back exactly as it was. That is the library doing its job
+   * -- it is saving a cartridge's battery before swapping cartridges -- and it
+   * is wrong for the one load that is not a swap.
+   *
+   * It stayed hidden because the write-back is skipped until the library has
+   * pushed RAM into the core at least once, which makes the *first* install of
+   * a session work and every later one a silent no-op. Measured: three Skips
+   * from a save at 10 o'clock left the record at 11, 11, 11, each reporting
+   * success, while the bytes handed to `persist` read 11, 12, 13.
+   *
+   * `WASMBOY_KEEP_STORED_BATTERY` is a one-line patch in `vendor/wasmboy.umd.js`
+   * guarding that write-back, and `tools/check-app` fails if it is not there --
+   * a vendor refresh that drops it would otherwise bring back a bug whose
+   * symptom is a save silently not loading. Set here rather than in `saves`
+   * because it is true of this call and not of the caller: re-loading the ROM
+   * in hand means the stored record is the one wanted, and `loadRom` -- a
+   * different cartridge -- keeps the library's behaviour untouched.
    */
   async reloadRom() {
     if (!this.rom) throw new Error('no ROM is loaded');
-    await this.loadRom(this.rom);
+    globalThis.WASMBOY_KEEP_STORED_BATTERY = true;
+    try {
+      await this.loadRom(this.rom);
+    } finally {
+      globalThis.WASMBOY_KEEP_STORED_BATTERY = false;
+    }
   }
 
   /**

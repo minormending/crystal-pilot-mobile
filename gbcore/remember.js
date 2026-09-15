@@ -189,8 +189,12 @@ export function writeOpts(patch, given = null) {
 // the rest worth having. Measured, because the opposite had been written down
 // and believed: save the game, reload, and the save is gone. WasmBoy's own
 // `keyval` store held zero records after a save the app had verified byte for
-// byte -- the library only persists a cartridge when something asks it to, and
-// nothing here was asking. So remembering the files without the battery would
+// byte -- the library persists a cartridge when something asks it to and when
+// a ROM loads, and an in-game save is neither of those. (That second occasion
+// is the one that ate every install after a session's first, and `gb.reloadRom`
+// now guards it; it was not known when this was written, and "only when
+// something asks it to" was the half of it that showed.) So remembering the
+// files without the battery would
 // bring the game back to a title screen with no game behind it.
 const FILES_DB = 'crystal-pilot-files';
 const STORE = 'kept';

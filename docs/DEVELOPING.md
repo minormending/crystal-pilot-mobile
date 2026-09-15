@@ -16,7 +16,7 @@ what CI checks and what the pre-commit hook blocks on.
 flowchart LR
     E[an edit] --> H{{".githooks/pre-commit"}}
     H --> T["./run-tests<br/>970 behaviour tests"]
-    H --> C["tools/check-app<br/>35 groups"]
+    H --> C["tools/check-app<br/>36 groups"]
     H --> D["tools/docs-check<br/>46 tracked sections"]
     T --> OK[commit]
     C --> OK
@@ -128,14 +128,14 @@ section gives. Everything by hand runs against a local build.
 ```mermaid
 flowchart BT
     C["the app"] --> T["./run-tests<br/>970 behaviour tests"]
-    C --> A["tools/check-app<br/>35 groups"]
+    C --> A["tools/check-app<br/>36 groups"]
     C --> D["tools/docs-check<br/>46 tracked sections"]
     C --> V["tools/coverage<br/>what the suite never runs"]
     T --> M["tools/mutate<br/>break a line, see who notices"]
     A --> K["tools/check-checks<br/>break each group's own subject"]
     T -.-> V
     M -.->|"survivors, by file"| R(["the suite is load-bearing"])
-    K -.->|"35 of 35 bite"| R2(["the groups are awake"])
+    K -.->|"36 of 36 bite"| R2(["the groups are awake"])
     V -.->|"61%, and where"| R3(["the gaps are known"])
 ```
 
@@ -464,12 +464,13 @@ is wrong, not the check. It is not in the pre-commit hook: it runs `check-app`
 about fifty times, which is the wrong price for every commit and the right
 one for the commit that changes a check.
 
-`tools/check-app` is thirty-five groups, each one a class of mistake that parses
+`tools/check-app` is thirty-six groups, each one a class of mistake that parses
 fine and is wrong at run time:
 
 | group | asserts |
 | --- | --- |
 | `seam` | only `gb.js` touches the emulator core — `.core` or the global anywhere else is a reach past the wrapper |
+| `patch` | the battery write-back in `vendor/wasmboy.umd.js` is still guarded on `WASMBOY_KEEP_STORED_BATTERY`, and `gb.reloadRom` still sets it — a library refresh would drop both in silence |
 | `layers` | every import points down `gbcore → gen2 → titles → app`, never up |
 | `titles` | a title adds methods to the engine and never overrides one |
 | `syntax` | all 27 modules and `sw.js` parse — copied to `.mjs` first, because `node --check` on a `.js` file with a syntax error exits 0 |

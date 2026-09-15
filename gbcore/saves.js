@@ -321,6 +321,12 @@ export class Saves {
    * there -- an ArrayBuffer of the cartridge header, which is why the key is
    * read back rather than constructed.
    *
+   * It also *writes* that record, from the live cartridge, at the top of the
+   * same load -- which is why the re-load below goes through `gb.reloadRom`
+   * and not the library directly. See its comment: without the guard it sets,
+   * only the first install of a session took, and every one after it reported
+   * success and changed nothing.
+   *
    * Leaves the game at the title screen. The caller drives CONTINUE, because
    * pressing buttons is a task's job and not this module's.
    */
@@ -353,10 +359,10 @@ export class Saves {
    *
    * **The half of `install` that does not restart the machine**, and it is
    * separate because the app has to be able to do exactly that. The library
-   * reads `cartridgeRam` out of this record when a ROM loads and -- measured,
-   * and written down in `remember.js` -- it never writes the record itself:
-   * "the library only persists a cartridge when something asks it to, and
-   * nothing here was asking".
+   * reads `cartridgeRam` out of this record when a ROM loads, and -- measured,
+   * and written down in `remember.js` -- an in-game save does not make it write
+   * one back: the record stayed empty through a save the app had verified byte
+   * for byte.
    *
    * So for as long as `install` was the only caller, this record held the last
    * save somebody *installed* and nothing else. Every in-game save moved the
