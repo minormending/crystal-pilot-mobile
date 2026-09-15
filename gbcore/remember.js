@@ -202,6 +202,38 @@ export function writeBuzz(on, given = null) {
   }
 }
 
+const SOUND_KEY = 'crystal-pilot-sound';
+
+/**
+ * Does the game make a noise? **Off unless somebody has said otherwise**, which
+ * is the opposite of the buzz above and deliberate.
+ *
+ * This app was silent for its first two hundred and forty versions, and it is
+ * opened on a phone that may be in a pocket, in a room with other people, or
+ * beside a sleeping child. A preference that did not exist yesterday should not
+ * start making noise today because the code learned how.
+ */
+export function readSound(given = null) {
+  const st = store(given);
+  if (!st) return false;
+  try {
+    return st.getItem(SOUND_KEY) === 'on';
+  } catch (e) {
+    return false;                // unreadable storage is not a preference
+  }
+}
+
+/** Remember that answer. */
+export function writeSound(on, given = null) {
+  const st = store(given);
+  if (!st) return;
+  try {
+    st.setItem(SOUND_KEY, on ? 'on' : 'off');
+  } catch (e) {
+    // Full, or refused. A forgotten preference is not worth a message.
+  }
+}
+
 // --- the files, and the game that goes with them -----------------------------
 //
 // The ROM and the .sym used to be re-picked every session, which is two file

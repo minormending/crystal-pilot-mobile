@@ -3,7 +3,7 @@
 //   checks that read the markup: wiring, labels, listeners, markup, counts.
 
 import { readHeader } from '../gbcore/cartridge.js';
-import { GameBoy } from '../gbcore/gb.js';
+import { GameBoy, audibleNow } from '../gbcore/gb.js';
 import { Symbols, sharedNames } from '../gen2/symbols.js';
 import { runSequence, sequenceSaid } from './runner.js';
 import {
@@ -14,8 +14,8 @@ import {
 } from './rows.js';
 import { VERSION } from '../gbcore/version.js';
 import { adoptable, forgetKept, keepBattery, keepRom, keepSym, keptMeta,
-         readBuzz, readOpts, recall, sanitise, writeBuzz,
-         writeOpts } from '../gbcore/remember.js';
+         readBuzz, readOpts, readSound, recall, sanitise, writeBuzz,
+         writeOpts, writeSound } from '../gbcore/remember.js';
 import { chosenName, needsOffer, openRoom, wasSharing } from '../gbcore/room.js';
 import { createHost, createWatcher } from '../gbcore/stream.js';
 import { Cancelled } from '../gbcore/taskbase.js';
@@ -1587,6 +1587,10 @@ async function runTask(id, busy, work,
   // twice was never able to start two walks. This is the same discipline, and
   // runTask was the caller without it.
   running = true;
+  // A job drives frames flat out, so the sound it would make is not the game's
+  // -- see audibleNow. The two early returns below do not need this undone:
+  // they refuse before anything has been muted.
+  syncAudio();
   // Every one of these needs a game already running -- the buttons are on
   // screen before that is true, and pressing one first got "no way from map
   // 0.0 to Route 30", which is honest but not much help.
@@ -1650,6 +1654,7 @@ async function runTask(id, busy, work,
     // three go through. The pilot's own last line stays.
     watchSaying(false);
     running = false;
+    syncAudio();
     setMode(false);
     $(id).disabled = false;
     refresh();
@@ -3137,6 +3142,59 @@ $('#catch').onclick = async () => {
 };
 
 
+// --- sound -------------------------------------------------------------------
+// Off unless asked, and audible only while the game is being played rather
+// than driven -- `audibleNow` in gb.js holds the whole rule and says why.
+let sounding = readSound();
+
+/**
+ * Re-ask whether the game should be making a noise, and tell the core.
+ *
+ * Called from every listener that can change one of the four inputs rather
+ * than from a timer: there are only four, and a poll would either lag the
+ * speed slider or run forever for nothing.
+ *
+ * Never awaited by its callers. A mute that lands a frame late is inaudible,
+ * and none of them have anything to do with the answer.
+ */
+function syncAudio() {
+  gb.setAudible(audibleNow({
+    sound: sounding, speed, running, watching: !!watcher,
+  }));
+}
+
+/**
+ * The switch, and the one gesture the browser insists on.
+ *
+ * `resumeAudio` is called from inside the click rather than at start-up
+ * because an AudioContext begins suspended and only a real interaction may
+ * resume it. Turning the switch on *is* that interaction, which is why the
+ * resume lives here and not beside the preference being read.
+ *
+ * No `CAN_*` check beside this one, unlike Buzz: every browser this app runs
+ * in has an AudioContext, and a core that cannot find its audio channels
+ * answers `false` from `setAudible` rather than failing. The row is therefore
+ * always offered.
+ */
+function paintSound() {
+  const btn = $('#soundtoggle');
+  if (!btn) return;
+  btn.textContent = sounding ? 'On' : 'Off';
+  btn.setAttribute('aria-pressed', String(sounding));
+  $('#soundstate').textContent = sounding
+    ? 'the game, at 1× and not while working' : 'silent';
+}
+if ($('#soundtoggle')) {
+  $('#soundtoggle').onclick = async () => {
+    sounding = !sounding;
+    writeSound(sounding);
+    paintSound();
+    if (sounding) await gb.resumeAudio();
+    syncAudio();
+  };
+  paintSound();
+}
+
 // --- speed ------------------------------------------------------------------
 // Only the idle loop is affected. Tasks drive their own frames as fast as they
 // can, which is what makes a grind worth starting.
@@ -3146,6 +3204,7 @@ const speedInput = $('#speed');
 function showSpeed() {
   if (!speedInput) return;
   speed = SPEEDS[Number(speedInput.value)];
+  syncAudio();
   $('#speedx').textContent = speed === SPEEDS[SPEEDS.length - 1]
     ? 'max' : speed + '×';
 }

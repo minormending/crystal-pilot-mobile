@@ -15,7 +15,7 @@ what CI checks and what the pre-commit hook blocks on.
 ```mermaid
 flowchart LR
     E[an edit] --> H{{".githooks/pre-commit"}}
-    H --> T["./run-tests<br/>973 behaviour tests"]
+    H --> T["./run-tests<br/>979 behaviour tests"]
     H --> C["tools/check-app<br/>36 groups"]
     H --> D["tools/docs-check<br/>46 tracked sections"]
     T --> OK[commit]
@@ -39,7 +39,7 @@ git config core.hooksPath .githooks
 ./run-tests -v         # notes and stack lines
 ```
 
-973 tests in 27 files, and what each file is about says more than the count:
+979 tests in 28 files, and what each file is about says more than the count:
 
 | file | tests | what it pins down |
 | --- | --- | --- |
@@ -70,6 +70,7 @@ git config core.hooksPath .githooks
 | `codec.mjs` | 3 | packing a save small enough for a room to carry |
 | `input.mjs` | 3 | held buttons, and releasing them |
 | `gb.mjs` | 7 | — |
+| `audio.mjs` | 6 | when the game may make a noise, and a core that has no audio behind it |
 
 No ROM, no browser, no emulator — which is the point rather than a compromise.
 The ROM is not in this repository and never will be, so a test that needs one
@@ -127,7 +128,7 @@ section gives. Everything by hand runs against a local build.
 
 ```mermaid
 flowchart BT
-    C["the app"] --> T["./run-tests<br/>973 behaviour tests"]
+    C["the app"] --> T["./run-tests<br/>979 behaviour tests"]
     C --> A["tools/check-app<br/>36 groups"]
     C --> D["tools/docs-check<br/>46 tracked sections"]
     C --> V["tools/coverage<br/>what the suite never runs"]

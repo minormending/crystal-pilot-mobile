@@ -114,7 +114,7 @@ of the subtleties in sections 6 and 7.
 
 ## 2. The shape of it
 
-<!-- covers-api: app/main.js gen2/journey.js titles/crystal.js gen2/tasks.js gen2/nav.js gen2/world.js gen2/collision.js gen2/state.js gen2/romdata.js gen2/symbols.js gbcore/gb.js @ 705b5fbff6b6 -->
+<!-- covers-api: app/main.js gen2/journey.js titles/crystal.js gen2/tasks.js gen2/nav.js gen2/world.js gen2/collision.js gen2/state.js gen2/romdata.js gen2/symbols.js gbcore/gb.js @ 5698bcb23ab1 -->
 
 Thirty modules, in four directories, and the directories are the design:
 **an import may point down this list and never up.**
@@ -348,7 +348,7 @@ count comes back in `stats.knockouts`, since each one costs half your money.
 
 ### `gb.js` — the emulator
 
-<!-- covers: gbcore/gb.js @ 35ccf6b0a133 -->
+<!-- covers: gbcore/gb.js @ 45d4ed5801cf -->
 
 Wraps WasmBoy. Runs frames, reads work RAM, holds and releases buttons.
 
@@ -5229,7 +5229,7 @@ This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ 3449c9346753 -->
+<!-- covers: app/main.js index.html @ c8152a9697d7 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -6304,7 +6304,7 @@ seconds by a page whose loop was supposedly running.
 
 ### One thing at a time
 
-<!-- covers: app/main.js @ 61d0187a58de -->
+<!-- covers: app/main.js @ 6fce7e0aa45f -->
 
 One Game Boy, one joypad, one canvas — so a great deal of this app is about
 making sure two things are never driving them at once. There are three claims,
@@ -6858,7 +6858,7 @@ a conversation.
 
 ### The card behind a party row
 
-<!-- covers: app/rows.js app/main.js index.html @ 6b271b677c5a -->
+<!-- covers: app/rows.js app/main.js index.html @ b6b55f937c4e -->
 
 Two questions the game itself will not answer about a Pokémon you are
 carrying — *what is this made of* and *what is it about to become* — and both
@@ -6947,7 +6947,7 @@ at body size.
 
 ### Running the list
 
-<!-- covers: app/rows.js app/main.js @ 7c456803ce74 -->
+<!-- covers: app/rows.js app/main.js @ b7cc21051589 -->
 
 The app has spent forty passes learning to answer one question — *what can the
 pilot do here, and which of those is worth most?* — and twenty showing the
@@ -7071,7 +7071,7 @@ to deposit your last Pokémon.
 
 ### The settings and the save card
 
-<!-- covers: index.html app/main.js @ 3449c9346753 -->
+<!-- covers: index.html app/main.js @ c8152a9697d7 -->
 
 The pilot's own list got a glyph column, shorter names and a slot to fill in
 v165. These two cards did not, and reading them found that they had a different
@@ -7102,6 +7102,38 @@ was drawn beside a hidden Forget button, in the one place a person opens *in
 order to change something*. The row appears now only when something is kept —
 which is when it has both a fact and a button — and the behaviour it was
 explaining is a sentence in *How this works* with the other explanations.
+
+**`Sound` sits above it, and it is off until asked.** This app was silent for
+its first two hundred and forty versions, and it is opened on a phone that may
+be in a pocket or beside someone asleep — a preference that did not exist
+yesterday should not start making noise today because the code learned how. Like
+`Buzz` it is remembered per device rather than shared into a room: whether a
+phone may make a noise is a fact about the room it is standing in.
+
+Three things about it are not obvious from the switch.
+
+**The core is always built with audio on, and the master channel carries the
+decision.** `isAudioEnabled` is read when the core is configured and cannot be
+changed afterwards, so the choice was between never having sound and having a
+mute — and `gb.setAudible` mutes `_getAudioChannels().master`. That is also the
+only shape that can follow the speed, which it must.
+
+**Sound is for 1× and nothing else**, and `audibleNow` in `gb.js` holds the
+whole rule: on only when the switch is on, the speed is 1, no job is running,
+and this device is not watching another. The APU makes its samples per *frame*,
+and this app steps frames as fast as the device manages — about thirty times
+real time on a laptop. Those samples are each correct and there are thirty times
+too many of them a second, which is not fast-forward, it is noise. A job is the
+same problem with no number attached: it drives frames flat out and consults no
+speed setting, because that is what a job is for. Every emulator with a
+fast-forward key does this.
+
+**The switch is also the gesture.** An AudioContext starts suspended and only a
+real interaction may resume it, so `gb.resumeAudio` is called from inside the
+click rather than beside the preference being read. Unlike `Buzz` there is no
+capability check and the row is always offered: every browser here has an
+AudioContext, and a core that cannot find its channels answers `false` from
+`setAudible` rather than failing.
 
 **`Buzz` is on this card and not on the pad, and it is hidden where it would be
 a lie.** A press on a touchscreen has no travel and no click, and on a pad the
@@ -7267,7 +7299,7 @@ stands 3.40:1 clear of the recess it is moulded around.
 
 ### What it remembers
 
-<!-- covers: gbcore/remember.js @ d5d9e3629905 -->
+<!-- covers: gbcore/remember.js @ b0d4b91f6a0c -->
 
 The app forgets everything on a reload, and a reload is not rare: the Update
 button causes one deliberately, and a phone discards a background tab whenever
@@ -7294,13 +7326,25 @@ reload look like a fresh decision. An absent or nonsense stamp reads as `0`,
 which loses to every real one: the record with nothing in it is the one that
 must not win.
 
-**One preference is deliberately outside all of that.** Whether a press buzzes
-has its own key and no stamp, because the rules above exist to *share* a choice
-between devices and this is the one choice that must not travel: it is a fact
-about the hand holding this device, and the tablet it is in a room with may have
-no motor at all. Sent through `adoptable` it would be one device answering a
-question only the other was asked. The colour theme made the same call before
-this file existed, and is left alone for the same reason — a key of its own
+**Two preferences are deliberately outside all of that.** Whether a press
+buzzes and whether the game makes a noise each have their own key and no stamp,
+because the rules above exist to *share* a choice between devices and these are
+the choices that must not travel. Both are facts about the device rather than
+about the game: the tablet in the room may have no motor at all, and a phone
+that may make a noise in one room may not in the next. Sent through `adoptable`
+either would be one device answering a question only the other was asked.
+
+They differ in their default, and that is the interesting part. `readBuzz`
+answers **on** unless told otherwise; `readSound` answers **off**. A buzz is
+invisible to everyone but the person holding the device, and the app has always
+had one. Sound is audible to the room, and the app had none for two hundred and
+forty versions — so a build that learned to make a noise must not start making
+one on a device whose owner never asked. Unreadable storage returns each of
+those defaults rather than throwing: it is an absent preference, not a
+preference for silence or for noise.
+
+The colour theme made the same call before this file existed, and is left alone
+for the same reason — a key of its own
 costs nothing, and moving it would mean a migration in exchange for nothing.
 
 **What is stored is the choice, never what the choice worked out to.** `+2`
@@ -7752,7 +7796,7 @@ they have been installed.
 
 ### Watching the other device's screen
 
-<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ fca226795ed4 -->
+<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ 97802de759e2 -->
 
 One device shows its screen; the other watches it, and plays it if the first
 one says so. The picture goes straight between them over WebRTC and never

@@ -1487,6 +1487,12 @@
     <path d="M2.6 4.4h6.6v9.6H2.6Z"/><path d="M11.2 7.2h4.2v7.4h-4.2Z"/></g>
   <!-- A handset with a wave off each side: the phone in a hand, shaking. It
        borrows i-devices' own body so the two read as the same family. -->
+  <g id="i-sound" fill="none" stroke="currentColor" stroke-width="1.8"
+     stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 7h2.5L10 4v10L6.5 11H4z"/>
+    <path d="M12.2 6.4a3.6 3.6 0 0 1 0 5.2"/>
+    <path d="M14.3 4.3a6.5 6.5 0 0 1 0 9.4"/>
+  </g>
   <g id="i-buzz" fill="none" stroke="currentColor" stroke-width="1.8"
      stroke-linecap="round" stroke-linejoin="round">
     <path d="M6.4 3.6h5.2v10.8H6.4Z"/>
@@ -2054,6 +2060,15 @@
          worse than no switch. Unlike the rows above this one is *not* shared
          into a room -- see remember.js -- because it is a fact about the hand
          holding this device and not about the game. -->
+    <!-- Off by default and remembered per device, like Buzz below: whether a
+         phone may make a noise is a fact about the room it is in, not about
+         the game, so it does not travel into a room. -->
+    <div class="themerow" id="soundrow">
+      <svg class="jicon" viewBox="0 0 18 18" aria-hidden="true"><use href="#i-sound"/></svg>
+      <span class="lvlabel">Sound</span>
+      <span class="val" id="soundstate">silent</span>
+      <button class="themebtn" id="soundtoggle" aria-pressed="false">Off</button>
+    </div>
     <div class="themerow hide" id="buzzrow">
       <svg class="jicon" viewBox="0 0 18 18" aria-hidden="true"><use href="#i-buzz"/></svg>
       <span class="lvlabel">Buzz</span>

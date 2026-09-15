@@ -50,6 +50,31 @@ const RATE_MIN = 1200;
 // twice. Nothing is queued and nothing accumulates.
 const PAINT_MS = 33;
 
+/**
+ * Should the game be making a noise right now?
+ *
+ * Four conditions, and each one is a different reason rather than a variation
+ * on caution:
+ *
+ * - **`sound`** is the person's answer, and it is the only one they gave.
+ * - **`speed` must be 1.** The APU makes its samples per frame, so a game
+ *   stepped sixteen times over is a game pitched sixteen times up. See
+ *   `setAudible`.
+ * - **No job may be running.** A job steps frames flat out, with no speed
+ *   setting to consult -- that is the point of one -- so it is the same problem
+ *   without a number attached.
+ * - **Not while watching another device.** There is no cartridge on this one;
+ *   the picture is arriving over WebRTC and the sound is coming out of the
+ *   machine that has the game.
+ *
+ * Pure, and exported, because it is the whole decision and the alternative is
+ * four conditions spread across the listeners that change them.
+ */
+export function audibleNow({ sound = false, speed = 1, running = false,
+                             watching = false } = {}) {
+  return !!sound && speed === 1 && !running && !watching;
+}
+
 export class GameBoy {
   constructor() {
     this.core = null;
@@ -61,6 +86,9 @@ export class GameBoy {
     // machine's throughput goes stale.
     this.stepped = 0;
     this.steppingMs = 0;
+    // Whether the master audio channel is currently unmuted. Tracked here so a
+    // caller can ask without crossing into the core -- see `setAudible`.
+    this.audible = false;
     // The paint throttle -- see PAINT_MS and `paint`. `paintedAt` is when the
     // last one was asked for and `painting` whether one is still in flight,
     // and both are needed: a paint takes longer than the interval, so time
@@ -72,10 +100,17 @@ export class GameBoy {
   async start(canvas) {
     const lib = window.WasmBoy;
     this.core = lib.WasmBoy || lib;
+    // Audio is *configured* on and *heard* only when `audible` says so -- see
+    // `setAudible`. The flag cannot be changed after config without rebuilding
+    // the core, so the choice here is between never having sound and having a
+    // mute; the mute is the one that lets somebody turn it on.
     await this.core.config(
-      { headless: false, isGbcEnabled: true, isAudioEnabled: false, frameSkip: 0 },
+      { headless: false, isGbcEnabled: true, isAudioEnabled: true, frameSkip: 0 },
       canvas
     );
+    // Silent until asked, whatever the preference says. A page that made noise
+    // before anyone touched it would be a page people close.
+    await this.setAudible(false);
     return this;
   }
 
@@ -372,6 +407,55 @@ export class GameBoy {
    * new direction is spent on the turn -- tap-only controls move you a tile per
    * tap at best, and nothing at all on the tap that changes direction.
    */
+  /**
+   * Sound on or off, without rebuilding the core.
+   *
+   * **Why a mute rather than the config flag.** `isAudioEnabled` is read when
+   * the core is configured and cannot be changed afterwards, and re-configuring
+   * means losing the running game. So the core is always built with audio on
+   * and the master channel carries the decision -- which is also the only shape
+   * that can follow the speed.
+   *
+   * **And it must follow the speed.** The Game Boy's APU produces samples per
+   * *frame*, and this app steps frames as fast as the device manages -- about
+   * thirty times real time on a laptop, measured. Those samples are each
+   * correct and there are thirty times too many of them a second, which is not
+   * fast-forward, it is noise. Sound belongs to ordinary play at 1x and nothing
+   * else, the same way a fast-forward key mutes an emulator.
+   *
+   * Tolerant of a core with no audio behind it: `_getAudioChannels` comes from
+   * the library rather than the wasm, and a half-built core answers nothing.
+   * Silence is the safe direction, so a failure is reported rather than thrown
+   * at a caller who only asked for sound.
+   */
+  async setAudible(on) {
+    this.audible = !!on;
+    if (!this.core || typeof this.core._getAudioChannels !== 'function') return false;
+    try {
+      const channels = await this.core._getAudioChannels();
+      const master = channels && channels.master;
+      if (!master) return false;
+      if (on) master.unmute(); else master.mute();
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /**
+   * Let the page make sound at all, which only a gesture can ask for.
+   *
+   * Every browser starts an AudioContext suspended until a real interaction
+   * resumes it, so this belongs on a click and nowhere else. Safe to call
+   * again -- resuming a running context does nothing -- which is cheaper than
+   * tracking whether it has already been done.
+   */
+  async resumeAudio() {
+    if (!this.core || typeof this.core.resumeAudioContext !== 'function') return false;
+    try { await this.core.resumeAudioContext(); return true; }
+    catch (e) { return false; }
+  }
+
   hold(button) { this.held.add(button); this.applyHeld(); }
   release(button) { this.held.delete(button); this.applyHeld(); }
   releaseAll() { this.held.clear(); this.applyHeld(); }
