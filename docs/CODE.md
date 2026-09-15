@@ -348,7 +348,7 @@ count comes back in `stats.knockouts`, since each one costs half your money.
 
 ### `gb.js` — the emulator
 
-<!-- covers: gbcore/gb.js @ 35ccf6b0a133 -->
+<!-- covers: gbcore/gb.js @ cac0869fbe29 -->
 
 Wraps WasmBoy. Runs frames, reads work RAM, holds and releases buttons.
 
@@ -441,42 +441,16 @@ for. Four probes at different moments all came back with exactly the 8192 bytes
 requested, so that is not happening now — but the normalisation stays, because
 one afternoon's probes are not evidence it never happens.
 
-**Frames are stepped directly, and that is the single biggest thing this file
-does for speed.** `_runNumberOfFrames` opens with `await pause()`, which waits
-for an animation frame — so *every* call cost one whether it asked for two
-frames or two hundred. That was known as a hidden-page problem, because a
-hidden page never gets an animation frame and the call hangs forever; what took
-longer to see is that the visible page was paying it sixty times a second.
-
-Measured on the real cartridge at 120Hz: `_runNumberOfFrames(2)` took 16.36 ms
-to do 0.9 ms of work — **94% waiting**. `nav.settle` calls exactly that up to
-45 times, so settling after one step spent three quarters of a second to
-emulate a second and a half of game. A 60Hz phone waits twice as long again,
-which is why the speed slider never appeared to help: it scales the idle loop's
-batch and **no job reads it**.
-
-So `run()` no longer splits — it always steps directly, and `paint()` does the
-drawing the old path used to do:
+**Frames must be stepped differently when the page is hidden.** `_runNumberOfFrames`
+awaits `pause()`, which needs an animation frame, and a hidden page does not get
+them. So `run()` splits:
 
 ```js
 async run(n = 1) {
+  if (!document.hidden) { await this.core._runNumberOfFrames(n); return; }
   for (let i = 0; i < n; i++) await this.core._runWasmExport('executeFrame', []);
-  this.paint();                        // throttled, and never awaited
 }
 ```
-
-`paint()` calls `_runNumberOfFrames(0)` — which steps nothing and draws, the
-half worth keeping — at most every `PAINT_MS`, and does not await it. The
-waiting is on the main thread, so the worker steps frames straight through it.
-
-End to end, playing Crystal's opening to a Lv5 Totodile on Route 29:
-**54.6 s before, 9.3 s after**, with `rate()` reporting the same ~2,100 fps
-either way. The core never got faster; the waiting went away.
-
-Because stepping is now nearly free, the idle loop can no longer be paced by
-the animation frame `run()` used to wait on — see
-[section 9](#9-the-interface) for `paceFrames`, which pays out frames against
-the wall clock so `speed` means the same thing on a 60Hz panel and a 120Hz one.
 
 Reads are deliberately small. `readBytes(addr, len)` exists alongside
 `readWram()` because a step polls coordinates every couple of frames, and
@@ -3308,11 +3282,10 @@ backwards answers *just now* rather than inventing a save from the future.
 
 **`install` refuses on a hidden page.** Re-loading the ROM goes through the
 library's `pause()`, which awaits an animation frame, and a hidden page is given
-none — so the call never returns. `run()` used to branch on this for frame
-stepping and now simply never goes near `pause()`, but a ROM re-load has no
-equivalent escape, so it refuses with a reason rather than hanging. `paint()`
-sits behind the same check for the same reason. A person pressing Load is
-looking at the page; the check only bites a backgrounded tab.
+none — so the call never returns. `run()` already branches on this for frame
+stepping and there is no equivalent escape here, so it refuses with a reason
+rather than hanging. A person pressing Load is looking at the page; the check
+only bites a backgrounded tab.
 
 **A refused undo does not spend the undo point.** Whatever the reason — hidden
 page, empty slot — the point stays where it was, so the next attempt still has
@@ -4600,15 +4573,12 @@ so the wait is *between* one and eight hours and the button shows the eight.
 The minutes are measured: the game counts its own time one frame at a time
 whatever speed those frames arrive at, so an hour is `3600 × 60` frames on any
 machine, and the only unknown is this device's throughput. `gb.rate()` times
-that, sampling **only calls of 240 frames or more**. That floor used to exist
-because a small call on a visible page was almost entirely animation-frame
-wait, so timing one measured the idle loop's tick rate rather than the core's
-throughput; that wait is gone, and what remains is the per-call `await` into
-the worker, which a two-frame call still pays in full and a 240-frame call
-amortises. Smaller than it was, the same shape, so the same floor holds. The
-overhead still in the samples that count makes the rate a slight underestimate
-and the time a slight overestimate, which is the right direction for a number
-somebody uses to decide whether to walk away.
+that, sampling **only calls of 240 frames or more** — on a visible page the
+library's `_runNumberOfFrames` opens by awaiting an animation frame, so timing
+a sixteen-frame call measures the idle loop's tick rate rather than the core's
+throughput. The overhead still in the samples that do count makes the rate a
+slight underestimate and the time a slight overestimate, which is the right
+direction for a number somebody uses to decide whether to walk away.
 
 Whether the *hour* moves at all depends on the emulator core rather than the
 cartridge, and the job reports which world it turned out to be in rather than
@@ -5217,7 +5187,7 @@ This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ 3449c9346753 -->
+<!-- covers: app/main.js index.html @ 3e42d95e6a60 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -6264,23 +6234,6 @@ the idle loop must stand down and no job may start on top of it, but a walk
 lasts a couple of seconds and reordering the page under a thumb that just tapped
 it would cost more than the dimming is worth.
 
-**The idle loop pays out frames against the wall clock, not the display.**
-`paceFrames` asks how long it has been since the last tick, divides by a Game
-Boy frame (1000/60 ms) and multiplies by `speed`. The batch used to be `speed`
-flat, which was right only by accident: `gb.run` waited for an animation frame
-of its own, so a tick took roughly a 60Hz frame however few frames it asked
-for. With that wait gone (see [`gb.js`](#gbjs--the-emulator)) a flat batch runs
-the game at the *display* rate — correct on the 60Hz panel it was tuned against
-and **double speed on a 120Hz one**, which is a good many phones. Measured
-after the change: 1× gives 60 fps, 4× gives 240, 16× gives 959.
-
-It is capped at four ticks' worth, because a wall clock also brings catch-up:
-returning from a stall — a slow paint, a lock screen — the arithmetic asks for
-every missed frame at once, which is a visible lurch and, at speed 16,
-thousands of frames in one uninterruptible call. Dropping them leaves the game
-late rather than making it jump, which is the right way round for something
-being watched.
-
 **The idle loop re-arms on every visibility change**, with a generation counter.
 It used to re-arm only from inside its own animation-frame callback, and a frame
 pending when a page is hidden never arrives — so the chain was lost, the loop
@@ -6292,7 +6245,7 @@ seconds by a page whose loop was supposedly running.
 
 ### One thing at a time
 
-<!-- covers: app/main.js @ 61d0187a58de -->
+<!-- covers: app/main.js @ f82c59bd27eb -->
 
 One Game Boy, one joypad, one canvas — so a great deal of this app is about
 making sure two things are never driving them at once. There are three claims,
@@ -6846,7 +6799,7 @@ a conversation.
 
 ### The card behind a party row
 
-<!-- covers: app/rows.js app/main.js index.html @ 6b271b677c5a -->
+<!-- covers: app/rows.js app/main.js index.html @ 826ee950c09c -->
 
 Two questions the game itself will not answer about a Pokémon you are
 carrying — *what is this made of* and *what is it about to become* — and both
@@ -6935,7 +6888,7 @@ at body size.
 
 ### Running the list
 
-<!-- covers: app/rows.js app/main.js @ 7c456803ce74 -->
+<!-- covers: app/rows.js app/main.js @ c6ab8a6ad36a -->
 
 The app has spent forty passes learning to answer one question — *what can the
 pilot do here, and which of those is worth most?* — and twenty showing the
@@ -7059,7 +7012,7 @@ to deposit your last Pokémon.
 
 ### The settings and the save card
 
-<!-- covers: index.html app/main.js @ 3449c9346753 -->
+<!-- covers: index.html app/main.js @ 3e42d95e6a60 -->
 
 The pilot's own list got a glyph column, shorter names and a slot to fill in
 v165. These two cards did not, and reading them found that they had a different
@@ -7740,7 +7693,7 @@ they have been installed.
 
 ### Watching the other device's screen
 
-<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ fca226795ed4 -->
+<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ 7dd83021d045 -->
 
 One device shows its screen; the other watches it, and plays it if the first
 one says so. The picture goes straight between them over WebRTC and never
