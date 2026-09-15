@@ -1391,6 +1391,36 @@ function startLoop() {
   if (loopStarted) return;
   loopStarted = true;
   let stepping = false, since = 0, stepId = 0, generation = 0;
+  // When the loop last stepped, so the next one can ask for the frames the
+  // wall clock says are owed rather than a fixed batch.
+  let paced = 0;
+
+  /**
+   * How many frames this tick owes, for `speed` times real time.
+   *
+   * The batch used to be `speed` flat, and that was right only by accident:
+   * `gb.run` waited for an animation frame of its own, so a tick took about a
+   * 60Hz frame however few frames it asked for. With that wait gone a tick
+   * costs almost nothing, and a flat batch means the game runs at the display
+   * rate -- correct on the 60Hz panel it was tuned against and **double speed
+   * on a 120Hz one**, which is most of this desk and a good many phones.
+   *
+   * So the clock decides instead of the display. A Game Boy frame is
+   * 1000/60 ms; whatever wall time has passed, that many frames are owed,
+   * times `speed`.
+   *
+   * Capped at four ticks' worth, because the other thing a wall clock brings
+   * is catch-up: come back from a stall -- a slow paint, a long read, the tab
+   * behind a lock screen -- and the arithmetic asks for every frame missed at
+   * once, which is a visible lurch and, at speed 16, thousands of frames in
+   * one uninterruptible call. Dropping them keeps the game late rather than
+   * making it jump, which is the right way round for something being watched.
+   */
+  const paceFrames = (now) => {
+    const owed = paced ? ((now - paced) / (1000 / 60)) * speed : speed;
+    paced = now;
+    return Math.max(1, Math.min(Math.round(owed), speed * 4));
+  };
   const tick = async (mine) => {
     // A newer chain has taken over; this one is a leftover and stops here.
     if (mine !== generation) return;
@@ -1412,7 +1442,8 @@ function startLoop() {
     stepping = true;
     since = performance.now();
     const step = ++stepId;
-    try { await gb.run(speed); } finally { if (stepId === step) stepping = false; }
+    try { await gb.run(paceFrames(since)); }
+    finally { if (stepId === step) stepping = false; }
   };
 
   /**
