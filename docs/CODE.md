@@ -4676,7 +4676,7 @@ cartridge will not say which hours are which.
 
 ## 8j. A cartridge that changed everything it could
 
-<!-- covers: titles/polished.js gen2/engine.js gen2/romdata.js gen2/state.js gen2/menus.js @ 703fd504abe1 -->
+<!-- covers: titles/polished.js gen2/engine.js gen2/romdata.js gen2/state.js gen2/menus.js @ c35ffc9e0b26 -->
 
 Polished Crystal is the profile in `docs/DEVELOPING.md`'s hack table described
 as "the generic fallback, and the hardest thing to support properly". It is
@@ -4768,12 +4768,24 @@ landing in ordinary dialogue cost nothing, because B advances text there just
 as A does. Crystal's opening plays exactly as before, nine legs and a Lv5
 starter in the grass.
 
-**And the budget was too small even once unblocked.** Two runs of the same
-build reached the overworld at 5,373 and 41,773 frames — Polished's opening is
-both longer than Crystal's and far more variable — so `INTRO_FRAMES` is 60,000
-where it was 20,000. The stall was not the bound, and that was checked rather
-than assumed: held at A-only for 120,000 frames, `mapStatus` and `mapGroup`
-never moved off zero.
+**And the budget was too small even once unblocked** — twice over, as it turned
+out. Two runs of the same build reached the overworld at 5,373 and 41,773
+frames — Polished's opening is both longer than Crystal's and far more
+variable — so `INTRO_FRAMES` went from 20,000 to 60,000. The stall was not the
+bound, and that was checked rather than assumed: held at A-only for 120,000
+frames, `mapStatus` and `mapGroup` never moved off zero.
+
+60,000 was still not enough, and the arithmetic says why: it clears the worst
+*measured* run by 40% on a process that varies by a factor of eight. Measured
+later, driving the opening over and over, **4 runs in 8 failed on the budget
+alone** — each after the same ~50 seconds, each reporting "never reached the
+overworld — is this a Polished Crystal ROM?", which sends a reader to inspect a
+cartridge that was never at fault. This profile now passes its own 200,000,
+five runs of five, one of them taking 229 seconds. The number lives in
+`titles/polished.js` because it is a fact about this opening; the only price a
+larger bound carries is a longer wait before a cartridge that genuinely cannot
+get there is told so, and Crystal — well inside the default — keeps the
+default.
 
 **Its trainers read now**, and getting there took three separate things.
 `TrainerGroups` is `dba` into banks `$7d` and `$79`, so the first pointer is

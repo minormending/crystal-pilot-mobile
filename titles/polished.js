@@ -28,6 +28,27 @@ import { Journey } from '../gen2/journey.js';
 // Where a game begins, which is what `tools/route --reach` measures every
 // other place from. Named the way `titles/crystal.js` names its own, so the
 // tool finds it without being told which profile it is reading.
+// How long this cartridge's opening is given to reach the overworld.
+//
+// `continueGame`'s own default is 60,000, and the note above it records why it
+// is not enough here: two runs of the same build reached the world at 5,373
+// and 41,773 frames, so the default clears the slower of the two by a factor
+// of 1.4 on a process that varies by a factor of eight. That is not headroom,
+// it is a coin toss that usually lands the right way -- measured, 4 of 8 runs
+// failed on the budget alone, every one of them after the same ~50 seconds,
+// and every one of them blaming the cartridge: "never reached the overworld --
+// is this a Polished Crystal ROM?".
+//
+// 200,000 is that worst measurement times five, and it bought 5 runs of 5.
+// The cost of the bigger number is paid only by a cartridge that genuinely
+// never gets there, which waits longer to be told so; the cost of the smaller
+// one was paid by cartridges that would have worked.
+//
+// Declared here rather than raised in `menus.js` because it is a fact about
+// *this* opening. Crystal reaches its world well inside the default and would
+// only wait longer to find out a real failure was real.
+const INTRO_FRAMES = 200000;
+
 const NEW_BARK_TOWN = key(24, 2);
 const PLAYERS_HOUSE_2F = key(24, 5);
 
@@ -768,7 +789,7 @@ export class Polished extends Journey {
     const p = this.title.places;
     const legs = [
       ['starting a new game', async () => {
-        if (await this.tasks.continueGame()) return null;
+        if (await this.tasks.continueGame(INTRO_FRAMES)) return null;
         return 'never reached the overworld — is this a Polished Crystal ROM?';
       }],
       ['going downstairs', async () =>
