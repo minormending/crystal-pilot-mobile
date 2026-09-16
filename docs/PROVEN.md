@@ -45,10 +45,12 @@ The trainer half took five failed harnesses first, and the failures are worth
 recording because none of them was about the feature. Route 29 has no trainers;
 Route 30's objects are not loaded from its southern end; `duelHere`'s
 `_approach` refuses a trainer four tiles away on an open route; Violet cannot be
-walked to from a fresh save. The way in was a **kept battery** -- play to Lv16
+walked to from a fresh save. The way in was a **kept battery** -- play to Lv12
 headless once, `gb.batterySave()` those 32,768 bytes to a file, and restore them
 with `saves.install` in about a second -- which turned a nine-minute dead end
 into a forty-second experiment that could be run six ways at once.
+`tools/make-save` is that playthrough, so this reproduces from a checkout with a
+cartridge in it rather than from bytes nobody else has.
 
 **And then the first three trainer runs were wrong, in a way worth writing
 down.** They left `travelTo` in flight while auto-battle ran, which is a second
@@ -73,6 +75,10 @@ PILOT | inBattle=true  mode=2 | Y3300 | "auto-battling CATERPIE" | "fighting the
       | inBattle=false mode=0 | Y3364 | "won the trainer battle" | "kind=trainer outcome=won seconds=1.2 lead=45/45"
 #battle pressed 1x  |  purse Y3300 -> Y3364  |  lead 45/45 -> 45/45
 ```
+
+Run from the Lv12 checkpoint rather than the Lv16 one it was first measured at,
+the answer is the same: PIDGEY Lv3 and CATERPIE Lv3 taken and won, one press
+each, lead ending 28/36 and 30/36.
 
 **Pressed once**, which is the latch doing its job, and the +Y64 is the same
 prize [the Duel row measured](USING.md#duel-fighting-a-trainer-on-purpose)

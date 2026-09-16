@@ -1,0 +1,274 @@
+#!/usr/bin/env node
+// Build the checkpoint saves the pilot is tested from, out of your own ROM.
+//
+//     tools/make-save                  every checkpoint, into dev/
+//     tools/make-save --only lv12      just one of them
+//     tools/make-save --list           what it would build, and what is there
+//     tools/make-save --starter cyndaquil
+//     tools/make-save --keep-open      leave the browser up to poke at
+//
+// **Why this is a tool and not a committed `.sav`.** A save is game data: it
+// comes out of a copyrighted cartridge, `.gitignore` excludes it, `check-app`
+// fails the build if one is ever tracked, and the README promises twice over
+// that none is distributed here. So the saves cannot travel, and this does
+// instead -- which is the better half of the trade anyway, because a save is
+// only as portable as the build it came from. Everyone here builds their own
+// ROM from the disassembly, and a hack's is a different cartridge again; a
+// recipe re-run against *your* ROM is repeatable in a way somebody else's bytes
+// are not.
+//
+// What it is for: reaching a trainer battle from a fresh save is most of an
+// hour of walking, and the pilot cannot walk to Violet before the errand. Five
+// harnesses failed on *reaching* a trainer before one worked, and none of them
+// failed on the thing being tested -- see `docs/PROVEN.md`. A kept battery
+// turns that into a one-second restore, which is what made the auto-battle
+// trainer case affordable to prove at all.
+//
+// Needs a ROM and a symbol file in `dev/` -- not in this repository and never
+// will be -- and a Playwright install, because a save needs the emulator and
+// the emulator needs a browser. Without either it says which and exits 0, the
+// same way every other tool here does.
+import { createServer } from 'node:http';
+import { createReadStream, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { dirname, extname, join, resolve } from 'node:path';
+
+import { findCartridge } from './cartridge.mjs';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const ROOT = join(HERE, '..');
+const DEV = join(ROOT, 'dev');
+
+// The checkpoints, in the order they have to be reached: each one starts from
+// where the last one left off, so asking for `lv12` runs everything above it.
+//
+// **`reached` is the half that earns its keep.** The first version of this
+// wrote a checkpoint whenever the in-game save succeeded, and the in-game save
+// succeeds whatever happened before it -- so a grind that stopped at Lv12
+// saying *no wild Pokemon appeared* still produced a file called `lv16` holding
+// a Lv12 game. A checkpoint that lies about what is in it is worse than one
+// that is missing: the test that restores it gets a party it did not ask for
+// and fails somewhere else entirely. So each step is asked of the *game state*
+// afterwards, not of the message the job returned.
+const STEPS = [
+  { name: 'opening', says: 'the intro played and a starter chosen, out on the grass',
+    reached: (s) => s.worldLoaded && s.party.length > 0 },
+  { name: 'errand', says: 'the Poké Ball errand done — five balls in the bag',
+    reached: (s) => s.balls.some(([, q]) => q > 0) },
+  { name: 'lv12', says: 'the lead ground to Lv12 — what the trainer tests restore',
+    reached: (s) => s.party[0] && s.party[0].level >= 12 },
+];
+// **Lv12 and no further, and that is measured rather than modest.** Lv16 was a
+// checkpoint here until it failed twice in a row on Route 29 -- once with *no
+// wild Pokemon appeared* and once with *5 battles in a row went nowhere* -- and
+// `tools/dex --party` on the Lv12 save says why it is at least plausible: the
+// lead is down to `SCRATCH 8, LEER 30, RAGE 20`, eight PP on the only move
+// worth swinging. Whether that is the whole cause is not established here.
+//
+// It does not matter, because Lv12 is enough for what these are for: the
+// trainer proof in `docs/PROVEN.md` reproduces from this checkpoint, taking and
+// winning against Route 30's PIDGEY Lv3 and CATERPIE Lv3 with the lead ending
+// 28/36 and 30/36. A checkpoint that fails half the time is worse than one that
+// stops lower down and always works.
+
+const args = process.argv.slice(2);
+const flag = (name, fallback = null) => {
+  const at = args.indexOf(name);
+  return at >= 0 ? (args[at + 1] ?? true) : fallback;
+};
+const has = (name) => args.includes(name);
+
+const savePath = (name) => join(DEV, `save-${name}.sav`);
+
+if (has('--help') || has('-h')) {
+  console.log(readFileSync(fileURLToPath(import.meta.url), 'utf8')
+    .split('\n').filter((l) => l.startsWith('//')).map((l) => l.slice(3)).join('\n'));
+  process.exit(0);
+}
+
+if (has('--list')) {
+  for (const s of STEPS) {
+    const at = savePath(s.name);
+    console.log(`  ${s.name.padEnd(8)} ${existsSync(at) ? 'built' : '  —  '}  ${s.says}`);
+  }
+  process.exit(0);
+}
+
+// --- what it needs, and saying which is missing ------------------------------
+
+const cart = findCartridge(DEV);
+if (!cart) {
+  console.log('no ROM and symbol file in dev/ — nothing to build a save from.');
+  console.log('Build them with a `make` in the pokecrystal disassembly.');
+  process.exit(0);
+}
+if (cart.note) console.log(`  ${cart.note}`);
+
+/**
+ * Playwright, from wherever this machine happens to keep it.
+ *
+ * Not a dependency of this repository, which has none at all: it is a static
+ * app and the test suite runs on a fake Game Boy. So this looks rather than
+ * requires, and the sibling `ui-audit` checkout is included because that is
+ * where the one on this desk lives.
+ */
+async function findPlaywright() {
+  const tries = [
+    process.env.PLAYWRIGHT_DIR && join(process.env.PLAYWRIGHT_DIR, 'index.mjs'),
+    join(ROOT, 'node_modules', 'playwright', 'index.mjs'),
+    join(ROOT, '..', 'ui-audit', 'node_modules', 'playwright', 'index.mjs'),
+  ].filter(Boolean);
+  for (const at of tries) {
+    if (!existsSync(at)) continue;
+    try { return await import(pathToFileURL(at).href); } catch (e) { /* try the next */ }
+  }
+  return null;
+}
+
+const pw = await findPlaywright();
+if (!pw) {
+  console.log('no Playwright on this machine, and a save needs the emulator,');
+  console.log('which needs a browser. Either:');
+  console.log('    npm i playwright && npx playwright install chromium');
+  console.log('or point PLAYWRIGHT_DIR at an install you already have.');
+  process.exit(0);
+}
+
+// --- serving the app to itself -----------------------------------------------
+//
+// Its own server rather than `python3 -m http.server`, for the reason the audit
+// harness learned the hard way: a detached server that dies mid-run leaves a
+// connection error where the work was supposed to be.
+const TYPES = {
+  '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript',
+  '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml',
+  '.webmanifest': 'application/manifest+json', '.png': 'image/png',
+};
+
+function serve(port) {
+  const server = createServer((req, res) => {
+    let p = decodeURIComponent(req.url.split('?')[0]);
+    if (p === '/') p = '/index.html';
+    const file = join(ROOT, p);
+    if (!file.startsWith(ROOT) || !existsSync(file)) { res.writeHead(404); res.end(); return; }
+    res.writeHead(200, { 'content-type': TYPES[extname(file)] || 'application/octet-stream' });
+    createReadStream(file).pipe(res);
+  });
+  return new Promise((ok) => server.listen(port, () => ok(server)));
+}
+
+// --- the run -----------------------------------------------------------------
+
+const only = flag('--only');
+const starter = flag('--starter', 'totodile');
+const port = Number(flag('--port', 8123));
+const wanted = only ? STEPS.filter((s) => s.name === only) : STEPS;
+if (!wanted.length) {
+  console.log(`no checkpoint called ${only}. Try: ${STEPS.map((s) => s.name).join(', ')}`);
+  process.exit(1);
+}
+// Everything up to and including the last one asked for: a checkpoint is a
+// point in one playthrough, not an independent recipe.
+const upTo = STEPS.slice(0, STEPS.indexOf(wanted[wanted.length - 1]) + 1);
+
+mkdirSync(DEV, { recursive: true });
+const server = await serve(port);
+const browser = await pw.chromium.launch();
+const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+const began = Date.now();
+const say = (...a) => console.log(`  [${((Date.now() - began) / 1000).toFixed(0)}s]`, ...a);
+
+page.on('pageerror', () => {});   // the core rejects a few times on load; see PROVEN.md
+
+await page.goto(`http://localhost:${port}/index.html`);
+await page.locator('#gate-files').first().click();
+await page.setInputFiles('#romFile', resolve(cart.rom));
+await page.setInputFiles('#symFile', resolve(cart.sym));
+await page.waitForSelector('#ctrls:not(.hide)', { timeout: 120000 });
+await page.waitForTimeout(2000);
+say(`${cart.name} loaded`);
+
+/** Save the game the way the Save button does, and keep the bytes. */
+async function keep(name) {
+  const got = await page.evaluate(async () => {
+    const P = window.PILOT;
+    const r = await P.tasks.saveGame();
+    if (!r || !r.ok) return { ok: false, message: r && r.message };
+    const bytes = await P.gb.batterySave();
+    let bin = '';
+    for (const b of bytes) bin += String.fromCharCode(b);
+    return { ok: true, b64: btoa(bin), n: bytes.length };
+  });
+  if (!got.ok) { say(`could not save: ${got.message}`); return false; }
+  writeFileSync(savePath(name), Buffer.from(got.b64, 'base64'));
+  say(`kept dev/save-${name}.sav (${got.n} bytes)`);
+  return true;
+}
+
+const where = () => page.evaluate(async () => {
+  const P = window.PILOT;
+  const s = await P.tasks.snap();
+  return `${P.boot.where(s.map[0] * 256 + s.map[1])} · Lv${s.party[0] ? s.party[0].level : '—'}`
+    + ` · ${s.badges} badge(s)`;
+});
+
+const RUN = {
+  opening: (s) => page.evaluate(async (pick) =>
+    (await window.PILOT.boot.run(pick)).message, s),
+  errand: () => page.evaluate(async () =>
+    (await window.PILOT.boot.eggErrand()).message),
+  lv12: () => grind(12),
+  lv16: () => grind(16),
+};
+
+// The grind's own wiring, copied from the Grind button rather than invented:
+// `dry` means out of PP, which a Center fixes and a potion does not.
+const grind = (to) => page.evaluate(async (lvl) => {
+  const P = window.PILOT;
+  const r = await P.tasks.grind(0, lvl, {
+    maxBattles: 200,
+    heal: async (why) => (why === 'dry'
+      ? P.boot.healUp() : (await P.boot.healNow()).ok),
+    regrass: () => P.boot.backToGrass(),
+  });
+  return r && r.message;
+}, to);
+
+/** What the game actually is now, for the step's own `reached` to judge. */
+const reached = (step) => page.evaluate(async (src) => {
+  const s = await window.PILOT.tasks.snap();
+  // eslint-disable-next-line no-new-func
+  return Boolean(new Function('s', `return (${src})(s)`)(s));
+}, step.reached.toString());
+
+let failed = null;
+for (const step of upTo) {
+  say(`${step.name}: ${step.says}`);
+  // Twice at most. A grind wandering off the grass is a known flake rather
+  // than a broken recipe -- "no wild Pokemon appeared" with the lead standing
+  // on Route 29 -- and a second go from where the first stopped usually takes.
+  let ok = false;
+  for (let go = 0; go < 2 && !ok; go++) {
+    if (go) say('   that did not get there; one more go from here');
+    say(`   ${await RUN[step.name](starter)}`);
+    say(`   ${await where()}`);
+    ok = await reached(step);
+  }
+  if (!ok) { failed = step.name; break; }
+  if (!await keep(step.name)) { failed = step.name; break; }
+}
+
+if (!has('--keep-open')) { await browser.close(); server.close(); }
+else say(`browser left open on http://localhost:${port}/ — ctrl-c when done`);
+
+if (failed) {
+  console.log(`\nstopped at ${failed}, and no file was written for it — the game`);
+  console.log('never got to what that name claims. The checkpoints before it are');
+  console.log('built and usable; run it again to carry on from the last one.');
+  process.exit(1);
+}
+console.log('\nRestore one in a page that has the cartridge loaded:');
+console.log('    await PILOT.saves.install(bytes)   // the 32768 bytes of the file');
+console.log('    await PILOT.tasks.continueGame()');
+console.log('    await PILOT.boot.runScripts()      // a restore refuses input until this');
+console.log('    await PILOT.tasks.closeMenus()     // and can leave a window open');

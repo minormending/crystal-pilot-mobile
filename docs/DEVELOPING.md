@@ -931,6 +931,74 @@ It never writes over the file it read, and it refuses a save whose checksum
 already disagrees with its bytes: re-sealing that would turn a save the game
 refuses into a save the game accepts and is wrong about.
 
+### A save to start from
+
+```
+tools/make-save                   every checkpoint, into dev/
+tools/make-save --only lv12       just one of them
+tools/make-save --list            what it would build, and what is there
+tools/make-save --starter cyndaquil
+```
+
+Three checkpoints of one playthrough — `opening`, `errand`, `lv12` — written as
+`dev/save-<name>.sav`. Each starts where the last ended, so asking for `lv12`
+runs the two before it.
+
+**It is a tool rather than four committed files, and that is not only policy.**
+A save is game data: `.gitignore` excludes it, `check-app` fails the build if
+one is ever tracked, and the README promises twice over that none is
+distributed here. But the better half of the argument is portability. A save is
+only as good as the build it came from, everybody here builds their own ROM,
+and a hack's is a different cartridge again — so a recipe re-run against *your*
+ROM is repeatable in a way somebody else's bytes are not. It finds your
+cartridge the same way every other tool on this page does.
+
+**What it is for is reaching a trainer.** A fresh save cannot walk to Violet,
+Route 29 has no trainers, Route 30's objects are not loaded from its southern
+end, and `duelHere`'s `_approach` refuses a trainer four tiles away on an open
+route. Five harnesses failed on *reaching* somebody before one worked, and none
+of them failed on the thing being tested — the whole account is in
+[What is proven](PROVEN.md#what-has-been-run). A kept battery turns that into a
+one-second restore:
+
+```js
+await PILOT.saves.install(bytes)   // the 32768 bytes of the file
+await PILOT.tasks.continueGame()
+await PILOT.boot.runScripts()      // a restore refuses input until this runs
+await PILOT.tasks.closeMenus()     // and can leave a window open behind it
+```
+
+Those last two are not ceremony. A restored game answers no button until the
+map scripts have run, and the restore can leave a Pokémon summary window open —
+which the pilot reads as *turned back* and which then refuses every leg of a
+walk, a long way from anything that looks like a save.
+
+**This is the one tool here that needs a browser**, because a save needs the
+emulator and the emulator needs a browser. Playwright is not a dependency of
+this repository — there are none, the app is static and the suite runs on a
+fake Game Boy — so it looks for one and says so if there is none, the same way
+the rest say so when there is no cartridge. `PLAYWRIGHT_DIR` points it at an
+install you already have.
+
+**A step that does not reach what it names writes nothing**, and that rule was
+earned: the first version wrote a checkpoint whenever the in-game save
+succeeded, and an in-game save succeeds whatever happened before it — so a
+grind that stopped at Lv12 saying *no wild Pokémon appeared* produced a file
+called `lv16` holding a Lv12 game. A checkpoint that lies about its contents is
+worse than a missing one: whatever restores it fails somewhere else entirely,
+a long way from the cause. Each step is asked of the *game state* afterwards
+instead — `party[0].level >= 12`, balls in the bag — gets one retry, and then
+stops with nothing written.
+
+**Lv12 is the top of the list on purpose.** Lv16 was a checkpoint until it
+failed twice running on Route 29, once with *no wild Pokémon appeared* and once
+with *5 battles in a row went nowhere*. `tools/dex --party` on the Lv12 save
+shows the lead holding `SCRATCH 8, LEER 30, RAGE 20` — eight PP on the only
+move worth swinging — which is at least a plausible part of it, though nothing
+here establishes that it is the whole cause. It does not matter either way:
+Lv12 is enough for what these exist for, and a checkpoint that fails half the
+time is worse than one that stops lower and always works.
+
 ### Asking the cartridge, without running it
 
 ```
