@@ -30,6 +30,62 @@ Every step of that is the first time it has been watched on a cartridge since
 the battle and job code was rewritten, and one of them failed the first time
 round — see [the eleventh pass](#the-audits-and-how-each-defect-was-actually-found).
 
+**Auto-battle, both halves, on the real cartridge.** The one thing in this app
+that acts without a press, so what had to be shown is not that it *can* fight --
+`battleHere` is the Fight button's own job and predates it -- but that it starts
+on the right battles and stays out of the wrong ones.
+
+The wild half is easy to watch: arm **Wild** on Route 29, hold a d-pad button
+the way a thumb does, and let the idle loop run. Seven battles taken and won
+unprompted -- RATTATA, HOPPIP, PIDGEY x3, HOPPIP, PIDGEY -- between 0.6 and 1.1
+seconds each. Arm **Trainers** in the same grass and six wild battles in a row
+are left on screen with the pad still live.
+
+The trainer half took five failed harnesses first, and the failures are worth
+recording because none of them was about the feature. Route 29 has no trainers;
+Route 30's objects are not loaded from its southern end; `duelHere`'s
+`_approach` refuses a trainer four tiles away on an open route; Violet cannot be
+walked to from a fresh save. The way in was a **kept battery** -- play to Lv16
+headless once, `gb.batterySave()` those 32,768 bytes to a file, and restore them
+with `saves.install` in about a second -- which turned a nine-minute dead end
+into a forty-second experiment that could be run six ways at once.
+
+**And then the first three trainer runs were wrong, in a way worth writing
+down.** They left `travelTo` in flight while auto-battle ran, which is a second
+driver -- and travel *fights* the trainers it meets, because a trainer battle
+cannot be fled. The purse rose, a trainer was beaten, and none of it could be
+attributed. It cannot happen in the app, where `travelTo` only ever runs inside
+`runTask` and `running` is what makes auto-battle stand down; it happened here
+because a test called the method directly. The tell was the bar reading *not in
+a battle* -- `battleHere`'s own refusal -- which was briefly mistaken for a
+defect in the latch.
+
+Done properly, one driver at a time: run the travel with auto-battle **off**,
+press Stop the instant `wBattleMode` reads 2, let it unwind, and a trainer
+battle is parked on screen with nothing running and the Battle button pressed
+zero times. Only then arm the pilot. Three for three:
+
+```
+travel unwound: "stopped" | inBattle=true mode=2 | Y3300 lead 45/45 | #battle presses: 0
+      | inBattle=true  mode=2 | Y3300 | "ready"                  | "heading up"
+PILOT | inBattle=true  mode=2 | Y3300 | "auto-battling CATERPIE" | ""
+PILOT | inBattle=true  mode=2 | Y3300 | "auto-battling CATERPIE" | "fighting the trainer CATERPIE"
+      | inBattle=false mode=0 | Y3364 | "won the trainer battle" | "kind=trainer outcome=won seconds=1.2 lead=45/45"
+#battle pressed 1x  |  purse Y3300 -> Y3364  |  lead 45/45 -> 45/45
+```
+
+**Pressed once**, which is the latch doing its job, and the +Y64 is the same
+prize [the Duel row measured](USING.md#duel-fighting-a-trainer-on-purpose)
+against the Youngster on Route 30 -- the same trainer, arrived at a different
+way. A trainer's *second* Pokemon is fought too: a separate run went PIDGEY Lv2
+to RATTATA Lv4 inside one battle with the pilot holding the joypad throughout,
+which is the case a wild battle never exercises.
+
+**Stop sticks**, and that was written down from reading the code and then
+measured because of it: pressed mid-fight against a HOPPIP on Route 29, the
+battle stayed on screen for twelve seconds and ten idle refreshes with the pad
+back and nothing restarting it.
+
 Proven, and visible in [the screenshot on the front page](../README.md):
 
 - a 2 MB Crystal ROM boots in the browser
