@@ -839,6 +839,63 @@ Two things worth knowing before you press it:
 - **Losing costs you.** A whiteout takes half your money and sends you to the
   last Pokémon Center. Heal first if the row above this one is offering to.
 
+## Auto-battle: the pilot fights while you walk
+
+Everything else in this app waits to be pressed. **Auto-battle is the one thing
+the pilot does on its own** — you play, and when a battle starts it takes the
+joypad, fights it, and hands it straight back.
+
+It is in **Settings**, under the speed slider, and one button cycles four ways:
+
+| The button says | What happens |
+| --- | --- |
+| **Off** | battles are yours — nothing changes |
+| **Wild** | the pilot fights wild Pokémon, and leaves trainers to you |
+| **Trainers** | the pilot fights trainers, and leaves wild Pokémon to you |
+| **All** | the pilot fights everything |
+
+On the row itself those read *battles are yours*, *fights wild ones*, *fights
+trainers* and *fights everything* — four sentences of the same length, so the
+button does not move down the screen between two presses of a control you may
+well press three times.
+
+**Four settings and not a switch, because the two kinds of battle are wanted in
+opposite directions by the same person on the same walk.** Trainers are
+unavoidable and each is fought exactly once, so handing them over loses nothing
+and is what makes walking a long route bearable. Wild battles are the ones you
+may actually want: a pilot set to **Wild** will knock out the SENTRET you were
+about to throw a ball at, because fighting is what it was told to do and *Throw*
+is a press it does not wait for. So **somebody hunting wants Trainers**, and
+somebody just getting to the next town wants **All**.
+
+What it looks like from the outside is the bar. The status reads
+*auto-battling PIDGEY* rather than *fighting* — the word the Fight button you
+did not press would have used — so a battle that takes itself out of your hands
+says which of you started it. Then the usual line:
+
+> **won the wild battle** · kind=wild  outcome=won  seconds=0.7  lead=19/26
+
+It is the same job the **Fight** button beside the pad runs, so it reaches for
+the bag the same way, takes the same undo point, and **Stop** stops it. The only
+difference is who pressed it.
+
+Three things worth knowing:
+
+- **One go per battle.** If the pilot cannot finish a fight — no PP left,
+  nothing in the party that can touch what is out there, a Bug-Catching Contest
+  menu it will not drive — it says so once and leaves the battle on screen for
+  you. It does not try again until the next battle, which is what stops a fight
+  it cannot win from restarting every second for ever.
+- **It only ever acts while nothing else is running.** A battle met in the
+  middle of a grind, a walk or a *Run the list* belongs to that job, and this
+  stands out of the way.
+- **Stop sticks.** Press Stop during an auto-battle and the pilot does not pick
+  the same battle up again a second later — the go has been had, and the battle
+  is yours from there. It arms again when the battle ends.
+- **It travels between your devices.** Like the speed and the quarry, and unlike
+  Sound, Buzz and Debug — it is a choice about the game rather than about the
+  phone. Set it on one device and the other has it too.
+
 ## It finds the Centers and the Marts itself
 
 Heal used to walk to one of the two Pokémon Centers written into this app, and

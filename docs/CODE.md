@@ -4587,7 +4587,7 @@ file says they do.
 
 ## 8i. Reaching an hour
 
-<!-- covers: gen2/jobs.js gen2/engine.js gen2/romdata.js gen2/state.js gbcore/saves.js app/rows.js @ e2866458a5a4 -->
+<!-- covers: gen2/jobs.js gen2/engine.js gen2/romdata.js gen2/state.js gbcore/saves.js app/rows.js @ 054317639ee4 -->
 
 A third of Johto's grass is behind the clock. HOOTHOOT is on Route 29 after
 dark and nowhere on it at noon, and for four versions the usage guide said the
@@ -5364,7 +5364,7 @@ This section is the code behind the screen. For the same screen described from
 the outside — what it offers, what is behind which door, and how the three
 layouts differ — see [The interface](INTERFACE.md).
 
-<!-- covers: app/main.js index.html @ 0833a274eb44 -->
+<!-- covers: app/main.js index.html @ f161c001dc40 -->
 
 The app does two jobs and used to look identical doing both: you play it by
 hand, or you send the pilot off to work for ninety seconds.
@@ -5389,6 +5389,18 @@ stateDiagram-v2
         the tabs stay live: a job is watched from any pane
     end note
 ```
+
+**One arrow into Piloting is not a press**, and it is the only one. With
+auto-battle on, a battle starting while you play moves the app across that line
+by itself: the idle refresh sees the battle, presses the Battle button, and
+everything downstream is the ordinary transition — `runTask`, `setMode(true)`,
+the pad dimming, Stop on the bar. That it is the *ordinary* transition is the
+design. The alternative was a quieter mode that fought without dimming the pad,
+and it would have meant a second set of rules about what the pad does while the
+pilot has the joypad, for the sake of not admitting that it has it. The bar says
+*auto-battling PIDGEY* rather than *fighting*, which is the only place the two
+differ, and it exists so the person can tell that the thing they did not press
+is the thing that started.
 
 **A press has to be felt, because it cannot be seen.** The thumb making it is
 on top of the key it pressed, so a fill and an inset shadow are both under the
@@ -6456,7 +6468,7 @@ seconds by a page whose loop was supposedly running.
 
 ### One thing at a time
 
-<!-- covers: app/main.js @ ed67caceda58 -->
+<!-- covers: app/main.js @ f47a44d6b6d0 -->
 
 One Game Boy, one joypad, one canvas — so a great deal of this app is about
 making sure two things are never driving them at once. There are three claims,
@@ -6551,6 +6563,36 @@ and the dot goes red. Which is the shape found in `Join` three audits earlier,
 in the other half of the app: a `finally` without a `catch`, on a path nobody
 presses twice.
 
+**And a fourth way a job starts, which is the only one nobody pressed.**
+Auto-battle watches from the tail of the idle refresh and, when the battle on
+screen is one it was told to take, presses the Battle button itself. It is safe
+to fire and forget — `refresh` does not await it, because a battle is tens of
+seconds and a refresh is a paint — and it is safe *only because* of the rule
+this section opens with: `runTask` claims `running` before its first await, so
+by the time the call returns, the next refresh is already refusing to start a
+second one. Written the way `runTask` used to be, two refreshes a second apart
+would both have read false and both have started a fight.
+
+It carries a latch of its own, `autoBattleTaken`, and that one is not about two
+drivers — it is about one driver trying for ever. A battle the loop cannot
+finish stays on screen: no PP left, nothing in the party that can touch what is
+out there, a Bug-Catching Contest menu it refuses to drive. Without the latch
+every idle refresh would start the same losing fight again, 1.2 seconds apart,
+taking an undo point each time. It is set when a go has been had and cleared by
+seeing the overworld again, so the rule is *one attempt per battle* and the
+thing that re-arms it is the battle ending, however it ended.
+
+Which also makes **Stop** mean what it says. The press ends the job — through
+`fightBattle`'s own loop, which checks `cancelled` and returns rather than
+letting the sentinel fly, so the bar reads *the wild battle went nowhere* and
+not *stopped* — and `runTask`'s `finally` refreshes with the battle still on
+screen and the latch still set. Nothing starts it again a second later.
+Measured: Stop pressed mid-fight against a HOPPIP on Route 29, then twelve
+seconds and ten idle refreshes with the battle up and the pad back. The latch
+was written for the fight that cannot be won and it is what makes Stop hold as
+well, which is the same state seen from two sides: the pilot has had its go at
+this battle.
+
 **And the one place `closeMenus` cannot help is a battle**, which the fix below
 made visible rather than caused. The battle menu is a window that B will not
 close, so pressing B until no window is open can only exhaust its budget — and
@@ -6598,7 +6640,7 @@ before a step is taken, so a stopped walk does not move at all.
 
 ### What is behind the Gym door, before you open it
 
-<!-- covers: gen2/romdata.js gen2/engine.js app/rows.js @ 413bba9e9cd9 -->
+<!-- covers: gen2/romdata.js gen2/engine.js app/rows.js @ 3b3dbf338cef -->
 
 The Gym row could say where the Gym is and who is in it. **Whether it is worth
 going** is two facts the cartridge has had all along, and neither of them
@@ -7010,7 +7052,7 @@ a conversation.
 
 ### The card behind a party row
 
-<!-- covers: app/rows.js app/main.js index.html @ bd113f99c21f -->
+<!-- covers: app/rows.js app/main.js index.html @ fb01bd8b75ac -->
 
 Two questions the game itself will not answer about a Pokémon you are
 carrying — *what is this made of* and *what is it about to become* — and both
@@ -7099,7 +7141,7 @@ at body size.
 
 ### Running the list
 
-<!-- covers: app/rows.js app/main.js @ 52ed512c3802 -->
+<!-- covers: app/rows.js app/main.js @ b19417ae1cd5 -->
 
 The app has spent forty passes learning to answer one question — *what can the
 pilot do here, and which of those is worth most?* — and twenty showing the
@@ -7147,6 +7189,14 @@ live, and a second path into a job is a second path to keep in step. Which
 meant the handlers had to start handing their results back: seven of the nine
 awaited their job and dropped the answer, and a runner cannot tell a job that
 failed from one that worked without it.
+
+That rule has a second user now. Auto-battle starts a fight nobody pressed for,
+and it does it by pressing `#battle` — so the heals it reaches for, the undo
+point it takes and the line it prints are the Fight button's, not a second
+opinion about them. The one thing it needs that the button did not offer is its
+own busy line, which is a parameter on the handler rather than a second handler:
+`(_ev, busy = 'fighting')`, the event argument left where the browser puts one
+so that `$(button).onclick()` from in here goes on getting the default.
 
 The one place it prefers a different button is Duel, where the row has offered
 **Clear** beside it since Clear was written: the same fights in one job with its
@@ -7223,7 +7273,7 @@ to deposit your last Pokémon.
 
 ### The settings and the save card
 
-<!-- covers: index.html app/main.js @ 0833a274eb44 -->
+<!-- covers: index.html app/main.js @ f161c001dc40 -->
 
 The pilot's own list got a glyph column, shorter names and a slot to fill in
 v165. These two cards did not, and reading them found that they had a different
@@ -7255,7 +7305,45 @@ order to change something*. The row appears now only when something is kept —
 which is when it has both a fact and a button — and the behaviour it was
 explaining is a sentence in *How this works* with the other explanations.
 
-**`Sound` sits above it, and it is off until asked.** This app was silent for
+**`Auto-battle` is the one row here that changes what the pilot does rather
+than what the page looks like**, and it is a **cycling button** — the shape
+`Colour` was taken *off* two paragraphs above. Worth saying why that is not a
+contradiction, because the earlier fix reads like a rule against cycling
+buttons and is not one. What was wrong with `Colour` was a button printing one
+word with nothing anywhere to say there were two more; it became a segment group
+because three segments fit on a row. Four do not, at 320px, beside a glyph, a
+label and a sentence. So this keeps the button and puts the missing information
+in the place `Colour` had nothing in — the row's own `.val`, which reads
+*fights wild ones* rather than repeating the word on the button. (The
+`Colour` row itself is gone now, with the second palette; see *Colour* in
+`INTERFACE.md`. The lesson it taught is what survives.)
+
+`aria-pressed` is deliberately **absent**, unlike every other button on this
+card. It means a two-state control, and a screen reader given it on four states
+is told that Trainers and All are the same kind of answer. The accessible name
+is written out on every paint instead — *Auto-battle: fights trainers. Press to
+change.* — because a button whose name is only its value announces "Off" with
+no clue what is off.
+
+It is also the only row on this card that is **shared into a room**. Sound,
+Buzz, Debug and the theme are facts about the device in your hand; this is a
+fact about the game, so it travels with the speed slider directly above it. See
+*What it remembers* for which side of that line a preference falls on and why.
+It hides with the speed slider too, before a cartridge is loaded, for the reason
+that row does: it is a control over nothing until there is a game.
+
+**All four sentences are the same length, and that is deliberate.** `.themerow`
+wraps, so a value a word longer than the row can hold drops the button onto a
+second line — which the Sound row does today and can afford to, because it is a
+switch pressed once and the button moving afterwards costs nothing. A cycle
+cannot: Off to All is three presses in a row, and a button that jumps 24px after
+the first is a button the second misses. Measured on an iPhone 13, where the
+first draft — *the pilot fights wild Pokémon* — took the row from 31px to 60px
+and the button from `top=527` to `top=551`. Dropping *the pilot* from all three
+fixed it: the row is labelled *Auto-battle* and this app has one pilot, so
+saying so again in every value was exactly the words that did not fit.
+
+**`Sound` sits below it, and it is off until asked.** This app was silent for
 its first two hundred and forty versions, and it is opened on a phone that may
 be in a pocket or beside someone asleep — a preference that did not exist
 yesterday should not start making noise today because the code learned how. Like
@@ -7632,7 +7720,7 @@ Four places, and knowing which is which is most of understanding *Forget*:
 
 | where | holds | written by | whose cartridge it is |
 | --- | --- | --- | --- |
-| `localStorage` — `crystal-pilot-opts` | speed, grind preset, hunted species, and a stamp | `remember.js` | nobody's — preferences outlive cartridges |
+| `localStorage` — `crystal-pilot-opts` | speed, grind preset, hunted species, destination, auto-battle, and a stamp | `remember.js` | nobody's — preferences outlive cartridges |
 | IndexedDB `crystal-pilot-files`, store `kept` | `rom`, `sym`, `battery`, `meta` | `remember.js` | `meta.tag`, the ROM's fingerprint |
 | IndexedDB `crystal-pilot`, store `slots` | five records and five `:about` summaries | `saves.js` | `rec.tag` on every slot |
 | IndexedDB `wasmboy`, store `keyval` | the library's own per-cartridge record | WasmBoy, and `saves.install` | the key *is* the identity: ROM bytes `0x134`–`0x14E` |
@@ -7958,7 +8046,7 @@ they have been installed.
 
 ### Watching the other device's screen
 
-<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ 3f84ad955870 -->
+<!-- covers: gbcore/stream.js app/main.js gbcore/room.js @ d77bacc67fe4 -->
 
 One device shows its screen; the other watches it, and plays it if the first
 one says so. The picture goes straight between them over WebRTC and never
@@ -7992,6 +8080,17 @@ an offer stamped later than the last one it answered, the host accepts an answer
 stamped later than the last one it accepted, and the host offers when the ask is
 newer than the ask it last offered to. `needsOffer` is that last one, and it is
 the branch that got it wrong first — see below.
+
+**The remote pad can now be taken away by nobody.** `applyRemoteInput` refuses
+while `running`, and the watching device is told so by `tellInput` from inside
+`setMode` — which is why a walk that deliberately skips `setMode` had to call
+`tellInput` by hand. Auto-battle needs nothing new here: it starts an ordinary
+`runTask`, so the note goes out on the same path. What is new is the *cause*. On
+the host, the pad dimming is explained by a battle appearing on the screen in
+front of you; on the watcher it is a pad that stops answering while somebody
+else's game does something. The note is the only thing that makes the second
+case legible, and it is sent because auto-battle went through the front door
+rather than around it.
 
 **Nothing on this path may throw at its caller**, and `send` was one line short
 of that. It checks `channel.readyState === 'open'` and then calls

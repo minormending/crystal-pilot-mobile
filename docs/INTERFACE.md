@@ -520,6 +520,28 @@ The offers list is therefore empty during a battle, by design, and the hint says
 where the two actions went. An empty list with no explanation reads as broken
 rather than as modal.
 
+### And a battle nobody has to answer at all
+
+**Auto-battle**, in the settings card, is the one control in this app that makes
+the pilot act without a press. With it on, the Fight button above is pressed for
+you the moment a battle it was told to take appears — and the app crosses into
+piloting mode exactly as it would have if you had pressed it: the pad dims, Stop
+appears, the bar carries the pilot's voice.
+
+Four states, cycled by one button: **Off**, **Wild**, **Trainers**, **All**. The
+split is not fussiness. Trainers are unavoidable and fought once each, so giving
+them away costs nothing; wild battles are the ones somebody may be *hunting*,
+and a pilot told to fight them will knock out the SENTRET you were lining a ball
+up at, because Throw is a press it does not wait for. The person hunting wants
+Trainers; the person walking to the next town wants All. A single switch would
+have had to be wrong for one of them.
+
+The one word that differs from a pressed battle is the busy line: *auto-battling
+PIDGEY*, where the button says *fighting*. It is a small thing and it is the
+only place the two are distinguishable, which is why it is there — a pilot that
+takes the joypad out of somebody's hand and reports it in the same words the
+button would have used looks like a fault the first time it happens.
+
 ### Catch this one no longer refuses a full party
 
 The row used to read *the party is full* once you carried six, because the app
@@ -1420,4 +1442,4 @@ So this page carries a marker naming the files it describes and the hash they
 had when it was last read against them. `tools/docs-check` reports it when they
 move, and the pre-commit hook blocks on that report.
 
-<!-- covers: index.html app/main.js app/rows.js @ bd113f99c21f -->
+<!-- covers: index.html app/main.js app/rows.js @ fb01bd8b75ac -->

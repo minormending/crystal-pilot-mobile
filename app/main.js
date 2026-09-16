@@ -8,10 +8,12 @@ import { Trace } from '../gbcore/trace.js';
 import { Symbols, sharedNames } from '../gen2/symbols.js';
 import { runSequence, sequenceSaid } from './runner.js';
 import {
-  describeAge, describeAuto, describeDex, describeDexTotals, describeHandoff,
+  AUTO_BATTLES, autoBattleTakes,
+  describeAge, describeAuto, describeAutoBattle, describeDex, describeDexTotals,
+  describeHandoff,
   describeKept, describeOffers, describePartyTotals, describeReplaced, describeRoom,
   describeRows, describeSaying, describeScreen, describeSlot, describeTitle,
-  describeUndo, findSpecies, hoursLine, joinFailure, otherHour,
+  describeUndo, findSpecies, hoursLine, joinFailure, nextAutoBattle, otherHour,
 } from './rows.js';
 import { VERSION } from '../gbcore/version.js';
 import { adoptable, forgetKept, keepBattery, keepRom, keepSym, keptMeta,
@@ -142,12 +144,27 @@ const SPEEDS = [1, 2, 4, 8, 16];
 // button that offered it.
 const GRIND_SPECS = [...document.querySelectorAll('[data-target]')]
   .map((b) => b.dataset.target);
-const LIMITS = { speeds: SPEEDS.length, grinds: GRIND_SPECS };
+const LIMITS = { speeds: SPEEDS.length, grinds: GRIND_SPECS,
+                 autobattles: AUTO_BATTLES };
 // The choices in force: last session's to begin with, and whatever another of
 // your devices has chosen since. Not a const any more, because a room can
 // change it -- but still only ever written through adoptOptions, so there is
 // one place where an option arriving from somewhere else is checked.
 let wanted = readOpts(LIMITS);
+// Which battles the pilot takes without being asked, out of the remembered
+// group above. Held in a variable of its own rather than read from `wanted`
+// at the moment it is needed, because `wanted` is also what a room writes
+// into -- and the one place that copies across is `applyWanted`, which is the
+// one place an arriving choice is allowed to move a control.
+let autoBattle = wanted.autobattle || 'off';
+// Whether the pilot has already had its go at the battle now on screen.
+//
+// One attempt per battle, and the flag clears by seeing the overworld again.
+// Without it a battle the loop cannot finish -- a Bug-Catching Contest menu it
+// refuses to drive, a party with no PP left -- would be started again by every
+// idle refresh for as long as somebody left it on screen, which is a job
+// restarting every 1.2 seconds for ever and an undo point taken each time.
+let autoBattleTaken = false;
 // A room's options that arrived while a job was running. Never repaint under a
 // thumb mid-task: the target moving while a grind runs is alarming, and the
 // job is using the old value anyway.
@@ -531,6 +548,7 @@ async function reallyStart() {
   closeGateway();
   $('#ctrls').classList.remove('hide');
   $('#speedbox').classList.remove('hide');
+  $('#autobattlerow').classList.remove('hide');
   $('#huntcard').classList.remove('hide');
   $('#savecard').classList.remove('hide');
   // Before a game there are three gateway cards and nothing to switch between,
@@ -2510,6 +2528,10 @@ async function refresh() {
     target = Math.min(100, s.party[0].level + 1);
   }
   paintJobs(s);
+  // Last, and the only line in here that *does* something rather than drawing
+  // it. After the paint so the screen already shows the battle it is about to
+  // take, and not awaited -- see autoBattleNow.
+  autoBattleNow(s);
 }
 
 // What a .sym has to contain to be this game's. Hoisted out of the picker
@@ -3345,6 +3367,72 @@ if ($('#soundtoggle')) {
   paintSound();
 }
 
+// --- auto-battle -------------------------------------------------------------
+// Four states, cycled by one button. What each of them takes is `rows.js`'s to
+// answer; this is the switch and the paint.
+
+/** The row, from the mode in force. */
+function paintAutoBattle() {
+  const btn = $('#autobattletoggle');
+  if (!btn) return;
+  const { label, text } = describeAutoBattle(autoBattle);
+  btn.textContent = label;
+  // Spelled out rather than left to the button's own word, because the word is
+  // the *value* and a button whose accessible name is only its value announces
+  // "Off" with no clue what is off. No `aria-pressed`: see the markup.
+  btn.setAttribute('aria-label', `Auto-battle: ${text}. Press to change.`);
+  $('#autobattlestate').textContent = text;
+}
+if ($('#autobattletoggle')) {
+  $('#autobattletoggle').onclick = () => {
+    autoBattle = nextAutoBattle(autoBattle);
+    // Through saveOption rather than writeOpts, so the room hears about it.
+    // It is one of the shared choices, and the three toggles below this one
+    // are not -- which is the only difference between this handler and theirs.
+    saveOption({ autobattle: autoBattle });
+    paintAutoBattle();
+    // Turning it on in front of a battle already on screen should take that
+    // battle, not the next one. The flag is only ever set by a go having been
+    // had, and there has not been one under this mode.
+    autoBattleTaken = false;
+  };
+  paintAutoBattle();
+}
+
+/**
+ * Take the battle on screen, if this is one the pilot was told to take.
+ *
+ * Called from the tail of `refresh`, off the snapshot that refresh already
+ * has. A watcher of its own would be a second read of the same work RAM on the
+ * same timer, and the idle refresh is the app's heartbeat for exactly this
+ * kind of question.
+ *
+ * **It presses the Battle button rather than calling `battleHere`**, which is
+ * the same decision the runner made and for the same reason: the handler is
+ * where the heals, the undo point, the busy line and the reporting live, and a
+ * second path into a job is a second path to keep in step.
+ *
+ * Not awaited by `refresh`, deliberately. A battle is tens of seconds and
+ * refresh is a paint; awaiting it would hold the idle timer's callback open for
+ * the length of a fight. Nothing races, because `runTask` claims `running`
+ * before its first await -- so by the time this function returns, the next
+ * refresh is already refusing to start a second one.
+ */
+function autoBattleNow(s) {
+  // The overworld re-arms it. Asked before the guards below so that a battle
+  // finished while a job held the joypad still clears the flag.
+  if (!s.inBattle) { autoBattleTaken = false; return; }
+  if (running || autoOn || autoBattleTaken || !tasks) return;
+  if (!autoBattleTakes(autoBattle, s, state && state.e)) return;
+  autoBattleTaken = true;
+  const foe = romdata ? romdata.speciesName(s.enemy.species) : 'it';
+  // The busy line says which of you started this. A pilot that takes the
+  // joypad out of somebody's hands and then reports "fighting" -- the same
+  // word the button they did not press would have used -- is a pilot that
+  // looks like a bug the first time it happens.
+  $('#battle').onclick(null, `auto-battling ${foe}`);
+}
+
 // --- speed ------------------------------------------------------------------
 // Only the idle loop is affected. Tasks drive their own frames as fast as they
 // can, which is what makes a grind worth starting.
@@ -3706,9 +3794,18 @@ $('#go').onclick = async () => {
 // --- the three that act on where you already are ----------------------------
 // No parameters and no picking: each one reads the situation and either does
 // the obvious thing or says why it cannot.
-$('#battle').onclick = async () => {
+/**
+ * Fight what is in front of you.
+ *
+ * `busy` is the line on the bar while it runs, and it is a parameter for one
+ * caller: the auto-battle above, which starts this same job without anybody
+ * having pressed anything. It comes second so that the browser's own event
+ * argument still lands where an event goes, and so the runner's
+ * `$(button).onclick()` keeps getting the default.
+ */
+$('#battle').onclick = async (_ev, busy = 'fighting') => {
   if (!tasks) return;
-  const res = await runTask('#battle', 'fighting',
+  const res = await runTask('#battle', busy,
     () => tasks.battleHere({ heals: title && title.heals }));
   progress(res ? Object.entries(res.stats)
     .map(([k, v]) => `${k}=${v}`).join('  ') : '');
@@ -4162,6 +4259,13 @@ function applyWanted() {
     showSpeed();
   }
   if (wanted.grind && lastLead !== null) pickTarget(wanted.grind, false);
+  // Null means the other device never chose, which is not a choice of `off` --
+  // the same distinction the speed above makes, and the one that stops a
+  // tablet that has only ever moved the slider turning the pilot off here.
+  if (wanted.autobattle !== null && wanted.autobattle !== autoBattle) {
+    autoBattle = wanted.autobattle;
+    paintAutoBattle();
+  }
   if (wanted.hunt !== huntWanted) {
     // Dropped rather than switched: refreshSpecies owns the rule about what can
     // be hunted where and when, and clearing its key makes it rebuild and

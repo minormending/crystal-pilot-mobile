@@ -1029,6 +1029,96 @@ export function describeAuto(offers, rows, { last = null, changed = true } = {})
   return { key, enabled: true, text: `starts with ${name}` };
 }
 
+// --- auto-battle -------------------------------------------------------------
+//
+// The one thing the pilot does without being asked. Everything else in this app
+// waits for a press; this stands behind you while you play and takes over when
+// a battle starts.
+//
+// Which makes the *shape* of the option the interesting part rather than the
+// mechanism, and it is why there are four settings and not a switch. The two
+// kinds of battle are wanted in opposite directions and by the same person on
+// the same walk:
+//
+//   - **Trainers** are unavoidable and each one is fought once. Handing them to
+//     the pilot loses nothing, and it is what makes walking a route bearable.
+//   - **Wild** battles are the ones you may actually want. A pilot on `wild`
+//     knocks out the SENTRET you were about to throw a ball at, because
+//     fighting is what it was told to do and Throw is a press it does not wait
+//     for. Somebody hunting wants `trainers`; somebody walking to the next town
+//     wants `all`.
+//
+// A switch would have had to pick one of those and be wrong for the other half
+// of the time.
+//
+// The order is the order the button cycles in, and `off` is first because it is
+// where a setting nobody has chosen starts.
+export const AUTO_BATTLES = ['off', 'wild', 'trainers', 'all'];
+
+/** The next mode the button offers, wrapping at the end. */
+export function nextAutoBattle(mode) {
+  const at = AUTO_BATTLES.indexOf(mode);
+  return AUTO_BATTLES[(at + 1) % AUTO_BATTLES.length];
+}
+
+/**
+ * Would the pilot take *this* battle on its own?
+ *
+ * `engine` is the cartridge's own profile, and `trainerBattle` is the number
+ * `wBattleMode` holds for one. Reading it off the profile rather than writing 2
+ * here is the same discipline the rest of the app follows for a title that
+ * moved it -- and it is why the refusal below exists.
+ *
+ * **A profile that cannot say which kind this is refuses `wild` and
+ * `trainers`.** Without it `battleMode === undefined` is false for every
+ * battle, so every battle reads as wild -- and `wild` would then fight the
+ * trainers it was chosen to avoid, silently and in the one direction that
+ * cannot be undone. `all` is still answerable, because it does not need to
+ * tell them apart, and that is the whole of what is lost.
+ */
+export function autoBattleTakes(mode, s, engine = null) {
+  if (!s || !s.inBattle) return false;
+  if (mode === 'all') return true;
+  const says = engine && Number.isInteger(engine.trainerBattle);
+  if (!says) return false;
+  const trainer = s.battleMode === engine.trainerBattle;
+  if (mode === 'wild') return !trainer;
+  if (mode === 'trainers') return trainer;
+  return false;
+}
+
+/**
+ * The row, as a word on the button and a sentence beside it.
+ *
+ * The sentence says what the pilot will *do*, not what the mode is called: a
+ * row reading `Auto-battle  wild  [Wild]` says the same word three times and
+ * answers nothing. What somebody wants to know from that row is whether the
+ * thing they are about to walk into will be taken out of their hands.
+ *
+ * **All four are about the same length, and that is a layout decision made
+ * here rather than in the stylesheet.** `.themerow` wraps, so a sentence a
+ * word longer than the row can hold drops the button onto a second line and
+ * moves it 24px down the screen. Every other row on that card can afford
+ * that -- they are two-state switches, pressed once, and the button moving
+ * afterwards costs nothing. This one is a *cycle*: somebody going from Off to
+ * All presses three times in a row, and a button that jumps after the first
+ * press is a button the second press misses. Measured on an iPhone 13, which
+ * is where it bites first.
+ *
+ * So `the pilot` came out of all three. The row is labelled *Auto-battle* and
+ * the app has one pilot; saying so again in every value was what did not fit.
+ */
+export function describeAutoBattle(mode) {
+  const label = mode === 'off' ? 'Off' : mode[0].toUpperCase() + mode.slice(1);
+  const text = {
+    off: 'battles are yours',
+    wild: 'fights wild ones',
+    trainers: 'fights trainers',
+    all: 'fights everything',
+  }[mode] || 'battles are yours';
+  return { label, text };
+}
+
 /**
  * What the game itself is saying, as one line for the status bar.
  *

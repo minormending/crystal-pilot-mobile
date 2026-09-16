@@ -2149,6 +2149,25 @@
         <span class="x" id="speedx">1&times;</span>
       </span>
     </div>
+    <!-- Hidden until a cartridge is loaded, like Speed directly above and for
+         the same reason: it is a choice about the game, and before there is a
+         game it is a control over nothing. Shared into a room as well, unlike
+         the three below it -- see remember.js for which side of that line a
+         preference falls on.
+
+         Four states rather than a switch, and the button carries the one in
+         force rather than the one it would move to. That is the same reading
+         the On/Off buttons below offer -- what it says is what is true -- and
+         the four are cycled by pressing. `aria-pressed` is deliberately absent:
+         it means a two-state control, and claiming it here would tell a screen
+         reader that Trainers and All are the same answer. The label is written
+         out on every paint instead. -->
+    <div class="themerow hide" id="autobattlerow">
+      <svg class="jicon" viewBox="0 0 18 18" aria-hidden="true"><use href="#i-duel"/></svg>
+      <span class="lvlabel">Auto-battle</span>
+      <span class="val" id="autobattlestate">battles are yours</span>
+      <button class="themebtn" id="autobattletoggle">Off</button>
+    </div>
     <!-- Hidden on a device with no motor, which is every iPhone: Safari has
          never shipped the Vibration API, and a switch that does nothing is
          worse than no switch. Unlike the rows above this one is *not* shared

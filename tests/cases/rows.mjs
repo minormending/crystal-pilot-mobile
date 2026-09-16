@@ -7,7 +7,8 @@
 import { fakeRom, symbols, test, worldRam } from '../harness.mjs';
 import { GameState } from '../../gen2/state.js';
 import { readCode } from '../../gbcore/room.js';
-import { describeAge, describeHandoff, describeKept, describeOffers,
+import { AUTO_BATTLES, autoBattleTakes, describeAutoBattle, nextAutoBattle,
+         describeAge, describeHandoff, describeKept, describeOffers,
          describePartyTotals, describeReplaced,
          describeRoom, describeScreen, joinFailure, describeRows, describeSlot,
          betterGrind, betterHour, hoursLine, otherHour,
@@ -2241,4 +2242,83 @@ test('half a record is no row at all', async (t) => {
   t.eq(describeKept(null, NOW).show, false, 'nothing kept');
   t.eq(describeKept({ romName: 'a.gbc' }, NOW).show, false, 'a ROM with no symbols');
   t.eq(describeKept({ symName: 'a.sym' }, NOW).show, false, 'symbols with no ROM');
+});
+
+// --- auto-battle --------------------------------------------------------------
+//
+// The only thing in this app that takes the joypad without being asked, which
+// is why its refusals are worth more tests than its acceptances.
+
+const inBattle = (battleMode) =>
+  state.read(worldRam(sym, { battleMode, party: [{ species: CYNDAQUIL }] }));
+
+test('each mode takes the battles it is named after, and no others', async (t) => {
+  const wild = inBattle(1), trainer = inBattle(gen2.trainerBattle);
+  t.false(autoBattleTakes('off', wild, gen2), 'off takes no wild battle');
+  t.false(autoBattleTakes('off', trainer, gen2), 'nor a trainer');
+  t.true(autoBattleTakes('wild', wild, gen2), 'wild takes a wild one');
+  t.false(autoBattleTakes('wild', trainer, gen2),
+          'and leaves the trainer alone, which is the point of having both');
+  t.true(autoBattleTakes('trainers', trainer, gen2), 'trainers takes a trainer');
+  t.false(autoBattleTakes('trainers', wild, gen2),
+          'and leaves the wild one to whoever is hunting it');
+  t.true(autoBattleTakes('all', wild, gen2), 'all takes the wild one');
+  t.true(autoBattleTakes('all', trainer, gen2), 'and the trainer');
+});
+
+test('no battle is no battle, whatever the mode says', async (t) => {
+  const field = state.read(worldRam(sym, { party: [{ species: CYNDAQUIL }] }));
+  for (const mode of AUTO_BATTLES) {
+    t.false(autoBattleTakes(mode, field, gen2), `${mode} on the overworld`);
+  }
+  t.false(autoBattleTakes('all', null, gen2), 'and no snapshot at all');
+});
+
+test('a profile that cannot tell the two apart refuses to guess', async (t) => {
+  // Without `trainerBattle` every battle compares equal to `undefined` and so
+  // reads as wild -- which would have `wild` fighting the trainers it was
+  // chosen to avoid, silently, in the direction that cannot be undone. `all`
+  // survives because it never needed to tell them apart.
+  const trainer = inBattle(gen2.trainerBattle);
+  t.false(autoBattleTakes('wild', trainer, null), 'no profile, no wild');
+  t.false(autoBattleTakes('trainers', trainer, null), 'no profile, no trainers');
+  t.false(autoBattleTakes('wild', trainer, {}), 'an empty profile is the same');
+  t.true(autoBattleTakes('all', trainer, null), 'and all is still answerable');
+});
+
+test('a mode nothing recognises is off rather than everything', async (t) => {
+  // What `sanitise` hands over when a record names a mode this build dropped.
+  const wild = inBattle(1);
+  t.false(autoBattleTakes(null, wild, gen2), 'nothing chosen');
+  t.false(autoBattleTakes('everything', wild, gen2), 'a word from another build');
+});
+
+test('the button cycles through every mode and comes back', async (t) => {
+  const seen = [];
+  let mode = 'off';
+  for (let i = 0; i < AUTO_BATTLES.length; i++) {
+    seen.push(mode);
+    mode = nextAutoBattle(mode);
+  }
+  t.eq(seen, AUTO_BATTLES, 'four presses visit all four');
+  t.eq(mode, 'off', 'and the fourth comes back to off');
+  t.eq(nextAutoBattle('nonsense'), 'off',
+       'a mode that is not in the list lands on off, not past the end');
+});
+
+test('the row says what the pilot will do, not what the mode is called',
+     async (t) => {
+  // A row reading `Auto-battle  wild  [Wild]` says the same word three times
+  // and answers nothing. The sentence is the only part that is informative.
+  for (const mode of AUTO_BATTLES) {
+    const { label, text } = describeAutoBattle(mode);
+    t.true(label.length > 0, `${mode} has a word on the button`);
+    t.true(text.length > 0, `${mode} has a sentence beside it`);
+  }
+  t.contains(describeAutoBattle('trainers').text, 'trainers', 'trainers');
+  t.contains(describeAutoBattle('all').text, 'everything', 'all');
+  t.eq(describeAutoBattle('off').text, 'battles are yours',
+       'off says whose they are rather than what is disabled');
+  t.eq(describeAutoBattle('everything').text, 'battles are yours',
+       'and an unrecognised mode reads as off, the same way it behaves');
 });

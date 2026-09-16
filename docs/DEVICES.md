@@ -322,7 +322,7 @@ not even the Firebase SDK, which is fetched only when a room is opened.
 | 110 addresses out of it | yes, ~1KB | while sharing |
 | your save | yes, ~1–10KB gzipped | on every in-game save, while sharing |
 | where you are, as a sentence | yes | with the save |
-| speed, grind preset, hunted species | yes | while sharing |
+| speed, grind preset, hunted species, destination, auto-battle | yes | while sharing |
 | the picture, while *Show* is on | device to device, **not** to a server | while showing |
 
 ```mermaid
@@ -331,13 +331,13 @@ flowchart LR
         ROM["the ROM<br/>2MB"]
         SYM["the .sym<br/>1.8MB"]
         SAVE["the battery<br/>32KB"]
-        OPT["speed, preset, species"]
+        OPT["speed, preset, species,<br/>destination, auto-battle"]
     end
     STOP(("never<br/>leaves"))
     subgraph R["the room, one Firebase key"]
         A["110 addresses<br/>~1KB"]
         S["the save<br/>gzipped, ~1.2KB"]
-        O["the three options"]
+        O["the five options"]
     end
     OTHER["your other device"]
     ROM --> STOP
