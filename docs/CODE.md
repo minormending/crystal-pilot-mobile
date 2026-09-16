@@ -7451,13 +7451,13 @@ stands 3.40:1 clear of the recess it is moulded around.
 
 ### What it remembers
 
-<!-- covers: gbcore/remember.js @ 39927ca17b05 -->
+<!-- covers: gbcore/remember.js @ b4aba7f22ace -->
 
 The app forgets everything on a reload, and a reload is not rare: the Update
 button causes one deliberately, and a phone discards a background tab whenever
-it likes. Three choices survive it, in one JSON object under one localStorage
-key — the speed step, which grind preset was tapped, what was being hunted, and
-where Travel was pointed.
+it likes. Five choices survive it, in one JSON object under one localStorage
+key — the speed step, which grind preset was tapped, what was being hunted,
+where Travel was pointed, and whether the pilot takes a battle off your hands.
 
 Two rules do all the work, and both come from the same place: what comes back
 is a *suggestion*, written by an older build of this app on a phone whose owner
@@ -7471,12 +7471,22 @@ and `Lv20` are different intentions, not different amounts of one. The valid
 range comes from the markup and the `SPEEDS` table rather than being written
 down twice, so a preset cannot outlive the button that offered it.
 
-**Each group carries when it was chosen.** A fourth field, `at`, stamped on
+**Each group carries when it was chosen.** One more field, `at`, stamped on
 every write — it is what lets one device's choices be ordered against another's,
 and it survives a reload because a stamp invented at load time would make every
 reload look like a fresh decision. An absent or nonsense stamp reads as `0`,
 which loses to every real one: the record with nothing in it is the one that
 must not win.
+
+**Auto-battle is in the shared group, and that is the line the group draws.**
+Whether the pilot fights for you is a choice about the *game* — true of the save
+wherever it is being played — so it belongs beside the speed and the quarry
+rather than beside the buzz. It is stored as one of four words rather than as a
+number, and an unrecognised word is dropped rather than approximated for a
+sharper reason than the grind presets have: the value decides who is holding the
+joypad, and the failure that costs nothing is the pilot staying out of the
+battle. A record saying `everything` — a word some later build might use for
+what this one calls `all` — must not be read as close enough.
 
 **Two preferences are deliberately outside all of that.** Whether a press
 buzzes and whether the game makes a noise each have their own key and no stamp,

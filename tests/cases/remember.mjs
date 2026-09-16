@@ -8,7 +8,8 @@
 import { test } from '../harness.mjs';
 import { adoptable, readOpts, sanitise, writeOpts } from '../../gbcore/remember.js';
 
-const LIMITS = { speeds: 5, grinds: ['+2', '+5', '10', '20'] };
+const LIMITS = { speeds: 5, grinds: ['+2', '+5', '10', '20'],
+                 autobattles: ['off', 'wild', 'trainers', 'all'] };
 
 /** A localStorage that is only a Map, and one that refuses like a private window. */
 function fakeStore(seed = null) {
@@ -66,6 +67,20 @@ test('a grind preset the markup no longer offers is dropped', async (t) => {
   t.eq(sanitise({ grind: 12 }, LIMITS).grind, null, 'a resolved level, not a preset');
 });
 
+test('an auto-battle mode this build does not have is dropped, not guessed at', async (t) => {
+  // The same rule the grind presets follow, and here it decides who is holding
+  // the joypad. A record saying `everything` -- a word some later build might
+  // use for what this one calls `all` -- must not be read as close enough: the
+  // safe failure is the pilot staying out of the battle, and a mode nobody
+  // recognises falls back to exactly that.
+  t.eq(sanitise({ autobattle: 'wild' }, LIMITS).autobattle, 'wild', 'a mode that exists');
+  t.eq(sanitise({ autobattle: 'everything' }, LIMITS).autobattle, null,
+       'a mode from some other build');
+  t.eq(sanitise({ autobattle: 'WILD' }, LIMITS).autobattle, null, 'the wrong case');
+  t.eq(sanitise({ autobattle: 2 }, LIMITS).autobattle, null, 'an index, not a mode');
+  t.eq(sanitise({}, LIMITS).autobattle, null, 'nothing chosen is off');
+});
+
 test('a hunted species survives as a name, and absurdity does not', async (t) => {
   t.eq(sanitise({ hunt: 'SENTRET' }, LIMITS).hunt, 'SENTRET', 'a species name');
   t.eq(sanitise({ hunt: '' }, LIMITS).hunt, null, 'an empty name');
@@ -119,7 +134,8 @@ test('a record that is not JSON is replaced rather than believed', async (t) => 
 
 // --- taking another device's choices ----------------------------------------
 
-const NOTHING = { speed: null, grind: null, hunt: null, travel: null, at: 0 };
+const NOTHING = { speed: null, grind: null, hunt: null, travel: null,
+                  autobattle: null, at: 0 };
 const group = (over) => ({ ...NOTHING, ...over });
 
 test('an empty group is not a choice anybody made', async (t) => {
@@ -145,6 +161,23 @@ test('a group that says the same thing is not news', async (t) => {
   t.false(adoptable(group({ speed: 2, grind: '+3', at: 9 }),
                     group({ speed: 2, grind: '+3', at: 1 })),
           'identical, so nothing to apply');
+});
+
+test('an auto-battle mode is a choice, the way a destination had to be taught to be',
+     async (t) => {
+  // `travel` was added to the stored keys, the sanitiser and the writer and to
+  // neither of `adoptable`'s questions, and was refused at the door for four
+  // versions. `CHOICES` is derived from `OPT_KEYS` now so that cannot happen
+  // again -- this is the assertion that says so out loud for the next option,
+  // which is this one.
+  t.true(adoptable(group({ autobattle: 'trainers', at: 9 }), group({ at: 1 })),
+         'a mode on its own is a group worth taking');
+  t.true(adoptable(group({ speed: 2, autobattle: 'all', at: 9 }),
+                   group({ speed: 2, autobattle: 'wild', at: 1 })),
+         'and a group that differs only in the mode has changed');
+  t.false(adoptable(group({ speed: 2, autobattle: 'all', at: 9 }),
+                    group({ speed: 2, autobattle: 'all', at: 1 })),
+          'the same mode twice is still not news');
 });
 
 test('a destination is a choice, which it was not for four versions',

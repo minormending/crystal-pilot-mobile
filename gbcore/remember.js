@@ -27,11 +27,16 @@ const OPTS_KEY = 'crystal-pilot-opts';
 // The only keys kept. Anything else in the record is dropped on the next
 // write, so a field this build has stopped using does not live forever.
 //
-// `at` is when the three were last chosen *on this device*, and it is stored
+// `at` is when the rest were last chosen *on this device*, and it is stored
 // rather than derived because it has to survive a reload: it is what orders
 // this device's choices against another device's, and a stamp invented at load
 // time would make every reload look like a fresh decision.
-const OPT_KEYS = ['speed', 'grind', 'hunt', 'travel', 'at'];
+//
+// `autobattle` is in here rather than beside the buzz below, and that is the
+// same call the other four made: whether the pilot takes a battle off your
+// hands is a choice about *the game*, true of the save wherever it is being
+// played, and not a fact about the phone it is being played on.
+const OPT_KEYS = ['speed', 'grind', 'hunt', 'travel', 'autobattle', 'at'];
 /**
  * The keys that are somebody's *choice*, which is every one of them but `at`.
  *
@@ -62,15 +67,17 @@ function store(given) {
  * the half worth testing: the storage call is three lines and a try, and every
  * bug this could have is in here.
  *
- * `speeds` is how many speed steps exist and `grinds` the preset specs the
- * markup offers -- both passed in rather than known here, so the markup and
- * the SPEEDS table stay the one source of each. An unknown value is dropped
+ * `speeds` is how many speed steps exist, `grinds` the preset specs the markup
+ * offers, and `autobattles` the modes the pilot knows how to be in -- all
+ * passed in rather than known here, so the markup, the SPEEDS table and
+ * `app/rows.js` stay the one source of each. An unknown value is dropped
  * rather than clamped: a grind preset that no longer exists has no nearest
  * neighbour, and a speed index out of range is more likely a different build's
  * record than a number to be salvaged.
  */
-export function sanitise(raw, { speeds = 0, grinds = [] } = {}) {
-  const out = { speed: null, grind: null, hunt: null, travel: null, at: 0 };
+export function sanitise(raw, { speeds = 0, grinds = [], autobattles = [] } = {}) {
+  const out = { speed: null, grind: null, hunt: null, travel: null,
+                autobattle: null, at: 0 };
   if (!raw || typeof raw !== 'object') return out;
   // A stamp, not a date: anything that is not a positive finite number is no
   // ordering at all, and 0 loses to every real choice, which is the safe way
@@ -94,6 +101,14 @@ export function sanitise(raw, { speeds = 0, grinds = [] } = {}) {
   // the same reason the hunted species is: that answer changes as you walk.
   if (Number.isInteger(raw.travel) && raw.travel > 0 && raw.travel <= 0xffff) {
     out.travel = raw.travel;
+  }
+  // A word out of a short list, dropped when it is not one of them for the
+  // same reason a stale grind preset is: a mode this build does not have has
+  // no nearest neighbour, and guessing at one would hand the joypad to a
+  // pilot on the strength of a string nobody here recognises. Dropping it
+  // leaves the option off, which is the answer that does nothing.
+  if (typeof raw.autobattle === 'string' && autobattles.includes(raw.autobattle)) {
+    out.autobattle = raw.autobattle;
   }
   return out;
 }
