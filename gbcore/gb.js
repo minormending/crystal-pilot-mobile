@@ -110,8 +110,34 @@ export class GameBoy {
     // `setAudible`. The flag cannot be changed after config without rebuilding
     // the core, so the choice here is between never having sound and having a
     // mute; the mute is the one that lets somebody turn it on.
+    // `audioBatchProcessing` is a quarter of this app's speed, free, and it was
+    // sitting unset for a year. The core takes seven optional speed flags and
+    // defaults every one of them off; each was measured alone, on the real
+    // cartridge, 2,000 frames from boot with no input, comparing work RAM and
+    // the core's graphics buffer against the same run with all flags off:
+    //
+    //   audioBatchProcessing              +27%   RAM identical, screen identical
+    //   graphicsBatchProcessing           +11%   **RAM DIVERGED**
+    //   audioAccumulateSamples             +3%   screen differs
+    //   graphicsDisableScanlineRendering   +0%   screen differs
+    //   tileRendering                      -1%   screen differs
+    //   timersBatchProcessing              -3%
+    //   tileCaching                       -10%
+    //
+    // So one of the seven is worth having and it is the one with no cost at
+    // all. **`graphicsBatchProcessing` is the trap**: it looks like a free 11%
+    // and it changes what the emulator computes, not merely what it draws --
+    // work RAM after an identical run no longer matches, which for a pilot that
+    // steers by reading work RAM is the whole game. Turning all seven on gives
+    // +35% and that same divergence, which is why this sets one flag and not a
+    // block of them.
+    //
+    // Re-measured over 8,000 frames with buttons actually pressed, twice each
+    // way: +26%, with work RAM *and* cartridge RAM byte-identical. See
+    // docs/CODE.md.
     await this.core.config(
-      { headless: false, isGbcEnabled: true, isAudioEnabled: true, frameSkip: 0 },
+      { headless: false, isGbcEnabled: true, isAudioEnabled: true, frameSkip: 0,
+        audioBatchProcessing: true },
       canvas
     );
     // Silent until asked, whatever the preference says. A page that made noise

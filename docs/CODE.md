@@ -453,7 +453,7 @@ of those sites.
 
 ### `gb.js` — the emulator
 
-<!-- covers: gbcore/gb.js @ 4001f946d332 -->
+<!-- covers: gbcore/gb.js @ 8055f4716e2a -->
 
 Wraps WasmBoy. Runs frames, reads work RAM, holds and releases buttons.
 
@@ -571,6 +571,42 @@ waiting is on the main thread, so the worker steps frames straight through it.
 End to end, playing Crystal's opening to a Lv5 Totodile on Route 29:
 **54.6 s before, 9.3 s after**, with `rate()` reporting the same ~2,100 fps
 either way. The core never got faster; the waiting went away.
+
+**And then the core did get faster, by a quarter, from a flag that had been
+sitting unset the whole time.** WasmBoy takes seven optional speed flags and
+defaults every one of them off. `start()` had never set any, so the app had been
+running the slow configuration of its own emulator since the first commit.
+
+Each was measured alone on the real cartridge — 2,000 frames from boot, no
+input — against the same run with all seven off, comparing **work RAM** and the
+core's graphics buffer byte for byte:
+
+| flag | speed | work RAM | screen |
+| --- | --- | --- | --- |
+| `audioBatchProcessing` | **+27%** | identical | identical |
+| `graphicsBatchProcessing` | +11% | **diverged** | differs |
+| `audioAccumulateSamples` | +3% | identical | differs |
+| `graphicsDisableScanlineRendering` | +0% | identical | differs |
+| `tileRendering` | −1% | identical | differs |
+| `timersBatchProcessing` | −3% | identical | identical |
+| `tileCaching` | −10% | identical | differs |
+
+Only one is worth having, and it is the only one that costs nothing. Four are
+slower than not setting them at all, which is worth knowing about a list of
+flags whose names all promise speed.
+
+**`graphicsBatchProcessing` is the trap.** It reads as a free 11%, and it
+changes what the emulator *computes* rather than only what it draws: work RAM
+after an identical run no longer matches. For a pilot that steers entirely by
+reading work RAM that is not a rendering nicety, it is the ground moving. All
+seven together give +35% and carry that same divergence — which is why `start()`
+sets one flag rather than a block of them.
+
+The check that makes this table mean anything is the control: the same run
+twice with no flags set is byte-identical, so the emulator is deterministic and
+a divergence is really a divergence. `audioBatchProcessing` was then re-measured
+over 8,000 frames with buttons actually pressed, twice each way — **+26%, with
+work RAM and cartridge RAM both byte-identical.**
 
 Because stepping is now nearly free, the idle loop can no longer be paced by
 the animation frame `run()` used to wait on — see
