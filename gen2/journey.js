@@ -112,6 +112,8 @@ const NAME_TRIES = 12, NAME_SETTLE = 20;
 // Anything not named here falls back to the vaguest of the three, which is
 // the honest place for a word this file has not been taught.
 const BATTLE_STUCK = {
+  noflee: 'a wild Pokémon that will not let go — every attempt to run '
+          + 'was refused',
   nopp: 'out of PP on anything that does damage',
   notouch: 'nothing this Pokémon carries can touch what it is facing',
   notours: 'this is a battle menu I cannot drive — the Bug-Catching Contest '
@@ -1915,7 +1917,27 @@ export class Journey {
       }
       return how === 'won';
     }
-    return this.tasks.flee();
+    // **A wild battle that will not let go is the same dead end as a trainer
+    // one, and only the trainer branch ever said so.** Every walk calls this
+    // at the top of each crossing stage, each edge attempt and each doorway
+    // try, and `travelTo` breaks out of its retries on `stuckInBattle` -- which
+    // a wild battle could never set. So the walk asked again, and again:
+    // measured, a grind that ran out of PP and set off for a Center stood on
+    // one tile of Route 29 for thirty-four minutes, `inBattle` throughout,
+    // printing `trying right again` and getting nowhere.
+    //
+    // Checked against the screen rather than against `flee`'s answer alone,
+    // because the two are not the same question: `flee` reports whether *it*
+    // got out, and what a walk needs to know is whether a battle is still
+    // there. A run that fails on its last turn while the battle ends anyway --
+    // the enemy fainting to Struggle, which is exactly how a dry party wins --
+    // is not a walk that has to give up.
+    const fled = await this.tasks.flee();
+    if (!fled && (await this.snap()).inBattle) {
+      this.battleStuck = true;
+      this.stuckReason = 'noflee';
+    }
+    return fled;
   }
 
   /**

@@ -1632,7 +1632,7 @@ point those coordinates mean somewhere else entirely.
 
 ## 5. Crossing to the next map
 
-<!-- covers: gen2/journey.js gen2/world.js @ d052cd663236 -->
+<!-- covers: gen2/journey.js gen2/world.js @ 564fe0bfd219 -->
 
 A connection spans only part of a shared edge, so "walk west until something
 happens" does not work. `crossEdge()` closes the distance in stages, then tries
@@ -1893,7 +1893,7 @@ and a Pokémon Center restores PP, so the grind treats it as a trip it already
 knew how to make. See [the tiles that run a
 script](#8g-the-tiles-that-run-a-script-and-saying-hello) for the walk half.
 
-<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ bb84d752e96c -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ d3d6b3ed52f9 -->
 
 ### Which move, and which question
 
@@ -2091,7 +2091,7 @@ mechanism's evidence spans two runs rather than one.
 
 ### The bigger number is not the harder hit
 
-<!-- covers: gen2/romdata.js gen2/engine.js gen2/battle.js @ 7bb680ac117d -->
+<!-- covers: gen2/romdata.js gen2/engine.js gen2/battle.js @ d54ee88b5039 -->
 
 For twenty-three passes the pilot ranked its moves by one number: the `power`
 byte out of the cartridge's move table. `romdata.move()` had been returning the
@@ -2207,6 +2207,18 @@ apart while whoever reads the message must:
 | `notouch` | full PP, none of it can touch what is in front of it, **and nobody on the bench can either** | a different move, or a Pokémon that is not in this party |
 | `stuck` | the loop ran out of turns and cannot say why | look at the screen |
 
+**`nopp` is handed back with the battle still on screen**, and that is not a
+detail the caller may skip: `fightBattle` returns it from directly after
+`awaitBattleMenu`, before anything is pressed. The branch that heals *instead*
+of fighting has always checked `!s.inBattle` first — `nav.step` yields on a
+battle, so a walk to a Center cannot move and `travelTo` retries a leg it can
+never cross. The two branches that heal *after* a fight, `nopp` and the
+knockout, never had that check. Measured: a grind that ran dry set off for a
+Center and stood on one tile of Route 29 for thirty-four minutes, `inBattle`
+throughout, HP frozen, saying `heading right` and then `trying right again` and
+nothing else, until it was killed. So both branches leave the battle first, and
+say so plainly when the way out is refused rather than walking into a wall.
+
 So `grind` **stops** on `notouch` rather than walking to a Center: a Center
 does not teach a move, and healing to come back at the same wall with a fuller
 bar is the sort of loop this app has been written to notice. And like every
@@ -2245,7 +2257,7 @@ pilot uses, not a second one beside it. See section 10.
 
 ### Sending out somebody who can touch it
 
-<!-- covers: gen2/battle.js gen2/engine.js @ 27559f1d1c8e -->
+<!-- covers: gen2/battle.js gen2/engine.js @ 7041898ef75a -->
 
 The pass before could tell that the Pokémon on the field takes nothing off a
 Ghost, and said so. The remedy it named — *a different Pokémon* — was one the
@@ -2346,6 +2358,39 @@ flowchart TD
     C -- no --> NO
     C -- yes --> YES["our turn"]
 ```
+
+**What it says yes to is *a* battle box, not the battle menu**, and the move
+list is the other one. Measured on the cartridge in a single battle, a frame
+apart:
+
+```
+battle menu:  menu=[1,1] items=34 top=12 left=8  selected='>FIGHT'
+move menu:    menu=[1,1] items=34 top=12 left=8  selected='>SCRATCH'
+```
+
+Every number above is the same. That was written down years before it was
+fixed — the catch path has backed out of the move list before reaching for the
+pack ever since a throw could not find a ball — and the *menu-driving* code
+never learned it. `chooseAction` computes a cursor position for the action it
+wants, finds the cursor already there, and presses A; on the move list that
+picks move one.
+
+**Harmless while move one has PP**, which is why it survived twenty-five
+versions: the move is simply used and the battle carries on. Measured once it
+was not: a Totodile grinding on Route 29 with SCRATCH at 0 of 35 sat on
+`>SCRATCH` while the game refused it and redrew the same list — forty turns to
+`stuck`, five of those in a row to end the grind. Across twenty runs from the
+same save, **every one of thirty stuck battles had SCRATCH at nought** and PP
+on every other move, and eleven of the twenty runs finished normally. A race,
+not a wall: `awaitBattleMenu` pushes A through the opening text, and only a
+press that lands just as the menu appears opens FIGHT.
+
+`menuIsLive` is deliberately left alone — it is the gate on the whole battle
+loop, and narrowing it on a number no cartridge has confirmed at run time would
+risk every battle. The words are read instead. `battleMenuShowing` asks the
+tilemap whether FIGHT is on screen, and `chooseAction` presses B first when the
+answer is no. A cartridge whose symbol file does not name the tilemap answers
+`null`, and `null` means press: cannot tell must never become do not press.
 
 <details>
 <summary><b>Advanced detail:</b> the two wrong versions, and what each cost</summary>
@@ -2600,7 +2645,7 @@ fainted.
 
 ## 7. Catching something
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ 9fa1ada1a404 -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/battle.js gen2/romdata.js @ bcf3e98ab8ea -->
 
 Catching is the most involved loop, because a Poké Ball's odds turn on how much
 HP is left. Throwing at a full-health target is mostly throwing balls away.
@@ -2763,7 +2808,7 @@ flowchart TD
 
 ## 7a. Five that act on where you already are
 
-<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ f490304b7524 -->
+<!-- covers: gen2/tasks.js gen2/jobs.js gen2/menus.js gen2/journey.js @ 66e66a7198ff -->
 
 **The first jobs ever run on Polished Crystal, now that its opening reaches the
 grass.** Grind took the starter Lv6 to Lv7 in two wild battles and 15 seconds,
@@ -3160,7 +3205,7 @@ counter and came away with **five potions and ¥1800**, in 49 seconds.
 
 ## 7b. Saving, and getting the save out
 
-<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ bb84d752e96c -->
+<!-- covers: gen2/tasks.js gbcore/taskbase.js gen2/battle.js gen2/jobs.js gen2/state.js @ d3d6b3ed52f9 -->
 
 ```mermaid
 flowchart TD
@@ -3463,7 +3508,7 @@ because that failure is only otherwise discovered by reaching for the undo.
 
 ## 8. The errands
 
-<!-- covers: titles/crystal.js gen2/journey.js @ f566340556cf -->
+<!-- covers: titles/crystal.js gen2/journey.js @ 2d20132ef4dd -->
 
 Everything in this section is `crystal.js` — the only file in the app that names
 a Crystal map, a Crystal door or a Crystal NPC. What it stands on is
@@ -3850,7 +3895,7 @@ the bag" rather than "did we gain any".
 
 ## 8a. Finding the Centers and the Marts in the cartridge
 
-<!-- covers: gen2/world.js gen2/journey.js @ d052cd663236 -->
+<!-- covers: gen2/world.js gen2/journey.js @ 564fe0bfd219 -->
 
 The last thing in this app that had to be written out by hand. A title said
 where the Centers and the Marts were, so the pilot healed in the two towns
@@ -4114,7 +4159,7 @@ by, which is the only leg it can measure.
 
 ## 8d. A route the game itself refuses
 
-<!-- covers: gen2/journey.js gen2/state.js @ ff7523d243f7 -->
+<!-- covers: gen2/journey.js gen2/state.js @ 7c6629537d55 -->
 
 The pass before this one taught the walk to *quote* the man who turns it back.
 This is the pilot doing something about it.
@@ -4221,7 +4266,7 @@ counting bytes reads a full case as one.
 
 ## 8e. Fighting everybody here
 
-<!-- covers: gen2/journey.js @ c25ab20cb5ec -->
+<!-- covers: gen2/journey.js @ bced19b080e2 -->
 
 The primitive a Gym needs. The pilot has been stopped on Route 32 for three
 passes by a man who wants Falkner beaten first, and beating Falkner means
@@ -4322,7 +4367,7 @@ costs however long it takes somebody to notice their money is gone.
 
 ## 8f. Going and winning a badge
 
-<!-- covers: gen2/journey.js gen2/state.js titles/crystal.js @ d24e53aaa621 -->
+<!-- covers: gen2/journey.js gen2/state.js titles/crystal.js @ 0273154ca572 -->
 
 The pilot has been turned back from Route 32 since the pass it learned to find
 Pokémon Centers. `reopen` throws away every written-off road the moment a badge
@@ -4405,7 +4450,7 @@ everybody is a heal whatever it says about itself.
 
 ## 8g. The tiles that run a script, and saying hello
 
-<!-- covers: gen2/world.js gen2/journey.js @ d052cd663236 -->
+<!-- covers: gen2/world.js gen2/journey.js @ 564fe0bfd219 -->
 
 Four passes of machinery pointed at one sentence a man says, and the reader that
 made it diagnosable is twelve lines.
@@ -4490,6 +4535,21 @@ knockout, because nothing advances while walking to a Center.
 on screen made the warp branch say *could not get through to DARK CAVE —
 something is still on screen*. The door was never the problem, and the sentence
 sent the reader at it.
+
+**`stuckInBattle` only ever covered half the battles.** It was set on the
+trainer branch, where `fightBattle` can answer `stuck` or `nopp`; the wild
+branch simply returned `flee()` and marked nothing. So a walk that met a wild
+Pokémon it could not run from had nothing to read, and asked again for as long
+as anybody waited — the same thirty-four minutes on one tile of Route 29, and
+the same three lines of output. A wild battle that will not let go is the same
+dead end as a trainer one, so it is marked the same way, under its own reason:
+*a wild Pokémon that will not let go*.
+
+It is checked against the screen rather than against `flee`'s answer alone,
+because those are different questions. `flee` reports whether *it* got out; what
+a walk needs to know is whether a battle is still there. A run whose last turn
+is refused while the battle ends anyway — the enemy fainting to Struggle, which
+is exactly how a party with no PP wins — is not a walk that has to give up.
 
 </details>
 
@@ -4587,7 +4647,7 @@ file says they do.
 
 ## 8i. Reaching an hour
 
-<!-- covers: gen2/jobs.js gen2/engine.js gen2/romdata.js gen2/state.js gbcore/saves.js app/rows.js @ 054317639ee4 -->
+<!-- covers: gen2/jobs.js gen2/engine.js gen2/romdata.js gen2/state.js gbcore/saves.js app/rows.js @ 12698ff4817e -->
 
 A third of Johto's grass is behind the clock. HOOTHOOT is on Route 29 after
 dark and nowhere on it at noon, and for four versions the usage guide said the
@@ -6753,7 +6813,7 @@ is the noise this list exists to replace.
 
 ### Leading with the one that can answer the room
 
-<!-- covers: gen2/romdata.js gen2/menus.js gen2/journey.js @ 3f6c59066349 -->
+<!-- covers: gen2/romdata.js gen2/menus.js gen2/journey.js @ a090da85f3e2 -->
 
 **Gen 2 sends out slot one and asks nobody.** So the party's order decides the
 first battle of a Gym — and since the pass before, the pilot has known exactly
@@ -6943,7 +7003,7 @@ disagreements.
 
 ### Gates: asking the cartridge what it wants
 
-<!-- covers: gen2/state.js gen2/journey.js titles/crystal.js @ d24e53aaa621 -->
+<!-- covers: gen2/state.js gen2/journey.js titles/crystal.js @ 0273154ca572 -->
 
 Two kinds of closed road, and the difference is everything:
 
@@ -8886,6 +8946,7 @@ here so the next person does not spend the same afternoon.
 | A service worker registration error in the console | The in-app browser pane blocks service-worker registration on its embedded origin. `sw.js` parses and serves correctly. |
 | The same leg of a journey failed once and worked next time | Was genuinely nondeterministic; the cause was calibration on a doorway. See section 5. |
 | `menuIsLive` returns false at a menu that is plainly up | Check `menuItems` and `menuTop` — you are probably looking at the pack, not the battle menu. |
+| `menuIsLive` returns **true** at a menu the pilot cannot drive | The move list shares every number the battle menu has. Ask `battleMenuShowing`, which reads the words. This one *is* a bug when it bites — see section 6. |
 | The pilot's list is empty during a battle | By design: Fight and Throw are on the bar, and nothing that walks can start. The hint says where they went. |
 | The level presets vanish | They are drawn only when Grind is on the list. With no party there is nothing to level, so they are four buttons that change a number nobody reads. |
 | `element.hidden = true` does nothing | The attribute only carries the UA sheet's `display:none`, which any class in the page outranks. `[hidden]{display:none!important}` is in the sheet for that reason — if you add a `display` rule to a class, it will win over `hidden` without it. |

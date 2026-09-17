@@ -53,6 +53,11 @@ const WHITEOUT_TAPS = 200;
 // which is often enough to leave a submenu within a few frames and rare enough
 // that a long text scene is still driven mostly by A.
 const BACK_OUT_EVERY = 4;
+// How many times to back out of a submenu before driving the battle menu.
+// Two, because one B leaves the move list and the second is for the press that
+// landed while the list was still drawing; a third would start closing things
+// nobody opened.
+const ACTION_BACK_OUT = 2;
 const BATTLE_MENU_ITEMS = gen2.battleMenu.items,
       BATTLE_MENU_TOP = gen2.battleMenu.top;
 // Those two and BALL_POCKET above are read from the *stock* profile at import
@@ -282,10 +287,60 @@ export function withBattle(Base) {
     return null;
   }
 
-  /** Drive the 2x2 battle menu to `action` by reading the live cursor. */
+  /**
+   * Is the 2x2 battle menu the thing on screen, or the move list over the top
+   * of it?
+   *
+   * **`menuIsLive` cannot tell, and that is not an oversight it can fix.**
+   * Measured in one battle, the two read *identically* through every field it
+   * looks at -- `items=34 top=12 left=8`, cursor at (1,1) -- and differ only in
+   * the words:
+   *
+   *     battle menu:  menu=[1,1] items=34 top=12 left=8  selected='>FIGHT'
+   *     move menu:    menu=[1,1] items=34 top=12 left=8  selected='>SCRATCH'
+   *
+   * So the words are what this reads. Null where the tilemap cannot be read,
+   * and callers treat a null as yes -- the same rule the type chart follows,
+   * because "cannot tell" must never become "do not press".
+   */
+  battleMenuShowing(s) {
+    const screen = this.state.screen(s && s.wram);
+    if (!screen) return null;
+    return screen.says('FIGHT');
+  }
+
+  /**
+   * Drive the 2x2 battle menu to `action` by reading the live cursor.
+   *
+   * **Back out of the move list first**, because this drove it by accident for
+   * as long as it has existed. `awaitBattleMenu` pushes A through the opening
+   * text, and a press that lands just as the battle menu appears opens FIGHT --
+   * after which `menuIsLive` reads true against the *move* list and hands it
+   * back as the battle menu. This then computed (1,1) for FIGHT, found the
+   * cursor already there, and pressed A: which picks move one.
+   *
+   * Harmless while move one has PP -- the move is simply used and the battle
+   * carries on, which is why this went twenty-five versions unnoticed. Measured
+   * once it did not: a Totodile on Route 29 with SCRATCH at 0/35 sat on
+   * `>SCRATCH` while the game refused it and redrew the same list, forty turns
+   * to `stuck`, five of those in a row to end the grind. Every one of thirty
+   * stuck battles across twenty runs had SCRATCH at nought and PP on every
+   * other move.
+   *
+   * `chooseMove` has had a guard for this since the pass that found eighty-four
+   * refusals in one grind; it confirms only when the cursor is where it meant.
+   * This is that guard for the menu above it.
+   */
   async chooseAction(action) {
     const wantX = ((action - 1) % 2) + 1;
     const wantY = Math.floor((action - 1) / 2) + 1;
+    // Only on positive evidence that the move list is up: a cartridge whose
+    // symbol file does not name the tilemap answers null and is left alone.
+    for (let i = 0; i < ACTION_BACK_OUT; i++) {
+      if (this.battleMenuShowing(await this.snap()) !== false) break;
+      await this.push('B', 4, 8);
+      await this.step(SETTLE_FRAMES);
+    }
     for (let i = 0; i < 8; i++) {
       const s = await this.snap();
       const [x, y] = s.menu;

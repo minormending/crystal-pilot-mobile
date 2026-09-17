@@ -716,6 +716,28 @@ export function withJobs(Base) {
     // `healNow` now prefers it -- it counts *walks*, which is the thing
     // MAX_HEALS is a budget for.
     let stuckRun = 0, trips = 0;
+    /**
+     * Leave the battle before walking anywhere, or say that we could not.
+     *
+     * **The guard below on the heal-instead-of-fighting branch says why, and
+     * the two branches that heal *after* a fight never had it.** `fightBattle`
+     * hands back `nopp` the moment nothing left can win -- from directly after
+     * `awaitBattleMenu`, so the battle is still on screen -- and the `nopp`
+     * branch walked straight out of it to a Center. `nav.step` yields on a
+     * battle, so the walk cannot move, and `travelTo` retries a leg it can
+     * never cross: measured, a grind stood on one tile of Route 29 with the
+     * battle up for thirty-four minutes before it was killed, HP frozen,
+     * saying `heading right` and then `trying right again` and nothing else.
+     *
+     * A no-op when there is no battle, which is every run that was already
+     * working: a knockout has been pressed through by `_whiteOut` and a won
+     * battle is over. It only speaks up for the case that used to hang.
+     */
+    const leftTheBattle = async () => {
+      if (!(await this.snap()).inBattle) return true;
+      await this.flee();
+      return !(await this.snap()).inBattle;
+    };
     let s = await this.snap();
     const mon0 = s.party[slot];
     if (!mon0) return { ok: false, message: `party slot ${slot + 1} is empty`, stats };
@@ -874,6 +896,14 @@ export function withJobs(Base) {
           };
         }
         this.say(`knocked out at Lv${mon.level} — healing and carrying on`);
+        if (!await leftTheBattle()) {
+          return {
+            ok: false,
+            message: `the whole party fainted at Lv${mon.level}, and the battle `
+                     + 'is still on screen — nothing can walk out of it',
+            stats: { ...stats, levels: mon.level - startLevel },
+          };
+        }
         // A faint is a Center's job whatever the bag holds, so the reason says
         // so: a potion does nothing for a Pokemon at 0 HP in Gen 2.
         if (!await heal('dry')) {
@@ -934,6 +964,15 @@ export function withJobs(Base) {
           };
         }
         this.say(`out of PP at Lv${mon.level} — a Center restores it`);
+        // Out of the battle first. This is the branch that hung.
+        if (!await leftTheBattle()) {
+          return {
+            ok: false,
+            message: `out of PP at Lv${mon.level}, and the battle would not let `
+                     + 'go — every attempt to run was refused',
+            stats: { ...stats, levels: mon.level - startLevel },
+          };
+        }
         if (!await heal('dry')) {
           return {
             ok: false,
