@@ -2,7 +2,7 @@
 // Build the checkpoint saves the pilot is tested from, out of your own ROM.
 //
 //     tools/make-save                  every checkpoint, into dev/
-//     tools/make-save --only lv12      just one of them
+//     tools/make-save --only lv16      just one of them (and everything above it)
 //     tools/make-save --list           what it would build, and what is there
 //     tools/make-save --starter cyndaquil
 //     tools/make-save --keep-open      leave the browser up to poke at
@@ -57,19 +57,31 @@ const STEPS = [
     reached: (s) => s.balls.some(([, q]) => q > 0) },
   { name: 'lv12', says: 'the lead ground to Lv12 — what the trainer tests restore',
     reached: (s) => s.party[0] && s.party[0].level >= 12 },
+  { name: 'lv16', says: 'and on to Lv16 — a lead that can take what Route 30 has',
+    reached: (s) => s.party[0] && s.party[0].level >= 16 },
 ];
-// **Lv12 and no further, and that is measured rather than modest.** Lv16 was a
-// checkpoint here until it failed twice in a row on Route 29 -- once with *no
-// wild Pokemon appeared* and once with *5 battles in a row went nowhere* -- and
-// `tools/dex --party` on the Lv12 save says why it is at least plausible: the
-// lead is down to `SCRATCH 8, LEER 30, RAGE 20`, eight PP on the only move
-// worth swinging. Whether that is the whole cause is not established here.
+// **Lv16 was dropped from this list for a reason that turned out to be the
+// wrong one, and is back because the real one is fixed (v252).** It failed
+// twice running on Route 29 -- once with *no wild Pokemon appeared*, once with
+// *5 battles in a row went nowhere* -- and the note here blamed PP, on the
+// evidence that `tools/dex --party` showed the lead holding `SCRATCH 8, LEER
+// 30, RAGE 20`. It said in as many words that this was not established, which
+// is the only part of it that has survived.
 //
-// It does not matter, because Lv12 is enough for what these are for: the
-// trainer proof in `docs/PROVEN.md` reproduces from this checkpoint, taking and
-// winning against Route 30's PIDGEY Lv3 and CATERPIE Lv3 with the lead ending
-// 28/36 and 30/36. A checkpoint that fails half the time is worse than one that
-// stops lower down and always works.
+// It was not PP. Twenty runs from the Lv12 save put the failure somewhere else
+// entirely: `chooseAction` was driving the *move list* believing it was the
+// battle menu -- the two are identical through every field `menuIsLive` reads
+// -- so once SCRATCH ran dry the pilot re-picked it, the game refused, and the
+// list redrew. All thirty stuck battles in those runs had SCRATCH at nought.
+// PP never entered into it; `nopp` did not fire in any of the six failures.
+// The account is in docs/CODE.md section 6.
+//
+// **Measured after the fix: ten runs of Lv12 -> Lv16 from this save, ten
+// reached it**, 81 battles and 82 seconds apiece, no stuck battles at all --
+// against eleven of twenty before. So the checkpoint is affordable again, and
+// this one is worth having: `docs/PROVEN.md` takes Route 30's PIDGEY Lv3 and
+// CATERPIE Lv3 from Lv12 already, and a Lv16 lead is what a trainer worth the
+// name needs.
 
 const args = process.argv.slice(2);
 const flag = (name, fallback = null) => {
@@ -244,9 +256,13 @@ const reached = (step) => page.evaluate(async (src) => {
 let failed = null;
 for (const step of upTo) {
   say(`${step.name}: ${step.says}`);
-  // Twice at most. A grind wandering off the grass is a known flake rather
-  // than a broken recipe -- "no wild Pokemon appeared" with the lead standing
-  // on Route 29 -- and a second go from where the first stopped usually takes.
+  // Twice at most, and the second go is insurance rather than a known remedy.
+  // The flake it was written for -- "no wild Pokemon appeared" with the lead
+  // standing on Route 29 -- was never once reproduced across thirty measured
+  // grinds, before the v252 fix or after, so its cause is still unaccounted
+  // for. It is kept because a step here begins wherever the one above it
+  // stopped rather than from a clean restore, which is the one condition those
+  // thirty runs did not cover, and a retry costs nothing when nothing is wrong.
   let ok = false;
   for (let go = 0; go < 2 && !ok; go++) {
     if (go) say('   that did not get there; one more go from here');

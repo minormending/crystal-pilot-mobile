@@ -935,14 +935,14 @@ refuses into a save the game accepts and is wrong about.
 
 ```
 tools/make-save                   every checkpoint, into dev/
-tools/make-save --only lv12       just one of them
+tools/make-save --only lv16       just one of them (and everything above it)
 tools/make-save --list            what it would build, and what is there
 tools/make-save --starter cyndaquil
 ```
 
-Three checkpoints of one playthrough — `opening`, `errand`, `lv12` — written as
-`dev/save-<name>.sav`. Each starts where the last ended, so asking for `lv12`
-runs the two before it.
+Four checkpoints of one playthrough — `opening`, `errand`, `lv12`, `lv16` —
+written as `dev/save-<name>.sav`. Each starts where the last ended, so asking
+for `lv16` runs the three before it.
 
 **It is a tool rather than four committed files, and that is not only policy.**
 A save is game data: `.gitignore` excludes it, `check-app` fails the build if
@@ -990,14 +990,26 @@ a long way from the cause. Each step is asked of the *game state* afterwards
 instead — `party[0].level >= 12`, balls in the bag — gets one retry, and then
 stops with nothing written.
 
-**Lv12 is the top of the list on purpose.** Lv16 was a checkpoint until it
-failed twice running on Route 29, once with *no wild Pokémon appeared* and once
-with *5 battles in a row went nowhere*. `tools/dex --party` on the Lv12 save
-shows the lead holding `SCRATCH 8, LEER 30, RAGE 20` — eight PP on the only
-move worth swinging — which is at least a plausible part of it, though nothing
-here establishes that it is the whole cause. It does not matter either way:
-Lv12 is enough for what these exist for, and a checkpoint that fails half the
-time is worse than one that stops lower and always works.
+**`lv16` was dropped from this list and is back, and the way it was wrong is
+worth keeping.** It failed twice running on Route 29 — once with *no wild
+Pokémon appeared*, once with *5 battles in a row went nowhere* — and the note
+that removed it blamed PP, on the evidence that `tools/dex --party` showed the
+lead holding `SCRATCH 8, LEER 30, RAGE 20`. It was careful to say that this was
+not established. That caution was the only part of it that held up.
+
+It was not PP. Twenty runs from the `lv12` save put the cause somewhere else
+entirely: `chooseAction` was driving the *move list* believing it was the battle
+menu, so once SCRATCH ran dry the pilot re-picked a move with no PP, the game
+refused, and the list redrew — forty turns to `stuck`. All thirty stuck battles
+across those runs had SCRATCH at nought, and `nopp` never fired in any of the
+six failures. The full account is in [section 6 of CODE.md](CODE.md#6-battles);
+the fix shipped in v252.
+
+**Measured after it: ten runs of Lv12 → Lv16, ten reached it**, 81 battles and
+82 seconds apiece with no stuck battles at all, against eleven of twenty before.
+So a checkpoint that failed half the time now does not, and the moral is the one
+the old note nearly reached on its own — a plausible cause sitting in plain
+sight is not a measured one, and saying so is what made it cheap to overturn.
 
 ### Asking the cartridge, without running it
 
