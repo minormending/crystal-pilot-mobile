@@ -23,17 +23,23 @@ const NAMES = { 152: 'CHIKORITA', 153: 'BAYLEEF' };
  * are stubbed, since neither is what these tests are about, and every `say` is
  * kept so the *order* of what it told you can be asserted on.
  */
-function grinder(script, { outcomes = [] } = {}) {
+function grinder(script, { outcomes = [], battle = null } = {}) {
   const sym = symbols();
   const state = new GameState(sym);
   const said = [];
   const gb = new FakeGameBoy();
   const tasks = new Tasks(gb, state, (m) => said.push(m), fakeRom({ species: NAMES }));
   let fought = 0;
+  // `battle` is what is on screen, asked fresh every snapshot rather than set
+  // per battle: the branches under test leave a battle up and then have to get
+  // out of it, which is a thing that changes *within* one iteration.
   tasks.snap = async () => {
     const mon = script[Math.min(fought, script.length - 1)];
-    return state.read(worldRam(sym, { party: [{ moves: [33, 0, 0, 0], pp: [35, 0, 0, 0],
-                                                hp: 40, maxHp: 44, ...mon }] }));
+    return state.read(worldRam(sym, {
+      battleMode: battle ? battle() : 0,
+      party: [{ moves: [33, 0, 0, 0], pp: [35, 0, 0, 0],
+                hp: 40, maxHp: 44, ...mon }],
+    }));
   };
   tasks._findFight = async () => true;
   tasks.fightBattle = async () => outcomes[fought++] || 'won';
@@ -335,4 +341,61 @@ test('a run of stuck battles is consecutive, not cumulative', async (t) => {
                                       maxBattles: 40 });
   t.true(r.stats.battles > 9, 'it fought past both runs of four');
   t.false(String(r.message).includes('in a row'), 'without calling it a stall');
+});
+
+// --- walking out of a battle that is still on screen --------------------------
+
+test('running out of PP leaves the battle before walking to a Center',
+     async (t) => {
+  // The defect, and it cost thirty-four minutes in one measured run.
+  // `fightBattle` returns 'nopp' from directly after `awaitBattleMenu`, so the
+  // battle is still up -- and this branch walked straight out of it. `nav.step`
+  // yields on a battle, so the walk cannot move and `travelTo` retries a leg it
+  // can never cross: the pilot stood on one tile of Route 29 with the battle on
+  // screen, HP frozen, saying 'trying right again' and nothing else.
+  let onScreen = 1, fled = 0;
+  const order = [];
+  const { tasks } = grinder([
+    { species: CHIKORITA, level: 10 },
+    { species: CHIKORITA, level: 11 },
+  ], { outcomes: ['nopp', 'won'], battle: () => onScreen });
+  tasks.flee = async () => { fled++; order.push('flee'); onScreen = 0; return true; };
+  const r = await tasks.grind(0, 11, {
+    heal: async () => { order.push('heal'); return true; },
+  });
+  t.eq(fled, 1, 'it got out of the battle');
+  t.eq(order.join(','), 'flee,heal', 'and only then went walking');
+  t.true(r.ok, 'and the grind carried on afterwards');
+});
+
+test('a battle that will not let go stops the grind rather than walking into it',
+     async (t) => {
+  // The honest answer when the way out is refused. Anything else is the hang:
+  // a walk that cannot move, asked for again for as long as anybody waits.
+  let healed = 0;
+  const { tasks } = grinder([
+    { species: CHIKORITA, level: 10 },
+  ], { outcomes: ['nopp'], battle: () => 1 });
+  tasks.flee = async () => false;
+  const r = await tasks.grind(0, 11, {
+    heal: async () => { healed++; return true; },
+  });
+  t.false(r.ok, 'it stopped');
+  t.contains(r.message, 'would not let go', 'and said what stopped it');
+  t.eq(healed, 0, 'without ever setting off for a Center');
+});
+
+test('a heal after a fight that ended needs no getting out of', async (t) => {
+  // The other half, and the one that keeps the fix free: every run that was
+  // already working has no battle on screen by the time it heals, so nothing
+  // is pressed and nothing is said.
+  let fled = 0;
+  const { tasks } = grinder([
+    { species: CHIKORITA, level: 10 },
+    { species: CHIKORITA, level: 11 },
+  ], { outcomes: ['nopp', 'won'], battle: () => 0 });
+  tasks.flee = async () => { fled++; return true; };
+  const r = await tasks.grind(0, 11, { heal: async () => true });
+  t.eq(fled, 0, 'it did not try to run from a battle that was over');
+  t.true(r.ok, 'and got there');
 });

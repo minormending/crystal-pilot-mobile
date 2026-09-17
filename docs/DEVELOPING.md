@@ -15,7 +15,7 @@ what CI checks and what the pre-commit hook blocks on.
 ```mermaid
 flowchart LR
     E[an edit] --> H{{".githooks/pre-commit"}}
-    H --> T["./run-tests<br/>1000 behaviour tests"]
+    H --> T["./run-tests<br/>1011 behaviour tests"]
     H --> C["tools/check-app<br/>36 groups"]
     H --> D["tools/docs-check<br/>47 tracked sections"]
     T --> OK[commit]
@@ -39,17 +39,17 @@ git config core.hooksPath .githooks
 ./run-tests -v         # notes and stack lines
 ```
 
-1000 tests in 29 files, and what each file is about says more than the count:
+1011 tests in 29 files, and what each file is about says more than the count:
 
 | file | tests | what it pins down |
 | --- | --- | --- |
-| `journey.mjs` | 163 | the walking: routes, doors, shut legs, healers, gyms, and the map graph |
+| `journey.mjs` | 166 | the walking: routes, doors, shut legs, healers, gyms, and the map graph |
 | `rows.mjs` | 160 | what every row and offer says, when its button works, and what the runner picks |
 | `menus.mjs` | 73 | the order the START menu is driven in, and what is closed between tries |
-| `battle.mjs` | 84 | whose turn it is, which Pokémon is out, and a win from a whiteout |
+| `battle.mjs` | 89 | whose turn it is, which Pokémon is out, and a win from a whiteout |
 | `collision.mjs` | 42 | which tiles can be walked, and which have somebody standing on them |
 | `capture.mjs` | 41 | weakening, ball choice, the party prompt, and the refusals before a throw |
-| `grind.mjs` | 22 | what a grind says while it works, and the bounds that make it stop |
+| `grind.mjs` | 25 | what a grind says while it works, and the bounds that make it stop |
 | `clock.mjs` | 22 | waiting for an hour, and telling a clock that will not move from a game that is not running |
 | `world.mjs` | 30 | reading a cartridge's own maps: sizes, warps, objects and triggers |
 | `control.mjs` | 30 | the task lifecycle: stopping, failing, undo points, and loops that must end |
@@ -155,7 +155,7 @@ section gives. Everything by hand runs against a local build.
 
 ```mermaid
 flowchart BT
-    C["the app"] --> T["./run-tests<br/>1000 behaviour tests"]
+    C["the app"] --> T["./run-tests<br/>1011 behaviour tests"]
     C --> A["tools/check-app<br/>36 groups"]
     C --> D["tools/docs-check<br/>47 tracked sections"]
     C --> V["tools/coverage<br/>what the suite never runs"]

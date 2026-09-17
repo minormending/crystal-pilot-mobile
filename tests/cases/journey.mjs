@@ -2961,3 +2961,57 @@ test('somebody who cannot be got next to is not talked to from here',
   t.false(await boxed.j.talkPast(), 'no way to stand beside them');
   t.eq(boxed.steps, [], 'and no step was taken trying');
 });
+
+// --- a wild battle a walk cannot get out of ----------------------------------
+
+/**
+ * A Journey standing in a battle, with `flee` under the test's control.
+ *
+ * `battle` is read fresh on every snapshot, because the thing under test is
+ * whether the battle is *still there* after the attempt to run -- which is a
+ * different question from whether `flee` says it succeeded.
+ */
+function inABattle({ battle, flee, fight = null, mode = 1 }) {
+  const gb = new FakeGameBoy({ wram: worldRam(sym, {}) });
+  const state = new GameState(sym);
+  const said = [];
+  const tasks = {
+    flee: async () => flee(),
+    fightBattle: async () => (fight ? fight() : 'won'),
+  };
+  const j = new Journey(gb, state, tasks, null, { mapKey: async () => HOME },
+                        (m) => said.push(m), null, {});
+  j.snap = async () => state.read(worldRam(sym, { battleMode: battle() }));
+  return { j, said };
+}
+
+test('a wild battle that will not let go is marked, so a walk stops asking',
+     async (t) => {
+  // The defect. `battleStuck` was set on the trainer branch only, and every
+  // walk calls escapeBattle at the top of each crossing stage, each edge
+  // attempt and each doorway try -- so a wild battle it could not run from was
+  // asked about for ever. Measured: thirty-four minutes on one tile of Route
+  // 29, out of PP, on the way to a Center it never reached.
+  const { j } = inABattle({ battle: () => 1, flee: () => false });
+  t.false(await j.escapeBattle(), 'it could not get out');
+  t.true(j.stuckInBattle, 'and says so, which is what the walks read');
+  t.contains(j._stuckMessage().message, 'will not let go',
+             'in words naming what happened');
+});
+
+test('a run that fails while the battle ends anyway is not a walk giving up',
+     async (t) => {
+  // Not the same question, and asking only `flee` gets it wrong: a dry party
+  // wins by Struggle often enough that the last turn of a failed run and the
+  // end of the battle land together. Nothing is stuck, so nothing is marked.
+  let up = 1;
+  const { j } = inABattle({ battle: () => up, flee: () => { up = 0; return false; } });
+  await j.escapeBattle();
+  t.false(j.stuckInBattle, 'the battle is over, whatever the run reported');
+});
+
+test('a wild battle it runs from leaves nothing marked', async (t) => {
+  const { j } = inABattle({ battle: () => 0, flee: () => true });
+  t.true(await j.escapeBattle(), 'it ran');
+  t.false(j.stuckInBattle, 'and there is nothing to report');
+});

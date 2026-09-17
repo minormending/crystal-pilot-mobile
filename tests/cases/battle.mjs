@@ -1,6 +1,7 @@
 // Battle decisions. Every test here corresponds to something that was once
 // wrong in a way no static check could see.
-import { FakeGameBoy, fakeRom, romReading, symbols, test, worldRam } from '../harness.mjs';
+import { blindTo, FakeGameBoy, fakeRom, romReading, symbols, test, worldRam }
+  from '../harness.mjs';
 import { learnMoveBox, onField, otherBattleMenu, switchBoxUp }
   from '../../gen2/battle.js';
 import { GameState } from '../../gen2/state.js';
@@ -34,6 +35,83 @@ test('the drawn battle menu is told apart from the pack over the top of it', asy
   }));
   t.true(Tasks.menuIsLive(battleMenu), '34 items at row 12 is the battle menu');
   t.false(Tasks.menuIsLive(packOverIt), '5 items at row 1 is the pack');
+});
+
+// --- the move list wearing the battle menu's clothes -------------------------
+//
+// Measured on a real cartridge, in one battle, a frame apart:
+//
+//     battle menu:  menu=[1,1] items=34 top=12 left=8  selected='>FIGHT'
+//     move menu:    menu=[1,1] items=34 top=12 left=8  selected='>SCRATCH'
+//
+// Every number `menuIsLive` reads is the same. Only the words differ, and this
+// is the pass that started reading them.
+const MOVE_LIST = ['TYPE/', ' NORMAL    17/ 36', '     0/35',
+                   '    >SCRATCH', '     LEER', '     RAGE'];
+const BATTLE_MENU = ['       17/ 36', '    >FIGHT', '     PACK  RUN'];
+const upFor = (sym, screen) => worldRam(sym, {
+  battleMode: 1, menu: [1, 1], menuItems: 34, menuTop: 12, screen,
+});
+
+test('menuIsLive cannot tell the move list from the battle menu', async (t) => {
+  const { sym, state } = pilot();
+  // Not a defect in `menuIsLive` -- it is the gate on the whole battle loop and
+  // narrowing it on a number no cartridge has confirmed would risk every
+  // battle. This test pins the fact that makes the guard below necessary.
+  const menu = state.read(upFor(sym, BATTLE_MENU));
+  const moves = state.read(upFor(sym, MOVE_LIST));
+  t.true(Tasks.menuIsLive(menu), 'the battle menu is live');
+  t.true(Tasks.menuIsLive(moves), 'and so is the move list, identically');
+});
+
+test('the words say which menu is on screen', async (t) => {
+  const { sym, state, tasks } = pilot();
+  t.true(tasks.battleMenuShowing(state.read(upFor(sym, BATTLE_MENU))),
+         'FIGHT on screen is the battle menu');
+  t.false(tasks.battleMenuShowing(state.read(upFor(sym, MOVE_LIST))),
+          'a list of moves is not');
+});
+
+test('a cartridge that will not say what is on screen is left alone', async (t) => {
+  // Null rather than false, and callers treat it as yes: the same rule the type
+  // chart follows, because "cannot tell" must never become "do not press".
+  // Painted with the full symbol file -- the words really are in memory -- and
+  // read by a pilot whose own symbols do not name the tilemap. Which is the
+  // real case: the screen is there, this build just cannot find it.
+  const sym = symbols();
+  const wram = upFor(sym, MOVE_LIST);
+  const blind = new GameState(blindTo(sym, 'wTilemap'));
+  const gb = new FakeGameBoy({ wram });
+  const tasks = new Tasks(gb, blind, () => {}, fakeRom());
+  t.eq(tasks.battleMenuShowing(blind.read(wram)), null,
+       'no tilemap named, so no answer');
+});
+
+test('choosing an action backs out of the move list before pressing', async (t) => {
+  // The defect, and it had been there since chooseAction was written.
+  // `awaitBattleMenu` pushes A through the opening text; a press landing as the
+  // menu appears opens FIGHT, and `menuIsLive` then reads true against the move
+  // list. This computed (1,1) for FIGHT, found the cursor already there, and
+  // pressed A -- which re-picks move one. With SCRATCH at 0/35 the game refuses
+  // and redraws the same list: forty turns to 'stuck', five in a row to end a
+  // grind. Thirty stuck battles across twenty runs, every one of them with
+  // SCRATCH at nought.
+  const sym = symbols();
+  const { gb, tasks } = pilot({ wram: upFor(sym, MOVE_LIST) });
+  await tasks.chooseAction(gen2.battleAction.fight);
+  t.eq(gb.presses[0], 'B', 'it leaves the move list first');
+  t.contains(gb.presses.join(','), 'A', 'and only then confirms');
+});
+
+test('choosing an action presses straight away when the battle menu is up',
+     async (t) => {
+  // The other half, and the one that stops the fix costing a turn in every
+  // ordinary battle: there is nothing to back out of, so nothing is pressed.
+  const sym = symbols();
+  const { gb, tasks } = pilot({ wram: upFor(sym, BATTLE_MENU) });
+  await tasks.chooseAction(gen2.battleAction.fight);
+  t.false(gb.presses.includes('B'), 'no stray B');
+  t.eq(gb.presses[gb.presses.length - 1], 'A', 'it confirms');
 });
 
 test('the battle menu is not live on the turn it has not been drawn yet', async (t) => {
